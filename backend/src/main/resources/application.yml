@@ -4,7 +4,7 @@ spring:
 
   docker:
     compose:
-      enabled: false
+      enabled: true
 
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:melly}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
