@@ -1,0 +1,40 @@
+# 환경변수
+.env
+.env.*
+!.env.example
+
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# VS Code
+.vscode/
+
+# Eclipse / STS
+.project
+.classpath
+.settings/
+
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# 운영체제
+.DS_Store
+Thumbs.db
+
+# 로그
+*.log
+
+# 임시 파일
+*.tmp
+*.temp
