@@ -4,3 +4,8 @@ build
 .idea
 *.iml
 compose.yaml
+node_modules
+dist
+.git
+.idea
+.env
