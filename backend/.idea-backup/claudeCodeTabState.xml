@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeTabState">
+    <option name="tabSessions">
+      <map>
+        <entry key="0">
+          <value>
+            <TabSessionState>
+              <option name="provider" value="codex" />
+              <option name="sessionId" value="019f7e5f-e565-7973-9a3d-8f23a20cf0c6" />
+              <option name="cwd" value="C:\Users\SSAFY\Documents\S15P11E106\backend" />
+              <option name="model" value="gpt-5.6-sol" />
+              <option name="permissionMode" value="acceptEdits" />
+            </TabSessionState>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
