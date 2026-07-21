@@ -15,7 +15,7 @@ docker compose \
   -p project \
   --env-file ../.env \
   -f infra/prod/docker-compose.prod.yml \
-  up -d mysql redis backend frontend nginx
+  up -d mysql redis livekit backend frontend nginx
 
 docker compose \
   -p project \
