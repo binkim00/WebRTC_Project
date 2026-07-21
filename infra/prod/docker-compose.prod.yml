@@ -1,0 +1,126 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: mysql
+    restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+
+    volumes:
+      - /home/ubuntu/docker/project/mysql/data:/var/lib/mysql
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - melly-network
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: redis
+    restart: unless-stopped
+
+    command: redis-server --appendonly yes
+
+    volumes:
+      - /home/ubuntu/docker/project/redis/data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - melly-network
+
+  backend:
+    build:
+        context: ../../backend
+        dockerfile: Dockerfile
+    image: melly-backend:local
+    container_name: backend
+    restart: unless-stopped
+
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - melly-network
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    image: melly-frontend:local
+    container_name: frontend
+    restart: unless-stopped
+
+    networks:
+      - melly-network
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    restart: unless-stopped
+
+    depends_on:
+      - backend
+      - frontend
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+    networks:
+      - melly-network
+
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    image: melly-jenkins:local
+    container_name: jenkins
+    restart: unless-stopped
+    user: root
+
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+
+    volumes:
+      - ./jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/ubuntu/docker/project/jenkins_home:/var/jenkins_home
+
+    networks:
+      - melly-network
+
+networks:
+  melly-network:
+    driver: bridge

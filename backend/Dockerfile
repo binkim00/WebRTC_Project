@@ -1,19 +1,19 @@
-FROM eclipse-temurin:17-jdk-alpine AS builder
+# 1단계: Spring Boot 빌드
+FROM gradle:8.10-jdk17 AS builder
 
 WORKDIR /app
 
 COPY gradlew .
-COPY gradle gradle
+COPY gradle ./gradle
 COPY build.gradle .
 COPY settings.gradle .
+COPY src ./src
 
 RUN chmod +x gradlew
-
-COPY src src
-
 RUN ./gradlew clean bootJar --no-daemon
 
-FROM eclipse-temurin:17-jre-alpine
+# 2단계: 실행 이미지
+FROM eclipse-temurin:17-jre
 
 WORKDIR /app
 
