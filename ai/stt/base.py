@@ -1,7 +1,6 @@
 """
 STT 어댑터 인터페이스.
-벤더(Clova / Google / Deepgram 등)가 결정되면
-이 클래스를 상속해서 구현체만 추가하면 됨.
+DeepL Voice / Google STT 등 벤더가 이 인터페이스를 상속해서 구현.
 agent.py는 이 인터페이스만 바라봄.
 """
 
@@ -12,10 +11,16 @@ from datetime import datetime
 
 @dataclass
 class FinalTranscript:
-    """STT final 이벤트 결과. interim은 agent에서 소비 후 폐기."""
-    text: str
-    language: str       # "ko" | "en" 등
-    spoken_at: datetime
+    """
+    STT concluded(확정) 결과.
+    DeepL Voice는 translated_text를 같이 줌.
+    Google STT는 translated_text=None.
+    """
+    text: str                               # 원문 텍스트
+    language: str                           # 원문 언어 ("ko", "en" 등)
+    spoken_at: datetime                     # 발화 시각
+    translated_text: str | None = None      # 번역 텍스트 (번역 없으면 None)
+    translated_lang: str | None = None      # 번역 언어 (번역 없으면 None)
 
 
 class STTAdapter(ABC):
@@ -29,7 +34,12 @@ class STTAdapter(ABC):
     ) -> None:
         """
         오디오 스트림을 STT에 흘려보내고,
-        final 확정 시마다 on_final 콜백을 호출.
-        interim은 이 메서드 내부에서 소비 후 폐기 — 밖으로 노출하지 않음.
+        concluded 확정 시마다 on_final 콜백을 호출.
+        tentative는 이 메서드 내부에서 소비 후 폐기.
         """
+        ...
+
+    @abstractmethod
+    async def close(self) -> None:
+        """세션/연결 정리."""
         ...

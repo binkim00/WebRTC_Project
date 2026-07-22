@@ -18,7 +18,7 @@ async def insert_subtitle(
     call_session_id: int,
     sequence: int,
     speaker_id: str,
-    speaker_role: str,          # "host" | "fan"
+    speaker_role: str,
     spoken_at: datetime,
     original_text: str,
     original_lang: str,
@@ -27,8 +27,8 @@ async def insert_subtitle(
 ) -> int:
     """
     발화 문장 1건 저장. 생성된 subtitle_id를 반환.
-    번역이 아직 안 됐으면 translated_text=None으로 먼저 INSERT 후
-    번역 완료 시 update_subtitle_translation()으로 채움.
+    DeepL 사용 시 translated_text가 이미 들어있고,
+    Google STT 사용 시 None.
     """
     sql = """
         INSERT INTO ai_subtitle
@@ -47,31 +47,14 @@ async def insert_subtitle(
             return cur.lastrowid
 
 
-async def update_subtitle_translation(
-    *,
-    subtitle_id: int,
-    translated_text: str,
-    translated_lang: str,
-) -> None:
-    """번역 결과를 나중에 채울 때 사용."""
-    sql = """
-        UPDATE ai_subtitle
-        SET translated_text = %s, translated_lang = %s
-        WHERE subtitle_id = %s
-    """
-    async with get_pool().acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(sql, (translated_text, translated_lang, subtitle_id))
-
-
 # ── ai_moderation ─────────────────────────────────────────────────────────────
 
 async def insert_moderation(
     *,
     call_session_id: int,
     subtitle_id: int,
-    risk_type: str,     # PROFANITY | SEXUAL | HARASSMENT | THREAT | PERSONAL_INFO
-    risk_level: str,    # LOW | MEDIUM | HIGH  (임계값 미정 — 추후 확정)
+    risk_type: str,
+    risk_level: str,
     reason: str,
     detected_at: datetime,
 ) -> int:
@@ -100,8 +83,7 @@ async def insert_call_summary(
 ) -> None:
     """
     통화 종료 후 요약 저장.
-    UNIQUE(call_session_id)라 중복 INSERT 시 에러 — 호출 전 존재 여부 확인 권장.
-    keywords는 JSON 배열로 직렬화해서 저장.
+    UNIQUE(call_session_id)라 중복 INSERT 시 에러.
     """
     sql = """
         INSERT INTO ai_call_summary (call_session_id, summary, keywords, created_at)
@@ -118,7 +100,7 @@ async def insert_call_summary(
 
 
 async def summary_exists(call_session_id: int) -> bool:
-    """요약이 이미 있는지 확인 (shutdown 재시도 중복 방지)."""
+    """요약이 이미 있는지 확인."""
     sql = "SELECT 1 FROM ai_call_summary WHERE call_session_id = %s LIMIT 1"
     async with get_pool().acquire() as conn:
         async with conn.cursor() as cur:
@@ -136,7 +118,7 @@ async def insert_translation_session(
     model_name: str,
     started_at: datetime,
 ) -> int:
-    """통역 세션 시작 시 기록. translation_id 반환."""
+    """통역 세션 시작 시 기록."""
     sql = """
         INSERT INTO ai_translation
             (call_session_id, status, source_language, target_language,
@@ -155,7 +137,7 @@ async def insert_translation_session(
 async def update_translation_session(
     *,
     translation_id: int,
-    status: str,            # COMPLETED | FAILED
+    status: str,
     ended_at: datetime,
     error_message: str | None = None,
 ) -> None:
@@ -172,9 +154,12 @@ async def update_translation_session(
 # ── ai_subtitle SELECT (요약용) ───────────────────────────────────────────────
 
 async def fetch_subtitles_for_summary(call_session_id: int) -> list[dict]:
-    """통화 종료 후 요약 LLM에 넘길 전체 자막 조회."""
+    """
+    통화 종료 후 요약 LLM에 넘길 자막 조회.
+    translated_text 포함 — 한국-외국이면 원문+번역, 한국-한국이면 원문만(NULL).
+    """
     sql = """
-        SELECT speaker_role, original_text, spoken_at
+        SELECT speaker_role, original_text, translated_text, spoken_at
         FROM ai_subtitle
         WHERE call_session_id = %s
         ORDER BY sequence ASC
