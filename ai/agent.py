@@ -232,14 +232,17 @@ async def my_agent(ctx: JobContext) -> None:
         )
 
     # ── 트랙 구독 핸들러 ──────────────────────────────────────────────────
-
+    # 새로운 사용자(인플루언서, 팬)이 입장하면 드러왔다고 알려주는 함수.
+    # LiveKit 프레임워크가 자동 호출해줌
     def on_track_subscribed(
         track: rtc.Track,
         publication: rtc.RemoteTrackPublication,
         participant: rtc.RemoteParticipant,
     ) -> None:
+        # nonlocal: 밖에 있는 변수 사용하겠다는 말
         nonlocal host_track, host_participant
 
+        #오디오 트랙만 구독
         if track.kind != rtc.TrackKind.KIND_AUDIO:
             return
 
@@ -248,7 +251,7 @@ async def my_agent(ctx: JobContext) -> None:
             return
 
         if role == "host":
-            # 호스트 트랙 저장만. STT는 팬 입장 시 시작.
+            # 호스트 트랙 저장만. STT는 팬 입장 시 시작. 왜냐면 fan_lang을 모르니까
             host_track = track
             host_participant = participant
             logger.info("호스트 트랙 저장 participant=%s", participant.identity)
@@ -256,6 +259,7 @@ async def my_agent(ctx: JobContext) -> None:
         elif role == "fan":
             # 팬 입장 → 통화 상태 생성 후 STT 시작
             async def fan_stt_loop() -> None:
+                # start_fan_call()이 팬 attributes에서 call_session_id, fan_lang 읽고, 어댑터 생성하고, CallState 만듬
                 await start_fan_call(participant)
 
                 if current_call is None:
