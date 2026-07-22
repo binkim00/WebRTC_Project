@@ -1,14 +1,15 @@
 services:
-  mariadb:
-    image: 'mariadb:latest'
+  mysql:
+    image: 'mysql:8.4'
     environment:
-      - 'MARIADB_DATABASE=mydatabase'
-      - 'MARIADB_PASSWORD=secret'
-      - 'MARIADB_ROOT_PASSWORD=verysecret'
-      - 'MARIADB_USER=myuser'
+      - 'MYSQL_DATABASE=melly'
+      - 'MYSQL_PASSWORD=secret'
+      - 'MYSQL_ROOT_PASSWORD=verysecret'
+      - 'MYSQL_USER=melly_user'
     ports:
       - '3306'
+
   redis:
-    image: 'redis:latest'
+    image: 'redis:7.4-alpine'
     ports:
       - '6379'

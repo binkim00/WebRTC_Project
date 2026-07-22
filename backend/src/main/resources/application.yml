@@ -2,15 +2,23 @@ spring:
   application:
     name: melly-backend
 
+  config:
+    import: "optional:file:./.env[.properties]"
+
   docker:
     compose:
-      enabled: false
+      enabled: true
 
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:melly}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: ${DB_USERNAME:melly_user}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
   jpa:
     hibernate:
@@ -19,3 +27,13 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+livekit:
+  url: ${LIVEKIT_URL}
+  api-key: ${LIVEKIT_API_KEY}
+  api-secret: ${LIVEKIT_API_SECRET}
+  test-token-enabled: ${LIVEKIT_TEST_TOKEN_ENABLED:false}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}

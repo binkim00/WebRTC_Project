@@ -1,37 +1,61 @@
-HELP.md
-.gradle
+### Gradle ###
+.gradle/
 build/
+
+# Gradle Wrapper는 커밋
 !gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
+
+### Spring Boot ###
+HELP.md
+
+### Environment ###
+.env
+.env.*
+!.env.example
+
+### Logs ###
+*.log
+logs/
+
+### OS ###
+.DS_Store
+Thumbs.db
 
 ### STS ###
-.apt_generated
+.apt_generated/
 .classpath
 .factorypath
 .project
-.settings
+.settings/
 .springBeans
-.sts4-cache
+.sts4-cache/
 bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
+
+# src 내부에 직접 만든 bin 폴더가 있다면 제외하지 않음
+!src/main/**/bin/
+!src/test/**/bin/
 
 ### IntelliJ IDEA ###
-.idea
+.idea/
 *.iws
 *.iml
 *.ipr
 out/
-!**/src/main/**/out/
-!**/src/test/**/out/
+
+# src 내부에 직접 만든 out 폴더가 있다면 제외하지 않음
+!src/main/**/out/
+!src/test/**/out/
 
 ### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
 
 ### VS Code ###
 .vscode/
+
+### Test / Coverage ###
+test-results/
+coverage/
