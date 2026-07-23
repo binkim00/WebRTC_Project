@@ -17,6 +17,7 @@ class LiveKitTokenControllerTest {
     private LiveKitTokenService tokenService;
     private MockMvc mockMvc;
 
+    /** 토큰 서비스 mock을 사용하는 standalone MockMvc를 각 테스트 전에 구성한다. */
     @BeforeEach
     void setUp() {
         tokenService = mock(LiveKitTokenService.class);
@@ -25,6 +26,7 @@ class LiveKitTokenControllerTest {
                 .build();
     }
 
+    /** 사용자 식별자가 공백이면 토큰 서비스를 호출하지 않고 HTTP 400을 반환하는지 확인한다. */
     @Test
     void returnsBadRequestWhenIdentityIsBlank() throws Exception {
         mockMvc.perform(post("/api/v1/livekit/test-token")

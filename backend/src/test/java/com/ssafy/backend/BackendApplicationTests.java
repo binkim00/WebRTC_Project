@@ -1,7 +1,9 @@
 package com.ssafy.backend;
 
+import com.ssafy.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(properties = {
 		"spring.docker.compose.enabled=false",
@@ -14,6 +16,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 })
 class BackendApplicationTests {
 
+	@MockitoBean
+	private UserRepository userRepository;
+
+	/** DB 자동 구성 없이도 Spring 애플리케이션 컨텍스트가 정상적으로 시작되는지 확인한다. */
 	@Test
 	void contextLoads() {
 	}

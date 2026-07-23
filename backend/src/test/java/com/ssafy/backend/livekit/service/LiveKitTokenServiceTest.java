@@ -20,6 +20,7 @@ class LiveKitTokenServiceTest {
 
     private LiveKitTokenService tokenService;
 
+    /** 외부 LiveKit 서버 없이 토큰 생성 로직을 검증할 테스트 설정과 서비스를 구성한다. */
     @BeforeEach
     void setUp() {
         LiveKitProperties properties = new LiveKitProperties();
@@ -29,6 +30,7 @@ class LiveKitTokenServiceTest {
         tokenService = new LiveKitTokenService(properties);
     }
 
+    /** 서로 다른 사용자에게 같은 테스트 방의 서로 다른 JWT가 발급되는지 확인한다. */
     @Test
     void issuesTokensForDifferentIdentitiesInTheSameTestRoom() {
         long issuedAt = Instant.now().getEpochSecond();
@@ -47,6 +49,7 @@ class LiveKitTokenServiceTest {
         assertTokenClaims(second.accessToken(), "test-user-2", issuedAt);
     }
 
+    /** JWT payload를 디코딩해 사용자, 방, 미디어 권한 및 만료 시간을 검증한다. */
     private void assertTokenClaims(String token, String identity, long issuedAt) {
         String[] parts = token.split("\\.");
         assertThat(parts).hasSize(3);

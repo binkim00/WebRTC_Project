@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SecurityConfigTest {
 
+    /** 허용 출처 설정이 비어 있으면 임의의 교차 출처 요청을 허용하지 않는지 확인한다. */
     @Test
     void keepsCrossOriginAccessClosedWhenNoOriginIsConfigured() {
         CorsConfiguration configuration = new SecurityConfig("")
@@ -19,6 +20,7 @@ class SecurityConfigTest {
         assertThat(configuration.getAllowedMethods()).contains("OPTIONS");
     }
 
+    /** 설정에 명시된 출처만 CORS 허용 목록에 포함되는지 확인한다. */
     @Test
     void allowsOnlyExplicitlyConfiguredOrigins() {
         CorsConfiguration configuration = new SecurityConfig(
