@@ -36,4 +36,8 @@ livekit:
 
 app:
   cors:
+<<<<<<< HEAD
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+=======
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+>>>>>>> a20101a72daeb1f8944ed704da35a660b7d2811e
