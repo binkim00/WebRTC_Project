@@ -3,6 +3,7 @@ package com.ssafy.backend.auth.service;
 import com.ssafy.backend.auth.dto.SignupRequest;
 import com.ssafy.backend.auth.exception.DuplicateEmailException;
 import com.ssafy.backend.auth.exception.DuplicateLoginIdException;
+import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import com.ssafy.backend.user.domain.UserStatus;
@@ -48,7 +49,7 @@ class SignupServiceTest {
         assertThat(saved.getPassword()).isEqualTo("encoded-password");
         assertThat(saved.getNickname()).isEqualTo("tester");
         assertThat(saved.getRole()).isEqualTo(role);
-        assertThat(saved.getPreferredLanguage()).isEqualTo("ko");
+        assertThat(saved.getPreferredLanguage()).isEqualTo(PreferredLanguage.KOREAN);
         assertThat(saved.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(saved.getProfileImageUrl()).isNull();
         assertThat(saved.getLastLoginAt()).isNull();
@@ -81,7 +82,7 @@ class SignupServiceTest {
     private SignupRequest request(UserRole role) {
         return new SignupRequest(
                 " login-user ", "password123", " User@Example.com ", " tester ",
-                role, " ko ", true, true
+                role, PreferredLanguage.KOREAN, true, true
         );
     }
 }

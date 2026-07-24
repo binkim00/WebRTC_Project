@@ -38,7 +38,8 @@ public class User extends BaseTimeEntity {
     private UserRole role;
 
     @Column(name = "preferred_language", nullable = false, length = 50)
-    private String preferredLanguage;
+    @Enumerated(EnumType.STRING)
+    private PreferredLanguage preferredLanguage;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -59,7 +60,7 @@ public class User extends BaseTimeEntity {
 
     /** 외부에서 직접 호출하지 못하도록 회원가입에 필요한 값으로 사용자 객체를 초기화한다. */
     private User(String loginId, String email, String password, String nickname,
-                 UserRole role, String preferredLanguage) {
+                 UserRole role, PreferredLanguage preferredLanguage) {
         this.loginId = loginId;
         this.email = email;
         this.password = password;
@@ -75,8 +76,17 @@ public class User extends BaseTimeEntity {
 
     /** 신규 회원을 ACTIVE 상태와 빈 프로필 이미지로 생성한다. */
     public static User createActive(String loginId, String email, String encodedPassword, String nickname,
-                                    UserRole role, String preferredLanguage) {
+                                    UserRole role, PreferredLanguage preferredLanguage) {
         return new User(loginId, email, encodedPassword, nickname, role, preferredLanguage);
+    }
+
+    /**
+     * 인증에 성공한 가장 최근 시각을 갱신한다.
+     *
+     * @param loginAt 마지막 로그인 시각
+     */
+    public void updateLastLoginAt(LocalDateTime loginAt) {
+        this.lastLoginAt = loginAt;
     }
 
     /** 데이터베이스가 생성한 사용자 식별자를 반환한다. */
@@ -92,7 +102,7 @@ public class User extends BaseTimeEntity {
     /** 계정에 지정된 단일 역할을 반환한다. */
     public UserRole getRole() { return role; }
     /** 사용자가 선호하는 언어 문자열을 반환한다. */
-    public String getPreferredLanguage() { return preferredLanguage; }
+    public PreferredLanguage getPreferredLanguage() { return preferredLanguage; }
     /** 계정의 현재 활성 상태를 반환한다. */
     public UserStatus getStatus() { return status; }
     /** nullable 프로필 이미지 URL을 반환한다. */

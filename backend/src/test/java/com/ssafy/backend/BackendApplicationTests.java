@@ -12,7 +12,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 				+ "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration",
 		"livekit.url=wss://test.livekit.invalid",
 		"livekit.api-key=test-api-key",
-		"livekit.api-secret=test-api-secret"
+		"livekit.api-secret=test-api-secret",
+		"jwt.secret=0123456789abcdef0123456789abcdef"
 })
 class BackendApplicationTests {
 

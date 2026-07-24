@@ -2,6 +2,8 @@ package com.ssafy.backend.user.domain;
 
 import com.ssafy.backend.common.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -20,6 +22,8 @@ class UserEntityMappingTest {
         assertColumn(User.class, "nickname", "nickname", false);
         assertColumn(User.class, "role", "role", false);
         assertColumn(User.class, "preferredLanguage", "preferred_language", false);
+        assertThat(User.class.getDeclaredField("preferredLanguage").getAnnotation(Enumerated.class).value())
+                .isEqualTo(EnumType.STRING);
         assertColumn(User.class, "status", "status", false);
         assertColumn(User.class, "profileImageUrl", "profile_image_url", true);
         assertColumn(User.class, "lastLoginAt", "last_login_at", true);

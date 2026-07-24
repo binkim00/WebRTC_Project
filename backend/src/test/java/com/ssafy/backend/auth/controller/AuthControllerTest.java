@@ -1,10 +1,15 @@
 package com.ssafy.backend.auth.controller;
 
+import com.ssafy.backend.auth.dto.LoginResponse;
 import com.ssafy.backend.auth.dto.SignupRequest;
 import com.ssafy.backend.auth.dto.SignupResponse;
 import com.ssafy.backend.auth.exception.AuthExceptionHandler;
 import com.ssafy.backend.auth.exception.DuplicateEmailException;
 import com.ssafy.backend.auth.exception.DuplicateLoginIdException;
+import com.ssafy.backend.auth.exception.AccountUnavailableException;
+import com.ssafy.backend.auth.exception.InvalidCredentialsException;
+import com.ssafy.backend.auth.service.LoginService;
+import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.SignupService;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,15 +28,100 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class AuthControllerTest {
     private SignupService signupService;
+    private LoginService loginService;
+    private LogoutService logoutService;
     private MockMvc mockMvc;
 
     /** 서비스 mock과 전역 예외 처리가 적용된 standalone MockMvc를 구성한다. */
     @BeforeEach
     void setUp() {
         signupService = mock(SignupService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(signupService))
+        loginService = mock(LoginService.class);
+        logoutService = mock(LogoutService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(signupService, loginService, logoutService))
                 .setControllerAdvice(new AuthExceptionHandler())
                 .build();
+    }
+
+    /** Bearer Access Token을 로그아웃 서비스에 전달하고 HTTP 204를 반환하는지 검증한다. */
+    @Test
+    void revokesAccessTokenAndReturnsNoContent() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .header("Authorization", "Bearer access-token"))
+                .andExpect(status().isNoContent());
+
+        verify(logoutService).logout("access-token");
+    }
+
+    /** 정상 로그인 요청이 최종 계약에 정의된 토큰과 사용자 정보를 반환하는지 검증한다. */
+    @Test
+    void returnsLoginResponseWithFinalContract() throws Exception {
+        when(loginService.login(any())).thenReturn(new LoginResponse(
+                "access-token", "refresh-token", 3600, 1L, UserRole.FAN, "melly"
+        ));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"melly01","password":"password123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
+                .andExpect(jsonPath("$.expiresIn").value(3600))
+                .andExpect(jsonPath("$.userId").value(1))
+                .andExpect(jsonPath("$.role").value("FAN"))
+                .andExpect(jsonPath("$.nickname").value("melly"));
+    }
+
+    /** 로그인 ID와 비밀번호의 공백·길이 제약을 위반한 요청이 서비스 호출 전에 거부되는지 검증한다. */
+    @Test
+    void rejectsBlankOrTooLongLoginIdAndBlankPassword() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"   ","password":"password123"}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"%s","password":"password123"}
+                                """.formatted("a".repeat(101))))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"melly01","password":"   "}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(loginService);
+    }
+
+    /** 로그인 인증 및 계정 상태 예외가 각각 약속된 ProblemDetail 응답으로 변환되는지 검증한다. */
+    @Test
+    void mapsLoginFailuresToProblemDetails() throws Exception {
+        when(loginService.login(any())).thenThrow(new InvalidCredentialsException());
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"melly01","password":"wrong"}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail").value("Invalid login ID or password."));
+
+        reset(loginService);
+        when(loginService.login(any())).thenThrow(new AccountUnavailableException());
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"melly01","password":"password123"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("This account is not available."));
     }
 
     /** 정상 가입 요청이 HTTP 201과 명세에 정의된 응답 필드만 반환하는지 확인한다. */
@@ -88,12 +178,12 @@ class AuthControllerTest {
         verifyNoInteractions(signupService);
     }
 
-    /** 선호 언어가 공백뿐이면 Bean Validation이 요청을 거부하는지 확인한다. */
+    /** 지원하지 않는 선호 언어 문자열이면 요청을 거부하는지 확인한다. */
     @Test
-    void rejectsBlankPreferredLanguage() throws Exception {
+    void rejectsUnknownPreferredLanguage() throws Exception {
         mockMvc.perform(post("/api/v1/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("FAN").replace("\"ko\"", "\"   \"")))
+                        .content(json("FAN").replace("\"KOREAN\"", "\"SPANISH\"")))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(signupService);
     }
@@ -129,12 +219,12 @@ class AuthControllerTest {
         verifyNoInteractions(signupService);
     }
 
-    /** 선호 언어가 DB 컬럼 길이인 50자를 초과하면 HTTP 400을 반환하는지 확인한다. */
+    /** 긴 문자열도 지원 언어 enum 값이 아니면 HTTP 400을 반환하는지 확인한다. */
     @Test
-    void rejectsPreferredLanguageLongerThan50Characters() throws Exception {
+    void rejectsUnsupportedLongPreferredLanguage() throws Exception {
         mockMvc.perform(post("/api/v1/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json("FAN").replace("\"ko\"", "\"" + "a".repeat(51) + "\"")))
+                        .content(json("FAN").replace("\"KOREAN\"", "\"" + "a".repeat(51) + "\"")))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(signupService);
     }
@@ -167,7 +257,7 @@ class AuthControllerTest {
     private String json(String role) {
         return """
                 {"loginId":"login-user","password":"password123","email":"user@example.com",
-                 "nickname":"tester","role":"%s","preferredLanguage":"ko",
+                 "nickname":"tester","role":"%s","preferredLanguage":"KOREAN",
                  "termsOfServiceAgreed":true,"privacyPolicyAgreed":true}
                 """.formatted(role);
     }

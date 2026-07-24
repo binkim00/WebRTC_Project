@@ -1,5 +1,6 @@
 package com.ssafy.backend.auth.dto;
 
+import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.UserRole;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
@@ -13,7 +14,7 @@ public record SignupRequest(
         @NotBlank @Email @Size(max = 255) String email,
         @NotBlank @Size(max = 50) String nickname,
         @NotNull UserRole role,
-        @NotBlank @Size(max = 50) String preferredLanguage,
+        @NotNull PreferredLanguage preferredLanguage,
         @NotNull @AssertTrue Boolean termsOfServiceAgreed,
         @NotNull @AssertTrue Boolean privacyPolicyAgreed
 ) {
