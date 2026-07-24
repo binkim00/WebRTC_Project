@@ -24,15 +24,11 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
 from livekit import agents, rtc
 from livekit.agents import AutoSubscribe, JobContext
 
-from db.connection import init_pool, close_pool
-from db import queries
 from pipeline.processor import SubtitleProcessor
-from pipeline.summarizer import generate_and_save_summary
 from stt.base import FinalTranscript
 from stt.deepl_voice import DeepLVoiceAdapter
 from stt.google_stt import GoogleSTTAdapter
@@ -40,22 +36,8 @@ from stt.google_stt import GoogleSTTAdapter
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SPRING_URL = os.environ.get("SPRING_INTERNAL_URL", "http://backend:8080")
 DEEPL_API_KEY = os.environ.get("DEEPL_API_KEY")
 
-
-# ── TODO: 감지/요약 구현체 (벤더 미정) ────────────────────────────────────────
-
-async def detect(text: str, lang: str) -> dict | None:
-    """TODO: 유해발언 감지 구현."""
-   # raise NotImplementedError("감지 모델 미결정")
-    return None
-
-async def summarize(subtitles: list[dict]) -> dict:
-    """TODO: 요약 LLM 구현."""
-   # raise NotImplementedError("요약 LLM 미결정")
-    return None
-    
 
 # ── 팬 1명과의 통화 상태 ─────────────────────────────────────────────────────
 
@@ -67,7 +49,6 @@ class CallState:
     fan_lang: str
     need_translation: bool
     processor: SubtitleProcessor
-    translation_id: int | None = None
     fan_audio_task: asyncio.Task | None = None
     host_audio_task: asyncio.Task | None = None
     host_adapter: DeepLVoiceAdapter | GoogleSTTAdapter | None = None
@@ -85,10 +66,7 @@ async def my_agent(ctx: JobContext) -> None:
 
     logger.info("에이전트 시작 host_lang=%s", host_lang)
 
-    # 2. DB 풀 초기화
-    await init_pool()
-
-    # 3. 현재 통화 상태
+    # 현재 통화 상태
     current_call: CallState | None = None
 
     # 4. 호스트 트랙 저장용 (팬 입장 전에 트랙만 보관)
@@ -114,12 +92,10 @@ async def my_agent(ctx: JobContext) -> None:
         seq_counters: dict[str, int] = {}
 
         # 프로세서 생성
-        # 프로세서: db저장, 유해발언 감지, 자막 표시
+        # 프로세서: 자막 표시
         processor = SubtitleProcessor(
             call_session_id=call_session_id,
             local_participant=ctx.room.local_participant,
-            spring_internal_url=SPRING_URL,
-            detect_fn=detect,
             sequence_counters=seq_counters,
         )
 
@@ -131,24 +107,12 @@ async def my_agent(ctx: JobContext) -> None:
             fan_adapter = GoogleSTTAdapter()
             host_adapter = GoogleSTTAdapter()
 
-        # ai_translation 세션 기록 (번역 있을 때만)
-        translation_id = None
-        if need_translation:
-            translation_id = await queries.insert_translation_session(
-                call_session_id=call_session_id,
-                source_language=host_lang,
-                target_language=fan_lang,
-                model_name="deepl-voice",
-                started_at=datetime.now(timezone.utc),
-            )
-
         current_call = CallState(
             call_session_id=call_session_id,
             fan_identity=participant.identity,
             fan_lang=fan_lang,
             need_translation=need_translation,
             processor=processor,
-            translation_id=translation_id,
             host_adapter=host_adapter,
             fan_adapter=fan_adapter,
             sequence_counters=seq_counters,
@@ -186,29 +150,6 @@ async def my_agent(ctx: JobContext) -> None:
             await call.fan_adapter.close()
         if call.host_adapter:
             await call.host_adapter.close()
-
-        # ai_translation(db) 상태 업데이트
-        if call.translation_id is not None:
-            try:
-                await queries.update_translation_session(
-                    translation_id=call.translation_id,
-                    status="COMPLETED",
-                    ended_at=datetime.now(timezone.utc),
-                )
-            except Exception:
-                logger.exception("translation 상태 업데이트 실패")
-
-        # 요약 생성
-        try:
-            await generate_and_save_summary(
-                call_session_id=call.call_session_id,
-                summarize_fn=summarize,
-            )
-        except Exception:
-            logger.exception("요약 생성 실패 call_session_id=%s", call.call_session_id)
-
-        # 프로세서 정리
-        await call.processor.close()
 
     # ── 호스트 STT 루프 ───────────────────────────────────────────────────
 
@@ -318,7 +259,6 @@ async def my_agent(ctx: JobContext) -> None:
     async def on_shutdown() -> None:
         logger.info("이벤트 종료 — shutdown 시작")
         await end_fan_call()
-        await close_pool()
 
     ctx.add_shutdown_callback(on_shutdown)
 
@@ -332,6 +272,6 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=my_agent,
-           # agent_name="subtitle-agent",
+            agent_name="subtitle-agent",
         )
     )
