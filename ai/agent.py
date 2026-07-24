@@ -16,6 +16,8 @@ metadata (JSON) — 이벤트 단위:
 팬 토큰 attributes:
   { "role": "fan", "call_session_id": "456", "fan_lang": "en" }
 """
+from dotenv import load_dotenv
+load_dotenv()
 
 import asyncio
 import json
@@ -46,13 +48,14 @@ DEEPL_API_KEY = os.environ.get("DEEPL_API_KEY")
 
 async def detect(text: str, lang: str) -> dict | None:
     """TODO: 유해발언 감지 구현."""
-    raise NotImplementedError("감지 모델 미결정")
-
+   # raise NotImplementedError("감지 모델 미결정")
+    return None
 
 async def summarize(subtitles: list[dict]) -> dict:
     """TODO: 요약 LLM 구현."""
-    raise NotImplementedError("요약 LLM 미결정")
-
+   # raise NotImplementedError("요약 LLM 미결정")
+    return None
+    
 
 # ── 팬 1명과의 통화 상태 ─────────────────────────────────────────────────────
 
@@ -73,13 +76,12 @@ class CallState:
 
 
 # ── 진입점 ────────────────────────────────────────────────────────────────────
-
-@agents.AgentServer.default.rtc_session()
+#백엔드에서 영상통화 세션을 만들고 dispatch하면 my_agent를 실행
 async def my_agent(ctx: JobContext) -> None:
 
     # 1. metadata 파싱 (이벤트 단위)
-    metadata = json.loads(ctx.job.metadata)
-    host_lang: str = metadata["host_lang"]
+    metadata = json.loads(ctx.job.metadata or "{}")
+    host_lang: str = metadata.get("host_lang", "ko")
 
     logger.info("에이전트 시작 host_lang=%s", host_lang)
 
@@ -98,8 +100,9 @@ async def my_agent(ctx: JobContext) -> None:
     async def start_fan_call(participant: rtc.RemoteParticipant) -> None:
         nonlocal current_call
 
-        call_session_id = int(participant.attributes.get("call_session_id"))
-        fan_lang = participant.attributes.get("fan_lang")
+        meta = json.loads(participant.metadata)
+        call_session_id = int(meta.get("call_session_id"))
+        fan_lang = meta.get("fan_lang")
         need_translation = (host_lang != fan_lang)
 
         logger.info(
@@ -111,6 +114,7 @@ async def my_agent(ctx: JobContext) -> None:
         seq_counters: dict[str, int] = {}
 
         # 프로세서 생성
+        # 프로세서: db저장, 유해발언 감지, 자막 표시
         processor = SubtitleProcessor(
             call_session_id=call_session_id,
             local_participant=ctx.room.local_participant,
@@ -183,7 +187,7 @@ async def my_agent(ctx: JobContext) -> None:
         if call.host_adapter:
             await call.host_adapter.close()
 
-        # ai_translation 상태 업데이트
+        # ai_translation(db) 상태 업데이트
         if call.translation_id is not None:
             try:
                 await queries.update_translation_session(
@@ -215,6 +219,7 @@ async def my_agent(ctx: JobContext) -> None:
 
         audio_stream = rtc.AudioStream(host_track)
 
+        #문장 확정되면 이거 실행
         async def on_final(transcript: FinalTranscript) -> None:
             if current_call is None:
                 return
@@ -225,9 +230,11 @@ async def my_agent(ctx: JobContext) -> None:
                 target_lang=current_call.fan_lang,
             )
 
+        #어댑터에게 시킬일, 어댑터가 on_final의 상태를 결정함
         await current_call.host_adapter.transcribe(
             audio_stream=audio_stream,
             language=host_lang,
+            # 문장이 확정되면 on_final을 처리하라는 뜻
             on_final=on_final,
         )
 
@@ -246,7 +253,8 @@ async def my_agent(ctx: JobContext) -> None:
         if track.kind != rtc.TrackKind.KIND_AUDIO:
             return
 
-        role = participant.attributes.get("role")
+        meta = json.loads(participant.metadata or "{}")
+        role = meta.get("role")
         if role not in ("host", "fan"):
             return
 
@@ -260,7 +268,7 @@ async def my_agent(ctx: JobContext) -> None:
             # 팬 입장 → 통화 상태 생성 후 STT 시작
             async def fan_stt_loop() -> None:
                 # start_fan_call()이 팬 attributes에서 call_session_id, fan_lang 읽고, 어댑터 생성하고, CallState 만듬
-                await start_fan_call(participant)
+                await start_fan_call(participant) # 여기서 _run_host_stt()도 실행됨
 
                 if current_call is None:
                     return
@@ -298,7 +306,8 @@ async def my_agent(ctx: JobContext) -> None:
     # ── 팬 퇴장 이벤트 ────────────────────────────────────────────────────
 
     def on_participant_disconnected(participant: rtc.RemoteParticipant) -> None:
-        role = participant.attributes.get("role")
+        meta = json.loads(participant.metadata or "{}")
+        role = meta.get("role")
         if role == "fan" and current_call and current_call.fan_identity == participant.identity:
             asyncio.create_task(end_fan_call())
 
@@ -323,6 +332,6 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=my_agent,
-            agent_name="subtitle-agent",
+           # agent_name="subtitle-agent",
         )
     )

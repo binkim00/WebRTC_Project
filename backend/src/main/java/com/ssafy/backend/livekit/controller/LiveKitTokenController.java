@@ -23,6 +23,6 @@ public class LiveKitTokenController {
 
     @PostMapping("/test-token")
     public LiveKitTokenResponse createTestToken(@Valid @RequestBody LiveKitTokenRequest request) {
-        return tokenService.createTestToken(request.identity(), request.displayName());
+        return tokenService.createTestToken(request.identity(), request.displayName(), request.metadata());
     }
 }

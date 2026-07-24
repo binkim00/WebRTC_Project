@@ -38,3 +38,13 @@ Thumbs.db
 # 임시 파일
 *.tmp
 *.temp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 가상환경
+venv/
+.venv/

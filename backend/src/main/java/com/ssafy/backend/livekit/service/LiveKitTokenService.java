@@ -24,7 +24,7 @@ public class LiveKitTokenService {
         this.properties = properties;
     }
 
-    public LiveKitTokenResponse createTestToken(String identity, String displayName) {
+    public LiveKitTokenResponse createTestToken(String identity, String displayName, String metadata) {
         if (!StringUtils.hasText(identity)) {
             throw new IllegalArgumentException("identity는 필수입니다.");
         }
@@ -44,6 +44,10 @@ public class LiveKitTokenService {
                 new CanPublish(true),
                 new CanSubscribe(true)
         );
+
+        if (StringUtils.hasText(metadata)) {
+            token.setMetadata(metadata);
+        }
 
         return new LiveKitTokenResponse(
                 properties.getUrl(),
