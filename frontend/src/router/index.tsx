@@ -6,11 +6,11 @@ import { InfluencerLayout } from '../layouts/InfluencerLayout'
 import { ManagerLayout } from '../layouts/ManagerLayout'
 import { LoginPage, SignupPage } from '../pages/auth/AuthRoutePages'
 import {
-  DeviceCheckPage,
   HomePage,
   MeetingFanListPage,
   MeetingStatisticsPage,
 } from '../pages/common/CommonRoutePages'
+import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
 import {
   ForbiddenPage,
   NotFoundPage,
