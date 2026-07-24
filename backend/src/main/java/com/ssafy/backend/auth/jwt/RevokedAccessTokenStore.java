@@ -1,13 +1,14 @@
 package com.ssafy.backend.auth.jwt;
 
-import com.ssafy.backend.config.jwt.JwtProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HexFormat;
 
 /** 로그아웃된 Access Token의 해시를 Redis에 보관하고 재사용 여부를 확인한다. */
@@ -17,26 +18,36 @@ public class RevokedAccessTokenStore {
     private static final String REVOKED_VALUE = "revoked";
 
     private final StringRedisTemplate redisTemplate;
-    private final Duration retention;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final Clock clock;
 
     /**
-     * Redis 접근 객체와 Access Token 최대 유효시간을 주입받는다.
+     * Redis 접근 객체, Access Token 검증기와 잔여 유효시간 계산용 시계를 주입받는다.
      *
      * @param redisTemplate 로그아웃 토큰을 저장할 Redis 접근 객체
-     * @param properties Access Token 만료시간 설정
+     * @param jwtTokenProvider Access Token 검증 및 만료 시각 제공자
+     * @param clock 현재 시각을 제공할 시계
      */
-    public RevokedAccessTokenStore(StringRedisTemplate redisTemplate, JwtProperties properties) {
+    public RevokedAccessTokenStore(StringRedisTemplate redisTemplate,
+                                   JwtTokenProvider jwtTokenProvider,
+                                   Clock clock) {
         this.redisTemplate = redisTemplate;
-        this.retention = Duration.ofSeconds(properties.accessExpiration());
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.clock = clock;
     }
 
     /**
-     * 로그아웃된 Access Token의 해시를 최대 유효시간 동안 저장한다.
+     * 로그아웃된 Access Token의 해시를 남은 유효시간 동안 저장한다.
      *
      * @param accessToken 로그아웃 처리할 Access Token
      */
     public void revoke(String accessToken) {
-        redisTemplate.opsForValue().set(key(accessToken), REVOKED_VALUE, retention);
+        Instant expiresAt = jwtTokenProvider.getAccessTokenExpiresAt(accessToken);
+        Duration remainingTime = Duration.between(clock.instant(), expiresAt);
+        if (remainingTime.isZero() || remainingTime.isNegative()) {
+            return;
+        }
+        redisTemplate.opsForValue().set(key(accessToken), REVOKED_VALUE, remainingTime);
     }
 
     /**

@@ -8,8 +8,11 @@ import com.ssafy.backend.auth.exception.DuplicateEmailException;
 import com.ssafy.backend.auth.exception.DuplicateLoginIdException;
 import com.ssafy.backend.auth.exception.AccountUnavailableException;
 import com.ssafy.backend.auth.exception.InvalidCredentialsException;
+import com.ssafy.backend.auth.exception.InvalidRefreshTokenException;
+import com.ssafy.backend.auth.exception.TooManyLoginAttemptsException;
 import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
+import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.auth.service.SignupService;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +33,7 @@ class AuthControllerTest {
     private SignupService signupService;
     private LoginService loginService;
     private LogoutService logoutService;
+    private RefreshTokenService refreshTokenService;
     private MockMvc mockMvc;
 
     /** 서비스 mock과 전역 예외 처리가 적용된 standalone MockMvc를 구성한다. */
@@ -38,7 +42,9 @@ class AuthControllerTest {
         signupService = mock(SignupService.class);
         loginService = mock(LoginService.class);
         logoutService = mock(LogoutService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(signupService, loginService, logoutService))
+        refreshTokenService = mock(RefreshTokenService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                        new AuthController(signupService, loginService, logoutService, refreshTokenService))
                 .setControllerAdvice(new AuthExceptionHandler())
                 .build();
     }
@@ -72,6 +78,23 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.userId").value(1))
                 .andExpect(jsonPath("$.role").value("FAN"))
                 .andExpect(jsonPath("$.nickname").value("melly"));
+    }
+
+    /** 유효한 Refresh Token 요청이 회전된 토큰 응답을 반환하는지 검증한다. */
+    @Test
+    void returnsRotatedTokensForValidRefreshToken() throws Exception {
+        when(refreshTokenService.refresh(any())).thenReturn(new LoginResponse(
+                "new-access", "new-refresh", 3600, 1L, UserRole.FAN, "melly"
+        ));
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"current-refresh"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new-access"))
+                .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
     }
 
     /** 로그인 ID와 비밀번호의 공백·길이 제약을 위반한 요청이 서비스 호출 전에 거부되는지 검증한다. */
@@ -122,6 +145,27 @@ class AuthControllerTest {
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail").value("This account is not available."));
+    }
+
+    /** 임시 로그인 차단과 잘못된 Refresh Token을 약속된 오류 응답으로 변환하는지 검증한다. */
+    @Test
+    void mapsRedisAuthenticationFailuresToProblemDetails() throws Exception {
+        when(loginService.login(any())).thenThrow(new TooManyLoginAttemptsException());
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"melly01","password":"wrong"}
+                                """))
+                .andExpect(status().isTooManyRequests());
+
+        when(refreshTokenService.refresh(any())).thenThrow(new InvalidRefreshTokenException());
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"invalid-refresh"}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail").value("Invalid or expired refresh token."));
     }
 
     /** 정상 가입 요청이 HTTP 201과 명세에 정의된 응답 필드만 반환하는지 확인한다. */

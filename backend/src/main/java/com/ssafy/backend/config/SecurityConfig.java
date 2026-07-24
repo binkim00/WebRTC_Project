@@ -61,7 +61,8 @@ public class SecurityConfig {
                 .exceptionHandling(exceptions ->
                         exceptions.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login",
+                                "/api/v1/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
                         // 보호 대상 API가 확정될 때까지 기존 접근 정책을 유지한다.
                         .anyRequest().permitAll()

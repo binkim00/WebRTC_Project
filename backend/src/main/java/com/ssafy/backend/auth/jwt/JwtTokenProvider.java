@@ -1,6 +1,7 @@
 package com.ssafy.backend.auth.jwt;
 
 import com.ssafy.backend.auth.exception.InvalidAccessTokenException;
+import com.ssafy.backend.auth.exception.InvalidRefreshTokenException;
 import com.ssafy.backend.config.jwt.JwtProperties;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
@@ -17,6 +18,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 
 /** 계약에 맞는 Access·Refresh Token을 발급하고 Access Token의 필수 조건을 검증한다. */
 @Component
@@ -46,6 +48,7 @@ public class JwtTokenProvider {
         String subject = user.getId().toString();
 
         String accessToken = encode(JwtClaimsSet.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(subject)
                 .issuedAt(issuedAt)
                 .expiresAt(issuedAt.plusSeconds(properties.accessExpiration()))
@@ -54,6 +57,7 @@ public class JwtTokenProvider {
                 .build());
 
         String refreshToken = encode(JwtClaimsSet.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(subject)
                 .issuedAt(issuedAt)
                 .expiresAt(issuedAt.plusSeconds(properties.refreshExpiration()))
@@ -66,13 +70,7 @@ public class JwtTokenProvider {
     /** 서명·만료·tokenType·sub·role을 검증하고 인증 principal을 반환한다. */
     public AuthenticatedUser parseAccessToken(String token) {
         try {
-            // 디코더가 서명과 만료시간을 먼저 검증한 뒤 애플리케이션 전용 Claim을 검사한다.
-            Jwt jwt = jwtDecoder.decode(token);
-            if (!ACCESS_TOKEN_TYPE.equals(jwt.getClaimAsString(CLAIM_TOKEN_TYPE))
-                    || jwt.getExpiresAt() == null) {
-                throw new InvalidAccessTokenException();
-            }
-
+            Jwt jwt = decodeAccessToken(token);
             String subject = jwt.getSubject();
             String roleClaim = jwt.getClaimAsString(CLAIM_ROLE);
             if (!StringUtils.hasText(subject) || !StringUtils.hasText(roleClaim)) {
@@ -84,6 +82,63 @@ public class JwtTokenProvider {
             throw exception;
         } catch (JwtException | IllegalArgumentException exception) {
             // 파싱 실패 원인은 내부에 보존하되 외부에는 하나의 토큰 오류 계약만 노출한다.
+            throw new InvalidAccessTokenException(exception);
+        }
+    }
+
+    /**
+     * 서명·만료·토큰 종류를 검증한 Access Token의 만료 시각을 반환한다.
+     *
+     * @param token 만료 시각을 확인할 Access Token
+     * @return 검증된 Access Token의 만료 시각
+     * @throws InvalidAccessTokenException 유효한 Access Token이 아닌 경우
+     */
+    public Instant getAccessTokenExpiresAt(String token) {
+        return decodeAccessToken(token).getExpiresAt();
+    }
+
+    /**
+     * 서명·만료·토큰 종류와 사용자 식별자를 검증해 Refresh Token principal을 반환한다.
+     *
+     * @param token 검증할 Refresh Token
+     * @return 검증된 Refresh Token의 사용자 식별자
+     * @throws InvalidRefreshTokenException 유효한 Refresh Token이 아닌 경우
+     */
+    public RefreshTokenPrincipal parseRefreshToken(String token) {
+        try {
+            Jwt jwt = jwtDecoder.decode(token);
+            if (!REFRESH_TOKEN_TYPE.equals(jwt.getClaimAsString(CLAIM_TOKEN_TYPE))
+                    || jwt.getExpiresAt() == null
+                    || !StringUtils.hasText(jwt.getSubject())) {
+                throw new InvalidRefreshTokenException();
+            }
+            return new RefreshTokenPrincipal(Long.valueOf(jwt.getSubject()));
+        } catch (InvalidRefreshTokenException exception) {
+            throw exception;
+        } catch (JwtException | IllegalArgumentException exception) {
+            throw new InvalidRefreshTokenException(exception);
+        }
+    }
+
+    /**
+     * 디코더로 서명과 만료를 검증하고 Access Token 전용 Claim을 확인한다.
+     *
+     * @param token 검증할 JWT 문자열
+     * @return 검증된 Access Token
+     * @throws InvalidAccessTokenException 유효한 Access Token이 아닌 경우
+     */
+    private Jwt decodeAccessToken(String token) {
+        try {
+            // 디코더가 서명과 만료시간을 먼저 검증한 뒤 애플리케이션 전용 Claim을 검사한다.
+            Jwt jwt = jwtDecoder.decode(token);
+            if (!ACCESS_TOKEN_TYPE.equals(jwt.getClaimAsString(CLAIM_TOKEN_TYPE))
+                    || jwt.getExpiresAt() == null) {
+                throw new InvalidAccessTokenException();
+            }
+            return jwt;
+        } catch (InvalidAccessTokenException exception) {
+            throw exception;
+        } catch (JwtException | IllegalArgumentException exception) {
             throw new InvalidAccessTokenException(exception);
         }
     }

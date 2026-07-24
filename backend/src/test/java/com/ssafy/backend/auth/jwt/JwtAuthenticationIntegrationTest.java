@@ -46,8 +46,11 @@ class JwtAuthenticationIntegrationTest {
                 properties,
                 Clock.fixed(Instant.now(), ZoneOffset.UTC)
         );
+        TokenSessionStore tokenSessionStore = mock(TokenSessionStore.class);
+        when(tokenSessionStore.isCurrentAccessToken(anyLong(), anyString())).thenReturn(true);
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
-                provider, mock(RevokedAccessTokenStore.class), new JwtAuthenticationEntryPoint()
+                provider, mock(RevokedAccessTokenStore.class), tokenSessionStore,
+                new JwtAuthenticationEntryPoint()
         );
         User user = User.createActive(
                 "melly01", "melly@example.com", "bcrypt", "melly",

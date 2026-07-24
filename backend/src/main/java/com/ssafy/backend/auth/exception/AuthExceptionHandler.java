@@ -21,6 +21,22 @@ public class AuthExceptionHandler {
         return detail;
     }
 
+    /** Refresh Token 검증 실패를 HTTP 401 응답으로 변환한다. */
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    ProblemDetail handleInvalidRefreshToken(InvalidRefreshTokenException exception) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, exception.getMessage());
+        detail.setTitle("Authentication failed");
+        return detail;
+    }
+
+    /** 반복된 로그인 실패로 인한 임시 차단을 HTTP 429 응답으로 변환한다. */
+    @ExceptionHandler(TooManyLoginAttemptsException.class)
+    ProblemDetail handleTooManyLoginAttempts(TooManyLoginAttemptsException exception) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage());
+        detail.setTitle("Login temporarily blocked");
+        return detail;
+    }
+
     /**
      * 사용할 수 없는 계정의 로그인 시도를 HTTP 403 응답으로 변환한다.
      *

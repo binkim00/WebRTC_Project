@@ -25,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final RevokedAccessTokenStore revokedAccessTokenStore;
+    private final TokenSessionStore tokenSessionStore;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
 
     /**
@@ -32,13 +33,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      *
      * @param jwtTokenProvider Access Token 검증기
      * @param revokedAccessTokenStore 로그아웃된 Access Token 저장소
+     * @param tokenSessionStore 사용자별 현재 토큰 세션 저장소
      * @param authenticationEntryPoint 인증 실패 응답 처리기
      */
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                    RevokedAccessTokenStore revokedAccessTokenStore,
+                                   TokenSessionStore tokenSessionStore,
                                    JwtAuthenticationEntryPoint authenticationEntryPoint) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.revokedAccessTokenStore = revokedAccessTokenStore;
+        this.tokenSessionStore = tokenSessionStore;
         this.authenticationEntryPoint = authenticationEntryPoint;
     }
 
@@ -58,6 +62,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 throw new InvalidAccessTokenException();
             }
             AuthenticatedUser principal = jwtTokenProvider.parseAccessToken(token);
+            if (!tokenSessionStore.isCurrentAccessToken(principal.userId(), token)) {
+                throw new InvalidAccessTokenException();
+            }
             SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + principal.role().name());
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(principal, null, List.of(authority));

@@ -1,6 +1,7 @@
 package com.ssafy.backend.auth.jwt;
 
 import com.ssafy.backend.auth.exception.InvalidAccessTokenException;
+import com.ssafy.backend.auth.exception.InvalidRefreshTokenException;
 import com.ssafy.backend.config.jwt.JwtConfig;
 import com.ssafy.backend.config.jwt.JwtProperties;
 import com.ssafy.backend.user.domain.PreferredLanguage;
@@ -70,20 +71,32 @@ class JwtTokenProviderTest {
         assertThat(access.getSubject()).isEqualTo("1");
         assertThat(access.getClaimAsString("role")).isEqualTo("FAN");
         assertThat(access.getClaimAsString("tokenType")).isEqualTo("access");
+        assertThat(access.getId()).isNotBlank();
         assertThat(access.getIssuedAt()).isEqualTo(ISSUED_AT);
         assertThat(access.getExpiresAt()).isEqualTo(ISSUED_AT.plusSeconds(3600));
 
         assertThat(refresh.getHeaders().get("alg").toString()).isEqualTo("HS256");
         assertThat(refresh.getSubject()).isEqualTo("1");
         assertThat(refresh.getClaimAsString("tokenType")).isEqualTo("refresh");
+        assertThat(refresh.getId()).isNotBlank();
         assertThat(refresh.hasClaim("role")).isFalse();
         assertThat(refresh.getExpiresAt()).isEqualTo(ISSUED_AT.plusSeconds(1209600));
         assertThat(tokens.expiresIn()).isEqualTo(3600);
 
         assertThat(provider.parseAccessToken(tokens.accessToken()))
                 .isEqualTo(new AuthenticatedUser(1L, UserRole.FAN));
+        assertThat(provider.getAccessTokenExpiresAt(tokens.accessToken()))
+                .isEqualTo(ISSUED_AT.plusSeconds(3600));
+        assertThat(provider.parseRefreshToken(tokens.refreshToken()))
+                .isEqualTo(new RefreshTokenPrincipal(1L));
         assertThatThrownBy(() -> provider.parseAccessToken(tokens.refreshToken()))
                 .isInstanceOf(InvalidAccessTokenException.class);
+        assertThatThrownBy(() -> provider.parseRefreshToken(tokens.accessToken()))
+                .isInstanceOf(InvalidRefreshTokenException.class);
+
+        IssuedTokens rotated = provider.issue(user);
+        assertThat(rotated.accessToken()).isNotEqualTo(tokens.accessToken());
+        assertThat(rotated.refreshToken()).isNotEqualTo(tokens.refreshToken());
     }
 
     /** 위조·만료·무서명 토큰과 잘못된 sub·role Claim이 모두 거부되는지 검증한다. */

@@ -37,6 +37,9 @@ livekit:
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  auth:
+    login-max-failures: ${LOGIN_MAX_FAILURES:5}
+    login-block-duration: ${LOGIN_BLOCK_DURATION:900}
 
 jwt:
   secret: ${JWT_SECRET}
