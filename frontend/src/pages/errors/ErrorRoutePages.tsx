@@ -1,4 +1,5 @@
 import { isRouteErrorResponse, Link, useRouteError } from 'react-router-dom'
+import { AlertBanner, Badge, Card, CardContent, CardHeader, CardTitle } from '../../components'
 
 type ErrorPageShellProps = {
   code: string
@@ -8,17 +9,27 @@ type ErrorPageShellProps = {
 
 function ErrorPageShell({ code, title, description }: ErrorPageShellProps) {
   return (
-    <section className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-      <p className="text-sm font-bold uppercase tracking-widest text-violet-700">{code}</p>
-      <h1 className="mt-3 text-3xl font-bold text-slate-950">{title}</h1>
-      <p className="mt-4 text-slate-600">{description}</p>
-      <Link
-        className="mt-6 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-        to="/"
-      >
-        메인으로 이동
-      </Link>
-    </section>
+    <Card className="mx-auto max-w-2xl overflow-hidden text-center">
+      <CardHeader className="bg-gradient-to-br from-red-50 to-white">
+        <Badge className="mx-auto" variant="danger">
+          {code}
+        </Badge>
+        <CardTitle as="h1" className="mt-4 text-3xl">
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <AlertBanner title="요청한 화면을 표시할 수 없습니다" variant="error">
+          {description}
+        </AlertBanner>
+        <Link
+          className="mt-6 inline-flex min-h-10 items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+          to="/"
+        >
+          메인으로 이동
+        </Link>
+      </CardContent>
+    </Card>
   )
 }
 

@@ -1,33 +1,22 @@
-import { Link, Outlet } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
+import { TopNavigation } from './components'
+
+const navigationItems = [
+  { label: '로그인', to: '/login' },
+  { label: '팬', to: '/fan/events' },
+  { label: '인플루언서', to: '/influencer/mypage/profile' },
+  { label: '매니저', to: '/manager/events' },
+] as const
 
 function App() {
   return (
-    <div className="min-h-screen bg-slate-50 text-left text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <Link className="text-xl font-bold tracking-tight text-violet-700" to="/">
-            MELLY
-          </Link>
-          <nav aria-label="주요 화면" className="flex flex-wrap gap-2 text-sm">
-            <Link className="rounded-md px-3 py-2 hover:bg-slate-100" to="/login">
-              로그인
-            </Link>
-            <Link className="rounded-md px-3 py-2 hover:bg-slate-100" to="/fan/events">
-              팬
-            </Link>
-            <Link
-              className="rounded-md px-3 py-2 hover:bg-slate-100"
-              to="/influencer/mypage/profile"
-            >
-              인플루언서
-            </Link>
-            <Link className="rounded-md px-3 py-2 hover:bg-slate-100" to="/manager/events">
-              매니저
-            </Link>
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-6xl px-6 py-8">
+    <div className="flex min-h-screen flex-col bg-slate-50 text-left text-slate-900">
+      <TopNavigation
+        ariaLabel="주요 화면"
+        brand="MELLY"
+        items={navigationItems}
+      />
+      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
         <Outlet />
       </main>
       <footer className="mt-auto border-t border-slate-200 bg-white px-6 py-4 text-center text-sm text-slate-500">

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Badge, Card, CardContent, CardHeader, CardTitle } from '../data-display/DataDisplay'
+import { AlertBanner } from '../feedback/Feedback'
 
 type ScreenPageProps = {
   screenId: string
@@ -16,17 +18,25 @@ type InvalidRouteStateProps = {
 
 export function InvalidRouteState({ title, message }: InvalidRouteStateProps) {
   return (
-    <section className="rounded-xl border border-amber-200 bg-amber-50 p-6">
-      <p className="text-sm font-semibold text-amber-700">잘못된 라우트 상태</p>
-      <h1 className="mt-2 text-2xl font-bold text-slate-900">{title}</h1>
-      <p className="mt-3 text-slate-700">{message}</p>
-      <Link
-        className="mt-5 inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-        to="/"
-      >
-        메인으로 이동
-      </Link>
-    </section>
+    <Card className="overflow-hidden">
+      <CardHeader className="bg-amber-50">
+        <Badge variant="warning">잘못된 라우트 상태</Badge>
+        <CardTitle as="h1" className="mt-3 text-2xl">
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <AlertBanner title="주소를 확인해 주세요" variant="warning">
+          {message}
+        </AlertBanner>
+        <Link
+          className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+          to="/"
+        >
+          메인으로 이동
+        </Link>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -54,35 +64,39 @@ export function ScreenPage({
   )
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-violet-700">{screenId}</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{title}</h1>
-          <p className="mt-3 max-w-3xl text-slate-600">{description}</p>
+    <Card className="overflow-hidden">
+      <CardHeader className="bg-gradient-to-br from-violet-50 to-white">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Badge variant="primary">{screenId}</Badge>
+          <Badge>라우팅 구현 화면</Badge>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          라우팅 구현 화면
-        </span>
-      </div>
+        <CardTitle as="h1" className="mt-4 text-3xl tracking-tight">
+          {title}
+        </CardTitle>
+        <p className="mt-3 max-w-3xl text-slate-600">{description}</p>
+      </CardHeader>
 
-      {visibleParams.length > 0 ? (
-        <dl className="mt-6 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
-          {visibleParams.map(([name, value]) => (
-            <div key={name}>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{name}</dt>
-              <dd className="mt-1 break-all font-mono text-sm text-slate-900">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      <CardContent className="grid gap-6">
+        {visibleParams.length > 0 ? (
+          <dl className="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
+            {visibleParams.map(([name, value]) => (
+              <div key={name}>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {name}
+                </dt>
+                <dd className="mt-1 break-all font-mono text-sm text-slate-900">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
 
-      {children ? <div className="mt-6">{children}</div> : null}
+        {children}
 
-      <p className="mt-6 border-t border-slate-100 pt-4 text-sm text-slate-500">
-        현재 단계에서는 URL 연결을 검증하는 최소 화면만 제공합니다. 실제 데이터와 업무 UI는 API와
-        디자인이 확정된 뒤 연결합니다.
-      </p>
-    </article>
+        <AlertBanner title="현재 구현 범위" variant="info">
+          현재 단계에서는 URL 연결과 공통 화면 구조를 제공합니다. 실제 데이터와 업무 기능은 API와
+          상세 디자인이 확정된 뒤 연결합니다.
+        </AlertBanner>
+      </CardContent>
+    </Card>
   )
 }

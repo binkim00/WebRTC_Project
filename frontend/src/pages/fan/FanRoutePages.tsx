@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { VideoCallRoom } from '../../components'
 import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
 
 export function FanEventListPage() {
@@ -45,12 +46,23 @@ export function FanMeetingWaitingPage() {
 }
 
 export function FanMeetingCallPage() {
+  const { fanMeetingId } = useParams()
+
+  if (!fanMeetingId?.trim()) {
+    return (
+      <InvalidRouteState
+        message="URL에 필요한 fanMeetingId 값이 없습니다. 이전 화면에서 올바른 팬미팅을 선택해 주세요."
+        title="필수 URL 파라미터가 없습니다"
+      />
+    )
+  }
+
   return (
-    <ScreenPage
-      description="팬이 인플루언서와 영상 통화를 진행하는 화면입니다."
-      requiredParams={['fanMeetingId']}
+    <VideoCallRoom
+      endTo={`/fan/fan-meetings/${fanMeetingId}/complete`}
+      meetingId={fanMeetingId}
+      participantLabel="인플루언서 영상"
       screenId="FN-005"
-      title="영상 통화 화면"
     />
   )
 }
