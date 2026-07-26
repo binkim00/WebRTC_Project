@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+google-credentials.json
 
 # IntelliJ
 .idea/
