@@ -68,4 +68,23 @@ public class CallSession extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ended_by_user_id")
     private User endedBy;
+
+    /**
+     * 호출된 팬의 입장을 기다리는 초기 영상통화 세션을 생성한다.
+     *
+     * @param queueEntry 통화 대상 대기열 항목
+     * @param roomId 팬미팅에서 공통으로 사용할 LiveKit Room 식별자
+     * @param fanLanguage 통화 중 고정해서 사용할 팬 언어 코드
+     * @return 연결 대기 상태의 영상통화 세션
+     */
+    public static CallSession createConnecting(
+            QueueEntry queueEntry, String roomId, String fanLanguage
+    ) {
+        CallSession callSession = new CallSession();
+        callSession.queueEntry = queueEntry;
+        callSession.roomId = roomId;
+        callSession.fanLanguage = fanLanguage;
+        callSession.status = CallSessionStatus.CONNECTING;
+        return callSession;
+    }
 }

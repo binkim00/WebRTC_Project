@@ -1,9 +1,11 @@
 package com.ssafy.backend.call.repository;
 
 import com.ssafy.backend.call.domain.CallSession;
+import com.ssafy.backend.call.domain.CallSessionStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -27,4 +29,22 @@ public interface CallSessionRepository extends JpaRepository<CallSession, Long> 
             "queueEntry.meeting.organization"
     })
     Optional<CallSession> findAccessContextById(Long callSessionId);
+
+    /**
+     * 대기열 항목에 이미 생성된 영상통화 세션을 조회한다.
+     *
+     * @param queueEntryId 대기열 항목 식별자
+     * @return 해당 대기열 항목의 영상통화 세션
+     */
+    Optional<CallSession> findByQueueEntry_Id(Long queueEntryId);
+
+    /**
+     * 팬미팅에 지정 상태의 영상통화 세션이 존재하는지 확인한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param statuses 확인할 영상통화 세션 상태
+     * @return 지정 상태의 세션이 하나라도 있으면 true
+     */
+    boolean existsByQueueEntry_Meeting_IdAndStatusIn(
+            Long meetingId, Collection<CallSessionStatus> statuses);
 }

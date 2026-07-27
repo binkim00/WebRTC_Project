@@ -9,6 +9,7 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.config.livekit.LiveKitProperties;
 import com.ssafy.backend.livekit.dto.LiveKitAccessTokenResponse;
+import com.ssafy.backend.livekit.support.LiveKitRoomNames;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.queue.domain.QueueEntry;
@@ -187,7 +188,7 @@ public class LiveKitAccessTokenService {
      * @throws BusinessException 통화 세션에 잘못된 Room 값이 저장된 경우
      */
     private String requireCanonicalRoomName(CallSession callSession, Long meetingId) {
-        String roomName = "meeting-room-" + meetingId;
+        String roomName = LiveKitRoomNames.forMeeting(meetingId);
         if (!roomName.equals(callSession.getRoomId())) {
             throw new BusinessException(ErrorCode.CALL_SESSION_STATE_CONFLICT);
         }

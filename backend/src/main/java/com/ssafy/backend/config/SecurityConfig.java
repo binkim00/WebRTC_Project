@@ -71,6 +71,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/webhook").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/call")
+                                .hasRole("MANAGER")
                         // 보호 대상 API가 확정될 때까지 기존 접근 정책을 유지한다.
                         .requestMatchers("/api/v1/fan-meetings/*/queue/operations/**")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")

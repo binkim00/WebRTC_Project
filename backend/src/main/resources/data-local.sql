@@ -76,3 +76,28 @@ SELECT
     WHERE NOT EXISTS (
     SELECT 1 FROM users WHERE login_id = 'testuser2'
 );
+
+INSERT INTO users (
+    login_id,
+    password_hash,
+    email,
+    nickname,
+    role,
+    status,
+    preferred_language,
+    created_at,
+    updated_at
+)
+SELECT
+    'testmanager1',
+    '$2y$10$O.QlRVhtccpaGjg9ZrTlGegtkJ5t.5IXN/UbcNY/xhsghSA2C6pm2',
+    'testmanager1@melly.test',
+    '테스트매니저',
+    'MANAGER',
+    'ACTIVE',
+    'KOREAN',
+    NOW(),
+    NOW()
+    WHERE NOT EXISTS (
+    SELECT 1 FROM users WHERE login_id = 'testmanager1'
+);
