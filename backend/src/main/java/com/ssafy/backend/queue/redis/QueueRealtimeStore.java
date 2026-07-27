@@ -12,8 +12,8 @@ import java.util.List;
 /** Redis에서 자주 변경되는 대기 순서와 호출 상태를 원자적으로 관리한다. */
 @Component
 public class QueueRealtimeStore {
-    private static final long NO_PARTICIPANT = -1L;
     private static final long ACTIVE_CALL = -2L;
+    private static final long STATE_CONFLICT = -3L;
 
     private static final DefaultRedisScript<Long> INITIALIZE_SCRIPT = new DefaultRedisScript<>("""
             if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
@@ -25,17 +25,13 @@ public class QueueRealtimeStore {
             return #ARGV / 3
             """, Long.class);
 
-    private static final DefaultRedisScript<Long> CLAIM_NEXT_SCRIPT = new DefaultRedisScript<>("""
+    private static final DefaultRedisScript<Long> CLAIM_ENTRY_SCRIPT = new DefaultRedisScript<>("""
             if redis.call('EXISTS', KEYS[3]) == 1 then return -2 end
-            local entries = redis.call('ZRANGE', KEYS[1], 0, -1)
-            for _, entryId in ipairs(entries) do
-              if redis.call('HGET', KEYS[2], entryId) == 'WAITING' then
-                redis.call('HSET', KEYS[2], entryId, 'CALLED')
-                redis.call('SET', KEYS[3], entryId)
-                return tonumber(entryId)
-              end
-            end
-            return -1
+            if not redis.call('ZSCORE', KEYS[1], ARGV[1]) then return -3 end
+            if redis.call('HGET', KEYS[2], ARGV[1]) ~= 'WAITING' then return -3 end
+            redis.call('HSET', KEYS[2], ARGV[1], 'CALLED')
+            redis.call('SET', KEYS[3], ARGV[1])
+            return tonumber(ARGV[1])
             """, Long.class);
 
     private static final DefaultRedisScript<Long> CLEAR_CURRENT_SCRIPT = new DefaultRedisScript<>("""
@@ -98,20 +94,30 @@ public class QueueRealtimeStore {
         return Boolean.TRUE.equals(redisTemplate.hasKey(QueueRedisKeys.initialized(meetingId)));
     }
 
-    /** 다음 WAITING 참가자를 원자적으로 호출 상태로 선점한다. */
-    public Long claimNext(Long meetingId) {
+    /**
+     * 명세에서 지정한 대기열 참가자를 원자적으로 호출 상태로 선점한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param entryId 호출할 대기열 항목 식별자
+     * @return Redis 선점 결과
+     */
+    public QueueClaimResult claimEntry(Long meetingId, Long entryId) {
         Long result = redisTemplate.execute(
-                CLAIM_NEXT_SCRIPT,
+                CLAIM_ENTRY_SCRIPT,
                 List.of(QueueRedisKeys.order(meetingId), QueueRedisKeys.status(meetingId),
-                        QueueRedisKeys.current(meetingId))
+                        QueueRedisKeys.current(meetingId)),
+                entryId.toString()
         );
-        if (result == null || result == NO_PARTICIPANT) {
-            return null;
+        if (result != null && result.equals(entryId)) {
+            return QueueClaimResult.CLAIMED;
         }
-        if (result == ACTIVE_CALL) {
-            throw new IllegalStateException("이미 호출 또는 통화 중인 참가자가 있습니다.");
+        if (result != null && result == ACTIVE_CALL) {
+            return QueueClaimResult.ACTIVE_CALL;
         }
-        return result;
+        if (result == null || result == STATE_CONFLICT) {
+            return QueueClaimResult.STATE_CONFLICT;
+        }
+        return QueueClaimResult.STATE_CONFLICT;
     }
 
     /** 참가자의 실시간 상태를 갱신한다. */

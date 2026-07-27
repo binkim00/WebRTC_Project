@@ -41,4 +41,10 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
             + "where q.meeting.id = :meetingId and q.id = :entryId")
     Optional<QueueEntry> findForUpdate(@Param("meetingId") Long meetingId,
                                        @Param("entryId") Long entryId);
+
+    /** 대기열 식별자로 항목과 팬미팅을 조회하면서 비관적 쓰기 잠금을 획득한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from QueueEntry q join fetch q.meeting m "
+            + "join fetch q.participant p join fetch p.fan where q.id = :entryId")
+    Optional<QueueEntry> findByIdForUpdate(@Param("entryId") Long entryId);
 }

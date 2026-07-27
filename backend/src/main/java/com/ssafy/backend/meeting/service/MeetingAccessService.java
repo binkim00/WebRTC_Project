@@ -5,6 +5,7 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.organization.domain.OrganizationMemberStatus;
+import com.ssafy.backend.organization.domain.OrganizationMemberType;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
@@ -42,6 +43,34 @@ public class MeetingAccessService {
         if (meeting.getOrganization() != null && organizationMemberRepository
                 .existsByOrganization_IdAndUser_IdAndStatus(
                         meeting.getOrganization().getId(), user.getId(), OrganizationMemberStatus.ACTIVE)) {
+            return meeting;
+        }
+        throw new BusinessException(ErrorCode.ACCESS_DENIED);
+    }
+
+    /**
+     * 사용자가 해당 팬미팅의 매니저인지 검증한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param user 검증할 활성 사용자
+     * @return 권한 검증을 통과한 팬미팅
+     * @throws BusinessException 해당 팬미팅의 매니저가 아닌 경우
+     */
+    @Transactional(readOnly = true)
+    public FanMeeting requireManager(Long meetingId, User user) {
+        FanMeeting meeting = requireMeeting(meetingId);
+        if (user.getRole() != UserRole.MANAGER) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        if (sameUser(meeting.getManager(), user)) {
+            return meeting;
+        }
+        if (meeting.getOrganization() != null && organizationMemberRepository
+                .existsByOrganization_IdAndUser_IdAndMemberTypeAndStatus(
+                        meeting.getOrganization().getId(),
+                        user.getId(),
+                        OrganizationMemberType.MANAGER,
+                        OrganizationMemberStatus.ACTIVE)) {
             return meeting;
         }
         throw new BusinessException(ErrorCode.ACCESS_DENIED);

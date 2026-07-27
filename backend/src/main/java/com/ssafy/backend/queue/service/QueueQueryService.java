@@ -8,6 +8,7 @@ import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
+import com.ssafy.backend.queue.domain.QueueDisplayStatus;
 import com.ssafy.backend.queue.dto.QueueOperationResponse;
 import com.ssafy.backend.queue.dto.QueueSnapshotResponse;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
@@ -54,13 +55,17 @@ public class QueueQueryService {
         if (status == null || position == null || peopleAhead < 0) {
             throw new BusinessException(ErrorCode.QUEUE_NOT_INITIALIZED);
         }
+        if (status == QueueEntryStatus.NOT_ENTERED) {
+            throw new BusinessException(ErrorCode.QUEUE_ENTRY_NOT_ENTERED);
+        }
         return new QueueSnapshotResponse(
-                meetingId,
                 entry.getId(),
                 position,
                 peopleAhead,
                 peopleAhead * setting.getCallDurationSec(),
-                status,
+                QueueDisplayStatus.from(status),
+                entry.getCallAttemptCount(),
+                entry.getCalledAt(),
                 status == QueueEntryStatus.CALLED
         );
     }
@@ -84,7 +89,9 @@ public class QueueQueryService {
                 entry.getParticipant().getId(),
                 entry.getQueuePosition(),
                 entry.getStatus(),
-                entry.getRecallCount()
+                entry.getCallAttemptCount(),
+                entry.getCalledAt(),
+                entry.getNoShowAt()
         );
     }
 }

@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 @Table(name = "queue_entries")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class QueueEntry extends BaseTimeEntity {
+    private static final int MAX_RECALL_COUNT = 1;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -90,8 +91,20 @@ public class QueueEntry extends BaseTimeEntity {
     /** 호출 중인 참가자의 재호출 횟수와 호출 시각을 갱신한다. */
     public void recall(LocalDateTime calledAt) {
         requireStatus(QueueEntryStatus.CALLED);
+        if (recallCount >= MAX_RECALL_COUNT) {
+            throw new IllegalStateException("재호출 가능 횟수를 초과했습니다.");
+        }
         this.recallCount++;
         this.calledAt = calledAt;
+    }
+
+    /**
+     * 최초 호출과 재호출을 합한 누적 호출 시도 횟수를 반환한다.
+     *
+     * @return 아직 호출되지 않았으면 0, 호출된 이후에는 최초 호출을 포함한 누적 횟수
+     */
+    public int getCallAttemptCount() {
+        return calledAt == null ? 0 : recallCount + 1;
     }
 
     /** 호출에 응답하지 않은 참가자를 노쇼로 처리한다. */
