@@ -22,11 +22,11 @@ import {
   FanEventDetailPage,
   FanEventListPage,
   FanMeetingCallPage,
-  FanMeetingCompletePage,
   FanMeetingListPage,
   FanMeetingWaitingPage,
   FanProfilePage,
 } from '../pages/fan/FanRoutePages'
+import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
 import {
   InfluencerFanMemoPage,
   InfluencerMeetingCallPage,
@@ -67,6 +67,10 @@ export const router = createBrowserRouter([
             Component: SignupPage,
           },
         ],
+      },
+      {
+        path: 'fan/fan-meetings/:fanMeetingId/complete',
+        Component: FanMeetingCompletePage,
       },
       {
         path: 'fan-meetings/:fanMeetingId',
@@ -112,10 +116,6 @@ export const router = createBrowserRouter([
           {
             path: 'fan-meetings/:fanMeetingId/call',
             Component: FanMeetingCallPage,
-          },
-          {
-            path: 'fan-meetings/:fanMeetingId/complete',
-            Component: FanMeetingCompletePage,
           },
           {
             path: 'mypage/profile',

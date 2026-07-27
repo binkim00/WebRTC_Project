@@ -67,17 +67,6 @@ export function FanMeetingCallPage() {
   )
 }
 
-export function FanMeetingCompletePage() {
-  return (
-    <ScreenPage
-      description="영상 통화가 끝난 뒤 표시되는 완료 화면입니다."
-      requiredParams={['fanMeetingId']}
-      screenId="FN-006"
-      title="영상 통화 종료 화면"
-    />
-  )
-}
-
 export function FanProfilePage() {
   return (
     <ScreenPage
