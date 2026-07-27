@@ -43,6 +43,15 @@ class GoogleSTTAdapter(STTAdapter):
             sample_rate_hertz=48000,
             language_code=self._to_google_lang(language),
             enable_automatic_punctuation=True,
+            model="latest_long",       # 긴 대화용 최신 모델
+            use_enhanced=True,         # enhanced 모델 사용
+            #     speech_contexts=[
+            #     speech.SpeechContext(
+            #         phrases=["팬미팅", "사인회", "영통", "인플루언서"],
+            #         boost=10.0,
+            #     )
+            # ],
+            
         )
         streaming_config = speech.StreamingRecognitionConfig(
             config=config,
