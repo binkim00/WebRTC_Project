@@ -43,6 +43,7 @@ public class QueueCommandService {
     private final CallSessionRepository callSessionRepository;
     private final QueueRealtimeStore realtimeStore;
     private final QueueQueryService queryService;
+    private final QueueInitializationService initializationService;
     private final Clock clock;
 
     /**
@@ -55,6 +56,7 @@ public class QueueCommandService {
      * @param callSessionRepository 영상통화 세션 저장소
      * @param realtimeStore Redis 실시간 대기열 저장소
      * @param queryService 대기열 응답 조회 서비스
+     * @param initializationService 참가자 기반 대기열 초기화 서비스
      * @param clock 상태 변경 시각 기준 시계
      */
     public QueueCommandService(CurrentUserService currentUserService,
@@ -64,6 +66,7 @@ public class QueueCommandService {
                                CallSessionRepository callSessionRepository,
                                QueueRealtimeStore realtimeStore,
                                QueueQueryService queryService,
+                               QueueInitializationService initializationService,
                                Clock clock) {
         this.currentUserService = currentUserService;
         this.meetingAccessService = meetingAccessService;
@@ -72,6 +75,7 @@ public class QueueCommandService {
         this.callSessionRepository = callSessionRepository;
         this.realtimeStore = realtimeStore;
         this.queryService = queryService;
+        this.initializationService = initializationService;
         this.clock = clock;
     }
 
@@ -86,6 +90,7 @@ public class QueueCommandService {
     @Transactional
     public QueueEnterResponse enter(Long meetingId, AuthenticatedUser principal) {
         User user = currentUserService.requireActiveUser(principal);
+        initializationService.ensureInitializedForParticipant(meetingId, user.getId());
         QueueEntry entry = queueEntryRepository
                 .findByMeeting_IdAndParticipant_Fan_Id(meetingId, user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPANT_NOT_FOUND));

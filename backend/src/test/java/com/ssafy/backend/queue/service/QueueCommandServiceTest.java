@@ -58,9 +58,10 @@ class QueueCommandServiceTest {
         CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
         QueueQueryService queryService = mock(QueueQueryService.class);
+        QueueInitializationService initializationService = mock(QueueInitializationService.class);
         QueueCommandService service = new QueueCommandService(
                 currentUserService, accessService, settingRepository, entryRepository,
-                callSessionRepository, realtimeStore, queryService, CLOCK);
+                callSessionRepository, realtimeStore, queryService, initializationService, CLOCK);
         User fan = mock(User.class);
         QueueEntry entry = mock(QueueEntry.class);
         MeetingOperationSetting setting = mock(MeetingOperationSetting.class);
@@ -76,6 +77,8 @@ class QueueCommandServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.WAITING_ROOM_NOT_OPEN));
+
+        verify(initializationService).ensureInitializedForParticipant(1L, 10L);
     }
 
     /** 최초 호출 시 Redis 선점과 함께 팬 언어를 고정한 CallSession을 생성하는지 검증한다. */
@@ -89,9 +92,10 @@ class QueueCommandServiceTest {
         CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
         QueueQueryService queryService = mock(QueueQueryService.class);
+        QueueInitializationService initializationService = mock(QueueInitializationService.class);
         QueueCommandService service = new QueueCommandService(
                 currentUserService, accessService, settingRepository, entryRepository,
-                callSessionRepository, realtimeStore, queryService, CLOCK);
+                callSessionRepository, realtimeStore, queryService, initializationService, CLOCK);
         User manager = mock(User.class);
         FanMeeting meeting = mock(FanMeeting.class);
         Participant participant = mock(Participant.class);
@@ -141,9 +145,10 @@ class QueueCommandServiceTest {
         CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
         QueueQueryService queryService = mock(QueueQueryService.class);
+        QueueInitializationService initializationService = mock(QueueInitializationService.class);
         QueueCommandService service = new QueueCommandService(
                 currentUserService, accessService, settingRepository, entryRepository,
-                callSessionRepository, realtimeStore, queryService, CLOCK);
+                callSessionRepository, realtimeStore, queryService, initializationService, CLOCK);
         User manager = mock(User.class);
         QueueEntry entry = mock(QueueEntry.class);
         FanMeeting meeting = mock(FanMeeting.class);
@@ -179,9 +184,10 @@ class QueueCommandServiceTest {
         CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
         QueueQueryService queryService = mock(QueueQueryService.class);
+        QueueInitializationService initializationService = mock(QueueInitializationService.class);
         QueueCommandService service = new QueueCommandService(
                 currentUserService, accessService, settingRepository, entryRepository,
-                callSessionRepository, realtimeStore, queryService, CLOCK);
+                callSessionRepository, realtimeStore, queryService, initializationService, CLOCK);
         User manager = mock(User.class);
         QueueEntry entry = mock(QueueEntry.class);
         FanMeeting meeting = mock(FanMeeting.class);
@@ -215,9 +221,10 @@ class QueueCommandServiceTest {
         CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
         QueueQueryService queryService = mock(QueueQueryService.class);
+        QueueInitializationService initializationService = mock(QueueInitializationService.class);
         QueueCommandService service = new QueueCommandService(
                 currentUserService, accessService, settingRepository, entryRepository,
-                callSessionRepository, realtimeStore, queryService, CLOCK);
+                callSessionRepository, realtimeStore, queryService, initializationService, CLOCK);
         User manager = mock(User.class);
         QueueEntry entry = mock(QueueEntry.class);
         FanMeeting meeting = mock(FanMeeting.class);
