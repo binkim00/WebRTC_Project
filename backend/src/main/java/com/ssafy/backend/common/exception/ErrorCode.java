@@ -27,6 +27,7 @@ public enum ErrorCode {
     ACTIVE_CALL_SESSION_EXISTS(HttpStatus.CONFLICT, "활성 통화 세션이 있습니다."),
     CALL_SESSION_STATE_CONFLICT(HttpStatus.CONFLICT, "처리할 수 없는 통화 상태입니다."),
     LIVEKIT_JOIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "통화방 입장 권한이 없습니다."),
+    LIVEKIT_RECONNECT_EXPIRED(HttpStatus.CONFLICT, "LiveKit 재접속 허용 시간이 만료되었습니다."),
     LIVEKIT_OPERATION_FAILED(HttpStatus.BAD_GATEWAY, "LiveKit 요청에 실패했습니다."),
     INVALID_LIVEKIT_WEBHOOK(HttpStatus.UNAUTHORIZED, "유효하지 않은 webhook입니다."),
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
