@@ -58,4 +58,39 @@ public class QueueChangeRequest {
 
     @Column(name = "changed_queue_position")
     private Integer changedQueuePosition;
+
+    /** 대기 순서 변경 요청을 대기 상태로 생성한다. */
+    public static QueueChangeRequest create(QueueEntry queueEntry, String reason, LocalDateTime requestedAt) {
+        QueueChangeRequest request = new QueueChangeRequest();
+        request.queueEntry = queueEntry;
+        request.requestReason = reason;
+        request.status = QueueChangeRequestStatus.PENDING;
+        request.requestedAt = requestedAt;
+        request.previousQueuePosition = queueEntry.getQueuePosition();
+        return request;
+    }
+
+    /** 대기 중인 순서 변경 요청을 승인 결과와 함께 완료한다. */
+    public void approve(User processedBy, int changedPosition, LocalDateTime processedAt) {
+        requirePending();
+        this.status = QueueChangeRequestStatus.APPROVED;
+        this.processedBy = processedBy;
+        this.processedAt = processedAt;
+        this.changedQueuePosition = changedPosition;
+    }
+
+    /** 대기 중인 순서 변경 요청을 거절 처리한다. */
+    public void reject(User processedBy, LocalDateTime processedAt) {
+        requirePending();
+        this.status = QueueChangeRequestStatus.REJECTED;
+        this.processedBy = processedBy;
+        this.processedAt = processedAt;
+    }
+
+    /** 이미 처리된 순서 변경 요청의 중복 처리를 차단한다. */
+    private void requirePending() {
+        if (status != QueueChangeRequestStatus.PENDING) {
+            throw new IllegalStateException("이미 처리된 순서 변경 요청입니다.");
+        }
+    }
 }

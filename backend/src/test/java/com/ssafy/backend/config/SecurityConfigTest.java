@@ -2,6 +2,7 @@ package com.ssafy.backend.config;
 
 import com.ssafy.backend.auth.jwt.JwtAuthenticationEntryPoint;
 import com.ssafy.backend.auth.jwt.JwtAuthenticationFilter;
+import com.ssafy.backend.common.security.RestAccessDeniedHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.cors.CorsConfiguration;
@@ -46,7 +47,8 @@ class SecurityConfigTest {
         return new SecurityConfig(
                 allowedOrigins,
                 mock(JwtAuthenticationFilter.class),
-                mock(JwtAuthenticationEntryPoint.class)
+                mock(JwtAuthenticationEntryPoint.class),
+                mock(RestAccessDeniedHandler.class)
         );
     }
 }

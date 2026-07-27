@@ -2,6 +2,7 @@ package com.ssafy.backend.config;
 
 import com.ssafy.backend.auth.jwt.JwtAuthenticationEntryPoint;
 import com.ssafy.backend.auth.jwt.JwtAuthenticationFilter;
+import com.ssafy.backend.common.security.RestAccessDeniedHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +28,7 @@ public class SecurityConfig {
     private final String allowedOrigins;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final RestAccessDeniedHandler accessDeniedHandler;
 
     /**
      * CORS 허용 출처와 JWT 인증 처리 구성 요소를 주입받는다.
@@ -38,10 +40,12 @@ public class SecurityConfig {
 
     public SecurityConfig(@Value("${app.cors.allowed-origins:}") String allowedOrigins,
                           JwtAuthenticationFilter jwtAuthenticationFilter,
-                          JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint) {
+                          JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
+                          RestAccessDeniedHandler accessDeniedHandler) {
         this.allowedOrigins = allowedOrigins;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
+        this.accessDeniedHandler = accessDeniedHandler;
     }
 
     /**
@@ -58,14 +62,25 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .exceptionHandling(exceptions ->
-                        exceptions.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login",
                                 "/api/v1/auth/refresh").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/livekit/webhook").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/queue/enter")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue/me")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/call")
+                                .hasRole("MANAGER")
                         // 보호 대상 API가 확정될 때까지 기존 접근 정책을 유지한다.
-                        .anyRequest().permitAll()
+                        .requestMatchers("/api/v1/fan-meetings/*/queue/operations/**")
+                                .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
+                        .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
