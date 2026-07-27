@@ -10,9 +10,12 @@ export function Card({ interactive, selected, className, ...props }: CardProps) 
   return (
     <div
       className={cn(
-        'rounded-2xl border bg-white shadow-sm',
-        selected ? 'border-violet-500 ring-2 ring-violet-100' : 'border-slate-200',
-        interactive && 'transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md',
+        'rounded-[var(--radius-panel)] border bg-[var(--color-surface-panel)]',
+        selected
+          ? 'border-[var(--color-primary-coral)] shadow-[0_0_0_3px_var(--color-primary-coral-soft-border)]'
+          : 'border-[var(--color-border-panel)] shadow-[var(--shadow-panel)]',
+        interactive &&
+          'transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-primary-coral-soft-border)] motion-reduce:transition-none',
         className,
       )}
       {...props}
@@ -21,7 +24,7 @@ export function Card({ interactive, selected, className, ...props }: CardProps) 
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('border-b border-slate-100 p-5', className)} {...props} />
+  return <div className={cn('border-b border-[var(--color-divider)] p-5 sm:p-6', className)} {...props} />
 }
 
 export type CardTitleProps = HTMLAttributes<HTMLHeadingElement> & {
@@ -29,15 +32,15 @@ export type CardTitleProps = HTMLAttributes<HTMLHeadingElement> & {
 }
 
 export function CardTitle({ as: Heading = 'h3', className, ...props }: CardTitleProps) {
-  return <Heading className={cn('text-lg font-bold !text-slate-950', className)} {...props} />
+  return <Heading className={cn('text-lg font-bold text-[var(--color-text-primary)]', className)} {...props} />
 }
 
 export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('p-5', className)} {...props} />
+  return <div className={cn('p-5 sm:p-6', className)} {...props} />
 }
 
 export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('border-t border-slate-100 p-5', className)} {...props} />
+  return <div className={cn('border-t border-[var(--color-divider)] p-5 sm:p-6', className)} {...props} />
 }
 
 export function List({ className, ...props }: HTMLAttributes<HTMLUListElement>) {
@@ -55,18 +58,27 @@ export type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
 }
 
 const badgeClasses: Record<BadgeVariant, string> = {
-  neutral: 'bg-slate-100 text-slate-700',
-  primary: 'bg-violet-100 text-violet-800',
-  success: 'bg-emerald-100 text-emerald-800',
-  warning: 'bg-amber-100 text-amber-900',
-  danger: 'bg-red-100 text-red-800',
-  info: 'bg-sky-100 text-sky-800',
+  neutral:
+    'border-[var(--color-border-control)] bg-[var(--color-surface-page)] text-[var(--color-text-secondary)]',
+  primary:
+    'border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral-hover)]',
+  success:
+    'border-[var(--color-success-border)] bg-[var(--color-success-soft)] text-[var(--color-success)]',
+  warning:
+    'border-[var(--color-warning-border)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+  danger: 'border-[var(--color-error-border)] bg-[var(--color-error-soft)] text-[var(--color-error)]',
+  info:
+    'border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral-hover)]',
 }
 
 export function Badge({ variant = 'neutral', className, ...props }: BadgeProps) {
   return (
     <span
-      className={cn('inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold', badgeClasses[variant], className)}
+      className={cn(
+        'inline-flex min-h-[30px] items-center justify-center rounded-[var(--radius-control)] border px-2.5 py-1 text-xs font-bold',
+        badgeClasses[variant],
+        className,
+      )}
       {...props}
     />
   )
