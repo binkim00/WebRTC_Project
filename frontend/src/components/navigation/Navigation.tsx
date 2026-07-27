@@ -33,10 +33,15 @@ export function TopNavigation({
       <NavLink
         className={({ isActive }) =>
           cn(
-            'rounded-lg px-3 py-2 text-sm font-medium transition',
+            'relative inline-flex min-h-11 items-center whitespace-nowrap px-1 text-[15px] font-semibold',
+            'transition-colors duration-200 motion-reduce:transition-none',
+            "after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:rounded-t-[3px] after:bg-transparent after:content-['']",
             isActive
-              ? 'bg-violet-100 text-violet-800'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+              ? 'text-[var(--color-primary-coral)] after:bg-[var(--color-primary-coral)]'
+              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
+            mobile &&
+              'w-full rounded-[var(--radius-control)] px-3 after:hidden hover:bg-[var(--color-surface-page)]',
+            mobile && isActive && 'bg-[var(--color-primary-coral-soft)]',
           )
         }
         end={item.end}
@@ -49,27 +54,37 @@ export function TopNavigation({
     ))
 
   return (
-    <header className={cn('border-b border-slate-200 bg-white', className)}>
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-        <Link className="text-xl font-bold tracking-tight text-violet-700" to={brandTo}>
+    <header
+      className={cn(
+        'h-[var(--service-header-height)] border-b border-[var(--color-divider)] bg-[var(--color-surface-panel)]',
+        className,
+      )}
+    >
+      <div className="mx-auto flex h-full w-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+        <Link
+          className="shrink-0 text-[28px] font-black tracking-[-0.055em] text-[var(--color-text-primary)]"
+          to={brandTo}
+        >
           {brand}
         </Link>
-        <nav aria-label={ariaLabel} className="hidden items-center gap-1 md:flex">
+        <nav aria-label={ariaLabel} className="hidden h-full items-stretch gap-8 md:flex lg:gap-10">
           {navigationLinks()}
         </nav>
-        <div className="hidden items-center gap-2 md:flex">{actions}</div>
+        {actions ? <div className="hidden shrink-0 items-center gap-2 md:flex">{actions}</div> : null}
         <details className="relative md:hidden" ref={mobileMenuRef}>
           <summary
             aria-label="모바일 메뉴 열기"
-            className="cursor-pointer list-none rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold [&::-webkit-details-marker]:hidden"
+            className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] [&::-webkit-details-marker]:hidden"
           >
             메뉴
           </summary>
-          <div className="absolute right-0 z-30 mt-2 grid min-w-56 gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+          <div className="absolute right-0 z-30 mt-2 grid min-w-56 gap-1 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-2 shadow-[var(--shadow-modal)]">
             <nav aria-label={`${ariaLabel} 모바일`} className="grid">
               {navigationLinks(true)}
             </nav>
-            {actions ? <div className="mt-1 border-t border-slate-100 pt-2">{actions}</div> : null}
+            {actions ? (
+              <div className="mt-1 border-t border-[var(--color-divider)] pt-2">{actions}</div>
+            ) : null}
           </div>
         </details>
       </div>
@@ -101,7 +116,10 @@ export function Tabs({
   return (
     <div
       aria-label={ariaLabel}
-      className={cn('flex gap-1 border-b border-slate-200', className)}
+      className={cn(
+        'flex min-h-14 gap-7 overflow-x-auto border-b border-[var(--color-divider)]',
+        className,
+      )}
       role="tablist"
     >
       {items.map((item) => {
@@ -110,11 +128,12 @@ export function Tabs({
           <button
             aria-selected={selected}
             className={cn(
-              '-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition',
+              'relative -mb-px inline-flex min-h-14 shrink-0 items-center border-b-[3px] px-0 text-[15px] font-semibold',
+              'transition-colors duration-200 motion-reduce:transition-none',
               selected
-                ? 'border-violet-700 text-violet-700'
-                : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-inset',
+                ? 'border-[var(--color-primary-coral)] text-[var(--color-primary-coral)]'
+                : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
+              'focus-visible:[outline-offset:-3px]',
               'disabled:cursor-not-allowed disabled:opacity-45',
             )}
             disabled={item.disabled}
@@ -144,18 +163,24 @@ export type BreadcrumbsProps = {
 export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
   return (
     <nav aria-label="현재 위치" className={className}>
-      <ol className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+      <ol className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-secondary)]">
         {items.map((item, index) => {
           const isCurrent = index === items.length - 1
           return (
             <li className="flex items-center gap-2" key={`${index}-${String(item.label)}`}>
               {index > 0 ? <span aria-hidden="true">/</span> : null}
               {item.to && !isCurrent ? (
-                <Link className="hover:text-violet-700 hover:underline" to={item.to}>
+                <Link
+                  className="rounded-sm transition-colors hover:text-[var(--color-primary-coral)] hover:underline motion-reduce:transition-none"
+                  to={item.to}
+                >
                   {item.label}
                 </Link>
               ) : (
-                <span aria-current={isCurrent ? 'page' : undefined} className={isCurrent ? 'text-slate-900' : ''}>
+                <span
+                  aria-current={isCurrent ? 'page' : undefined}
+                  className={isCurrent ? 'font-semibold text-[var(--color-text-primary)]' : ''}
+                >
                   {item.label}
                 </span>
               )}
@@ -226,7 +251,7 @@ export function Pagination({
             {item}
           </Button>
         ) : (
-          <span aria-hidden="true" className="px-2 text-slate-400" key={item}>
+          <span aria-hidden="true" className="px-2 text-[var(--color-text-tertiary)]" key={item}>
             …
           </span>
         ),
@@ -270,10 +295,13 @@ export function Stepper({ steps, activeStep, className }: StepperProps) {
             <div className="flex items-center sm:mb-2">
               <span
                 className={cn(
-                  'flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold',
-                  complete && 'border-violet-700 bg-violet-700 text-white',
-                  current && 'border-violet-700 bg-white text-violet-700',
-                  !complete && !current && 'border-slate-300 bg-white text-slate-400',
+                  'flex size-9 shrink-0 items-center justify-center rounded-full border text-sm font-bold',
+                  complete && 'border-[var(--color-success)] bg-[var(--color-success)] text-white',
+                  current &&
+                    'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[0_0_0_5px_var(--color-primary-coral-soft)]',
+                  !complete &&
+                    !current &&
+                    'border-[var(--color-border-control)] bg-[var(--color-surface-page)] text-[var(--color-text-tertiary)]',
                 )}
               >
                 {complete ? '✓' : index + 1}
@@ -283,16 +311,25 @@ export function Stepper({ steps, activeStep, className }: StepperProps) {
                   aria-hidden="true"
                   className={cn(
                     'ml-2 hidden h-0.5 flex-1 sm:block',
-                    complete ? 'bg-violet-700' : 'bg-slate-200',
+                    complete ? 'bg-[var(--color-success-border)]' : 'bg-[var(--color-divider)]',
                   )}
                 />
               ) : null}
             </div>
             <div>
-              <p className={cn('text-sm font-semibold', current ? 'text-violet-700' : 'text-slate-800')}>
+              <p
+                className={cn(
+                  'text-sm font-semibold',
+                  complete && 'text-[var(--color-success)]',
+                  current && 'text-[var(--color-primary-coral-hover)]',
+                  !complete && !current && 'text-[var(--color-text-primary)]',
+                )}
+              >
                 {step.label}
               </p>
-              {step.description ? <p className="mt-1 text-sm text-slate-500">{step.description}</p> : null}
+              {step.description ? (
+                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{step.description}</p>
+              ) : null}
             </div>
           </li>
         )

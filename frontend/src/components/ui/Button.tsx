@@ -13,18 +13,22 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-violet-700 text-white hover:bg-violet-800 active:bg-violet-900',
-  secondary: 'bg-slate-200 text-slate-900 hover:bg-slate-300 active:bg-slate-400',
+  primary:
+    'border-transparent bg-[var(--color-primary-coral)] text-white hover:bg-[var(--color-primary-coral-hover)] active:bg-[var(--color-primary-coral-active)]',
+  secondary:
+    'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-page)] active:bg-[var(--color-divider)]',
   outline:
-    'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 active:bg-slate-100',
-  ghost: 'bg-transparent text-slate-700 hover:bg-slate-100 active:bg-slate-200',
-  danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
+    'border-[var(--color-primary-coral)] bg-transparent text-[var(--color-primary-coral)] hover:bg-[var(--color-primary-coral-soft)] active:bg-[var(--color-primary-coral-soft-border)]',
+  ghost:
+    'border-transparent bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)] hover:text-[var(--color-text-primary)] active:bg-[var(--color-divider)]',
+  danger:
+    'border-transparent bg-[var(--color-error)] text-white hover:bg-[var(--color-error-hover)] active:bg-[var(--color-error-active)]',
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'min-h-8 px-3 py-1.5 text-sm',
-  md: 'min-h-10 px-4 py-2 text-sm',
-  lg: 'min-h-12 px-5 py-2.5 text-base',
+  sm: 'min-h-9 px-3 py-1.5 text-sm',
+  md: 'min-h-[var(--control-height)] px-[var(--control-padding-inline)] py-2 text-sm',
+  lg: 'min-h-[var(--control-height-final-cta)] px-6 py-2.5 text-base',
 }
 
 function buttonClassName({
@@ -33,8 +37,10 @@ function buttonClassName({
   className,
 }: Pick<ButtonProps, 'variant' | 'size' | 'className'> = {}) {
   return cn(
-    'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2',
+    'inline-flex items-center justify-center gap-[var(--space-control-gap)] whitespace-nowrap rounded-[var(--radius-control)] border font-semibold',
+    'transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out',
+    'active:translate-y-px motion-reduce:transform-none motion-reduce:transition-none',
+    'focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
     'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45',
     variantClasses[variant],
     sizeClasses[size],

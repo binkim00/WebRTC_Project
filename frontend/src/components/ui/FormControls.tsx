@@ -31,18 +31,18 @@ function FieldFrame({
   className,
 }: FieldFrameProps) {
   return (
-    <div className={cn('grid gap-1.5 text-left', className)}>
-      <label className="text-sm font-semibold text-slate-800" htmlFor={id}>
+    <div className={cn('grid gap-[var(--space-field-gap)] text-left', className)}>
+      <label className="text-sm font-semibold text-[var(--color-text-primary)]" htmlFor={id}>
         {label}
-        {required ? <span className="ml-1 text-red-600">*</span> : null}
+        {required ? <span className="ml-1 text-[var(--color-error)]">*</span> : null}
       </label>
       {children}
       {error ? (
-        <p className="text-sm text-red-600" id={`${id}-error`}>
+        <p className="text-sm text-[var(--color-error)]" id={`${id}-error`}>
           {error}
         </p>
       ) : helperText ? (
-        <p className="text-sm text-slate-500" id={`${id}-help`}>
+        <p className="text-sm text-[var(--color-text-secondary)]" id={`${id}-help`}>
           {helperText}
         </p>
       ) : null}
@@ -51,10 +51,16 @@ function FieldFrame({
 }
 
 const fieldClassName = cn(
-  'min-h-10 w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-950 shadow-sm transition',
-  'placeholder:text-slate-400 focus:outline-none focus:ring-2',
-  'disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500',
+  'min-h-[var(--control-height)] w-full rounded-[var(--radius-control)] border bg-[var(--color-surface-panel)] px-[var(--input-padding-inline)] py-2 text-sm text-[var(--color-text-primary)]',
+  'placeholder:text-[var(--color-text-secondary)] transition-[background-color,border-color,box-shadow] duration-200',
+  'focus:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
+  'disabled:cursor-not-allowed disabled:bg-[var(--color-surface-page)] disabled:text-[var(--color-text-tertiary)]',
 )
+
+const fieldStateClasses = {
+  default: 'border-[var(--color-border-control)] focus:border-[var(--color-primary-coral)]',
+  error: 'border-[var(--color-error)] focus:border-[var(--color-error)]',
+} as const
 
 export type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> & {
   label: ReactNode
@@ -92,9 +98,7 @@ export function TextField({
         aria-invalid={Boolean(error)}
         className={cn(
           fieldClassName,
-          error
-            ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
-            : 'border-slate-300 focus:border-violet-500 focus:ring-violet-200',
+          error ? fieldStateClasses.error : fieldStateClasses.default,
           className,
         )}
         id={id}
@@ -143,9 +147,7 @@ export function Textarea({
         className={cn(
           fieldClassName,
           'resize-y',
-          error
-            ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
-            : 'border-slate-300 focus:border-violet-500 focus:ring-violet-200',
+          error ? fieldStateClasses.error : fieldStateClasses.default,
           className,
         )}
         id={id}
@@ -233,9 +235,7 @@ export function Select({
         aria-invalid={Boolean(error)}
         className={cn(
           fieldClassName,
-          error
-            ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
-            : 'border-slate-300 focus:border-violet-500 focus:ring-violet-200',
+          error ? fieldStateClasses.error : fieldStateClasses.default,
           className,
         )}
         id={id}
@@ -269,37 +269,52 @@ export function Checkbox({
   description,
   error,
   className,
+  disabled,
+  'aria-describedby': ariaDescribedBy,
   ...props
 }: CheckboxProps) {
   const generatedId = useId()
   const id = providedId ?? generatedId
+  const descriptionId = description ? `${id}-description` : undefined
+  const errorId = error ? `${id}-error` : undefined
 
   return (
-    <div className="grid gap-1">
-      <label className="flex cursor-pointer items-start gap-3" htmlFor={id}>
+    <div className="grid gap-[var(--space-field-gap)]">
+      <label
+        className={cn(
+          'flex items-start gap-[var(--space-control-gap)]',
+          disabled ? 'cursor-not-allowed opacity-45' : 'cursor-pointer',
+        )}
+        htmlFor={id}
+      >
         <input
-          aria-describedby={description ? `${id}-description` : undefined}
+          aria-describedby={cn(ariaDescribedBy, descriptionId, errorId) || undefined}
           aria-invalid={Boolean(error)}
           className={cn(
-            'mt-0.5 size-4 rounded border-slate-300 accent-violet-700',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2',
-            'disabled:cursor-not-allowed disabled:opacity-45',
+            'mt-0.5 size-5 shrink-0 rounded-[6px] border-[var(--color-border-control)] accent-[var(--color-primary-coral)]',
+            'focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
+            'disabled:cursor-not-allowed',
             className,
           )}
+          disabled={disabled}
           id={id}
           type="checkbox"
           {...props}
         />
         <span>
-          <span className="block text-sm font-medium text-slate-800">{label}</span>
+          <span className="block text-sm font-medium text-[var(--color-text-primary)]">{label}</span>
           {description ? (
-            <span className="mt-0.5 block text-sm text-slate-500" id={`${id}-description`}>
+            <span className="mt-0.5 block text-sm text-[var(--color-text-secondary)]" id={descriptionId}>
               {description}
             </span>
           ) : null}
         </span>
       </label>
-      {error ? <p className="pl-7 text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="pl-[30px] text-sm text-[var(--color-error)]" id={errorId}>
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }
