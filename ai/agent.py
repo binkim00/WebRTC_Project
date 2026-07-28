@@ -5,15 +5,15 @@
 
 이벤트 시작 시 dispatch → agent는 이벤트 내내 Room에 상주.
 인플루언서 트랙은 계속 유지, 팬만 교체됨.
-팬 교체 시 호스트/팬 어댑터 둘 다 재시작 (DeepL 세션의 target_lang 변경 불가).
+팬 교체 시 호스트/팬 어댑터 둘 다 재시작.
 
-한국-외국: DeepL Voice API (STT + 번역 + 자막 + 감지)
-한국-한국: Google STT (STT + 감지만)
+한국-외국: DeepL Voice API (STT + 번역 + 자막)
+한국-한국: Google STT (STT)
 
-metadata (JSON) — 이벤트 단위:
+호스트 토큰 metadata (JSON) — 이벤트 단위:
   { "host_lang": "ko" }
 
-팬 토큰 attributes:
+팬 토큰 metada (JSON) - 팬 입장마다 생성
   { "role": "fan", "call_session_id": "456", "fan_lang": "en" }
 """
 from dotenv import load_dotenv
@@ -24,6 +24,9 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from db.connection import init_pool, close_pool, get_pool
+from pipeline import queries
+from pipeline.summarizer import generate_summary  # {summary, keywords} 반환하는 그 함수
 
 from livekit import agents, rtc
 from livekit.agents import AutoSubscribe, JobContext
@@ -65,6 +68,12 @@ async def my_agent(ctx: JobContext) -> None:
     host_lang: str = metadata.get("host_lang", "ko")
 
     logger.info("에이전트 시작 host_lang=%s", host_lang)
+    
+    # 1.5 DB pool 초기화 — 이벤트 단위로 1개
+    await init_pool()
+    pool = get_pool()
+    logger.info("DB pool 초기화 완료")
+
 
     # 현재 통화 상태
     current_call: CallState | None = None
@@ -96,7 +105,7 @@ async def my_agent(ctx: JobContext) -> None:
         processor = SubtitleProcessor(
             call_session_id=call_session_id,
             local_participant=ctx.room.local_participant,
-            sequence_counters=seq_counters,
+            pool = pool,
         )
 
         # 어댑터 생성 (언어 조합에 따라 분기)
@@ -150,6 +159,18 @@ async def my_agent(ctx: JobContext) -> None:
             await call.fan_adapter.close()
         if call.host_adapter:
             await call.host_adapter.close()
+            
+        asyncio.create_task(_trigger_summary(call.call_session_id))
+    
+    async def _trigger_summary(call_session_id: int) -> None:
+        try:
+            subtitles = await queries.get_subtitles_by_call(pool, call_session_id)
+            if not subtitles:
+                logger.warning("자막 없음 — 요약 스킵 call_session_id=%s", call_session_id)
+                return
+            await generate_and_save_summary(pool, call_session_id, subtitles)
+        except Exception:
+            logger.exception("요약 트리거 실패 call_session_id=%s", call_session_id)
 
     # ── 호스트 STT 루프 ───────────────────────────────────────────────────
 
@@ -259,6 +280,7 @@ async def my_agent(ctx: JobContext) -> None:
     async def on_shutdown() -> None:
         logger.info("이벤트 종료 — shutdown 시작")
         await end_fan_call()
+        await close_pool()  
 
     ctx.add_shutdown_callback(on_shutdown)
 
