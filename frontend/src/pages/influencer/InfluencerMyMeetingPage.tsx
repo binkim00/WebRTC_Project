@@ -16,6 +16,7 @@ import {
   LinearProgress,
 } from '../../components'
 
+/* TODO: API 연동 후 아래 mock 데이터를 서버 응답 데이터로 교체 */
 const meeting = {
   id: '1',
   title: 'MELLY DAY 팬미팅',
