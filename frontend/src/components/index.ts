@@ -1,4 +1,4 @@
-export * from './call/VideoCallRoom'
+export * from './call'
 export * from './data-display'
 export * from './feedback'
 export * from './media/MediaDevicePreview'
