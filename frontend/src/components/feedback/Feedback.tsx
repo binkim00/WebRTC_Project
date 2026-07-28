@@ -13,10 +13,13 @@ import { cn } from '../ui/cn'
 export type FeedbackVariant = 'success' | 'info' | 'warning' | 'error'
 
 const feedbackClasses: Record<FeedbackVariant, string> = {
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-  info: 'border-sky-200 bg-sky-50 text-sky-900',
-  warning: 'border-amber-200 bg-amber-50 text-amber-950',
-  error: 'border-red-200 bg-red-50 text-red-900',
+  success:
+    'border-[var(--color-success-border)] bg-[var(--color-success-soft)] text-[var(--color-success)]',
+  info:
+    'border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral-hover)]',
+  warning:
+    'border-[var(--color-warning-border)] bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
+  error: 'border-[var(--color-error-border)] bg-[var(--color-error-soft)] text-[var(--color-error)]',
 }
 
 const feedbackIcons: Record<FeedbackVariant, string> = {
@@ -44,7 +47,11 @@ export function AlertBanner({
 }: AlertBannerProps) {
   return (
     <div
-      className={cn('flex items-start gap-3 rounded-xl border p-4', feedbackClasses[variant], className)}
+      className={cn(
+        'flex items-start gap-3 rounded-[var(--radius-panel)] border p-4',
+        feedbackClasses[variant],
+        className,
+      )}
       role={variant === 'error' ? 'alert' : 'status'}
       {...props}
     >
@@ -99,6 +106,7 @@ export function ToastRegion({
     >
       {toasts.map((toast) => (
         <AlertBanner
+          className="shadow-[var(--shadow-modal)]"
           key={toast.id}
           onDismiss={onDismiss ? () => onDismiss(toast.id) : undefined}
           title={toast.title}
@@ -129,7 +137,7 @@ export function Spinner({ label = '불러오는 중', size = 'md', className }: 
       <span
         aria-hidden="true"
         className={cn(
-          'animate-spin rounded-full border-violet-200 border-r-violet-700',
+          'animate-spin rounded-full border-[var(--color-primary-coral-soft-border)] border-r-[var(--color-primary-coral)]',
           spinnerSizeClasses[size],
         )}
       />
@@ -147,7 +155,10 @@ export function Skeleton({ lines = 1, className, ...props }: SkeletonProps) {
     <div aria-busy="true" aria-label="콘텐츠 불러오는 중" className={cn('grid gap-2', className)} {...props}>
       {Array.from({ length: Math.max(1, lines) }, (_, index) => (
         <span
-          className={cn('block h-4 animate-pulse rounded bg-slate-200', index === lines - 1 && lines > 1 && 'w-2/3')}
+          className={cn(
+            'block h-4 animate-pulse rounded-[var(--radius-control)] bg-[var(--color-divider)]',
+            index === lines - 1 && lines > 1 && 'w-2/3',
+          )}
           key={index}
         />
       ))}
@@ -173,20 +184,22 @@ export function LinearProgress({
   return (
     <div className={cn('grid gap-2', className)}>
       <div className="flex justify-between gap-4 text-sm">
-        <span className="font-medium text-slate-700">{label}</span>
-        {showValue && normalized !== undefined ? <span className="text-slate-500">{normalized}%</span> : null}
+        <span className="font-medium text-[var(--color-text-primary)]">{label}</span>
+        {showValue && normalized !== undefined ? (
+          <span className="text-[var(--color-text-secondary)]">{normalized}%</span>
+        ) : null}
       </div>
       <div
         aria-label={label}
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={normalized}
-        className="h-2 overflow-hidden rounded-full bg-slate-200"
+        className="h-2 overflow-hidden rounded-full bg-[var(--color-divider)]"
         role="progressbar"
       >
         <span
           className={cn(
-            'block h-full rounded-full bg-violet-700 transition-all',
+            'block h-full rounded-full bg-[var(--color-primary-coral)] transition-[width] duration-200 motion-reduce:transition-none',
             normalized === undefined && 'w-1/3 animate-[pulse_1.5s_ease-in-out_infinite]',
           )}
           style={normalized === undefined ? undefined : { width: `${normalized}%` }}
@@ -222,14 +235,14 @@ export function Meter({
   return (
     <div className={cn('grid gap-2', className)}>
       <div className="flex items-center justify-between gap-4 text-sm">
-        <span className="font-medium text-slate-700">{label}</span>
-        <span className="text-slate-500">
+        <span className="font-medium text-[var(--color-text-primary)]">{label}</span>
+        <span className="text-[var(--color-text-secondary)]">
           {value}
           {unit}
         </span>
       </div>
       <meter
-        className="h-3 w-full accent-emerald-600"
+        className="h-3 w-full accent-[var(--color-success)]"
         high={high}
         low={low}
         max={max}
@@ -267,6 +280,7 @@ export function Dialog({
 }: DialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const titleId = useId()
+  const descriptionId = useId()
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -294,10 +308,11 @@ export function Dialog({
 
   return (
     <dialog
+      aria-describedby={description ? descriptionId : undefined}
       aria-labelledby={titleId}
       className={cn(
-        'm-auto w-[min(32rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl',
-        'backdrop:bg-slate-950/50',
+        'm-auto w-[min(32rem,calc(100vw-2rem))] rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-0 text-[var(--color-text-primary)] shadow-[var(--shadow-modal)]',
+        'backdrop:bg-[rgb(23_24_29/48%)]',
         className,
       )}
       onCancel={handleCancel}
@@ -305,17 +320,25 @@ export function Dialog({
       onClose={() => onOpenChange(false)}
       ref={dialogRef}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+      <div className="flex items-start justify-between gap-4 border-b border-[var(--color-divider)] p-5 sm:p-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-950" id={titleId}>
+          <h2 className="text-xl font-bold text-[var(--color-text-primary)]" id={titleId}>
             {title}
           </h2>
-          {description ? <p className="mt-2 text-sm text-slate-500">{description}</p> : null}
+          {description ? (
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]" id={descriptionId}>
+              {description}
+            </p>
+          ) : null}
         </div>
         <IconButton aria-label={closeLabel} icon="×" onClick={() => onOpenChange(false)} size="sm" />
       </div>
-      {children ? <div className="p-5">{children}</div> : null}
-      {footer ? <div className="flex justify-end gap-2 border-t border-slate-100 p-5">{footer}</div> : null}
+      {children ? <div className="p-5 sm:p-6">{children}</div> : null}
+      {footer ? (
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--color-divider)] p-5 sm:p-6">
+          {footer}
+        </div>
+      ) : null}
     </dialog>
   )
 }
