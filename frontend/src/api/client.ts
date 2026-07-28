@@ -7,6 +7,10 @@ type ErrorResponse = {
   message?: string
 }
 
+export type ApiRequestOptions = RequestInit & {
+  authToken?: string
+}
+
 async function readErrorResponse(response: Response): Promise<ErrorResponse> {
   const text = await response.text()
 
@@ -34,14 +38,17 @@ async function readErrorResponse(response: Response): Promise<ErrorResponse> {
 
 export async function apiRequest<T = unknown>(
   path: string,
-  options: RequestInit = {},
+  options: ApiRequestOptions = {},
 ): Promise<T> {
+  const { authToken, ...requestOptions } = options
+
   const response = await fetch(`${API_URL}${path}`, {
-    ...options,
+    ...requestOptions,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...requestOptions.headers,
     },
   })
 
