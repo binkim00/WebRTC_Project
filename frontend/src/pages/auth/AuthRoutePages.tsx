@@ -8,14 +8,16 @@ import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
+  login,
+  saveAuthSession,
   signup,
+  type LoginRole,
   type PreferredLanguage,
   type SignupRequest,
   type SignupRole,
 } from '../../api/auth'
 import {
   AlertBanner,
-  Badge,
   Button,
   Card,
   CardContent,
@@ -49,62 +51,152 @@ function isPreferredLanguage(value: string): value is PreferredLanguage {
 }
 
 export function LoginPage() {
-  const [submitted, setSubmitted] = useState(false)
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [submitError, setSubmitError] = useState<string>()
+  const [notice, setNotice] = useState<string>()
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function getPostLoginPath(role: LoginRole) {
+    switch (role) {
+      case 'FAN':
+        return '/fan/events'
+      case 'INFLUENCER':
+      case 'SOLO_INFLUENCER':
+        return '/influencer/mypage/profile'
+      case 'MANAGER':
+        return '/manager/events'
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitted(true)
+    const formData = new FormData(event.currentTarget)
+
+    setSubmitError(undefined)
+    setNotice(undefined)
+    setLoading(true)
+
+    try {
+      const response = await login({
+        loginId: String(formData.get('loginId') ?? '').trim(),
+        password: String(formData.get('password') ?? ''),
+      })
+
+      saveAuthSession(response, formData.get('remember') === 'on')
+      navigate(getPostLoginPath(response.role), { replace: true })
+    } catch (error: unknown) {
+      setSubmitError(
+        error instanceof ApiError || error instanceof TypeError
+          ? error.message
+          : '로그인 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <Card className="mx-auto max-w-lg overflow-hidden">
-      <CardHeader className="bg-gradient-to-br from-violet-50 to-white">
-        <Badge variant="primary">CM-001</Badge>
-        <CardTitle as="h1" className="mt-4 text-2xl">
-          로그인
-        </CardTitle>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          MELLY의 역할별 화면으로 이동하려면 계정 정보를 입력해 주세요.
+    <section className="grid min-h-full w-full items-center gap-10 lg:grid-cols-[minmax(0,1fr)_500px] lg:gap-20">
+      <div className="hidden max-w-[620px] self-center lg:block lg:pl-6">
+        <p className="text-sm font-extrabold tracking-[0.1em] text-[var(--color-text-secondary)]">
+          MELLY FAN MEETING
         </p>
-      </CardHeader>
-      <CardContent className="grid gap-6">
-        {submitted ? (
-          <AlertBanner title="인증 연결 대기 중" variant="info">
-            입력 형식은 확인했습니다. 현재는 인증 API가 연결되지 않아 실제 로그인 요청은
-            전송하지 않습니다.
-          </AlertBanner>
-        ) : null}
-        <form className="grid gap-5" onSubmit={handleSubmit}>
-          <TextField
-            autoComplete="email"
-            label="이메일"
-            name="email"
-            placeholder="name@example.com"
-            required
-            type="email"
-          />
-          <TextField
-            autoComplete="current-password"
-            label="비밀번호"
-            minLength={8}
-            name="password"
-            placeholder="8자 이상 입력"
-            required
-            type="password"
-          />
-          <Checkbox label="로그인 상태 유지" name="remember" />
-          <Button className="w-full" size="lg" type="submit">
+        <h2 className="mt-5 text-[clamp(2rem,3vw,2.55rem)] font-black tracking-[-0.045em] text-[var(--color-text-primary)]">
+          다시 만나서 반가워요
+        </h2>
+        <p className="mt-5 text-base leading-7 text-[var(--color-text-secondary)]">
+          로그인하고 좋아하는 인플루언서의 이벤트와 신청한 팬미팅을 확인해 보세요.
+        </p>
+      </div>
+
+      <Card className="w-full overflow-hidden rounded-[14px] shadow-none">
+        <CardHeader className="border-b-0 px-6 pb-0 pt-8 sm:px-10 sm:pt-10">
+          <CardTitle as="h1" className="text-[28px] tracking-[-0.025em]">
             로그인
-          </Button>
-        </form>
-        <p className="text-center text-sm text-slate-600">
-          아직 계정이 없나요?{' '}
-          <Link className="font-semibold text-violet-700 hover:underline" to="/signup">
-            회원가입
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+          </CardTitle>
+          <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
+            MELLY 계정 정보를 입력해 주세요.
+          </p>
+        </CardHeader>
+
+        <CardContent className="grid gap-6 px-6 pb-8 pt-0 sm:px-10 sm:pb-8">
+          {submitError ? (
+            <AlertBanner title="로그인하지 못했습니다" variant="error">
+              {submitError}
+            </AlertBanner>
+          ) : null}
+          {notice ? (
+            <AlertBanner onDismiss={() => setNotice(undefined)} title="안내" variant="info">
+              {notice}
+            </AlertBanner>
+          ) : null}
+
+          <form className="grid gap-5" onSubmit={(event) => void handleSubmit(event)}>
+            <TextField
+              autoComplete="username"
+              label="아이디"
+              name="loginId"
+              placeholder="아이디를 입력해 주세요"
+              required
+            />
+            <TextField
+              autoComplete="current-password"
+              endAdornment={
+                <IconButton
+                  aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
+                  className="size-9 min-h-0 text-[var(--color-text-secondary)]"
+                  icon={showPassword ? <EyeSlashIcon size={20} /> : <EyeIcon size={20} />}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  size="sm"
+                />
+              }
+              label="비밀번호"
+              name="password"
+              placeholder="비밀번호를 입력해 주세요"
+              required
+              type={showPassword ? 'text' : 'password'}
+            />
+
+            <div className="flex items-center justify-between gap-4">
+              <Checkbox
+                className="size-4 rounded-[2px]"
+                label="로그인 상태 유지"
+                name="remember"
+              />
+              <button
+                className="text-sm font-bold text-[var(--color-primary-coral)] hover:underline"
+                onClick={() =>
+                  setNotice('비밀번호 찾기 API와 화면은 현재 Notion API 정의서에 명시되어 있지 않습니다.')
+                }
+                type="button"
+              >
+                비밀번호 찾기
+              </button>
+            </div>
+
+            <Button
+              className="mt-1 min-h-[46px] w-full shadow-[var(--shadow-final-cta)]"
+              loading={loading}
+              size="lg"
+              type="submit"
+            >
+              로그인
+            </Button>
+          </form>
+
+          <p className="border-t border-[var(--color-divider)] pt-5 text-center text-sm text-[var(--color-text-secondary)]">
+            아직 MELLY 계정이 없나요?{' '}
+            <Link
+              className="font-bold text-[var(--color-primary-coral)] hover:underline"
+              to="/signup"
+            >
+              회원가입
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
+    </section>
   )
 }
 

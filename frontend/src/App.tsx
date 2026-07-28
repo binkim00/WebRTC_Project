@@ -24,13 +24,15 @@ function App() {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const isCallPage = isVideoCallPath(pathname)
+  const isLoginPage = pathname === '/login'
   const isSignupPage = pathname === '/signup'
+  const isAuthPage = isLoginPage || isSignupPage
   const isQaCapture =
     import.meta.env.DEV &&
     isCallPage &&
     searchParams.get('preview') === '1' &&
     searchParams.get('qa') === '1'
-  const navigationItems = isSignupPage
+  const navigationItems = isAuthPage
     ? []
     : pathname.startsWith('/fan/fan-meetings/')
     ? fanCallNavigationItems
@@ -59,6 +61,14 @@ function App() {
                 <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
               </Link>
             </p>
+          ) : isLoginPage ? (
+            <Link
+              className="inline-flex items-center gap-1 text-sm font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]"
+              to="/fan/events"
+            >
+              이벤트 둘러보기
+              <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
+            </Link>
           ) : undefined
         }
         brand="MELLY"
@@ -68,14 +78,14 @@ function App() {
         className={
           isCallPage
             ? 'mx-auto w-full max-w-[1440px] flex-1 px-3 py-5 sm:px-6 lg:px-10 lg:py-6'
-            : isSignupPage
+            : isAuthPage
               ? 'mx-auto flex w-full max-w-[1360px] flex-1 px-4 py-7 sm:px-6 lg:px-10 lg:pb-2 lg:pt-12'
             : 'mx-auto w-full max-w-[1360px] flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:py-10'
         }
       >
         <Outlet />
       </main>
-      {isCallPage || isSignupPage ? null : (
+      {isCallPage || isAuthPage ? null : (
         <footer className="mt-auto border-t border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-4 py-4 text-center text-sm text-[var(--color-text-secondary)] sm:px-6">
           Notion 화면 라우팅 정의서를 기준으로 구성한 라우팅 학습 화면입니다.
         </footer>
