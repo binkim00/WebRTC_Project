@@ -10,12 +10,12 @@ public class AgentIntegrationTest {
 
     public static void main(String[] args) {
         String hostToken = createToken("host-1", "host",
-                "{\"role\":\"host\"}");
+                "{\"role\":\"INFLUENCER\"}");
         System.out.println("=== HOST TOKEN ===");
         System.out.println(hostToken);
 
         String fanToken = createToken("fan-1", "fan",
-                "{\"role\":\"fan\",\"call_session_id\":\"1\",\"fan_lang\":\"en\"}");
+                "{\"role\":\"FAN\",\"call_session_id\":\"1\",\"fan_lang\":\"en\"}");
         System.out.println("\n=== FAN TOKEN ===");
         System.out.println(fanToken);
 

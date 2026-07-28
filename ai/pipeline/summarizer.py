@@ -13,6 +13,8 @@ import openai
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
+from db import queries
+
 # 1. LangSmith 관련 패키지 가져오기
 from langsmith import traceable
 from langsmith.wrappers import wrap_anthropic, wrap_openai
@@ -69,7 +71,7 @@ USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 �
 def _format_subtitles(subtitles: list[dict]) -> str:
     lines = []
     for s in subtitles:
-        role = "인플루언서" if s.get("speaker_role") == "HOST" else "팬"
+        role = "인플루언서" if s.get("speaker_role") == "INFLUENCER" else "팬"
         text = s.get("original_text", "").strip()
         if text:
             lines.append(f"{role}: {text}")

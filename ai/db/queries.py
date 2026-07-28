@@ -8,7 +8,7 @@ async def insert_subtitle(
     call_session_id: int,
     sequence: int,
     speaker_id: int,
-    speaker_role: str,        # "HOST" or "FAN"S
+    speaker_role: str,        # "INFLUENCER" or "FAN"
     spoken_at: datetime,
     original_text: str,
     original_lang: str,

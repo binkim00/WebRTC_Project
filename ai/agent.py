@@ -10,11 +10,14 @@
 한국-외국: DeepL Voice API (STT + 번역 + 자막)
 한국-한국: Google STT (STT)
 
-호스트 토큰 metadata (JSON) — 이벤트 단위:
-  { "host_lang": "ko" }
+role 값은 users.role 컨벤션과 동일하게 대문자 사용 (INFLUENCER / FAN).
 
-팬 토큰 metada (JSON) - 팬 입장마다 생성
-  { "role": "fan", "call_session_id": "456", "fan_lang": "en" }
+호스트 토큰:
+  - job metadata (JSON) — 이벤트 단위: { "host_lang": "ko" }
+  - participant metadata (JSON): { "role": "INFLUENCER" }
+
+팬 토큰 participant metadata (JSON) - 팬 입장마다 생성
+  { "role": "FAN", "call_session_id": "456", "fan_lang": "en" }
 """
 from dotenv import load_dotenv
 load_dotenv()
@@ -24,9 +27,9 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from db import queries
 from db.connection import init_pool, close_pool, get_pool
-from pipeline import queries
-from pipeline.summarizer import generate_summary  # {summary, keywords} 반환하는 그 함수
+from pipeline.summarizer import generate_and_save_summary
 
 from livekit import agents, rtc
 from livekit.agents import AutoSubscribe, JobContext
@@ -78,6 +81,9 @@ async def my_agent(ctx: JobContext) -> None:
     # 현재 통화 상태
     current_call: CallState | None = None
 
+    # 진행 중인 요약 task 모음 — 이벤트 종료 시 전부 완료를 기다린 뒤 pool을 닫기 위함
+    pending_summaries: set[asyncio.Task] = set()
+
     # 4. 호스트 트랙 저장용 (팬 입장 전에 트랙만 보관)
     host_track: rtc.Track | None = None
     host_participant: rtc.RemoteParticipant | None = None
@@ -105,7 +111,8 @@ async def my_agent(ctx: JobContext) -> None:
         processor = SubtitleProcessor(
             call_session_id=call_session_id,
             local_participant=ctx.room.local_participant,
-            pool = pool,
+            pool=pool,
+            sequence_counters=seq_counters,
         )
 
         # 어댑터 생성 (언어 조합에 따라 분기)
@@ -160,7 +167,9 @@ async def my_agent(ctx: JobContext) -> None:
         if call.host_adapter:
             await call.host_adapter.close()
             
-        asyncio.create_task(_trigger_summary(call.call_session_id))
+        task = asyncio.create_task(_trigger_summary(call.call_session_id))
+        pending_summaries.add(task)
+        task.add_done_callback(pending_summaries.discard)
     
     async def _trigger_summary(call_session_id: int) -> None:
         try:
@@ -188,7 +197,7 @@ async def my_agent(ctx: JobContext) -> None:
             await current_call.processor.handle_final(
                 transcript=transcript,
                 speaker_id=host_participant.identity,
-                speaker_role="host",
+                speaker_role="INFLUENCER",
                 target_lang=current_call.fan_lang,
             )
 
@@ -217,16 +226,16 @@ async def my_agent(ctx: JobContext) -> None:
 
         meta = json.loads(participant.metadata or "{}")
         role = meta.get("role")
-        if role not in ("host", "fan"):
+        if role not in ("INFLUENCER", "FAN"):
             return
 
-        if role == "host":
+        if role == "INFLUENCER":
             # 호스트 트랙 저장만. STT는 팬 입장 시 시작. 왜냐면 fan_lang을 모르니까
             host_track = track
             host_participant = participant
             logger.info("호스트 트랙 저장 participant=%s", participant.identity)
 
-        elif role == "fan":
+        elif role == "FAN":
             # 팬 입장 → 통화 상태 생성 후 STT 시작
             async def fan_stt_loop() -> None:
                 # start_fan_call()이 팬 attributes에서 call_session_id, fan_lang 읽고, 어댑터 생성하고, CallState 만듬
@@ -242,7 +251,7 @@ async def my_agent(ctx: JobContext) -> None:
                         await current_call.processor.handle_final(
                             transcript=transcript,
                             speaker_id=participant.identity,
-                            speaker_role="fan",
+                            speaker_role="FAN",
                             target_lang=host_lang,
                         )
 
@@ -270,7 +279,7 @@ async def my_agent(ctx: JobContext) -> None:
     def on_participant_disconnected(participant: rtc.RemoteParticipant) -> None:
         meta = json.loads(participant.metadata or "{}")
         role = meta.get("role")
-        if role == "fan" and current_call and current_call.fan_identity == participant.identity:
+        if role == "FAN" and current_call and current_call.fan_identity == participant.identity:
             asyncio.create_task(end_fan_call())
 
     ctx.room.on("participant_disconnected", on_participant_disconnected)
@@ -280,7 +289,20 @@ async def my_agent(ctx: JobContext) -> None:
     async def on_shutdown() -> None:
         logger.info("이벤트 종료 — shutdown 시작")
         await end_fan_call()
-        await close_pool()  
+        # 진행 중인 요약(방금 트리거된 것 포함)이 끝날 때까지 기다린 뒤 pool 종료.
+        # 최대 30초까지만 기다리고, 넘으면 유실을 감수하고 pool을 닫는다.
+        if pending_summaries:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*pending_summaries, return_exceptions=True),
+                    timeout=30,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "요약 완료 대기 30초 초과 — 미완료 요약 %d건 남기고 pool 종료",
+                    len(pending_summaries),
+                )
+        await close_pool()
 
     ctx.add_shutdown_callback(on_shutdown)
 

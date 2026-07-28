@@ -45,7 +45,7 @@ class SubtitleProcessor:
         self,
         transcript: FinalTranscript,
         speaker_id: str,
-        speaker_role: str,      # "host" | "fan"
+        speaker_role: str,      # "INFLUENCER" | "FAN"
         target_lang: str,       # 상대방 언어 (push용)
     ) -> None:
         """
@@ -58,7 +58,7 @@ class SubtitleProcessor:
 
         # 1. ai_subtitle INSERT (원문 + 번역 한 번에)
         subtitle_id = await queries.insert_subtitle(
-            pool=self.pool
+            pool=self.pool,
             call_session_id=self.call_session_id,
             sequence=seq,
             speaker_id=speaker_id,

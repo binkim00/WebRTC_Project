@@ -45,8 +45,8 @@
         <div class="field">
             <label>역할</label>
             <select id="role">
-                <option value="host">host</option>
-                <option value="fan">fan</option>
+                <option value="INFLUENCER">INFLUENCER</option>
+                <option value="FAN">FAN</option>
             </select>
         </div>
     </div>
@@ -86,8 +86,8 @@
     const fanLangField = document.getElementById('fanLangField');
 
     roleSelect.addEventListener('change', () => {
-        fanLangField.style.display = roleSelect.value === 'fan' ? 'block' : 'none';
-        document.getElementById('identity').value = roleSelect.value === 'fan' ? 'fan-1' : 'host-1';
+        fanLangField.style.display = roleSelect.value === 'FAN' ? 'block' : 'none';
+        document.getElementById('identity').value = roleSelect.value === 'FAN' ? 'fan-1' : 'host-1';
     });
 
     room.on(RoomEvent.DataReceived, (data, participant, kind, topic) => {
@@ -127,10 +127,10 @@
             if (!identity) throw new Error('참가자 ID를 입력하세요');
 
             let metadata;
-            if (role === 'host') {
-                metadata = JSON.stringify({ role: 'host' });
+            if (role === 'INFLUENCER') {
+                metadata = JSON.stringify({ role: 'INFLUENCER' });
             } else {
-                metadata = JSON.stringify({ role: 'fan', call_session_id: sessionId, fan_lang: fanLang });
+                metadata = JSON.stringify({ role: 'FAN', call_session_id: sessionId, fan_lang: fanLang });
             }
 
             statusEl.textContent = '토큰 발급 중...';
