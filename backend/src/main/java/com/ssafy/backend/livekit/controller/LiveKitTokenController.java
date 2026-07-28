@@ -24,7 +24,7 @@ public class LiveKitTokenController {
 
     /** 검증된 사용자 식별자로 테스트 방 입장용 LiveKit 토큰을 발급한다. */
     @PostMapping("/test-token")
-        public LiveKitTokenResponse createTestToken(@Valid @RequestBody LiveKitTokenRequest request) {
-        return tokenService.createTestToken(request.identity(), request.displayName());
+    public LiveKitTokenResponse createTestToken(@Valid @RequestBody LiveKitTokenRequest request) {
+        return tokenService.createTestToken(request.identity(), request.displayName(), request.metadata());
     }
 }
