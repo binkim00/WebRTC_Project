@@ -35,8 +35,8 @@ class LiveKitTokenServiceTest {
     void issuesTokensForDifferentIdentitiesInTheSameTestRoom() {
         long issuedAt = Instant.now().getEpochSecond();
 
-        LiveKitTokenResponse first = tokenService.createTestToken("test-user-1", "테스트 사용자 1");
-        LiveKitTokenResponse second = tokenService.createTestToken("test-user-2", null);
+        LiveKitTokenResponse first = tokenService.createTestToken("test-user-1", "테스트 사용자 1", null);
+        LiveKitTokenResponse second = tokenService.createTestToken("test-user-2", null, null);
 
         assertThat(first.liveKitUrl()).isEqualTo(LIVEKIT_URL);
         assertThat(first.roomName()).isEqualTo("test-room");
