@@ -3,7 +3,7 @@ set -e
 
 PROJECT_ROOT="/home/ubuntu/docker/project/S15P11E106"
 COMPOSE_FILE="$PROJECT_ROOT/infra/prod/docker-compose.prod.yml"
-ENV_FILE="$PROJECT_ROOT/infra/prod/.env"
+ENV_FILE="/home/ubuntu/docker/project/.env"
 
 cd "$PROJECT_ROOT"
 
