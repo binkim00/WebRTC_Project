@@ -24,17 +24,6 @@ export function InfluencerMeetingCallPage() {
   )
 }
 
-export function InfluencerFanMemoPage() {
-  return (
-    <ScreenPage
-      description="특정 팬미팅의 특정 팬에 대한 메모를 확인하고 작성하는 화면입니다."
-      requiredParams={['fanMeetingId', 'fanId']}
-      screenId="ID-004"
-      title="메모 화면"
-    />
-  )
-}
-
 export function InfluencerMeetingHistoryPage() {
   return (
     <ScreenPage

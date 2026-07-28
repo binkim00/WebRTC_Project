@@ -1,3 +1,4 @@
+import { CaretRight } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -19,7 +20,9 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
           const isCurrent = index === items.length - 1
           return (
             <li className="flex items-center gap-2" key={`${index}-${String(item.label)}`}>
-              {index > 0 ? <span aria-hidden="true">/</span> : null}
+              {index > 0 ? (
+                <CaretRight aria-hidden="true" size={14} weight="bold" />
+              ) : null}
               {item.to && !isCurrent ? (
                 <Link
                   className="rounded-sm transition-colors hover:text-[var(--color-primary-coral)] hover:underline motion-reduce:transition-none"

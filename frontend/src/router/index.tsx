@@ -28,8 +28,8 @@ import {
   FanProfilePage,
 } from '../pages/fan/FanRoutePages'
 import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
+import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
 import {
-  InfluencerFanMemoPage,
   InfluencerMeetingCallPage,
   InfluencerMeetingHistoryPage,
   InfluencerProfilePage,
@@ -95,6 +95,10 @@ export const router = createBrowserRouter([
         Component: InfluencerMeetingReadyPage,
       },
       {
+        path: 'influencer/fan-meetings/:fanMeetingId/fans/:fanId/records',
+        Component: InfluencerFanRecordPage,
+      },
+      {
         path: 'fan',
         Component: FanLayout,
         children: [
@@ -151,10 +155,6 @@ export const router = createBrowserRouter([
           {
             path: 'fan-meetings/:fanMeetingId/call',
             Component: InfluencerMeetingCallPage,
-          },
-          {
-            path: 'fan-meetings/:fanMeetingId/fans/:fanId/memo',
-            Component: InfluencerFanMemoPage,
           },
           {
             path: 'mypage/fan-meetings',

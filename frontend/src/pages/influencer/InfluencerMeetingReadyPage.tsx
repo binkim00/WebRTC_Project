@@ -53,7 +53,7 @@ export function InfluencerMeetingReadyPage() {
   const handleOpenMemo = () => {
     if (!fanMeetingId) { return }
     navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/fans/${meeting.currentFan.id}/memo`
+      `/influencer/fan-meetings/${fanMeetingId}/fans/${meeting.currentFan.id}/records?tab=memo`
     )
   }
 
