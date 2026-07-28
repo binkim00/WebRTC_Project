@@ -22,6 +22,11 @@
     <input id="identity" value="browser-user-1">
 </label>
 
+<label>
+    <input id="publishMedia" type="checkbox">
+    카메라·마이크 발행
+</label>
+
 <button id="joinButton">방 입장</button>
 
 <p id="status">입장 전</p>
@@ -56,6 +61,16 @@
         remoteVideoElement.appendChild(mediaElement);
         statusElement.textContent =
             `${participant.identity}의 미디어 수신 중`;
+    });
+
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
+        statusElement.textContent =
+            `상대 참가자 연결: ${participant.identity}`;
+    });
+
+    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        statusElement.textContent =
+            `상대 참가자 퇴장: ${participant.identity}`;
     });
 
     document.getElementById("joinButton").addEventListener("click", async () => {
@@ -98,21 +113,23 @@
 
             await room.connect(serverUrl, accessToken);
 
-            await room.localParticipant.setCameraEnabled(true);
-            await room.localParticipant.setMicrophoneEnabled(true);
+            if (document.getElementById("publishMedia").checked) {
+                await room.localParticipant.setCameraEnabled(true);
+                await room.localParticipant.setMicrophoneEnabled(true);
 
-            const cameraPublication =
-                room.localParticipant.getTrackPublication(Track.Source.Camera);
+                const cameraPublication =
+                    room.localParticipant.getTrackPublication(Track.Source.Camera);
 
-            if (cameraPublication?.track) {
-                const videoElement = cameraPublication.track.attach();
+                if (cameraPublication?.track) {
+                    const videoElement = cameraPublication.track.attach();
 
-                // 자신의 목소리가 다시 재생되지 않도록 처리
-                videoElement.muted = true;
-                videoElement.autoplay = true;
-                videoElement.playsInline = true;
+                    // 자신의 목소리가 다시 재생되지 않도록 처리
+                    videoElement.muted = true;
+                    videoElement.autoplay = true;
+                    videoElement.playsInline = true;
 
-                localVideoElement.appendChild(videoElement);
+                    localVideoElement.appendChild(videoElement);
+                }
             }
 
             statusElement.textContent =

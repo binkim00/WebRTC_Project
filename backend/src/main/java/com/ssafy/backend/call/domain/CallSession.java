@@ -87,4 +87,26 @@ public class CallSession extends BaseTimeEntity {
         callSession.status = CallSessionStatus.CONNECTING;
         return callSession;
     }
+
+    /**
+     * 팬과 인플루언서의 접속이 확인된 세션을 실제 통화 중 상태로 전환한다.
+     *
+     * @param startedAt LiveKit에서 양측 접속이 확인된 시각
+     * @param durationSec 팬미팅 운영 설정의 통화 제한 시간(초)
+     * @throws IllegalStateException 연결 대기 상태가 아니거나 통화 시간이 올바르지 않은 경우
+     */
+    public void activate(LocalDateTime startedAt, int durationSec) {
+        if (status == CallSessionStatus.ACTIVE) {
+            return;
+        }
+        if (status != CallSessionStatus.CONNECTING) {
+            throw new IllegalStateException("시작할 수 없는 통화 세션 상태입니다.");
+        }
+        if (durationSec <= 0) {
+            throw new IllegalStateException("통화 시간은 0초보다 커야 합니다.");
+        }
+        this.status = CallSessionStatus.ACTIVE;
+        this.startedAt = startedAt;
+        this.endsAt = startedAt.plusSeconds(durationSec);
+    }
 }

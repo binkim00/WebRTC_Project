@@ -6,6 +6,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,6 +15,8 @@ import java.util.List;
 public class QueueRealtimeStore {
     private static final long ACTIVE_CALL = -2L;
     private static final long STATE_CONFLICT = -3L;
+    private static final Duration WEBHOOK_EVENT_TTL = Duration.ofDays(1);
+    private static final Duration LIVEKIT_PRESENCE_TTL = Duration.ofHours(6);
 
     private static final DefaultRedisScript<Long> INITIALIZE_SCRIPT = new DefaultRedisScript<>("""
             if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
@@ -179,5 +182,85 @@ public class QueueRealtimeStore {
                 List.of(QueueRedisKeys.current(meetingId), QueueRedisKeys.status(meetingId)),
                 entryId.toString()
         );
+    }
+
+    /**
+     * LiveKit webhook 이벤트를 최초 처리 요청에서만 원자적으로 선점한다.
+     *
+     * @param eventId LiveKit webhook 이벤트 식별자
+     * @return 처음 선점한 이벤트이면 true
+     */
+    public boolean claimWebhookEvent(String eventId) {
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(
+                QueueRedisKeys.webhookEvent(eventId), "1", WEBHOOK_EVENT_TTL));
+    }
+
+    /**
+     * 처리에 실패한 webhook 이벤트의 선점을 해제하여 재전송을 허용한다.
+     *
+     * @param eventId LiveKit webhook 이벤트 식별자
+     */
+    public void releaseWebhookEvent(String eventId) {
+        redisTemplate.delete(QueueRedisKeys.webhookEvent(eventId));
+    }
+
+    /**
+     * 지정한 LiveKit Room의 호스트 접속 상태를 기록한다.
+     *
+     * @param roomId LiveKit Room 식별자
+     */
+    public void markHostConnected(String roomId) {
+        redisTemplate.opsForValue().set(
+                QueueRedisKeys.liveKitHostPresence(roomId), "1", LIVEKIT_PRESENCE_TTL);
+    }
+
+    /**
+     * 지정한 LiveKit Room에 호스트가 접속해 있는지 확인한다.
+     *
+     * @param roomId LiveKit Room 식별자
+     * @return 호스트 접속 상태가 저장되어 있으면 true
+     */
+    public boolean isHostConnected(String roomId) {
+        return Boolean.TRUE.equals(
+                redisTemplate.hasKey(QueueRedisKeys.liveKitHostPresence(roomId)));
+    }
+
+    /**
+     * 지정한 LiveKit Room의 호스트 접속 상태를 제거한다.
+     *
+     * @param roomId LiveKit Room 식별자
+     */
+    public void clearHostConnected(String roomId) {
+        redisTemplate.delete(QueueRedisKeys.liveKitHostPresence(roomId));
+    }
+
+    /**
+     * 지정한 통화 세션의 팬 접속 상태를 기록한다.
+     *
+     * @param callSessionId 통화 세션 식별자
+     */
+    public void markFanConnected(Long callSessionId) {
+        redisTemplate.opsForValue().set(
+                QueueRedisKeys.liveKitFanPresence(callSessionId), "1", LIVEKIT_PRESENCE_TTL);
+    }
+
+    /**
+     * 지정한 통화 세션의 팬이 접속해 있는지 확인한다.
+     *
+     * @param callSessionId 통화 세션 식별자
+     * @return 팬 접속 상태가 저장되어 있으면 true
+     */
+    public boolean isFanConnected(Long callSessionId) {
+        return Boolean.TRUE.equals(
+                redisTemplate.hasKey(QueueRedisKeys.liveKitFanPresence(callSessionId)));
+    }
+
+    /**
+     * 지정한 통화 세션의 팬 접속 상태를 제거한다.
+     *
+     * @param callSessionId 통화 세션 식별자
+     */
+    public void clearFanConnected(Long callSessionId) {
+        redisTemplate.delete(QueueRedisKeys.liveKitFanPresence(callSessionId));
     }
 }

@@ -1,0 +1,52 @@
+package com.ssafy.backend.call.domain;
+
+import com.ssafy.backend.queue.domain.QueueEntry;
+import org.junit.jupiter.api.Test;
+
+import java.time.LocalDateTime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+
+class CallSessionTest {
+
+    /** 양측 접속 시 세션 상태와 서버 기준 시작·종료 시각이 함께 설정되는지 검증한다. */
+    @Test
+    void activatesWithServerBasedCallTimes() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "KOREAN");
+        LocalDateTime startedAt = LocalDateTime.of(2026, 7, 28, 10, 0);
+
+        callSession.activate(startedAt, 60);
+
+        assertThat(callSession.getStatus()).isEqualTo(CallSessionStatus.ACTIVE);
+        assertThat(callSession.getStartedAt()).isEqualTo(startedAt);
+        assertThat(callSession.getEndsAt()).isEqualTo(startedAt.plusSeconds(60));
+    }
+
+    /** 중복 입장 이벤트가 이미 시작된 세션의 시작·종료 시각을 변경하지 않는지 검증한다. */
+    @Test
+    void keepsOriginalTimesWhenActivationIsRepeated() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "KOREAN");
+        LocalDateTime firstStartedAt = LocalDateTime.of(2026, 7, 28, 10, 0);
+
+        callSession.activate(firstStartedAt, 60);
+        callSession.activate(firstStartedAt.plusSeconds(5), 120);
+
+        assertThat(callSession.getStartedAt()).isEqualTo(firstStartedAt);
+        assertThat(callSession.getEndsAt()).isEqualTo(firstStartedAt.plusSeconds(60));
+    }
+
+    /** 통화 제한 시간이 0 이하이면 세션 시작을 거부하는지 검증한다. */
+    @Test
+    void rejectsNonPositiveCallDuration() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "KOREAN");
+
+        assertThatThrownBy(() -> callSession.activate(
+                LocalDateTime.of(2026, 7, 28, 10, 0), 0))
+                .isInstanceOf(IllegalStateException.class);
+    }
+}
