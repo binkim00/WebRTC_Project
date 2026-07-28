@@ -7,6 +7,31 @@ type ErrorResponse = {
   message?: string
 }
 
+async function readErrorResponse(response: Response): Promise<ErrorResponse> {
+  const text = await response.text()
+
+  if (!text) {
+    return {}
+  }
+
+  try {
+    const data: unknown = JSON.parse(text)
+
+    if (typeof data !== 'object' || data === null) {
+      return {}
+    }
+
+    const error = data as Record<string, unknown>
+
+    return {
+      code: typeof error.code === 'string' ? error.code : undefined,
+      message: typeof error.message === 'string' ? error.message : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
 export async function apiRequest<T = unknown>(
   path: string,
   options: RequestInit = {},
@@ -21,7 +46,7 @@ export async function apiRequest<T = unknown>(
   })
 
   if (!response.ok) {
-    const error = (await response.json()) as ErrorResponse
+    const error = await readErrorResponse(response)
 
     throw new ApiError(
       response.status,
