@@ -117,7 +117,7 @@ export function Tabs({
     <div
       aria-label={ariaLabel}
       className={cn(
-        'flex min-h-14 gap-7 overflow-x-auto border-b border-[var(--color-divider)]',
+        'flex min-h-14 gap-7 overflow-x-auto overflow-y-hidden border-b border-[var(--color-divider)]',
         className,
       )}
       role="tablist"

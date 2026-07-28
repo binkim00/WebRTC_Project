@@ -1,5 +1,6 @@
-import { Link, useSearchParams } from "react-router-dom"
-import { InvalidRouteState } from "../../components/routing/ScreenPage"
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Badge, Button, Card, CardContent, CardFooter, Tabs } from '../../components'
+import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 type FanMeetingListItem = {
     id: number
@@ -54,14 +55,15 @@ const MOCK_FAN_MEETINGS: FanMeetingListItem[] = [
     },
 ]
 
+const FAN_MEETING_TABS = [
+    { value: 'upcoming', label: '예정' },
+    { value: 'completed', label: '히스토리' },
+] as const
+
 export function FanMeetingListPage() {
     const [searchParam] = useSearchParams()
+    const navigate = useNavigate()
     const status = searchParam.get('status')
-    const isUpcoming = status === 'upcoming'
-
-    const fanMeetings = MOCK_FAN_MEETINGS.filter(
-        (fanMeeting) => fanMeeting.status === status,
-    )
 
     if (status !== 'upcoming' && status !== 'completed') {
         return (
@@ -72,147 +74,121 @@ export function FanMeetingListPage() {
         )
     }
 
+    const isUpcoming = status === 'upcoming'
+    const fanMeetings = MOCK_FAN_MEETINGS.filter(
+        (fanMeeting) => fanMeeting.status === status,
+    )
+
     return (
-        <main className="mx-auto w-full max-w-6xl">
+        <div className="mx-auto w-full max-w-6xl">
             <header>
                 <Link
-                    className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900"
+                    className="inline-flex items-center text-sm font-medium text-[var(--color-text-secondary)] transition-colors duration-200 hover:text-[var(--color-primary-coral)] motion-reduce:transition-none"
                     to="/fan/mypage/profile"
                 >
                     ← 프로필로 돌아가기
                 </Link>
 
-                <h1 className="mt-5 text-4xl font-bold tracking-tight text-slate-950">
+                <h1 className="mt-5 text-4xl font-bold tracking-tight text-[var(--color-text-primary)]">
                     마이페이지
                 </h1>
 
-                <p className="mt-3 text-slate-500">
+                <p className="mt-3 text-[var(--color-text-secondary)]">
                     내 정보와 참여 내역을 관리하세요.
                 </p>
             </header>
             <section className="mt-12">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h2 className="text-2xl font-bold text-slate-950">팬미팅</h2>
+                        <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">팬미팅</h2>
 
-                        <p className="mt-2 text-sm text-slate-500">
+                        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
                             {isUpcoming
                                 ? '다가오는 팬미팅을 확인하세요.'
                                 : '참여한 팬미팅과 녹화 영상을 확인하세요.'}
                         </p>
                     </div>
-                    <nav
-                        aria-label="팬미팅 목록 상태"
-                        className="mt-6 inline-grid grid-cols-2 rounded-xl border border-slate-200 bg-white p-1"
-                    >
-                        <Link
-                            aria-current={isUpcoming ? 'page' : undefined}
-                            className={[
-                                'rounded-lg px-6 py-2 text-sm font-semibold transition',
-                                isUpcoming ? 'bg-red-600 text-white' : 'text-slate-600 hover:bg-slate-100',
-                            ].join(' ')}
-                            to="?status=upcoming"
-                        >
-                            예정
-                        </Link>
-
-                        <Link
-                            aria-current={!isUpcoming ? 'page' : undefined}
-                            className={[
-                                'rounded-lg px-6 py-2 text-sm font-semibold transition',
-                                !isUpcoming ? 'bg-red-600 text-white' : 'text-slate-600 hover:bg-slate-100',
-                            ].join(' ')}
-                            to="?status=completed"
-                        >
-                            히스토리
-                        </Link>
-                    </nav>
+                    <Tabs
+                        ariaLabel="팬미팅 목록 상태"
+                        items={FAN_MEETING_TABS}
+                        onValueChange={(nextStatus) => navigate(`?status=${nextStatus}`)}
+                        value={status}
+                    />
                 </div>
 
                 <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
                     {fanMeetings.map((fanMeeting) => (
-                        <article
+                        <Card
+                            className="overflow-hidden"
                             key={fanMeeting.id}
-                            className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
                         >
-                            <div className="flex h-56 items-center justify-center bg-slate-200 text-sm text-slate-500">
+                            <div className="flex h-56 items-center justify-center bg-[var(--color-divider)] text-sm text-[var(--color-text-secondary)]">
                                 이미지 영역
-                            </div >
-                            <div className="p-6">
-                                <p className="text-sm font-semibold text-red-600">
-                                    {fanMeeting.status === 'upcoming'
-                                        ? '예정된 팬미팅'
-                                        : '참여 완료'}
-                                </p>
-                                <h3 className="mt-2 text-xl font-bold text-slate-950">
+                            </div>
+                            <CardContent>
+                                <Badge variant={isUpcoming ? 'primary' : 'success'}>
+                                    {isUpcoming ? '예정된 팬미팅' : '참여 완료'}
+                                </Badge>
+                                <h3 className="mt-3 text-xl font-bold text-[var(--color-text-primary)]">
                                     {fanMeeting.title}
                                 </h3>
-                                <p className="mt-2 text-sm text-slate-500">
+                                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
                                     인플루언서 {fanMeeting.influencerName}
                                 </p>
                                 <div className="mt-6">
-                                    <p className="text-sm text-slate-500">
-                                        {fanMeeting.status === 'upcoming'
-                                            ? '팬미팅 일정'
-                                            : '참여 일자'}
+                                    <p className="text-sm text-[var(--color-text-secondary)]">
+                                        {isUpcoming ? '팬미팅 일정' : '참여 일자'}
                                     </p>
 
-                                    <p className="mt-1 font-semibold text-slate-950">
+                                    <p className="mt-1 font-semibold text-[var(--color-text-primary)]">
                                         {fanMeeting.meetingAt}
                                     </p>
-                                    {isUpcoming ? (
-                                        <div className="mt-6 border-t border-slate-200 pt-5">
-                                            <p
-                                                className={[
-                                                    'mb-4 text-sm font-semibold',
-                                                    fanMeeting.canEnter ? 'text-green-600' : 'text-slate-500',
-                                                ].join(' ')}
-                                            >
-                                                {fanMeeting.canEnter
-                                                    ? '지금 입장할 수 있어요'
-                                                    : '입장 전에 장비를 확인해 주세요'}
-                                            </p>
-
-                                            <button
-                                                className={[
-                                                    'w-full rounded-xl border px-4 py-3 font-semibold',
-                                                    fanMeeting.canEnter
-                                                        ? 'border-red-600 bg-red-600 text-white'
-                                                        : 'border-slate-300 bg-white text-slate-900',
-                                                ].join(' ')}
-                                                type="button"
-                                            >
-                                                {fanMeeting.canEnter ? '입장하기' : '장비 점검하기'}
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="mt-6 border-t border-slate-200 pt-5">
-                                            <p className="text-sm text-slate-500">
-                                                영상 보관&nbsp;
-                                                <strong className="text-slate-950">
-                                                    {fanMeeting.recordingExpiresAt}까지
-                                                </strong>
-                                            </p>
-
-                                            <p className="mt-4 text-sm font-semibold text-green-600">
-                                                ● 녹화 영상 저장 완료
-                                            </p>
-
-                                            <button
-                                                className="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-900"
-                                                type="button"
-                                            >
-                                                녹화 영상 다운로드
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
-                            </div>
-                        </article>
-                    ))
-                    }
+                            </CardContent>
+                            <CardFooter className="grid gap-4">
+                                {isUpcoming ? (
+                                    <>
+                                        <p
+                                            className={[
+                                                'text-sm font-semibold',
+                                                fanMeeting.canEnter
+                                                    ? 'text-[var(--color-success)]'
+                                                    : 'text-[var(--color-text-secondary)]',
+                                            ].join(' ')}
+                                        >
+                                            {fanMeeting.canEnter
+                                                ? '지금 입장할 수 있어요'
+                                                : '입장 전에 장비를 확인해 주세요'}
+                                        </p>
+                                        <Button
+                                            className="w-full"
+                                            size="lg"
+                                            variant={fanMeeting.canEnter ? 'primary' : 'secondary'}
+                                        >
+                                            {fanMeeting.canEnter ? '입장하기' : '장비 점검하기'}
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-sm text-[var(--color-text-secondary)]">
+                                            영상 보관&nbsp;
+                                            <strong className="text-[var(--color-text-primary)]">
+                                                {fanMeeting.recordingExpiresAt}까지
+                                            </strong>
+                                        </p>
+                                        <Badge className="w-fit" variant="success">
+                                            녹화 영상 저장 완료
+                                        </Badge>
+                                        <Button className="w-full" size="lg" variant="secondary">
+                                            녹화 영상 다운로드
+                                        </Button>
+                                    </>
+                                )}
+                            </CardFooter>
+                        </Card>
+                    ))}
                 </div>
             </section>
-        </main>
+        </div>
     )
 }
