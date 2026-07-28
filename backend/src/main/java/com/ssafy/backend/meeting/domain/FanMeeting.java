@@ -19,6 +19,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 /**
  * 팬미팅의 기본 정보와 전체 진행 상태를 저장하는 엔티티다.
@@ -73,4 +74,38 @@ public class FanMeeting extends BaseTimeEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    private FanMeeting(Organization organization,
+                       User manager,
+                       User influencer,
+                       String title,
+                       String description,
+                       String coverImageUrl,
+                       LocalDateTime scheduledStartAt) {
+        this.organization = organization;
+        this.manager = manager;
+        this.influencer = Objects.requireNonNull(influencer);
+        this.title = Objects.requireNonNull(title);
+        this.description = description;
+        this.coverImageUrl = coverImageUrl;
+        this.status = FanMeetingStatus.DRAFT;
+        this.scheduledStartAt = Objects.requireNonNull(scheduledStartAt);
+    }
+
+    /**
+     * 공개 전 초안 상태의 팬미팅을 생성한다.
+     * 조직과 매니저는 1인 인플루언서가 생성하는 경우 null일 수 있다.
+     */
+    public static FanMeeting create(Organization organization,
+                                    User manager,
+                                    User influencer,
+                                    String title,
+                                    String description,
+                                    String coverImageUrl,
+                                    LocalDateTime scheduledStartAt) {
+        return new FanMeeting(
+                organization, manager, influencer, title,
+                description, coverImageUrl, scheduledStartAt
+        );
+    }
 }

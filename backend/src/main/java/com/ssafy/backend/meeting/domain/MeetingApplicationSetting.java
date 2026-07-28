@@ -14,6 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 /**
  * 팬미팅의 응모 기간과 모집 인원 설정을 저장하는 엔티티다.
@@ -33,6 +34,9 @@ public class MeetingApplicationSetting extends BaseTimeEntity {
     @JoinColumn(name = "meeting_id", nullable = false)
     private FanMeeting meeting;
 
+    @Column(name = "application_enabled", nullable = false)
+    private boolean enabled;
+
     @Column(name = "application_open_at")
     private LocalDateTime applicationOpenAt;
 
@@ -44,4 +48,30 @@ public class MeetingApplicationSetting extends BaseTimeEntity {
 
     @Column(name = "capacity", nullable = false)
     private Integer capacity;
+
+    private MeetingApplicationSetting(FanMeeting meeting,
+                                      boolean enabled,
+                                      LocalDateTime applicationOpenAt,
+                                      LocalDateTime applicationCloseAt,
+                                      LocalDateTime resultAnnouncementAt,
+                                      int capacity) {
+        this.meeting = Objects.requireNonNull(meeting);
+        this.enabled = enabled;
+        this.applicationOpenAt = applicationOpenAt;
+        this.applicationCloseAt = applicationCloseAt;
+        this.resultAnnouncementAt = resultAnnouncementAt;
+        this.capacity = capacity;
+    }
+
+    public static MeetingApplicationSetting create(FanMeeting meeting,
+                                                   boolean enabled,
+                                                   LocalDateTime applicationOpenAt,
+                                                   LocalDateTime applicationCloseAt,
+                                                   LocalDateTime resultAnnouncementAt,
+                                                   int capacity) {
+        return new MeetingApplicationSetting(
+                meeting, enabled, applicationOpenAt, applicationCloseAt,
+                resultAnnouncementAt, capacity
+        );
+    }
 }
