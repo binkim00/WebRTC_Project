@@ -17,6 +17,7 @@ public class QueueRealtimeStore {
     private static final long STATE_CONFLICT = -3L;
     private static final Duration WEBHOOK_EVENT_TTL = Duration.ofDays(1);
     private static final Duration LIVEKIT_PRESENCE_TTL = Duration.ofHours(6);
+    private static final Duration LIVEKIT_DISCONNECT_TTL = Duration.ofMinutes(2);
 
     private static final DefaultRedisScript<Long> INITIALIZE_SCRIPT = new DefaultRedisScript<>("""
             if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
@@ -262,5 +263,39 @@ public class QueueRealtimeStore {
      */
     public void clearFanConnected(Long callSessionId) {
         redisTemplate.delete(QueueRedisKeys.liveKitFanPresence(callSessionId));
+    }
+
+    /**
+     * 재접속 유예 만료 시 종료 사유를 결정할 마지막 이탈 역할을 저장한다.
+     *
+     * @param callSessionId 통화 세션 식별자
+     * @param role 이탈한 참가자 역할
+     */
+    public void markDisconnectRole(Long callSessionId, String role) {
+        redisTemplate.opsForValue().set(
+                QueueRedisKeys.liveKitDisconnectRole(callSessionId),
+                role,
+                LIVEKIT_DISCONNECT_TTL
+        );
+    }
+
+    /**
+     * 통화 세션에서 마지막으로 이탈한 참가자 역할을 조회한다.
+     *
+     * @param callSessionId 통화 세션 식별자
+     * @return 저장된 역할이며 없으면 null
+     */
+    public String getDisconnectRole(Long callSessionId) {
+        return redisTemplate.opsForValue().get(
+                QueueRedisKeys.liveKitDisconnectRole(callSessionId));
+    }
+
+    /**
+     * 재접속 완료 또는 통화 종료 후 마지막 이탈 역할을 제거한다.
+     *
+     * @param callSessionId 통화 세션 식별자
+     */
+    public void clearDisconnectRole(Long callSessionId) {
+        redisTemplate.delete(QueueRedisKeys.liveKitDisconnectRole(callSessionId));
     }
 }

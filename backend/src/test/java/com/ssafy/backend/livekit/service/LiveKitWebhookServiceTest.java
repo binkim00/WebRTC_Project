@@ -134,6 +134,9 @@ class LiveKitWebhookServiceTest {
     @Test
     void clearsFanPresenceWhenFanLeavesRoom() {
         when(realtimeStore.claimWebhookEvent("fan-left-event")).thenReturn(true);
+        when(callSession.getStatus()).thenReturn(CallSessionStatus.ACTIVE);
+        when(callSessionRepository.findWebhookContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
         LivekitWebhook.WebhookEvent event = LivekitWebhook.WebhookEvent.newBuilder()
                 .setEvent("participant_left")
                 .setId("fan-left-event")
@@ -147,7 +150,27 @@ class LiveKitWebhookServiceTest {
         service.handle(event);
 
         verify(realtimeStore).clearFanConnected(CALL_SESSION_ID);
-        verifyNoInteractions(callSessionRepository, operationSettingRepository);
+        verify(callSession).openReconnectWindow(STARTED_AT.plusSeconds(60));
+        verify(realtimeStore).markDisconnectRole(CALL_SESSION_ID, "fan");
+        verifyNoInteractions(operationSettingRepository);
+    }
+
+    /** 재접속 유예 중 양측이 다시 연결되면 기존 타이머를 유지하고 유예만 해제하는지 검증한다. */
+    @Test
+    void resumesActiveCallWithoutRestartingTimer() {
+        when(realtimeStore.claimWebhookEvent("fan-rejoined-event")).thenReturn(true);
+        when(callSession.getStatus()).thenReturn(CallSessionStatus.ACTIVE);
+        when(callSessionRepository.findWebhookContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(realtimeStore.isHostConnected(ROOM_ID)).thenReturn(true);
+        when(realtimeStore.isFanConnected(CALL_SESSION_ID)).thenReturn(true);
+
+        service.handle(fanJoinedEvent("fan-rejoined-event"));
+
+        verify(callSession).resumeConnection();
+        verify(realtimeStore).clearDisconnectRole(CALL_SESSION_ID);
+        verify(callSession, never()).activate(STARTED_AT, 60);
+        verifyNoInteractions(operationSettingRepository);
     }
 
     /**

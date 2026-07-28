@@ -33,6 +33,11 @@ public final class QueueRedisKeys {
         return "livekit:call-session:" + callSessionId + ":fan";
     }
 
+    /** 통화 세션의 마지막 연결 종료 역할 Key를 반환한다. */
+    public static String liveKitDisconnectRole(Long callSessionId) {
+        return "livekit:call-session:" + callSessionId + ":disconnect-role";
+    }
+
     /** 팬미팅별 공통 Key 접두사를 반환한다. */
     private static String prefix(Long meetingId) { return PREFIX + meetingId; }
 }

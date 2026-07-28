@@ -109,4 +109,51 @@ public class CallSession extends BaseTimeEntity {
         this.startedAt = startedAt;
         this.endsAt = startedAt.plusSeconds(durationSec);
     }
+
+    /**
+     * 활성 통화의 재접속 허용 종료 시각을 기록한다.
+     *
+     * @param reconnectAllowedUntil 재접속을 허용할 마지막 서버 시각
+     * @throws IllegalStateException 활성 상태가 아니거나 허용 시각이 없는 경우
+     */
+    public void openReconnectWindow(LocalDateTime reconnectAllowedUntil) {
+        if (status != CallSessionStatus.ACTIVE || reconnectAllowedUntil == null) {
+            throw new IllegalStateException("활성 통화에만 재접속 유예를 설정할 수 있습니다.");
+        }
+        this.reconnectAllowedUntil = reconnectAllowedUntil;
+    }
+
+    /**
+     * 양측 참가자가 다시 연결된 활성 통화의 재접속 유예를 해제한다.
+     *
+     * @throws IllegalStateException 활성 통화가 아닌 경우
+     */
+    public void resumeConnection() {
+        if (status != CallSessionStatus.ACTIVE) {
+            throw new IllegalStateException("활성 통화만 재접속을 완료할 수 있습니다.");
+        }
+        this.reconnectAllowedUntil = null;
+    }
+
+    /**
+     * 활성 통화를 지정된 사유로 종료하고 종료 주체와 시각을 기록한다.
+     *
+     * @param endedAt 서버 기준 종료 시각
+     * @param endReason 통화 종료 사유
+     * @param endedBy 종료를 요청한 사용자이며 자동 종료라면 null
+     * @throws IllegalStateException 활성 상태가 아니거나 필수 종료 정보가 없는 경우
+     */
+    public void end(LocalDateTime endedAt, CallEndReason endReason, User endedBy) {
+        if (status != CallSessionStatus.ACTIVE) {
+            throw new IllegalStateException("활성 통화만 종료할 수 있습니다.");
+        }
+        if (endedAt == null || endReason == null) {
+            throw new IllegalStateException("종료 시각과 종료 사유는 필수입니다.");
+        }
+        this.status = CallSessionStatus.ENDED;
+        this.endedAt = endedAt;
+        this.endReason = endReason;
+        this.endedBy = endedBy;
+        this.reconnectAllowedUntil = null;
+    }
 }

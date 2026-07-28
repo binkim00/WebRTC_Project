@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -32,6 +33,7 @@ public class LiveKitWebhookService {
     private static final String CALL_SESSION_ID_ATTRIBUTE = "call_session_id";
     private static final String FAN_ROLE = "fan";
     private static final String HOST_ROLE = "host";
+    private static final Duration RECONNECT_GRACE_PERIOD = Duration.ofSeconds(60);
 
     private final CallSessionRepository callSessionRepository;
     private final MeetingOperationSettingRepository operationSettingRepository;
@@ -120,10 +122,17 @@ public class LiveKitWebhookService {
         Map<String, String> attributes = event.getParticipant().getAttributesMap();
         String role = attributes.get(ROLE_ATTRIBUTE);
         if (FAN_ROLE.equals(role)) {
-            realtimeStore.clearFanConnected(
-                    parseCallSessionId(attributes.get(CALL_SESSION_ID_ATTRIBUTE)));
+            Long callSessionId = parseCallSessionId(
+                    attributes.get(CALL_SESSION_ID_ATTRIBUTE));
+            realtimeStore.clearFanConnected(callSessionId);
+            callSessionRepository.findWebhookContextById(callSessionId)
+                    .ifPresent(callSession -> markDisconnected(callSession, FAN_ROLE));
         } else if (HOST_ROLE.equals(role)) {
-            realtimeStore.clearHostConnected(event.getRoom().getName());
+            String roomId = event.getRoom().getName();
+            realtimeStore.clearHostConnected(roomId);
+            callSessionRepository.findFirstByRoomIdAndStatusOrderByIdDesc(
+                            roomId, CallSessionStatus.ACTIVE)
+                    .ifPresent(callSession -> markDisconnected(callSession, HOST_ROLE));
         }
     }
 
@@ -154,6 +163,9 @@ public class LiveKitWebhookService {
     private void handleHostJoined(String roomId) {
         realtimeStore.markHostConnected(roomId);
         callSessionRepository.findFirstByRoomIdAndStatusOrderByIdDesc(
+                        roomId, CallSessionStatus.ACTIVE)
+                .ifPresent(this::activateIfBothParticipantsConnected);
+        callSessionRepository.findFirstByRoomIdAndStatusOrderByIdDesc(
                         roomId, CallSessionStatus.CONNECTING)
                 .ifPresent(this::activateIfBothParticipantsConnected);
     }
@@ -165,11 +177,14 @@ public class LiveKitWebhookService {
      * @throws BusinessException 팬미팅 운영 설정이 없는 경우
      */
     private void activateIfBothParticipantsConnected(CallSession callSession) {
-        if (callSession.getStatus() == CallSessionStatus.ACTIVE) {
-            return;
-        }
         if (!realtimeStore.isHostConnected(callSession.getRoomId())
                 || !realtimeStore.isFanConnected(callSession.getId())) {
+            return;
+        }
+
+        if (callSession.getStatus() == CallSessionStatus.ACTIVE) {
+            callSession.resumeConnection();
+            realtimeStore.clearDisconnectRole(callSession.getId());
             return;
         }
 
@@ -182,6 +197,21 @@ public class LiveKitWebhookService {
         callSession.activate(startedAt, setting.getCallDurationSec());
         queueEntry.startCall();
         realtimeStore.updateStatus(meetingId, queueEntry.getId(), QueueEntryStatus.IN_CALL);
+    }
+
+    /**
+     * 활성 통화의 연결 종료 역할과 60초 재접속 허용 시각을 기록한다.
+     *
+     * @param callSession 연결이 끊긴 활성 통화 세션
+     * @param role 연결이 끊긴 참가자 역할
+     */
+    private void markDisconnected(CallSession callSession, String role) {
+        if (callSession.getStatus() != CallSessionStatus.ACTIVE) {
+            return;
+        }
+        callSession.openReconnectWindow(
+                LocalDateTime.now(clock).plus(RECONNECT_GRACE_PERIOD));
+        realtimeStore.markDisconnectRole(callSession.getId(), role);
     }
 
     /**

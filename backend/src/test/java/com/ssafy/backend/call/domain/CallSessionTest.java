@@ -1,6 +1,7 @@
 package com.ssafy.backend.call.domain;
 
 import com.ssafy.backend.queue.domain.QueueEntry;
+import com.ssafy.backend.user.domain.User;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -47,6 +48,36 @@ class CallSessionTest {
 
         assertThatThrownBy(() -> callSession.activate(
                 LocalDateTime.of(2026, 7, 28, 10, 0), 0))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    /** 활성 통화 종료 시 최종 상태·시각·사유·종료 주체가 함께 기록되는지 검증한다. */
+    @Test
+    void endsActiveCallWithFinalContext() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "ko");
+        LocalDateTime startedAt = LocalDateTime.of(2026, 7, 28, 11, 0);
+        LocalDateTime endedAt = startedAt.plusSeconds(30);
+        User operator = mock(User.class);
+        callSession.activate(startedAt, 60);
+
+        callSession.end(endedAt, CallEndReason.FORCED, operator);
+
+        assertThat(callSession.getStatus()).isEqualTo(CallSessionStatus.ENDED);
+        assertThat(callSession.getEndedAt()).isEqualTo(endedAt);
+        assertThat(callSession.getEndReason()).isEqualTo(CallEndReason.FORCED);
+        assertThat(callSession.getEndedBy()).isSameAs(operator);
+        assertThat(callSession.getReconnectAllowedUntil()).isNull();
+    }
+
+    /** 연결 대기 상태의 세션은 활성 통화 종료 전이를 사용할 수 없는지 검증한다. */
+    @Test
+    void rejectsEndingConnectingCall() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "ko");
+
+        assertThatThrownBy(() -> callSession.end(
+                LocalDateTime.of(2026, 7, 28, 11, 0), CallEndReason.FORCED, mock(User.class)))
                 .isInstanceOf(IllegalStateException.class);
     }
 }
