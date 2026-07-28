@@ -32,8 +32,8 @@ import {
 } from '../../components'
 
 const languageOptions = [
-  { label: '한국어', value: 'ko' },
-  { label: 'English', value: 'en' },
+  { label: '한국어', value: 'KOREAN' },
+  { label: 'English', value: 'ENGLISH' },
 ] as const
 
 const roleOptions = [
@@ -47,7 +47,7 @@ function isSignupRole(value: string): value is SignupRole {
 }
 
 function isPreferredLanguage(value: string): value is PreferredLanguage {
-  return value === 'ko' || value === 'en'
+  return value === 'KOREAN' || value === 'ENGLISH'
 }
 
 export function LoginPage() {

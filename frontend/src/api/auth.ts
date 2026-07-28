@@ -1,7 +1,7 @@
 import { apiRequest } from './client'
 
 export type SignupRole = 'FAN' | 'INFLUENCER' | 'MANAGER'
-export type PreferredLanguage = 'ko' | 'en'
+export type PreferredLanguage = 'KOREAN' | 'ENGLISH'
 
 export type SignupRequest = {
   loginId: string
