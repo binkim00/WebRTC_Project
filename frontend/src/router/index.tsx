@@ -27,6 +27,7 @@ import {
   FanMeetingWaitingPage,
   FanProfilePage,
 } from '../pages/fan/FanRoutePages'
+import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
 import {
   InfluencerFanMemoPage,
   InfluencerMeetingCallPage,
@@ -84,6 +85,10 @@ export const router = createBrowserRouter([
             Component: MeetingStatisticsPage,
           },
         ],
+      },
+      {
+        path: 'influencer/my-fan-meetings',
+        Component: InfluencerMyMeetingPage,
       },
       {
         path: 'fan',
