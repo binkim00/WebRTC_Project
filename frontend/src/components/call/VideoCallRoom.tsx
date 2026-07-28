@@ -15,7 +15,7 @@ import {
   getLiveKitConnectionInfo,
   type LiveKitConnectionInfo,
 } from '../../api/livekit'
-import { Badge, Card, CardContent, CardHeader, CardTitle } from '../data-display/DataDisplay'
+import { Badge, Card, CardContent, CardHeader, CardTitle } from '../data-display'
 import { AlertBanner, Dialog } from '../feedback'
 import { Button } from '../ui/Button'
 

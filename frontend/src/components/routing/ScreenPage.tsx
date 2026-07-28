@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Badge, Card, CardContent, CardHeader, CardTitle } from '../data-display/DataDisplay'
+import { Badge, Card, CardContent, CardHeader, CardTitle } from '../data-display'
 import { AlertBanner } from '../feedback'
 
 type ScreenPageProps = {

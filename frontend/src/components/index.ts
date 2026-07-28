@@ -1,5 +1,5 @@
 export * from './call/VideoCallRoom'
-export * from './data-display/DataDisplay'
+export * from './data-display'
 export * from './feedback'
 export * from './media/MediaDevicePreview'
 export * from './navigation'
