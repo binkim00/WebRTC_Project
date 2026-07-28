@@ -38,3 +38,6 @@ Thumbs.db
 # 임시 파일
 *.tmp
 *.temp
+
+# Node.js dependencies
+node_modules/

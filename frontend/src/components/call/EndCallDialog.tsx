@@ -25,7 +25,7 @@ export function EndCallDialog({ open, onOpenChange, onConfirm }: EndCallDialogPr
       open={open}
       title="영상 통화를 종료할까요?"
     >
-      <p className="text-sm leading-6 text-slate-600">
+      <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
         연결을 종료하면 LiveKit이 사용 중인 카메라와 마이크도 함께 정리합니다.
       </p>
     </Dialog>

@@ -1,5 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '../components'
+import { isVideoCallPath } from '../router/routeState'
 
 export type RoleNavigationItem = {
   label: string
@@ -13,6 +14,12 @@ type RoleLayoutProps = {
 }
 
 export function RoleLayout({ title, description, navigation }: RoleLayoutProps) {
+  const { pathname } = useLocation()
+
+  if (isVideoCallPath(pathname)) {
+    return <Outlet />
+  }
+
   return (
     <div className="grid items-start gap-[var(--space-panel-gap)] lg:grid-cols-[260px_minmax(0,1fr)]">
       <aside className="h-fit lg:sticky lg:top-[calc(var(--service-header-height)+24px)]">

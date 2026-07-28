@@ -1,3 +1,6 @@
+import { ApiError } from './ApiError'
+import { apiRequest } from './client'
+
 export type LiveKitConnectionInfo = {
   serverUrl: string
   token: string
@@ -25,35 +28,35 @@ export async function getLiveKitConnectionInfo(
   fanMeetingId: string,
   signal?: AbortSignal,
 ): Promise<LiveKitConnectionInfo> {
-  const response = await fetch(
-    `/api/fan-meetings/${encodeURIComponent(fanMeetingId)}/livekit-token`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        Accept: 'application/json',
-      },
-      signal,
-    },
-  )
+  let data: unknown
 
-  if (!response.ok) {
-    if (response.status === 401) {
+  try {
+    data = await apiRequest(
+      `/api/fan-meetings/${encodeURIComponent(fanMeetingId)}/livekit-token`,
+      {
+        method: 'POST',
+        signal,
+      },
+    )
+  } catch (error: unknown) {
+    if (!(error instanceof ApiError)) {
+      throw error
+    }
+
+    if (error.status === 401) {
       throw new Error('로그인이 만료되었습니다. 다시 로그인한 뒤 입장해 주세요.')
     }
 
-    if (response.status === 403) {
+    if (error.status === 403) {
       throw new Error('이 팬미팅 영상통화에 입장할 권한이 없습니다.')
     }
 
-    if (response.status === 404) {
+    if (error.status === 404) {
       throw new Error('팬미팅을 찾을 수 없거나 아직 통화방이 준비되지 않았습니다.')
     }
 
-    throw new Error(`통화 연결 정보를 가져오지 못했습니다. (${response.status})`)
+    throw new Error(`통화 연결 정보를 가져오지 못했습니다. (${error.status})`)
   }
-
-  const data: unknown = await response.json()
 
   if (!isConnectionInfo(data)) {
     throw new Error('백엔드가 반환한 LiveKit 연결 정보 형식이 올바르지 않습니다.')

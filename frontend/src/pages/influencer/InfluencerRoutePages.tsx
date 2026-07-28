@@ -1,9 +1,11 @@
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components'
 import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
 
 export function InfluencerMeetingCallPage() {
-  const { fanMeetingId } = useParams()
+  const { fanMeetingId, callSessionId } = useParams()
+  const [searchParams] = useSearchParams()
+  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
 
   if (!fanMeetingId?.trim()) {
     return (
@@ -14,8 +16,18 @@ export function InfluencerMeetingCallPage() {
     )
   }
 
+  if (!callSessionId?.trim() && !isDesignPreview) {
+    return (
+      <InvalidRouteState
+        message="실제 영상통화 입장에는 callSessionId가 필요합니다. 준비실에서 현재 통화 세션으로 입장해 주세요."
+        title="통화 세션 ID가 없습니다"
+      />
+    )
+  }
+
   return (
     <VideoCallRoom
+      callSessionId={callSessionId}
       endTo="/influencer/mypage/fan-meetings"
       meetingId={fanMeetingId}
       participantLabel="팬 영상"

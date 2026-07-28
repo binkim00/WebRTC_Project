@@ -22,13 +22,13 @@ import {
   FanEventDetailPage,
   FanEventListPage,
   FanMeetingCallPage,
-  FanMeetingCompletePage,
-  FanMeetingListPage,
   FanMeetingWaitingPage,
   FanProfilePage,
 } from '../pages/fan/FanRoutePages'
-import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
 import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
+import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
+import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
+import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
 import {
   InfluencerMeetingCallPage,
   InfluencerMeetingHistoryPage,
@@ -68,6 +68,14 @@ export const router = createBrowserRouter([
             Component: SignupPage,
           },
         ],
+      },
+      {
+        path: 'fan/fan-meetings/:fanMeetingId/complete',
+        Component: FanMeetingCompletePage,
+      },
+      {
+        path: 'fan/mypage/fan-meetings',
+        Component: FanMeetingListPage,
       },
       {
         path: 'fan-meetings/:fanMeetingId',
@@ -127,8 +135,8 @@ export const router = createBrowserRouter([
             Component: FanMeetingCallPage,
           },
           {
-            path: 'fan-meetings/:fanMeetingId/complete',
-            Component: FanMeetingCompletePage,
+            path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
+            Component: FanMeetingCallPage,
           },
           {
             path: 'mypage/profile',
@@ -137,10 +145,6 @@ export const router = createBrowserRouter([
           {
             path: 'mypage/applications',
             Component: FanApplicationsPage,
-          },
-          {
-            path: 'mypage/fan-meetings',
-            Component: FanMeetingListPage,
           },
         ],
       },
@@ -154,6 +158,10 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/:fanMeetingId/call',
+            Component: InfluencerMeetingCallPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: InfluencerMeetingCallPage,
           },
           {

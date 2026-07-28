@@ -1,4 +1,4 @@
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components'
 import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
 
@@ -46,7 +46,9 @@ export function FanMeetingWaitingPage() {
 }
 
 export function FanMeetingCallPage() {
-  const { fanMeetingId } = useParams()
+  const { fanMeetingId, callSessionId } = useParams()
+  const [searchParams] = useSearchParams()
+  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
 
   if (!fanMeetingId?.trim()) {
     return (
@@ -57,23 +59,22 @@ export function FanMeetingCallPage() {
     )
   }
 
+  if (!callSessionId?.trim() && !isDesignPreview) {
+    return (
+      <InvalidRouteState
+        message="실제 영상통화 입장에는 callSessionId가 필요합니다. 대기 화면에서 배정받은 통화 세션으로 입장해 주세요."
+        title="통화 세션 ID가 없습니다"
+      />
+    )
+  }
+
   return (
     <VideoCallRoom
+      callSessionId={callSessionId}
       endTo={`/fan/fan-meetings/${fanMeetingId}/complete`}
       meetingId={fanMeetingId}
       participantLabel="인플루언서 영상"
       screenId="FN-005"
-    />
-  )
-}
-
-export function FanMeetingCompletePage() {
-  return (
-    <ScreenPage
-      description="영상 통화가 끝난 뒤 표시되는 완료 화면입니다."
-      requiredParams={['fanMeetingId']}
-      screenId="FN-006"
-      title="영상 통화 종료 화면"
     />
   )
 }
@@ -95,48 +96,5 @@ export function FanApplicationsPage() {
       screenId="FN-007"
       title="응모한 이벤트"
     />
-  )
-}
-
-export function FanMeetingListPage() {
-  const [searchParams] = useSearchParams()
-  const status = searchParams.get('status')
-
-  if (status !== 'upcoming' && status !== 'completed') {
-    return (
-      <InvalidRouteState
-        message="status 검색 파라미터는 upcoming 또는 completed여야 합니다."
-        title="팬미팅 목록 상태를 확인할 수 없습니다"
-      />
-    )
-  }
-
-  const isUpcoming = status === 'upcoming'
-
-  return (
-    <ScreenPage
-      description={
-        isUpcoming
-          ? '앞으로 진행될 팬미팅을 확인하는 마이페이지 영역입니다.'
-          : '완료된 팬미팅 이력을 확인하는 마이페이지 영역입니다.'
-      }
-      screenId="FN-007"
-      title={isUpcoming ? '팬미팅 예정' : '팬미팅 히스토리'}
-    >
-      <div className="flex flex-wrap gap-2">
-        <Link
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          to="/fan/mypage/fan-meetings?status=upcoming"
-        >
-          예정
-        </Link>
-        <Link
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          to="/fan/mypage/fan-meetings?status=completed"
-        >
-          완료
-        </Link>
-      </div>
-    </ScreenPage>
   )
 }
