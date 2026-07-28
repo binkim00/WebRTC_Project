@@ -1,6 +1,6 @@
 export * from './call/VideoCallRoom'
 export * from './data-display/DataDisplay'
-export * from './feedback/Feedback'
+export * from './feedback'
 export * from './media/MediaDevicePreview'
 export * from './navigation'
 export * from './ui/Button'

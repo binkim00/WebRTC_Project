@@ -16,7 +16,7 @@ import {
   type LiveKitConnectionInfo,
 } from '../../api/livekit'
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '../data-display/DataDisplay'
-import { AlertBanner, Dialog } from '../feedback/Feedback'
+import { AlertBanner, Dialog } from '../feedback'
 import { Button } from '../ui/Button'
 
 export type VideoCallRoomProps = {
