@@ -80,6 +80,7 @@ public class SecurityConfig {
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/call")
                                 .hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings").authenticated()
                         // 보호 대상 API가 확정될 때까지 기존 접근 정책을 유지한다.
                         .requestMatchers("/api/v1/fan-meetings/*/queue/operations/**")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
