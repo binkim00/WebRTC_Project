@@ -67,6 +67,7 @@ export type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>
   error?: string
   helperText?: string
   containerClassName?: string
+  endAdornment?: ReactNode
 }
 
 export function TextField({
@@ -75,6 +76,7 @@ export function TextField({
   error,
   helperText,
   containerClassName,
+  endAdornment,
   className,
   required,
   'aria-describedby': ariaDescribedBy,
@@ -93,18 +95,24 @@ export function TextField({
       label={label}
       required={required}
     >
-      <input
-        aria-describedby={cn(ariaDescribedBy, descriptionId) || undefined}
-        aria-invalid={Boolean(error)}
-        className={cn(
-          fieldClassName,
-          error ? fieldStateClasses.error : fieldStateClasses.default,
-          className,
-        )}
-        id={id}
-        required={required}
-        {...props}
-      />
+      <div className="relative">
+        <input
+          aria-describedby={cn(ariaDescribedBy, descriptionId) || undefined}
+          aria-invalid={Boolean(error)}
+          className={cn(
+            fieldClassName,
+            endAdornment ? 'pr-12' : undefined,
+            error ? fieldStateClasses.error : fieldStateClasses.default,
+            className,
+          )}
+          id={id}
+          required={required}
+          {...props}
+        />
+        {endAdornment ? (
+          <div className="absolute inset-y-0 right-1 flex items-center">{endAdornment}</div>
+        ) : null}
+      </div>
     </FieldFrame>
   )
 }
@@ -399,9 +407,9 @@ export function RadioGroup({
                   appearance === 'button' &&
                     'block h-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center transition',
                   appearance === 'button' &&
-                    'peer-checked:border-violet-600 peer-checked:bg-violet-50 peer-checked:ring-1 peer-checked:ring-violet-600',
+                    'peer-checked:border-[var(--color-primary-coral)] peer-checked:bg-[var(--color-primary-coral-soft)] peer-checked:ring-1 peer-checked:ring-[var(--color-primary-coral)]',
                   appearance === 'button' &&
-                    'peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500 peer-focus-visible:ring-offset-2',
+                    'peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-focus-indigo)] peer-focus-visible:ring-offset-2',
                 )}
               >
                 <span className="block text-sm font-semibold text-slate-800">{option.label}</span>

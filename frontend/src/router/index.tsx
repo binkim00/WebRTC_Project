@@ -122,13 +122,17 @@ export const router = createBrowserRouter([
             Component: FanMeetingCallPage,
           },
           {
+            path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
+            Component: FanMeetingCallPage,
+          },
+          {
             path: 'mypage/profile',
             Component: FanProfilePage,
           },
           {
             path: 'mypage/applications',
             Component: FanApplicationsPage,
-          }
+          },
         ],
       },
       {
@@ -145,6 +149,10 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/:fanMeetingId/call',
+            Component: InfluencerMeetingCallPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: InfluencerMeetingCallPage,
           },
           {

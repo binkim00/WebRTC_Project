@@ -7,21 +7,29 @@ import {
   useParticipants,
   useRoomContext,
   useTracks,
+  useTranscriptions,
 } from '@livekit/components-react'
+import { UserCircleIcon } from '@phosphor-icons/react'
 import { ConnectionState, Track } from 'livekit-client'
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  getLiveKitConnectionInfo,
-  type LiveKitConnectionInfo,
-} from '../../api/livekit'
-import { Badge, Card, CardContent, CardHeader, CardTitle } from '../data-display/DataDisplay'
+  getCallSessionStatus,
+  issueLiveKitAccessToken,
+  type CallSessionStatusResponse,
+  type LiveKitAccessTokenResponse,
+} from '../../api/callSessions'
+import localPreviewImage from '../../assets/call-preview-local.jpg'
+import remotePreviewImage from '../../assets/call-preview-remote.jpg'
+import { Badge } from '../data-display/DataDisplay'
 import { AlertBanner, Dialog } from '../feedback/Feedback'
 import { Button } from '../ui/Button'
+import { CallStage } from './CallStage'
 
 export type VideoCallRoomProps = {
   screenId: string
   meetingId: string
+  callSessionId?: string
   participantLabel: string
   endTo: string
 }
@@ -32,52 +40,99 @@ function formatDuration(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function useSessionDuration(active: boolean) {
-  const [seconds, setSeconds] = useState(0)
+function useRemainingTime(status: CallSessionStatusResponse) {
+  const [receivedAt, setReceivedAt] = useState(() => Date.now())
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!active) {
-      setSeconds(0)
-      return
-    }
+    const nextNow = Date.now()
+    setReceivedAt(nextNow)
+    setNow(nextNow)
+  }, [status.remainingSec, status.serverNow])
 
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setSeconds((current) => current + 1)
+      setNow(Date.now())
     }, 1000)
 
     return () => window.clearInterval(intervalId)
-  }, [active])
+  }, [])
 
-  return formatDuration(seconds)
+  const elapsedSeconds = Math.max(0, Math.floor((now - receivedAt) / 1000))
+  return formatDuration(Math.max(0, status.remainingSec - elapsedSeconds))
+}
+
+type EndCallDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: () => void
+}
+
+function EndCallDialog({ open, onOpenChange, onConfirm }: EndCallDialogProps) {
+  return (
+    <Dialog
+      description="LiveKit 통화방 연결을 종료하고 다음 화면으로 이동합니다."
+      footer={
+        <>
+          <Button onClick={() => onOpenChange(false)} variant="ghost">
+            계속 통화
+          </Button>
+          <Button onClick={onConfirm} variant="danger">
+            종료하기
+          </Button>
+        </>
+      }
+      onOpenChange={onOpenChange}
+      open={open}
+      title="영상 통화를 종료할까요?"
+    >
+      <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
+        연결을 종료하면 LiveKit이 사용 중인 카메라와 마이크도 함께 정리합니다.
+      </p>
+    </Dialog>
+  )
+}
+
+type ConnectedCallRoomProps = VideoCallRoomProps & {
+  sessionStatus: CallSessionStatusResponse
 }
 
 function ConnectedCallRoom({
-  screenId,
   meetingId,
+  callSessionId,
   participantLabel,
   endTo,
-}: VideoCallRoomProps) {
+  sessionStatus,
+}: ConnectedCallRoomProps) {
   const navigate = useNavigate()
   const room = useRoomContext()
   const connectionState = useConnectionState()
   const participants = useParticipants()
   const cameraTracks = useTracks([Track.Source.Camera])
+  const transcriptions = useTranscriptions()
   const {
     isCameraEnabled,
     isMicrophoneEnabled,
     localParticipant,
   } = useLocalParticipant()
   const [endDialogOpen, setEndDialogOpen] = useState(false)
+  const [captionEnabled, setCaptionEnabled] = useState(true)
   const [mediaAction, setMediaAction] = useState<'camera' | 'microphone'>()
   const [mediaError, setMediaError] = useState<string>()
   const isConnected = connectionState === ConnectionState.Connected
   const isReconnecting =
     connectionState === ConnectionState.Reconnecting ||
     connectionState === ConnectionState.SignalReconnecting
-  const sessionDuration = useSessionDuration(isConnected)
+  const remainingTime = useRemainingTime(sessionStatus)
   const remoteParticipants = participants.filter((participant) => !participant.isLocal)
+  const remoteParticipant = remoteParticipants[0]
   const remoteCameraTrack = cameraTracks.find((track) => !track.participant.isLocal)
   const localCameraTrack = cameraTracks.find((track) => track.participant.isLocal)
+  const latestTranscription = transcriptions.at(-1)
+  const remoteName =
+    remoteParticipant?.name ||
+    remoteParticipant?.identity ||
+    participantLabel.replace(/\s*영상$/, '')
 
   async function toggleCamera() {
     setMediaAction('camera')
@@ -110,48 +165,88 @@ function ConnectedCallRoom({
     navigate(endTo)
   }
 
-  let noticeTitle = 'LiveKit 통화방 연결 중'
-  let noticeMessage = '보안 연결을 만들고 카메라와 마이크를 준비하고 있습니다.'
-  let noticeVariant: 'info' | 'warning' | 'success' | 'error' = 'info'
+  useEffect(() => {
+    if (sessionStatus.status !== 'ENDED') {
+      return
+    }
+
+    void room.disconnect().finally(() => navigate(endTo, { replace: true }))
+  }, [endTo, navigate, room, sessionStatus.status])
+
+  let connectionLabel = '연결 중'
 
   if (isConnected && remoteParticipants.length > 0) {
-    noticeTitle = '영상통화 연결 완료'
-    noticeMessage = '상대방과 LiveKit 통화방에 연결되었습니다.'
-    noticeVariant = 'success'
+    connectionLabel = '연결 완료'
   } else if (isConnected) {
-    noticeTitle = '상대방 입장 대기 중'
-    noticeMessage = '내 장비 연결은 완료되었습니다. 상대방이 같은 통화방에 입장하면 자동으로 표시됩니다.'
-    noticeVariant = 'info'
+    connectionLabel = '입장 대기'
   } else if (isReconnecting) {
-    noticeTitle = '통화 재연결 중'
-    noticeMessage = '네트워크 연결이 불안정해 LiveKit 통화방에 다시 연결하고 있습니다.'
-    noticeVariant = 'warning'
+    connectionLabel = '재연결 중'
   } else if (connectionState === ConnectionState.Disconnected) {
-    noticeTitle = '통화 연결이 종료되었습니다'
-    noticeMessage = '다시 입장하려면 페이지를 새로고침해 주세요.'
-    noticeVariant = 'error'
+    connectionLabel = '연결 종료'
   }
 
-  return (
-    <div className="grid gap-6">
-      <RoomAudioRenderer />
+  const remoteVideo = remoteCameraTrack ? (
+    <VideoTrack
+      aria-label={participantLabel}
+      className="size-full object-cover"
+      trackRef={remoteCameraTrack}
+    />
+  ) : (
+    <div className="flex size-full flex-col items-center justify-center gap-3 bg-[#23242a] px-6 text-center text-white/70">
+      <UserCircleIcon aria-hidden="true" size={64} weight="thin" />
+      <p className="font-semibold text-white">{remoteName}</p>
+      <p className="text-sm">상대방의 입장 또는 카메라 연결을 기다리고 있습니다.</p>
+    </div>
+  )
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Badge variant="primary">{screenId}</Badge>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight !text-slate-950">영상 통화</h1>
-          <p className="mt-3 text-slate-600">
-            팬미팅 ID: <span className="font-mono text-slate-800">{meetingId}</span>
+  const localVideo =
+    localCameraTrack && isCameraEnabled ? (
+      <VideoTrack
+        aria-label="내 카메라"
+        className="size-full -scale-x-100 object-cover"
+        trackRef={localCameraTrack}
+      />
+    ) : (
+      <div className="flex size-full items-center justify-center bg-[#23242a] text-white/70">
+        <UserCircleIcon aria-hidden="true" size={48} weight="thin" />
+      </div>
+    )
+
+  return (
+    <div className="grid gap-4">
+      <RoomAudioRenderer />
+      <CallStage
+        cameraEnabled={isCameraEnabled}
+        captionEnabled={captionEnabled}
+        captionSpeaker={latestTranscription ? remoteName : undefined}
+        captionText={latestTranscription?.text}
+        connected={isConnected}
+        connectionLabel={connectionLabel}
+        localVideo={localVideo}
+        mediaAction={mediaAction}
+        microphoneEnabled={isMicrophoneEnabled}
+        onCameraToggle={() => void toggleCamera()}
+        onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
+        onLeave={() => setEndDialogOpen(true)}
+        onMicrophoneToggle={() => void toggleMicrophone()}
+        participantLabel={participantLabel}
+        remoteVideo={remoteVideo}
+        timeLabel="남은 시간"
+        timeValue={remainingTime}
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--color-text-secondary)]">
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <p>
+            팬미팅 ID: <span className="font-mono text-[var(--color-text-primary)]">{meetingId}</span>
+          </p>
+          <p>
+            통화 세션 ID:{' '}
+            <span className="font-mono text-[var(--color-text-primary)]">{callSessionId}</span>
           </p>
         </div>
-        <Badge variant={isConnected ? 'success' : 'neutral'}>
-          {isConnected ? `세션 ${sessionDuration}` : '연결 중'}
-        </Badge>
-      </header>
-
-      <AlertBanner title={noticeTitle} variant={noticeVariant}>
-        {noticeMessage}
-      </AlertBanner>
+        <p>실시간 자막은 LiveKit transcription 데이터가 전달될 때 표시됩니다.</p>
+      </div>
 
       {mediaError ? (
         <AlertBanner title="장비 상태를 변경하지 못했습니다" variant="error">
@@ -159,137 +254,105 @@ function ConnectedCallRoom({
         </AlertBanner>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(18rem,0.8fr)]">
-        <Card className="overflow-hidden bg-slate-950">
-          <div className="relative aspect-video">
-            {remoteCameraTrack ? (
-              <VideoTrack
-                aria-label={participantLabel}
-                className="size-full object-cover"
-                trackRef={remoteCameraTrack}
-              />
-            ) : (
-              <div
-                aria-label={`${participantLabel} 영역`}
-                className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center text-slate-300"
-              >
-                <span aria-hidden="true" className="text-5xl">◎</span>
-                <div>
-                  <p className="font-semibold text-white">{participantLabel}</p>
-                  <p className="mt-2 text-sm leading-6">
-                    상대방의 입장 또는 카메라 연결을 기다리고 있습니다.
-                  </p>
-                </div>
-                <Badge className="bg-white/10 text-white">LiveKit 연결 대기</Badge>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>내 화면</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
-              {localCameraTrack && isCameraEnabled ? (
-                <VideoTrack
-                  aria-label="내 카메라"
-                  className="size-full -scale-x-100 object-cover"
-                  trackRef={localCameraTrack}
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-300">
-                  카메라가 꺼져 있습니다.
-                </div>
-              )}
-            </div>
-            <dl className="grid gap-2 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500">카메라</dt>
-                <dd className={isCameraEnabled ? 'font-semibold text-emerald-700' : 'text-slate-500'}>
-                  {isCameraEnabled ? '켜짐' : '꺼짐'}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500">마이크</dt>
-                <dd className={isMicrophoneEnabled ? 'font-semibold text-emerald-700' : 'text-slate-500'}>
-                  {isMicrophoneEnabled ? '켜짐' : '꺼짐'}
-                </dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-center gap-3">
-          <Button
-            disabled={!isConnected}
-            loading={mediaAction === 'camera'}
-            onClick={() => void toggleCamera()}
-            variant={isCameraEnabled ? 'secondary' : 'outline'}
-          >
-            {isCameraEnabled ? '카메라 끄기' : '카메라 켜기'}
-          </Button>
-          <Button
-            disabled={!isConnected}
-            loading={mediaAction === 'microphone'}
-            onClick={() => void toggleMicrophone()}
-            variant={isMicrophoneEnabled ? 'secondary' : 'outline'}
-          >
-            {isMicrophoneEnabled ? '마이크 끄기' : '마이크 켜기'}
-          </Button>
-          <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
-            to={`/fan-meetings/${meetingId}/device-check`}
-          >
-            장비 다시 선택
-          </Link>
-          <Button onClick={() => setEndDialogOpen(true)} variant="danger">
-            통화 종료
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Dialog
-        description="LiveKit 통화방 연결을 종료하고 다음 화면으로 이동합니다."
-        footer={
-          <>
-            <Button onClick={() => setEndDialogOpen(false)} variant="ghost">
-              계속 통화
-            </Button>
-            <Button onClick={() => void leaveRoom()} variant="danger">
-              종료하기
-            </Button>
-          </>
-        }
+      <EndCallDialog
+        onConfirm={() => void leaveRoom()}
         onOpenChange={setEndDialogOpen}
         open={endDialogOpen}
-        title="영상 통화를 종료할까요?"
-      >
-        <p className="text-sm leading-6 text-slate-600">
-          연결을 종료하면 LiveKit이 사용 중인 카메라와 마이크도 함께 정리합니다.
-        </p>
-      </Dialog>
+      />
+    </div>
+  )
+}
+
+function PreviewCallRoom({ endTo, participantLabel }: VideoCallRoomProps) {
+  const navigate = useNavigate()
+  const [cameraEnabled, setCameraEnabled] = useState(true)
+  const [microphoneEnabled, setMicrophoneEnabled] = useState(true)
+  const [captionEnabled, setCaptionEnabled] = useState(true)
+  const [endDialogOpen, setEndDialogOpen] = useState(false)
+
+  const remoteVideo = (
+    <img
+      alt={`${participantLabel} 디자인 미리보기`}
+      className="size-full object-cover"
+      src={remotePreviewImage}
+    />
+  )
+
+  const localVideo = cameraEnabled ? (
+    <img
+      alt="내 카메라 디자인 미리보기"
+      className="size-full -scale-x-100 object-cover"
+      src={localPreviewImage}
+    />
+  ) : (
+    <div className="flex size-full items-center justify-center bg-[#23242a] text-white/70">
+      <UserCircleIcon aria-hidden="true" size={48} weight="thin" />
+    </div>
+  )
+
+  return (
+    <div className="grid gap-4">
+      <CallStage
+        cameraEnabled={cameraEnabled}
+        captionEnabled={captionEnabled}
+        captionSpeaker="Melly"
+        captionText="오늘 만나게 돼서 정말 반가워요!"
+        connected
+        connectionLabel="연결 완료"
+        localVideo={localVideo}
+        microphoneEnabled={microphoneEnabled}
+        onCameraToggle={() => setCameraEnabled((enabled) => !enabled)}
+        onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
+        onLeave={() => setEndDialogOpen(true)}
+        onMicrophoneToggle={() => setMicrophoneEnabled((enabled) => !enabled)}
+        participantLabel={participantLabel}
+        remoteVideo={remoteVideo}
+        timeLabel="남은 시간"
+        timeValue="00:30"
+      />
+
+      <EndCallDialog
+        onConfirm={() => navigate(endTo)}
+        onOpenChange={setEndDialogOpen}
+        open={endDialogOpen}
+      />
     </div>
   )
 }
 
 export function VideoCallRoom(props: VideoCallRoomProps) {
-  const [connectionInfo, setConnectionInfo] = useState<LiveKitConnectionInfo>()
+  const [searchParams] = useSearchParams()
+  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
+  const [connectionInfo, setConnectionInfo] = useState<LiveKitAccessTokenResponse>()
+  const [sessionStatus, setSessionStatus] = useState<CallSessionStatusResponse>()
   const [connectionError, setConnectionError] = useState<string>()
+  const [statusError, setStatusError] = useState<string>()
   const [retryCount, setRetryCount] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!isDesignPreview)
 
   const loadConnectionInfo = useCallback(
     async (signal: AbortSignal) => {
+      if (isDesignPreview) {
+        return
+      }
+
+      if (!props.callSessionId) {
+        setConnectionError('통화 연결에 필요한 callSessionId가 없습니다.')
+        setLoading(false)
+        return
+      }
+
       setLoading(true)
       setConnectionError(undefined)
+      setStatusError(undefined)
 
       try {
-        const info = await getLiveKitConnectionInfo(props.meetingId, signal)
+        const [info, status] = await Promise.all([
+          issueLiveKitAccessToken(props.callSessionId, { signal }),
+          getCallSessionStatus(props.callSessionId, { signal }),
+        ])
         setConnectionInfo(info)
+        setSessionStatus(status)
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return
@@ -305,7 +368,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         }
       }
     },
-    [props.meetingId],
+    [isDesignPreview, props.callSessionId],
   )
 
   useEffect(() => {
@@ -314,14 +377,54 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     return () => abortController.abort()
   }, [loadConnectionInfo, retryCount])
 
-  if (!connectionInfo) {
+  useEffect(() => {
+    const callSessionId = props.callSessionId
+
+    if (isDesignPreview || !callSessionId || !connectionInfo) {
+      return
+    }
+
+    let active = true
+
+    const refreshStatus = async () => {
+      try {
+        const status = await getCallSessionStatus(callSessionId)
+
+        if (active) {
+          setSessionStatus(status)
+          setStatusError(undefined)
+        }
+      } catch (error: unknown) {
+        if (active) {
+          setStatusError(
+            error instanceof Error ? error.message : '통화 상태를 갱신하지 못했습니다.',
+          )
+        }
+      }
+    }
+
+    const intervalId = window.setInterval(() => void refreshStatus(), 5000)
+
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [connectionInfo, isDesignPreview, props.callSessionId])
+
+  if (isDesignPreview) {
+    return <PreviewCallRoom {...props} />
+  }
+
+  if (!connectionInfo || !sessionStatus) {
     return (
-      <div className="grid gap-6">
+      <div className="mx-auto grid max-w-3xl gap-6 py-10">
         <header>
           <Badge variant="primary">{props.screenId}</Badge>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight !text-slate-950">영상 통화</h1>
-          <p className="mt-3 text-slate-600">
-            팬미팅 ID: <span className="font-mono text-slate-800">{props.meetingId}</span>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
+            영상 통화
+          </h1>
+          <p className="mt-3 text-[var(--color-text-secondary)]">
+            통화 세션 ID: <span className="font-mono">{props.callSessionId ?? '없음'}</span>
           </p>
         </header>
         <AlertBanner
@@ -329,7 +432,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
           variant={loading ? 'info' : 'error'}
         >
           {loading
-            ? '백엔드에서 이 팬미팅의 LiveKit 접속 토큰을 요청하고 있습니다.'
+            ? '백엔드에서 LiveKit 접속 토큰과 통화 상태를 요청하고 있습니다.'
             : connectionError}
         </AlertBanner>
         {!loading ? (
@@ -354,17 +457,22 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       onMediaDeviceFailure={() => {
         setConnectionError('카메라 또는 마이크를 사용할 수 없습니다. 브라우저 권한과 장치 연결을 확인해 주세요.')
       }}
-      serverUrl={connectionInfo.serverUrl}
-      token={connectionInfo.token}
+      serverUrl={connectionInfo.liveKitUrl}
+      token={connectionInfo.accessToken}
       video={cameraId ? { deviceId: { exact: cameraId } } : true}
     >
-      <ConnectedCallRoom
-        {...props}
-      />
+      <ConnectedCallRoom {...props} sessionStatus={sessionStatus} />
       {connectionError ? (
         <div className="mt-4">
           <AlertBanner title="LiveKit 연결 오류" variant="error">
             {connectionError}
+          </AlertBanner>
+        </div>
+      ) : null}
+      {statusError ? (
+        <div className="mt-4">
+          <AlertBanner title="통화 상태 갱신 오류" variant="warning">
+            {statusError}
           </AlertBanner>
         </div>
       ) : null}
