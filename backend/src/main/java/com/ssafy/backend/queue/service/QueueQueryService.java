@@ -1,6 +1,8 @@
 package com.ssafy.backend.queue.service;
 
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.call.domain.CallSession;
+import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
@@ -22,16 +24,27 @@ import org.springframework.transaction.annotation.Transactional;
 public class QueueQueryService {
     private final CurrentUserService currentUserService;
     private final QueueEntryRepository queueEntryRepository;
+    private final CallSessionRepository callSessionRepository;
     private final MeetingOperationSettingRepository operationSettingRepository;
     private final QueueRealtimeStore realtimeStore;
 
-    /** 대기열 조회에 필요한 저장소와 현재 사용자 처리기를 주입받는다. */
+    /**
+     * 대기열 조회에 필요한 저장소와 현재 사용자 처리기를 주입받는다.
+     *
+     * @param currentUserService 현재 로그인 사용자 조회 서비스
+     * @param queueEntryRepository 대기열 항목 저장소
+     * @param callSessionRepository 영상통화 세션 저장소
+     * @param operationSettingRepository 팬미팅 운영 설정 저장소
+     * @param realtimeStore 실시간 대기열 상태 저장소
+     */
     public QueueQueryService(CurrentUserService currentUserService,
                              QueueEntryRepository queueEntryRepository,
+                             CallSessionRepository callSessionRepository,
                              MeetingOperationSettingRepository operationSettingRepository,
                              QueueRealtimeStore realtimeStore) {
         this.currentUserService = currentUserService;
         this.queueEntryRepository = queueEntryRepository;
+        this.callSessionRepository = callSessionRepository;
         this.operationSettingRepository = operationSettingRepository;
         this.realtimeStore = realtimeStore;
     }
@@ -58,6 +71,12 @@ public class QueueQueryService {
         if (status == QueueEntryStatus.NOT_ENTERED) {
             throw new BusinessException(ErrorCode.QUEUE_ENTRY_NOT_ENTERED);
         }
+        Long callSessionId = null;
+        if (status == QueueEntryStatus.CALLED || status == QueueEntryStatus.IN_CALL) {
+            callSessionId = callSessionRepository.findByQueueEntry_Id(entry.getId())
+                    .map(CallSession::getId)
+                    .orElse(null);
+        }
         return new QueueSnapshotResponse(
                 entry.getId(),
                 position,
@@ -66,7 +85,8 @@ public class QueueQueryService {
                 QueueDisplayStatus.from(status),
                 entry.getCallAttemptCount(),
                 entry.getCalledAt(),
-                status == QueueEntryStatus.CALLED
+                callSessionId,
+                callSessionId != null
         );
     }
 

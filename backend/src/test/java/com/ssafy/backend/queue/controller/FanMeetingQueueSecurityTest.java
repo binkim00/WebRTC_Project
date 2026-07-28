@@ -2,6 +2,7 @@ package com.ssafy.backend.queue.controller;
 
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
+import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
@@ -56,6 +57,9 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private FanMeetingRepository fanMeetingRepository;
+
+    @MockitoBean
+    private MeetingApplicationSettingRepository applicationSettingRepository;
 
     @MockitoBean
     private MeetingOperationSettingRepository operationSettingRepository;

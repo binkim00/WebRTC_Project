@@ -62,6 +62,7 @@ class FanMeetingQueueControllerTest {
                 QueueDisplayStatus.WAITING,
                 0,
                 null,
+                null,
                 false
         );
         when(queryService.getMySnapshot(1L, FAN_PRINCIPAL)).thenReturn(expected);
