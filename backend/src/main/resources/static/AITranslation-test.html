@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>LiveKit 테스트</title>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: sans-serif; padding: 24px; background: #f5f5f5; color: #1a1a1a; }
+        h1 { font-size: 20px; font-weight: 500; margin-bottom: 20px; }
+        .card { background: white; border-radius: 12px; border: 0.5px solid #e0e0e0; padding: 20px; margin-bottom: 16px; }
+        .field { margin-bottom: 14px; }
+        label { font-size: 13px; color: #666; display: block; margin-bottom: 4px; }
+        input, select { width: 100%; padding: 8px 10px; border: 0.5px solid #ccc; border-radius: 8px; font-size: 14px; }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        button { padding: 10px 20px; border-radius: 8px; border: 0.5px solid #ccc; background: white; font-size: 14px; cursor: pointer; }
+        button:hover { background: #f0f0f0; }
+        button#joinBtn { background: #1a1a1a; color: white; border-color: #1a1a1a; width: 100%; margin-top: 4px; }
+        button#joinBtn:hover { background: #333; }
+        #status { font-size: 13px; color: #666; margin-top: 10px; min-height: 20px; }
+        #status.error { color: #c0392b; }
+        #status.ok { color: #27ae60; }
+        video { width: 100%; border-radius: 8px; background: #111; display: block; }
+        .video-label { font-size: 12px; color: #888; margin-bottom: 6px; }
+        .videos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .fan-lang-field { display: none; }
+        #subtitles { min-height: 80px; max-height: 240px; overflow-y: auto; }
+        .subtitle-row { padding: 6px 0; border-bottom: 0.5px solid #f0f0f0; font-size: 14px; line-height: 1.5; }
+        .subtitle-row:last-child { border-bottom: none; }
+        .subtitle-role { font-size: 11px; color: #888; margin-bottom: 2px; }
+        .subtitle-original { color: #1a1a1a; }
+        .subtitle-translated { color: #2563eb; margin-top: 2px; }
+        .subtitle-empty { color: #bbb; font-size: 13px; }
+    </style>
+</head>
+<body>
+<h1>LiveKit 테스트</h1>
+
+<div class="card">
+    <div class="row">
+        <div class="field">
+            <label>참가자 ID</label>
+            <input id="identity" value="host-1">
+        </div>
+        <div class="field">
+            <label>역할</label>
+            <select id="role">
+                <option value="host">host</option>
+                <option value="fan">fan</option>
+            </select>
+        </div>
+    </div>
+    <div class="field fan-lang-field" id="fanLangField">
+        <label>팬 언어 (fan_lang)</label>
+        <input id="fanLang" value="en" placeholder="en / ja / zh 등">
+    </div>
+    <div class="field">
+        <label>call_session_id</label>
+        <input id="sessionId" value="1">
+    </div>
+    <button id="joinBtn">방 입장</button>
+    <p id="status"></p>
+</div>
+
+<div class="card">
+    <p class="video-label" style="margin-bottom:10px;">실시간 자막</p>
+    <div id="subtitles"><p class="subtitle-empty">자막 대기 중...</p></div>
+</div>
+
+<div class="card videos">
+    <div>
+        <p class="video-label">내 화면</p>
+        <div id="localVideo"></div>
+    </div>
+    <div>
+        <p class="video-label">상대 화면</p>
+        <div id="remoteVideo"></div>
+    </div>
+</div>
+
+<script>
+    const { Room, RoomEvent, Track } = LivekitClient;
+    const room = new Room({ adaptiveStream: true, dynacast: true });
+    const statusEl = document.getElementById('status');
+    const roleSelect = document.getElementById('role');
+    const fanLangField = document.getElementById('fanLangField');
+
+    roleSelect.addEventListener('change', () => {
+        fanLangField.style.display = roleSelect.value === 'fan' ? 'block' : 'none';
+        document.getElementById('identity').value = roleSelect.value === 'fan' ? 'fan-1' : 'host-1';
+    });
+
+    room.on(RoomEvent.DataReceived, (data, participant, kind, topic) => {
+        if (topic !== 'subtitle') return;
+        const msg = JSON.parse(new TextDecoder().decode(data));
+        const box = document.getElementById('subtitles');
+        const empty = box.querySelector('.subtitle-empty');
+        if (empty) empty.remove();
+
+        const row = document.createElement('div');
+        row.className = 'subtitle-row';
+        row.innerHTML = `
+        <div class="subtitle-role">${msg.speaker_role} · ${msg.original_lang}</div>
+        <div class="subtitle-original">${msg.original_text}</div>
+        ${msg.translated_text ? `<div class="subtitle-translated">${msg.translated_text}</div>` : ''}
+    `;
+        box.appendChild(row);
+        box.scrollTop = box.scrollHeight;
+    });
+
+    room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+        const el = track.attach();
+        el.autoplay = true;
+        el.playsInline = true;
+        document.getElementById('remoteVideo').appendChild(el);
+        statusEl.textContent = `${participant.identity} 미디어 수신 중`;
+        statusEl.className = 'ok';
+    });
+
+    document.getElementById('joinBtn').addEventListener('click', async () => {
+        try {
+            const identity = document.getElementById('identity').value.trim();
+            const role = roleSelect.value;
+            const fanLang = document.getElementById('fanLang').value.trim();
+            const sessionId = document.getElementById('sessionId').value.trim();
+
+            if (!identity) throw new Error('참가자 ID를 입력하세요');
+
+            let metadata;
+            if (role === 'host') {
+                metadata = JSON.stringify({ role: 'host' });
+            } else {
+                metadata = JSON.stringify({ role: 'fan', call_session_id: sessionId, fan_lang: fanLang });
+            }
+
+            statusEl.textContent = '토큰 발급 중...';
+            statusEl.className = '';
+
+            const res = await fetch('/api/v1/livekit/test-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identity, displayName: identity, metadata })
+            });
+
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+
+            statusEl.textContent = 'LiveKit 연결 중...';
+            await room.connect(data.liveKitUrl ?? data.url, data.accessToken ?? data.token);
+            await room.localParticipant.setCameraEnabled(true);
+            await room.localParticipant.setMicrophoneEnabled(true);
+
+            const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+            if (camPub?.track) {
+                const v = camPub.track.attach();
+                v.muted = true;
+                v.autoplay = true;
+                v.playsInline = true;
+                document.getElementById('localVideo').appendChild(v);
+            }
+
+            statusEl.textContent = `입장 성공 — ${identity} (${role}) / ${data.roomName ?? 'test-room'}`;
+            statusEl.className = 'ok';
+        } catch (e) {
+            console.error(e);
+            statusEl.textContent = `입장 실패: ${e.message}`;
+            statusEl.className = 'error';
+        }
+    });
+</script>
+</body>
+</html>

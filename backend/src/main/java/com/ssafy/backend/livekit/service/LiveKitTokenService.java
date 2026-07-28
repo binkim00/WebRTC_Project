@@ -26,7 +26,7 @@ public class LiveKitTokenService {
     }
 
     /** 지정한 사용자가 공용 테스트 방에 참여할 수 있는 10분짜리 토큰을 생성한다. */
-    public LiveKitTokenResponse createTestToken(String identity, String displayName) {
+    public LiveKitTokenResponse createTestToken(String identity, String displayName, String metadata) {
         if (!StringUtils.hasText(identity)) {
             throw new IllegalArgumentException("identity는 필수입니다.");
         }
@@ -48,6 +48,10 @@ public class LiveKitTokenService {
                 new CanPublish(true),
                 new CanSubscribe(true)
         );
+
+        if (StringUtils.hasText(metadata)) {
+            token.setMetadata(metadata);
+        }
 
         // toJwt() 호출 시 위의 사용자 정보와 권한을 실제 서명된 JWT 문자열로 변환한다.
         return new LiveKitTokenResponse(
