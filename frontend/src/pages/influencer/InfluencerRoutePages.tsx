@@ -2,17 +2,6 @@ import { useParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components'
 import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
 
-export function InfluencerMeetingReadyPage() {
-  return (
-    <ScreenPage
-      description="인플루언서가 팬미팅 시작 전에 참여 상태를 확인하는 준비실입니다."
-      requiredParams={['fanMeetingId']}
-      screenId="ID-002"
-      title="팬미팅 준비실"
-    />
-  )
-}
-
 export function InfluencerMeetingCallPage() {
   const { fanMeetingId } = useParams()
 
