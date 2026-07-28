@@ -87,4 +87,73 @@ public class CallSession extends BaseTimeEntity {
         callSession.status = CallSessionStatus.CONNECTING;
         return callSession;
     }
+
+    /**
+     * 팬과 인플루언서의 접속이 확인된 세션을 실제 통화 중 상태로 전환한다.
+     *
+     * @param startedAt LiveKit에서 양측 접속이 확인된 시각
+     * @param durationSec 팬미팅 운영 설정의 통화 제한 시간(초)
+     * @throws IllegalStateException 연결 대기 상태가 아니거나 통화 시간이 올바르지 않은 경우
+     */
+    public void activate(LocalDateTime startedAt, int durationSec) {
+        if (status == CallSessionStatus.ACTIVE) {
+            return;
+        }
+        if (status != CallSessionStatus.CONNECTING) {
+            throw new IllegalStateException("시작할 수 없는 통화 세션 상태입니다.");
+        }
+        if (durationSec <= 0) {
+            throw new IllegalStateException("통화 시간은 0초보다 커야 합니다.");
+        }
+        this.status = CallSessionStatus.ACTIVE;
+        this.startedAt = startedAt;
+        this.endsAt = startedAt.plusSeconds(durationSec);
+    }
+
+    /**
+     * 활성 통화의 재접속 허용 종료 시각을 기록한다.
+     *
+     * @param reconnectAllowedUntil 재접속을 허용할 마지막 서버 시각
+     * @throws IllegalStateException 활성 상태가 아니거나 허용 시각이 없는 경우
+     */
+    public void openReconnectWindow(LocalDateTime reconnectAllowedUntil) {
+        if (status != CallSessionStatus.ACTIVE || reconnectAllowedUntil == null) {
+            throw new IllegalStateException("활성 통화에만 재접속 유예를 설정할 수 있습니다.");
+        }
+        this.reconnectAllowedUntil = reconnectAllowedUntil;
+    }
+
+    /**
+     * 양측 참가자가 다시 연결된 활성 통화의 재접속 유예를 해제한다.
+     *
+     * @throws IllegalStateException 활성 통화가 아닌 경우
+     */
+    public void resumeConnection() {
+        if (status != CallSessionStatus.ACTIVE) {
+            throw new IllegalStateException("활성 통화만 재접속을 완료할 수 있습니다.");
+        }
+        this.reconnectAllowedUntil = null;
+    }
+
+    /**
+     * 활성 통화를 지정된 사유로 종료하고 종료 주체와 시각을 기록한다.
+     *
+     * @param endedAt 서버 기준 종료 시각
+     * @param endReason 통화 종료 사유
+     * @param endedBy 종료를 요청한 사용자이며 자동 종료라면 null
+     * @throws IllegalStateException 활성 상태가 아니거나 필수 종료 정보가 없는 경우
+     */
+    public void end(LocalDateTime endedAt, CallEndReason endReason, User endedBy) {
+        if (status != CallSessionStatus.ACTIVE) {
+            throw new IllegalStateException("활성 통화만 종료할 수 있습니다.");
+        }
+        if (endedAt == null || endReason == null) {
+            throw new IllegalStateException("종료 시각과 종료 사유는 필수입니다.");
+        }
+        this.status = CallSessionStatus.ENDED;
+        this.endedAt = endedAt;
+        this.endReason = endReason;
+        this.endedBy = endedBy;
+        this.reconnectAllowedUntil = null;
+    }
 }
