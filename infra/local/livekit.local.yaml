@@ -6,5 +6,3 @@ rtc:
   port_range_end: 50100
   use_external_ip: false
 
-keys:
-  devkey: melly-local-dev-secret-1234567890abcdef
