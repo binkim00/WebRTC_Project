@@ -3,7 +3,7 @@
 
 실행: python agent.py dev
 
-이벤트 시작 시 dispatch → agent는 이벤트 내내 Room에 상주.
+LiveKit Room 생성 시 자동 dispatch → agent는 이벤트 내내 Room에 상주.
 인플루언서 트랙은 계속 유지, 팬만 교체됨.
 팬 교체 시 인플루언서/팬 어댑터 둘 다 재시작.
 
@@ -64,7 +64,7 @@ class CallState:
 
 
 # ── 진입점 ────────────────────────────────────────────────────────────────────
-#백엔드에서 영상통화 세션을 만들고 dispatch하면 my_agent를 실행
+# LiveKit이 새 Room에 자동 dispatch하면 my_agent를 실행
 async def my_agent(ctx: JobContext) -> None:
 
     # 1. 인플루언서 언어 — INFLUENCER participant 입장 시 token metadata에서 읽어 채운다.
@@ -332,6 +332,5 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=my_agent,
-            agent_name="subtitle-agent",   # 백엔드 dispatch의 agent_name과 반드시 동일해야 함
         )
     )
