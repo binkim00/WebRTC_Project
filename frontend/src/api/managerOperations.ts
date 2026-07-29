@@ -24,19 +24,32 @@ export type ManagerNotice = {
 }
 
 export type FanMeetingForm = {
+  influencerId: number
   title: string
-  influencerName: string
+  description: string | null
+  coverImageUrl: string | null
   scheduledStartAt: string
-  durationMinutes: number
-  recordingEnabled: boolean
+  application: {
+    enabled: boolean
+    startAt: string | null
+    endAt: string | null
+    resultAnnouncementAt: string | null
+    capacity: number
+  }
+  operation: {
+    queueOpenAt: string
+    callDurationSec: number
+    recordingEnabled: boolean
+    translationEnabled: boolean
+  }
 }
 
-export type EventForm = {
-  title: string
-  description: string
-  applicationStartAt: string
-  applicationEndAt: string
-  capacity: number
+export type FanMeetingCreateResponse = FanMeetingForm & {
+  meetingId: number
+  status: 'DRAFT'
+  organizationId: number | null
+  managerId: number | null
+  createdAt: string
 }
 
 function unwrap(value: unknown): unknown {
@@ -46,41 +59,34 @@ function unwrap(value: unknown): unknown {
   return value
 }
 
-export async function fetchManagerEvents(authToken: string, keyword = '', signal?: AbortSignal) {
-  const params = new URLSearchParams({ page: '0', size: '10' })
-  if (keyword.trim()) params.set('keyword', keyword.trim())
-  const value = unwrap(await apiRequest<unknown>(`/api/v1/events?${params.toString()}`, { authToken, signal }))
-  const content = Array.isArray(value) ? value : (value as { content?: unknown[] } | null)?.content ?? []
-  return content as ManagerEvent[]
+function isFanMeetingCreateResponse(value: unknown): value is FanMeetingCreateResponse {
+  if (typeof value !== 'object' || value === null) return false
+
+  const response = value as Record<string, unknown>
+
+  return (
+    typeof response.meetingId === 'number' &&
+    Number.isFinite(response.meetingId) &&
+    response.status === 'DRAFT' &&
+    typeof response.createdAt === 'string'
+  )
 }
 
-export async function fetchApplications(eventId: string, authToken: string, signal?: AbortSignal) {
-  const value = unwrap(await apiRequest<unknown>(`/api/v1/events/${encodeURIComponent(eventId)}/applications?page=0&size=10`, { authToken, signal }))
-  const content = Array.isArray(value) ? value : (value as { content?: unknown[] } | null)?.content ?? []
-  return content as ManagerApplication[]
-}
+export async function createFanMeeting(
+  payload: FanMeetingForm,
+  authToken: string,
+): Promise<FanMeetingCreateResponse> {
+  const value = unwrap(
+    await apiRequest<unknown>('/api/v1/fan-meetings', {
+      method: 'POST',
+      authToken,
+      body: JSON.stringify(payload),
+    }),
+  )
 
-export async function fetchNotices(meetingId: string, authToken: string, signal?: AbortSignal) {
-  const value = unwrap(await apiRequest<unknown>(`/api/v1/fan-meetings/${encodeURIComponent(meetingId)}/notices`, { authToken, signal }))
-  return (Array.isArray(value) ? value : (value as { content?: unknown[] } | null)?.content ?? []) as ManagerNotice[]
-}
+  if (!isFanMeetingCreateResponse(value)) {
+    throw new TypeError('팬미팅 생성 응답 형식이 올바르지 않습니다.')
+  }
 
-export async function createFanMeeting(payload: FanMeetingForm, authToken: string) {
-  return apiRequest('/api/v1/fan-meetings', { method: 'POST', authToken, body: JSON.stringify(payload) })
-}
-
-export async function updateFanMeeting(meetingId: string, payload: FanMeetingForm, authToken: string) {
-  return apiRequest(`/api/v1/fan-meetings/${encodeURIComponent(meetingId)}`, { method: 'PATCH', authToken, body: JSON.stringify(payload) })
-}
-
-export async function createEvent(payload: EventForm, authToken: string) {
-  return apiRequest('/api/v1/events', { method: 'POST', authToken, body: JSON.stringify(payload) })
-}
-
-export async function updateEvent(eventId: string, payload: EventForm, authToken: string) {
-  return apiRequest(`/api/v1/events/${encodeURIComponent(eventId)}`, { method: 'PATCH', authToken, body: JSON.stringify(payload) })
-}
-
-export async function updateNotice(noticeId: string, payload: Pick<ManagerNotice, 'title' | 'content' | 'status' | 'publishAt'>, authToken: string) {
-  return apiRequest(`/api/v1/notices/${encodeURIComponent(noticeId)}`, { method: 'PATCH', authToken, body: JSON.stringify(payload) })
+  return value
 }

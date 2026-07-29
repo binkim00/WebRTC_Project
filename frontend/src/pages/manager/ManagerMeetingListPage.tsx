@@ -9,10 +9,7 @@ import {
 } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ApiError } from '../../api/ApiError'
-import { getAuthSession } from '../../api/auth'
 import {
-  fetchManagerMeetings,
   type ManagerMeetingPage,
   type ManagerMeetingSummary,
 } from '../../api/managerMeetings'
@@ -60,65 +57,55 @@ export function ManagerMeetingListPage() {
   const [error, setError] = useState<string>()
 
   useEffect(() => {
-    if (isPreview) {
-      const normalizedKeyword = keyword.trim().toLocaleLowerCase()
-      const filteredMeetings = normalizedKeyword
-        ? previewMeetings.filter((meeting) =>
-            `${meeting.title} ${meeting.influencerName}`
-              .toLocaleLowerCase()
-              .includes(normalizedKeyword),
-          )
-        : previewMeetings
-      setMeetingPage({
-        content: filteredMeetings,
-        page: 0,
-        size: 5,
-        totalElements: filteredMeetings.length,
-        totalPages: normalizedKeyword ? 1 : 2,
-        hasNext: !normalizedKeyword && page < 2,
-      })
-      setError(undefined)
+    if (!isPreview) {
       setLoading(false)
       return
     }
 
-    const authToken = getAuthSession()?.accessToken
-    if (!authToken) {
-      setError('매니저 계정으로 로그인한 후 팬미팅 목록을 확인할 수 있습니다.')
-      setLoading(false)
-      return
-    }
-
-    const controller = new AbortController()
-    setLoading(true)
-    fetchManagerMeetings(
-      { keyword, page: page - 1, size: 5 },
-      authToken,
-      controller.signal,
-    )
-      .then((response) => {
-        setMeetingPage(response)
-        setError(undefined)
-      })
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return
-        setError(
-          reason instanceof ApiError
-            ? reason.message
-            : reason instanceof Error
-              ? reason.message
-              : '팬미팅 목록을 불러오지 못했습니다.',
+    const normalizedKeyword = keyword.trim().toLocaleLowerCase()
+    const filteredMeetings = normalizedKeyword
+      ? previewMeetings.filter((meeting) =>
+          `${meeting.title} ${meeting.influencerName}`
+            .toLocaleLowerCase()
+            .includes(normalizedKeyword),
         )
-      })
-      .finally(() => setLoading(false))
-
-    return () => controller.abort()
+      : previewMeetings
+    setMeetingPage({
+      content: filteredMeetings,
+      page: 0,
+      size: 5,
+      totalElements: filteredMeetings.length,
+      totalPages: normalizedKeyword ? 1 : 2,
+      hasNext: !normalizedKeyword && page < 2,
+    })
+    setError(undefined)
+    setLoading(false)
   }, [isPreview, keyword, page])
 
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPage(1)
     setKeyword(keywordInput)
+  }
+
+  if (!isPreview) {
+    return (
+      <div className="grid min-w-0 gap-7 pb-10">
+        <header>
+          <h1 className="text-4xl font-black tracking-[-0.05em]">팬미팅 관리</h1>
+          <p className="mt-3 text-[var(--color-text-secondary)]">팬미팅을 새로 등록하거나 운영 화면으로 이동하세요.</p>
+        </header>
+        <AlertBanner title="팬미팅 목록 API가 아직 구현되지 않았습니다" variant="warning">
+          첨부된 API 구현 현황 기준으로 <code>GET /api/v1/fan-meetings</code>를 사용할 수 없습니다.
+          팬미팅 생성 API는 구현되어 있으므로 새 팬미팅 등록은 가능합니다.
+        </AlertBanner>
+        <div>
+          <Button leadingIcon={<Plus size={20} weight="bold" />} onClick={() => navigate('/manager/fan-meetings/new')}>
+            새 팬미팅 등록
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (

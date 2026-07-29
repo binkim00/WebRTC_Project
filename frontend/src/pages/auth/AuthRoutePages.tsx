@@ -11,7 +11,6 @@ import {
   login,
   saveAuthSession,
   signup,
-  type LoginRole,
   type PreferredLanguage,
   type SignupRequest,
   type SignupRole,
@@ -57,18 +56,6 @@ export function LoginPage() {
   const [submitError, setSubmitError] = useState<string>()
   const [notice, setNotice] = useState<string>()
 
-  function getPostLoginPath(role: LoginRole) {
-    switch (role) {
-      case 'FAN':
-        return '/fan/events'
-      case 'INFLUENCER':
-      case 'SOLO_INFLUENCER':
-        return '/influencer/mypage/profile'
-      case 'MANAGER':
-        return '/manager/events'
-    }
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
@@ -84,7 +71,7 @@ export function LoginPage() {
       })
 
       saveAuthSession(response, formData.get('remember') === 'on')
-      navigate(getPostLoginPath(response.role), { replace: true })
+      navigate('/', { replace: true })
     } catch (error: unknown) {
       setSubmitError(
         error instanceof ApiError || error instanceof TypeError
