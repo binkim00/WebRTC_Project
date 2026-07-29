@@ -37,6 +37,7 @@ export type LoginResponse = {
 }
 
 const AUTH_SESSION_KEY = 'melly-auth-session'
+const AUTH_SAVED_AT_KEY = 'melly-auth-saved-at'
 
 function isLoginRole(value: unknown): value is LoginRole {
   return (
@@ -106,19 +107,33 @@ export function saveAuthSession(response: LoginResponse, remember: boolean) {
   const unusedStorage = remember ? window.sessionStorage : window.localStorage
 
   unusedStorage.removeItem(AUTH_SESSION_KEY)
+  unusedStorage.removeItem(AUTH_SAVED_AT_KEY)
   selectedStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(response))
+  selectedStorage.setItem(AUTH_SAVED_AT_KEY, String(Date.now()))
 }
 
 export function getAuthSession(): LoginResponse | null {
-  const serialized =
-    window.localStorage.getItem(AUTH_SESSION_KEY) ?? window.sessionStorage.getItem(AUTH_SESSION_KEY)
+  const storage = window.localStorage.getItem(AUTH_SESSION_KEY)
+    ? window.localStorage
+    : window.sessionStorage
+  const serialized = storage.getItem(AUTH_SESSION_KEY)
+  const savedAt = Number(storage.getItem(AUTH_SAVED_AT_KEY))
 
   if (!serialized) return null
 
   try {
     const parsed: unknown = JSON.parse(serialized)
-    return isLoginResponse(parsed) ? parsed : null
+    if (!isLoginResponse(parsed) || !Number.isFinite(savedAt)) {
+      clearAuthSession()
+      return null
+    }
+    if (Date.now() >= savedAt + parsed.expiresIn * 1000) {
+      clearAuthSession()
+      return null
+    }
+    return parsed
   } catch {
+    clearAuthSession()
     return null
   }
 }
@@ -126,6 +141,8 @@ export function getAuthSession(): LoginResponse | null {
 export function clearAuthSession() {
   window.localStorage.removeItem(AUTH_SESSION_KEY)
   window.sessionStorage.removeItem(AUTH_SESSION_KEY)
+  window.localStorage.removeItem(AUTH_SAVED_AT_KEY)
+  window.sessionStorage.removeItem(AUTH_SAVED_AT_KEY)
 }
 
 export async function signup(

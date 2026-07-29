@@ -2,6 +2,7 @@ import { ApiError } from './ApiError'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 const AUTH_SESSION_KEY = 'melly-auth-session'
+const AUTH_SAVED_AT_KEY = 'melly-auth-saved-at'
 
 type ErrorResponse = {
   code?: string
@@ -14,16 +15,31 @@ export type ApiRequestOptions = RequestInit & {
 }
 
 function getStoredAccessToken(): string | undefined {
-  const serialized =
-    window.localStorage.getItem(AUTH_SESSION_KEY) ??
-    window.sessionStorage.getItem(AUTH_SESSION_KEY)
+  const storage = window.localStorage.getItem(AUTH_SESSION_KEY)
+    ? window.localStorage
+    : window.sessionStorage
+  const serialized = storage.getItem(AUTH_SESSION_KEY)
 
   if (!serialized) return undefined
 
   try {
     const session: unknown = JSON.parse(serialized)
     if (typeof session !== 'object' || session === null) return undefined
-    const accessToken = (session as Record<string, unknown>).accessToken
+    const record = session as Record<string, unknown>
+    const accessToken = record.accessToken
+    const expiresIn = record.expiresIn
+    const savedAt = Number(storage.getItem(AUTH_SAVED_AT_KEY))
+    if (
+      typeof expiresIn !== 'number' ||
+      !Number.isFinite(savedAt) ||
+      Date.now() >= savedAt + expiresIn * 1000
+    ) {
+      window.localStorage.removeItem(AUTH_SESSION_KEY)
+      window.sessionStorage.removeItem(AUTH_SESSION_KEY)
+      window.localStorage.removeItem(AUTH_SAVED_AT_KEY)
+      window.sessionStorage.removeItem(AUTH_SAVED_AT_KEY)
+      return undefined
+    }
     return typeof accessToken === 'string' && accessToken.trim() ? accessToken : undefined
   } catch {
     return undefined
@@ -75,6 +91,13 @@ export async function apiRequest<T = unknown>(
 
   if (!response.ok) {
     const error = await readErrorResponse(response)
+    if (response.status === 401 && path !== '/api/v1/auth/login') {
+      window.localStorage.removeItem(AUTH_SESSION_KEY)
+      window.sessionStorage.removeItem(AUTH_SESSION_KEY)
+      window.localStorage.removeItem(AUTH_SAVED_AT_KEY)
+      window.sessionStorage.removeItem(AUTH_SAVED_AT_KEY)
+      window.location.replace('/login')
+    }
 
     throw new ApiError(
       response.status,

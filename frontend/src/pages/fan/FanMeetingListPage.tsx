@@ -63,7 +63,7 @@ const FAN_MEETING_TABS = [
 export function FanMeetingListPage() {
     const [searchParam] = useSearchParams()
     const navigate = useNavigate()
-    const status = searchParam.get('status')
+    const status = searchParam.get('status') ?? 'upcoming'
 
     if (status !== 'upcoming' && status !== 'completed') {
         return (
