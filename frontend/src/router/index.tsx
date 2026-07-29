@@ -17,13 +17,13 @@ import {
   RouterErrorPage,
 } from '../pages/errors/ErrorRoutePages'
 import {
-  FanApplicationsPage,
   FanMeetingCallPage,
-  FanProfilePage,
 } from '../pages/fan/FanRoutePages'
 import { FanEventListPage } from '../pages/fan/FanEventListPage'
 import { FanEventDetailPage } from '../pages/fan/FanEventDetailPage'
 import { FanApplicationResultPage } from '../pages/fan/FanApplicationResultPage'
+import { FanProfilePage } from '../pages/fan/FanProfilePage'
+import { FanApplicationsPage } from '../pages/fan/FanApplicationsPage'
 import { FanMeetingWaitingPage } from '../pages/fan/FanMeetingWaitingPage'
 import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
 import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
@@ -82,6 +82,14 @@ export const router = createBrowserRouter([
         Component: FanMeetingListPage,
       },
       {
+        path: 'fan/mypage/profile',
+        Component: FanProfilePage,
+      },
+      {
+        path: 'fan/mypage/applications',
+        Component: FanApplicationsPage,
+      },
+      {
         path: 'fan/events',
         Component: FanEventListPage,
       },
@@ -137,14 +145,6 @@ export const router = createBrowserRouter([
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: FanMeetingCallPage,
-          },
-          {
-            path: 'mypage/profile',
-            Component: FanProfilePage,
-          },
-          {
-            path: 'mypage/applications',
-            Component: FanApplicationsPage,
           },
         ],
       },

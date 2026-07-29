@@ -1,6 +1,6 @@
 import { useParams, useSearchParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components'
-import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
+import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 export function FanMeetingCallPage() {
   const { fanMeetingId, callSessionId } = useParams()
@@ -32,26 +32,6 @@ export function FanMeetingCallPage() {
       meetingId={fanMeetingId}
       participantLabel="인플루언서 영상"
       screenId="FN-005"
-    />
-  )
-}
-
-export function FanProfilePage() {
-  return (
-    <ScreenPage
-      description="팬 마이페이지의 프로필 영역입니다."
-      screenId="FN-007"
-      title="팬 마이페이지 화면 - 프로필"
-    />
-  )
-}
-
-export function FanApplicationsPage() {
-  return (
-    <ScreenPage
-      description="팬이 응모한 이벤트를 모아 보는 마이페이지 영역입니다."
-      screenId="FN-007"
-      title="응모한 이벤트"
     />
   )
 }
