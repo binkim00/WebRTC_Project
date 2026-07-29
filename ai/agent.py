@@ -1,5 +1,5 @@
 """
-영통팬싸 자막 에이전트.
+영통팬싸 자막/요약 에이전트.
 
 실행: python agent.py dev
 
@@ -332,6 +332,5 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=my_agent,
-            agent_name="subtitle-agent",
         )
     )
