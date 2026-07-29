@@ -2,16 +2,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components'
 import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
 
-export function FanEventListPage() {
-  return (
-    <ScreenPage
-      description="팬이 참여할 수 있는 홍보 이벤트 목록 화면입니다."
-      screenId="FN-001"
-      title="홍보 목록 화면"
-    />
-  )
-}
-
 export function FanEventDetailPage() {
   return (
     <ScreenPage
