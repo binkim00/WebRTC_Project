@@ -23,14 +23,6 @@ export type ManagerNotice = {
   publishAt?: string
 }
 
-export type ManagerProfile = {
-  nickname: string
-  name: string
-  email: string
-  role: string
-  profileImageUrl?: string
-}
-
 export type FanMeetingForm = {
   title: string
   influencerName: string
@@ -71,10 +63,6 @@ export async function fetchApplications(eventId: string, authToken: string, sign
 export async function fetchNotices(meetingId: string, authToken: string, signal?: AbortSignal) {
   const value = unwrap(await apiRequest<unknown>(`/api/v1/fan-meetings/${encodeURIComponent(meetingId)}/notices`, { authToken, signal }))
   return (Array.isArray(value) ? value : (value as { content?: unknown[] } | null)?.content ?? []) as ManagerNotice[]
-}
-
-export async function fetchManagerProfile(authToken: string, signal?: AbortSignal) {
-  return unwrap(await apiRequest<ManagerProfile>('/api/v1/users/me', { authToken, signal })) as ManagerProfile
 }
 
 export async function createFanMeeting(payload: FanMeetingForm, authToken: string) {

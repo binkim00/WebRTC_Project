@@ -48,6 +48,10 @@ import {
   ManagerStatisticsPage,
 } from '../pages/manager/ManagerRoutePages'
 import { ManagerMeetingListPage } from '../pages/manager/ManagerMeetingListPage'
+import {
+  ManagerEventHubPage,
+  ManagerMeetingHubPage,
+} from '../pages/manager/ManagerManagementHubPage'
 import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
 
 export const router = createBrowserRouter([
@@ -196,10 +200,14 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Navigate replace to="events" />,
+            element: <Navigate replace to="fan-meetings" />,
           },
           {
             path: 'events',
+            Component: ManagerEventHubPage,
+          },
+          {
+            path: 'events/manage',
             Component: ManagerEventListPage,
           },
           {
@@ -216,6 +224,10 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings',
+            Component: ManagerMeetingHubPage,
+          },
+          {
+            path: 'fan-meetings/manage',
             Component: ManagerMeetingListPage,
           },
           {
