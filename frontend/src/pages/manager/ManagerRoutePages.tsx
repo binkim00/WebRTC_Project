@@ -18,7 +18,6 @@ import {
   createFanMeeting,
   fetchApplications,
   fetchManagerEvents,
-  fetchManagerProfile,
   fetchNotices,
   updateEvent,
   updateFanMeeting,
@@ -28,7 +27,6 @@ import {
   type ManagerApplication,
   type ManagerEvent,
   type ManagerNotice,
-  type ManagerProfile,
 } from '../../api/managerOperations'
 import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, EmptyState, Select, TextField, Textarea } from '../../components'
 
@@ -111,9 +109,89 @@ export function ManagerNoticesPage() {
 }
 
 export function ManagerMyPage() {
-  const preview = usePreview(); const [profile, setProfile] = useState<ManagerProfile>({ nickname: '한서연', name: '한서연', email: 'seoyeon.han@melly.co.kr', role: '매니저' }); const [loading, setLoading] = useState(!preview)
-  useEffect(() => { if (!preview) { const token = getAuthSession()?.accessToken; if (token) fetchManagerProfile(token).then(setProfile).finally(() => setLoading(false)); else setLoading(false) } }, [preview])
-  return <div className="grid gap-7 pb-10"><PageHeader title="내 마이페이지" description="개인정보를 확인하고 팬미팅 관리 이력으로 이동하세요." />{loading ? <Card className="p-8">프로필 정보를 불러오는 중입니다.</Card> : <><Card className="p-6"><div className="flex flex-wrap items-center gap-6"><div className="flex size-28 items-center justify-center rounded-2xl bg-[var(--color-primary-coral-soft)] text-4xl font-black text-[var(--color-primary-coral)]">{profile.name.slice(0, 1)}</div><div className="min-w-0 flex-1"><Badge variant="primary">{profile.role}</Badge><h2 className="mt-3 text-3xl font-black">{profile.name}</h2><dl className="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-sm text-[var(--color-text-secondary)]"><div><dt className="inline">이름 </dt><dd className="inline font-bold text-[var(--color-text-primary)]">{profile.name}</dd></div><div><dt className="inline">이메일 </dt><dd className="inline font-bold text-[var(--color-text-primary)]">{profile.email}</dd></div></dl></div><div className="grid gap-2"><Button leadingIcon={<PencilSimple size={17} />}>회원정보 수정</Button><Button variant="secondary">비밀번호 변경</Button></div></div></Card><Card className="flex flex-wrap items-center gap-5 p-6"><span className="flex size-12 items-center justify-center rounded-xl bg-[var(--color-surface-page)]"><VideoCamera size={24} /></span><div className="flex-1"><h2 className="font-black">팬미팅 관리 이력</h2><p className="mt-1 text-sm text-[var(--color-text-secondary)]">담당하거나 관리했던 1:1 영상통화 팬미팅 목록을 확인하세요.</p></div><Link className="font-bold text-[var(--color-primary-coral)]" to="/manager/fan-meetings">이력 확인 <ArrowRight className="inline" size={17} /></Link></Card></>}</div>
+  const session = getAuthSession()
+  const profile = session
+    ? {
+        nickname: session.nickname,
+        role: session.role,
+        name: session.nickname,
+      }
+    : null
+  const loading = false
+
+  const displayName = profile?.name ?? profile?.nickname
+  const roleLabel = profile?.role === 'MANAGER' ? '매니저' : profile?.role
+
+  return (
+    <div className="grid gap-7 pb-10">
+      <PageHeader
+        title="내 마이페이지"
+        description="개인정보를 확인하고 팬미팅 관리 이력으로 이동하세요."
+      />
+
+      {loading ? <Card className="p-8">프로필 정보를 불러오는 중입니다.</Card> : null}
+
+      {!loading && !profile ? (
+        <Card className="grid gap-4 p-8">
+          <h2 className="text-xl font-black">로그인이 필요합니다.</h2>
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            현재 회원 정보를 확인하려면 매니저 계정으로 로그인해 주세요.
+          </p>
+          <Link
+            className="font-bold text-[var(--color-primary-coral)]"
+            to="/login"
+          >
+            로그인 화면으로 이동 <ArrowRight className="inline" size={17} />
+          </Link>
+        </Card>
+      ) : null}
+
+      {!loading && profile ? (
+        <>
+          <Card className="p-6">
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex size-28 items-center justify-center rounded-2xl bg-[var(--color-primary-coral-soft)] text-4xl font-black text-[var(--color-primary-coral)]">
+                {displayName?.slice(0, 1)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <Badge variant="primary">{roleLabel}</Badge>
+                <h2 className="mt-3 text-3xl font-black">{displayName}</h2>
+                <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-sm text-[var(--color-text-secondary)]">
+                  <div>
+                    <dt className="inline">닉네임 </dt>
+                    <dd className="inline font-bold text-[var(--color-text-primary)]">
+                      {profile.nickname}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+              <div className="grid gap-2">
+                <Button leadingIcon={<PencilSimple size={17} />}>회원정보 수정</Button>
+                <Button variant="secondary">비밀번호 변경</Button>
+              </div>
+            </div>
+          </Card>
+          <Card className="flex flex-wrap items-center gap-5 p-6">
+            <span className="flex size-12 items-center justify-center rounded-xl bg-[var(--color-surface-page)]">
+              <VideoCamera size={24} />
+            </span>
+            <div className="flex-1">
+              <h2 className="font-black">팬미팅 관리 이력</h2>
+              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                담당하거나 관리했던 1:1 영상통화 팬미팅 목록을 확인하세요.
+              </p>
+            </div>
+            <Link
+              className="font-bold text-[var(--color-primary-coral)]"
+              to="/manager/fan-meetings/manage"
+            >
+              이력 확인 <ArrowRight className="inline" size={17} />
+            </Link>
+          </Card>
+        </>
+      ) : null}
+    </div>
+  )
 }
 
 export function ManagerStatisticsPage() {

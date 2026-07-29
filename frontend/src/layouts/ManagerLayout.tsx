@@ -2,8 +2,8 @@ import { RoleLayout } from './RoleLayout'
 import type { RoleNavigationItem } from './RoleLayout'
 
 const managerNavigation: readonly RoleNavigationItem[] = [
-  { label: '이벤트 관리', to: '/manager/events' },
   { label: '팬미팅 관리', to: '/manager/fan-meetings' },
+  { label: '홍보 및 응모 관리', to: '/manager/events' },
   { label: '마이페이지', to: '/manager/mypage' },
 ]
 
