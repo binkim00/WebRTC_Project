@@ -10,7 +10,6 @@ import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.config.livekit.LiveKitProperties;
 import com.ssafy.backend.livekit.dto.LiveKitAccessTokenResponse;
 import com.ssafy.backend.meeting.domain.FanMeeting;
-import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
@@ -31,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,7 +43,7 @@ class LiveKitAccessTokenServiceTest {
 
     private CallSessionRepository callSessionRepository;
     private CurrentUserService currentUserService;
-    private MeetingAccessService meetingAccessService;
+    private LiveKitAgentDispatchService agentDispatchService;
     private LiveKitAccessTokenService service;
     private CallSession callSession;
     private QueueEntry queueEntry;
@@ -64,12 +64,12 @@ class LiveKitAccessTokenServiceTest {
 
         callSessionRepository = mock(CallSessionRepository.class);
         currentUserService = mock(CurrentUserService.class);
-        meetingAccessService = mock(MeetingAccessService.class);
+        agentDispatchService = mock(LiveKitAgentDispatchService.class);
         service = new LiveKitAccessTokenService(
                 properties,
                 callSessionRepository,
                 currentUserService,
-                meetingAccessService,
+                agentDispatchService,
                 Clock.fixed(FIXED_INSTANT, SEOUL)
         );
 
@@ -115,11 +115,13 @@ class LiveKitAccessTokenServiceTest {
                 .contains("\"room\":\"meeting-room-7\"")
                 .contains("\"canPublish\":true")
                 .contains("\"canSubscribe\":true")
-                .contains("\"role\":\"fan\"")
+                .contains("\"user_id\":\"11\"")
+                .contains("\"role\":\"FAN\"")
                 .contains("\"call_session_id\":\"100\"")
                 .contains("\"fan_lang\":\"en\"")
                 .contains("\"sub\":\"fan-")
                 .doesNotContain("\"sub\":\"11\"");
+        verify(agentDispatchService, never()).ensureDispatched(any());
     }
 
     /**
@@ -136,30 +138,28 @@ class LiveKitAccessTokenServiceTest {
         assertThat(response.expiresAt())
                 .isEqualTo(LocalDateTime.ofInstant(FIXED_INSTANT, SEOUL).plusMinutes(15));
         assertThat(payload)
-                .contains("\"role\":\"host\"")
+                .contains("\"user_id\":\"12\"")
+                .contains("\"role\":\"INFLUENCER\"")
+                .contains("\"influencer_lang\":\"ko\"")
                 .contains("\"sub\":\"host-")
                 .contains("\"canPublish\":true")
                 .doesNotContain("call_session_id")
                 .doesNotContain("fan_lang");
+        verify(agentDispatchService).ensureDispatched("meeting-room-7");
     }
 
     /**
-     * 팬미팅 매니저에게 발행은 금지하고 구독만 허용하는 모니터링 토큰을 발급하는지 검증한다.
+     * 팬미팅 매니저가 LiveKit 통화방 입장 토큰을 발급받지 못하는지 검증한다.
      */
     @Test
-    void issuesSubscribeOnlyTokenForMeetingManager() {
+    void rejectsMeetingManagerFromLiveKitRoom() {
         when(currentUserService.requireActiveUser(any())).thenReturn(manager);
-        when(meetingAccessService.requireManager(MEETING_ID, manager)).thenReturn(meeting);
 
-        LiveKitAccessTokenResponse response = service.issue(
-                CALL_SESSION_ID, new AuthenticatedUser(13L, UserRole.MANAGER));
-        String payload = decodePayload(response.accessToken());
-
-        verify(meetingAccessService).requireManager(MEETING_ID, manager);
-        assertThat(payload)
-                .contains("\"role\":\"operator\"")
-                .contains("\"canPublish\":false")
-                .contains("\"canSubscribe\":true");
+        assertThatThrownBy(() -> service.issue(
+                CALL_SESSION_ID, new AuthenticatedUser(13L, UserRole.MANAGER)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.LIVEKIT_JOIN_NOT_ALLOWED));
     }
 
     /**

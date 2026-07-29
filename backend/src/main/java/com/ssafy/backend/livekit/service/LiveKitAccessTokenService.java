@@ -11,7 +11,6 @@ import com.ssafy.backend.config.livekit.LiveKitProperties;
 import com.ssafy.backend.livekit.dto.LiveKitAccessTokenResponse;
 import com.ssafy.backend.livekit.support.LiveKitRoomNames;
 import com.ssafy.backend.meeting.domain.FanMeeting;
-import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.user.domain.User;
@@ -43,11 +42,12 @@ public class LiveKitAccessTokenService {
     private static final Duration ACCESS_TOKEN_TTL = Duration.ofMinutes(15);
     private static final String IDENTITY_ALGORITHM = "HmacSHA256";
     private static final int IDENTITY_HASH_LENGTH = 22;
+    private static final String INFLUENCER_LANGUAGE = "ko";
 
     private final LiveKitProperties properties;
     private final CallSessionRepository callSessionRepository;
     private final CurrentUserService currentUserService;
-    private final MeetingAccessService meetingAccessService;
+    private final LiveKitAgentDispatchService agentDispatchService;
     private final Clock clock;
 
     /**
@@ -56,20 +56,20 @@ public class LiveKitAccessTokenService {
      * @param properties            LiveKit 서버 연결 및 서명 설정
      * @param callSessionRepository 통화 세션 저장소
      * @param currentUserService    현재 로그인 사용자 조회 서비스
-     * @param meetingAccessService  팬미팅 운영 권한 검증 서비스
+     * @param agentDispatchService  Room 단위 자막 Agent 자동 배치 서비스
      * @param clock                 토큰 만료 시각 계산 기준 시계
      */
     public LiveKitAccessTokenService(
             LiveKitProperties properties,
             CallSessionRepository callSessionRepository,
             CurrentUserService currentUserService,
-            MeetingAccessService meetingAccessService,
+            LiveKitAgentDispatchService agentDispatchService,
             Clock clock
     ) {
         this.properties = properties;
         this.callSessionRepository = callSessionRepository;
         this.currentUserService = currentUserService;
-        this.meetingAccessService = meetingAccessService;
+        this.agentDispatchService = agentDispatchService;
         this.clock = clock;
     }
 
@@ -96,6 +96,9 @@ public class LiveKitAccessTokenService {
         LocalDateTime expiresAt = now.plus(ACCESS_TOKEN_TTL);
         String roomName = requireCanonicalRoomName(callSession, meeting.getId());
         String identity = createIdentity(accessRole, meeting.getId(), user.getId());
+        if (accessRole == ParticipantAccessRole.HOST) {
+            agentDispatchService.ensureDispatched(roomName);
+        }
 
         AccessToken token = createToken(
                 callSession, user, accessRole, roomName, identity, expiresAt);
@@ -113,7 +116,7 @@ public class LiveKitAccessTokenService {
      * @param meeting    통화가 속한 팬미팅
      * @param queueEntry 통화 대상 대기열 항목
      * @param user       로그인 사용자
-     * @return 팬, 호스트 또는 모니터링 운영자 역할
+     * @return 팬 또는 인플루언서 역할
      * @throws BusinessException 통화 관계 사용자가 아닌 경우
      */
     private ParticipantAccessRole resolveAccessRole(
@@ -127,14 +130,6 @@ public class LiveKitAccessTokenService {
                 || user.getRole() == UserRole.SOLO_INFLUENCER)
                 && sameUser(meeting.getInfluencer(), user)) {
             return ParticipantAccessRole.HOST;
-        }
-        if (user.getRole() == UserRole.MANAGER) {
-            try {
-                meetingAccessService.requireManager(meeting.getId(), user);
-                return ParticipantAccessRole.OPERATOR;
-            } catch (BusinessException exception) {
-                throw new BusinessException(ErrorCode.LIVEKIT_JOIN_NOT_ALLOWED);
-            }
         }
         throw new BusinessException(ErrorCode.LIVEKIT_JOIN_NOT_ALLOWED);
     }
@@ -244,15 +239,18 @@ public class LiveKitAccessTokenService {
         token.setIdentity(identity);
         token.setName(user.getNickname());
         token.setExpiration(Date.from(expiresAt.atZone(clock.getZone()).toInstant()));
+        token.getAttributes().put("user_id", user.getId().toString());
         token.getAttributes().put("role", accessRole.attributeValue);
         if (accessRole == ParticipantAccessRole.FAN) {
             token.getAttributes().put("call_session_id", callSession.getId().toString());
             token.getAttributes().put("fan_lang", callSession.getFanLanguage());
+        } else if (accessRole == ParticipantAccessRole.HOST) {
+            token.getAttributes().put("influencer_lang", INFLUENCER_LANGUAGE);
         }
         token.addGrants(
                 new RoomJoin(true),
                 new RoomName(roomName),
-                new CanPublish(accessRole != ParticipantAccessRole.OPERATOR),
+                new CanPublish(true),
                 new CanSubscribe(true)
         );
         return token;
@@ -273,9 +271,8 @@ public class LiveKitAccessTokenService {
      * LiveKit 토큰에 반영할 통화 참가 역할을 구분한다.
      */
     private enum ParticipantAccessRole {
-        FAN("fan", "fan"),
-        HOST("host", "host"),
-        OPERATOR("operator", "operator");
+        FAN("FAN", "fan"),
+        HOST("INFLUENCER", "host");
 
         private final String attributeValue;
         private final String identityPrefix;

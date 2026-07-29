@@ -66,7 +66,7 @@ class CallSessionExpirationServiceTest {
     void endsCallWhenFanReconnectWindowExpires() {
         when(callSession.getEndsAt()).thenReturn(now.plusMinutes(1));
         when(callSession.getReconnectAllowedUntil()).thenReturn(now);
-        when(realtimeStore.getDisconnectRole(CALL_SESSION_ID)).thenReturn("fan");
+        when(realtimeStore.getDisconnectRole(CALL_SESSION_ID)).thenReturn("FAN");
 
         service.endIfExpired(CALL_SESSION_ID);
 
