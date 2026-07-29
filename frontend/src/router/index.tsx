@@ -41,10 +41,10 @@ import {
   ManagerEventFormPage,
   ManagerEventListPage,
   ManagerMeetingFormPage,
-  ManagerMeetingListPage,
   ManagerMyPage,
   ManagerNoticesPage,
 } from '../pages/manager/ManagerRoutePages'
+import { ManagerMeetingListPage } from '../pages/manager/ManagerMeetingListPage'
 import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
 
 export const router = createBrowserRouter([

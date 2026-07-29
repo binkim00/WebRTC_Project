@@ -4,6 +4,7 @@ export type VideoCallRoomProps = {
   callSessionId?: string
   participantLabel: string
   endTo: string
+  forceEndOnLeave?: boolean
 }
 
 export type MediaAction = 'camera' | 'microphone'

@@ -38,7 +38,6 @@ function App() {
   const isHomePage = pathname === '/'
   const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
-  const isManagerMonitorPage = /^\/manager\/fan-meetings\/[^/]+\/monitor$/.test(pathname)
   const isAuthenticated = getAuthSession() !== null
   const isQaCapture =
     import.meta.env.DEV &&
@@ -49,7 +48,7 @@ function App() {
     import.meta.env.DEV && !isCallPage && searchParams.get('qa') === '1'
   const navigationItems = isAuthPage || isHomePage || isDeviceCheckPage
     ? []
-    : isManagerMonitorPage
+    : pathname.startsWith('/manager')
       ? managerMonitorNavigationItems
       : pathname.startsWith('/fan/fan-meetings/')
     ? fanCallNavigationItems

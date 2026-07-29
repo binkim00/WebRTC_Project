@@ -17,8 +17,9 @@ export function RoleLayout({ title, description, navigation }: RoleLayoutProps) 
   const { pathname } = useLocation()
   const isManagerMonitorPage =
     /^\/manager\/fan-meetings\/[^/]+\/monitor\/?$/.test(pathname)
+  const isManagerMeetingListPage = /^\/manager\/fan-meetings\/?$/.test(pathname)
 
-  if (isVideoCallPath(pathname) || isManagerMonitorPage) {
+  if (isVideoCallPath(pathname) || isManagerMonitorPage || isManagerMeetingListPage) {
     return <Outlet />
   }
 

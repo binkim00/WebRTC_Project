@@ -12,7 +12,8 @@ import { UserCircleIcon } from '@phosphor-icons/react'
 import { ConnectionState, Track } from 'livekit-client'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { CallSessionStatusResponse } from '../../api/callSessions'
+import { forceEndCallSession, type CallSessionStatusResponse } from '../../api/callSessions'
+import { getAuthSession } from '../../api/auth'
 import { AlertBanner } from '../feedback'
 import { CallStage } from './CallStage'
 import { EndCallDialog } from './EndCallDialog'
@@ -26,9 +27,10 @@ type ConnectedCallRoomProps = VideoCallRoomProps & {
 export function ConnectedCallRoom({
   meetingId,
   callSessionId,
-  participantLabel,
-  endTo,
-  sessionStatus,
+    participantLabel,
+    endTo,
+    sessionStatus,
+    forceEndOnLeave,
 }: ConnectedCallRoomProps) {
   const navigate = useNavigate()
   const room = useRoomContext()
@@ -83,6 +85,16 @@ export function ConnectedCallRoom({
   }
 
   async function leaveRoom() {
+    if (forceEndOnLeave && callSessionId) {
+      try {
+        await forceEndCallSession(callSessionId, { reason: '영상통화 종료' }, {
+          authToken: getAuthSession()?.accessToken,
+        })
+      } catch (error: unknown) {
+        setMediaError(error instanceof Error ? error.message : '통화 종료 상태를 서버에 반영하지 못했습니다.')
+      }
+    }
+
     await room.disconnect()
     navigate(endTo)
   }

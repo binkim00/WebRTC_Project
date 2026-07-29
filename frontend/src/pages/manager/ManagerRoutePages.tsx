@@ -51,16 +51,6 @@ export function ManagerMeetingMonitorPage() {
   )
 }
 
-export function ManagerMeetingListPage() {
-  return (
-    <ScreenPage
-      description="매니저가 팬미팅 목록과 운영 상태를 확인하는 화면입니다."
-      screenId="MG-006"
-      title="팬미팅 관리 화면"
-    />
-  )
-}
-
 export function ManagerMeetingFormPage({ mode }: FormPageProps) {
   return (
     <ScreenPage
