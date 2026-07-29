@@ -59,8 +59,8 @@ async def insert_call_summary(
             await cur.execute(
                 """
                 INSERT INTO ai_call_summary
-                    (call_session_id, summary, keywords)
-                VALUES (%s, %s, %s)
+                    (call_session_id, summary, keywords, created_at)
+                VALUES (%s, %s, %s, NOW(6))
                 ON DUPLICATE KEY UPDATE
                     summary = VALUES(summary),
                     keywords = VALUES(keywords)
