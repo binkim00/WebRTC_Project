@@ -46,6 +46,11 @@ __pycache__/
 *.pyo
 *.pyd
 
+# AI 로컬 테스트 (커밋 제외)
+ai/test/
+
 # 가상환경
 venv/
 .venv/
+
+.claude/
