@@ -10,6 +10,7 @@ import {
   MeetingStatisticsPage,
 } from '../pages/common/CommonRoutePages'
 import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
+import { LiveKitTestPage } from '../pages/common/LiveKitTestPage'
 import {
   ForbiddenPage,
   NotFoundPage,
@@ -43,6 +44,8 @@ import {
   ManagerMeetingFormPage,
   ManagerMyPage,
   ManagerNoticesPage,
+  ManagerRiskIncidentPage,
+  ManagerStatisticsPage,
 } from '../pages/manager/ManagerRoutePages'
 import { ManagerMeetingListPage } from '../pages/manager/ManagerMeetingListPage'
 import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
@@ -98,6 +101,10 @@ export const router = createBrowserRouter([
       {
         path: 'influencer/my-fan-meetings',
         Component: InfluencerMyMeetingPage,
+      },
+      {
+        path: 'rtc/livekit-test',
+        Component: LiveKitTestPage,
       },
       {
         path: 'influencer/fan-meetings',
@@ -222,6 +229,14 @@ export const router = createBrowserRouter([
           {
             path: 'fan-meetings/:fanMeetingId/notices',
             Component: ManagerNoticesPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/statistics',
+            Component: ManagerStatisticsPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/monitor/risk',
+            Component: ManagerRiskIncidentPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/monitor',

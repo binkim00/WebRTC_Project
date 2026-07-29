@@ -14,7 +14,7 @@ import {
   Wrench,
 } from '@phosphor-icons/react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/auth'
 import {
@@ -142,7 +142,7 @@ export function ManagerMeetingMonitorPage() {
           <div className="border-y border-[var(--color-divider)] py-4"><div className="flex items-center justify-between text-sm"><span className="font-semibold">세션 진행 상황</span><span className="text-[var(--color-text-secondary)]">진행 시간 01:32:45</span></div><div className="mt-3 flex items-center gap-3"><div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[var(--color-primary-coral)]" style={{ width: `${progress}%` }} /></div><strong className="text-sm text-[var(--color-primary-coral)]">{completedCount + inCallCount} / {capacity}명</strong></div></div>
           <div><h3 className="font-extrabold">대기열 요약</h3><div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4 min-[1400px]:grid-cols-2"><SummaryTile icon={<Clock size={18} />} label="대기 인원" value={waitingCount} /><SummaryTile icon={<MonitorPlay size={18} />} label="통화 중" value={inCallCount} accent /><SummaryTile icon={<Wrench size={18} />} label="장비 확인" value={deviceCheckCount} /><SummaryTile icon={<CheckCircle size={18} />} label="완료" value={completedCount} /></div></div>
           <div><div className="flex items-center justify-between"><h3 className="font-extrabold">알림</h3><button className="text-xs font-bold text-[var(--color-text-secondary)]" type="button">모두 읽음 처리</button></div><div className="mt-3 grid gap-2"><AlertRow icon={<Warning size={20} weight="fill" />} title="위험 감지" detail="실시간 위험 감지 API 연결 후 표시됩니다." tone="danger" /><AlertRow icon={<WifiHigh size={20} weight="bold" />} title="연결 상태" detail="참가자 네트워크 상태를 확인하세요." tone="warning" /><AlertRow icon={<Wrench size={20} weight="bold" />} title="장비 확인 대기" detail={`${deviceCheckCount}명의 장비 확인이 필요합니다.`} tone="info" /></div></div>
-          <div className="grid grid-cols-2 gap-3"><Button variant="secondary" leadingIcon={<Eye size={18} weight="bold" />}>참가자 상세 보기</Button><Button disabled leadingIcon={<Warning size={18} weight="bold" />}>위험 상황 검토</Button></div>
+          <div className="grid grid-cols-2 gap-3"><Button variant="secondary" leadingIcon={<Eye size={18} weight="bold" />}>참가자 상세 보기</Button><Link className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] border border-transparent bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] text-sm font-semibold text-white hover:bg-[var(--color-primary-coral-hover)]" to={`/manager/fan-meetings/${encodeURIComponent(fanMeetingId ?? 'demo-meeting')}/monitor/risk`}><Warning size={18} weight="bold" />위험 상황 검토</Link></div>
         </Card>
       </div>
 
