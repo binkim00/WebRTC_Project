@@ -30,8 +30,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class LiveKitAccessTokenServiceTest {
@@ -43,7 +41,6 @@ class LiveKitAccessTokenServiceTest {
 
     private CallSessionRepository callSessionRepository;
     private CurrentUserService currentUserService;
-    private LiveKitAgentDispatchService agentDispatchService;
     private LiveKitAccessTokenService service;
     private CallSession callSession;
     private QueueEntry queueEntry;
@@ -64,12 +61,10 @@ class LiveKitAccessTokenServiceTest {
 
         callSessionRepository = mock(CallSessionRepository.class);
         currentUserService = mock(CurrentUserService.class);
-        agentDispatchService = mock(LiveKitAgentDispatchService.class);
         service = new LiveKitAccessTokenService(
                 properties,
                 callSessionRepository,
                 currentUserService,
-                agentDispatchService,
                 Clock.fixed(FIXED_INSTANT, SEOUL)
         );
 
@@ -121,7 +116,6 @@ class LiveKitAccessTokenServiceTest {
                 .contains("\"fan_lang\":\"en\"")
                 .contains("\"sub\":\"fan-")
                 .doesNotContain("\"sub\":\"11\"");
-        verify(agentDispatchService, never()).ensureDispatched(any());
     }
 
     /**
@@ -145,7 +139,6 @@ class LiveKitAccessTokenServiceTest {
                 .contains("\"canPublish\":true")
                 .doesNotContain("call_session_id")
                 .doesNotContain("fan_lang");
-        verify(agentDispatchService).ensureDispatched("meeting-room-7");
     }
 
     /**

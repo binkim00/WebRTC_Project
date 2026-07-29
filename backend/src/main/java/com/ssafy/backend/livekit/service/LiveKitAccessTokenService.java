@@ -47,7 +47,6 @@ public class LiveKitAccessTokenService {
     private final LiveKitProperties properties;
     private final CallSessionRepository callSessionRepository;
     private final CurrentUserService currentUserService;
-    private final LiveKitAgentDispatchService agentDispatchService;
     private final Clock clock;
 
     /**
@@ -56,20 +55,17 @@ public class LiveKitAccessTokenService {
      * @param properties            LiveKit 서버 연결 및 서명 설정
      * @param callSessionRepository 통화 세션 저장소
      * @param currentUserService    현재 로그인 사용자 조회 서비스
-     * @param agentDispatchService  Room 단위 자막 Agent 자동 배치 서비스
      * @param clock                 토큰 만료 시각 계산 기준 시계
      */
     public LiveKitAccessTokenService(
             LiveKitProperties properties,
             CallSessionRepository callSessionRepository,
             CurrentUserService currentUserService,
-            LiveKitAgentDispatchService agentDispatchService,
             Clock clock
     ) {
         this.properties = properties;
         this.callSessionRepository = callSessionRepository;
         this.currentUserService = currentUserService;
-        this.agentDispatchService = agentDispatchService;
         this.clock = clock;
     }
 
@@ -96,10 +92,6 @@ public class LiveKitAccessTokenService {
         LocalDateTime expiresAt = now.plus(ACCESS_TOKEN_TTL);
         String roomName = requireCanonicalRoomName(callSession, meeting.getId());
         String identity = createIdentity(accessRole, meeting.getId(), user.getId());
-        if (accessRole == ParticipantAccessRole.HOST) {
-            agentDispatchService.ensureDispatched(roomName);
-        }
-
         AccessToken token = createToken(
                 callSession, user, accessRole, roomName, identity, expiresAt);
         return new LiveKitAccessTokenResponse(
