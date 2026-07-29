@@ -1,6 +1,7 @@
 import { ArrowRightIcon, SignOutIcon } from '@phosphor-icons/react'
+import { useEffect } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { clearAuthSession, getAuthSession, type LoginRole } from './api/auth'
+import { AUTH_EXPIRED_EVENT, getAuthSession, logout, type LoginRole } from './api/auth'
 import { TopNavigation } from './components'
 import { getRoleNavigation } from './layouts/roleNavigation'
 import { isVideoCallPath } from './router/routeState'
@@ -68,8 +69,14 @@ function App() {
         ? []
         : publicNavigationItems
 
-  function handleLogout() {
-    clearAuthSession()
+  useEffect(() => {
+    const handleAuthExpired = () => navigate('/login', { replace: true })
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+  }, [navigate])
+
+  async function handleLogout() {
+    await logout().catch(() => undefined)
     navigate('/', { replace: true })
   }
 
@@ -108,7 +115,7 @@ function App() {
               {isAuthenticated ? (
                 <button
                   className="font-semibold hover:text-[var(--color-primary-coral)]"
-                  onClick={handleLogout}
+                  onClick={() => void handleLogout()}
                   type="button"
                 >
                   로그아웃
@@ -162,7 +169,7 @@ function App() {
           ) : isAuthenticated ? (
             <button
               className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               type="button"
             >
               로그아웃
