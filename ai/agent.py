@@ -332,5 +332,6 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=my_agent,
+            agent_name="subtitle-agent",   # 백엔드 dispatch의 agent_name과 반드시 동일해야 함
         )
     )
