@@ -12,6 +12,7 @@ export type TopNavigationProps = {
   brand: ReactNode
   brandTo?: string
   items: readonly NavigationItem[]
+  centerContent?: ReactNode
   actions?: ReactNode
   ariaLabel?: string
   className?: string
@@ -21,6 +22,7 @@ export function TopNavigation({
   brand,
   brandTo = '/',
   items,
+  centerContent,
   actions,
   ariaLabel = '주요 메뉴',
   className,
@@ -59,16 +61,22 @@ export function TopNavigation({
         className,
       )}
     >
-      <div className="mx-auto flex h-full w-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+      <div className="relative mx-auto flex h-full w-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
         <Link
           className="shrink-0 text-[28px] font-black tracking-[-0.055em] text-[var(--color-text-primary)]"
           to={brandTo}
         >
           {brand}
         </Link>
-        <nav aria-label={ariaLabel} className="hidden h-full items-stretch gap-8 md:flex lg:gap-10">
-          {navigationLinks()}
-        </nav>
+        {centerContent ? (
+          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center md:flex">
+            {centerContent}
+          </div>
+        ) : (
+          <nav aria-label={ariaLabel} className="hidden h-full items-stretch gap-8 md:flex lg:gap-10">
+            {navigationLinks()}
+          </nav>
+        )}
         {actions ? <div className="hidden shrink-0 items-center gap-2 md:flex">{actions}</div> : null}
         <details className="relative md:hidden" ref={mobileMenuRef}>
           <summary

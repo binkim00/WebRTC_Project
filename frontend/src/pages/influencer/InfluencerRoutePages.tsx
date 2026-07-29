@@ -32,6 +32,7 @@ export function InfluencerMeetingCallPage() {
       meetingId={fanMeetingId}
       participantLabel="팬 영상"
       screenId="ID-003"
+      forceEndOnLeave
     />
   )
 }

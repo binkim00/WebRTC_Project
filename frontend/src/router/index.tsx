@@ -7,10 +7,10 @@ import { ManagerLayout } from '../layouts/ManagerLayout'
 import { LoginPage, SignupPage } from '../pages/auth/AuthRoutePages'
 import {
   HomePage,
-  MeetingFanListPage,
   MeetingStatisticsPage,
 } from '../pages/common/CommonRoutePages'
 import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
+import { LiveKitTestPage } from '../pages/common/LiveKitTestPage'
 import {
   ForbiddenPage,
   NotFoundPage,
@@ -26,6 +26,8 @@ import { FanProfilePage } from '../pages/fan/FanProfilePage'
 import { FanApplicationsPage } from '../pages/fan/FanApplicationsPage'
 import { FanMeetingWaitingPage } from '../pages/fan/FanMeetingWaitingPage'
 import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
+import { FanMeetingParticipantsPage } from '../pages/common/FanMeetingParticipantsPage'
+import { ManagerFanListPage } from '../pages/manager/ManagerFanListPage'
 import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
 import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
 import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
@@ -40,11 +42,13 @@ import {
   ManagerEventFormPage,
   ManagerEventListPage,
   ManagerMeetingFormPage,
-  ManagerMeetingListPage,
-  ManagerMeetingMonitorPage,
   ManagerMyPage,
   ManagerNoticesPage,
+  ManagerRiskIncidentPage,
+  ManagerStatisticsPage,
 } from '../pages/manager/ManagerRoutePages'
+import { ManagerMeetingListPage } from '../pages/manager/ManagerMeetingListPage'
+import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
 
 export const router = createBrowserRouter([
   {
@@ -106,7 +110,7 @@ export const router = createBrowserRouter([
         children: [
           {
             path: 'fans',
-            Component: MeetingFanListPage,
+            Component: FanMeetingParticipantsPage,
           },
           {
             path: 'device-check',
@@ -129,6 +133,18 @@ export const router = createBrowserRouter([
       {
         path: 'influencer/mypage/fan-meetings',
         Component: InfluencerMeetingHistoryPage,
+      },
+      {
+        path: 'rtc/livekit-test',
+        Component: LiveKitTestPage,
+      },
+      {
+        path: 'influencer/fan-meetings',
+        Component: InfluencerMyMeetingPage,
+      },
+      {
+        path: 'influencer/fan-meetings/:fanMeetingId/fans',
+        Component: FanMeetingParticipantsPage,
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/ready',
@@ -215,8 +231,20 @@ export const router = createBrowserRouter([
             Component: ManagerNoticesPage,
           },
           {
+            path: 'fan-meetings/:fanMeetingId/statistics',
+            Component: ManagerStatisticsPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/monitor/risk',
+            Component: ManagerRiskIncidentPage,
+          },
+          {
             path: 'fan-meetings/:fanMeetingId/monitor',
-            Component: ManagerMeetingMonitorPage,
+            Component: LiveManagerMeetingMonitorPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/fans',
+            Component: ManagerFanListPage,
           },
           {
             path: 'mypage',

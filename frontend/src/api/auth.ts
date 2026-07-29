@@ -109,6 +109,25 @@ export function saveAuthSession(response: LoginResponse, remember: boolean) {
   selectedStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(response))
 }
 
+export function getAuthSession(): LoginResponse | null {
+  const serialized =
+    window.localStorage.getItem(AUTH_SESSION_KEY) ?? window.sessionStorage.getItem(AUTH_SESSION_KEY)
+
+  if (!serialized) return null
+
+  try {
+    const parsed: unknown = JSON.parse(serialized)
+    return isLoginResponse(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+export function clearAuthSession() {
+  window.localStorage.removeItem(AUTH_SESSION_KEY)
+  window.sessionStorage.removeItem(AUTH_SESSION_KEY)
+}
+
 export async function signup(
   request: SignupRequest,
   signal?: AbortSignal,

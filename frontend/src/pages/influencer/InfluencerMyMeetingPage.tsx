@@ -178,7 +178,9 @@ export function InfluencerMyMeetingPage() {
                 <Button
                   className="w-fit"
                   leadingIcon={<ListChecks aria-hidden size={20} weight="bold" />}
-                  onClick={() => navigate(`/fan-meetings/${meeting.id}/fans`)}
+                  onClick={() =>
+                    navigate(`/influencer/fan-meetings/${meeting.id}/fans`)
+                  }
                   trailingIcon={<ArrowRight aria-hidden size={18} weight="bold" />}
                   variant="secondary"
                 >

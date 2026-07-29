@@ -5,6 +5,7 @@ const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 type ErrorResponse = {
   code?: string
   message?: string
+  detail?: string
 }
 
 export type ApiRequestOptions = RequestInit & {
@@ -30,6 +31,7 @@ async function readErrorResponse(response: Response): Promise<ErrorResponse> {
     return {
       code: typeof error.code === 'string' ? error.code : undefined,
       message: typeof error.message === 'string' ? error.message : undefined,
+      detail: typeof error.detail === 'string' ? error.detail : undefined,
     }
   } catch {
     return {}
@@ -58,7 +60,8 @@ export async function apiRequest<T = unknown>(
     throw new ApiError(
       response.status,
       error.code ?? `HTTP_${response.status}`,
-      error.message ?? 'API 요청에 실패했습니다.',
+      error.detail ?? error.message ?? 'API 요청에 실패했습니다.',
+      error.detail,
     )
   }
 
