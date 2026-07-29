@@ -143,7 +143,7 @@ class LiveKitWebhookServiceTest {
                 .setRoom(LivekitModels.Room.newBuilder().setName(ROOM_ID))
                 .setParticipant(LivekitModels.ParticipantInfo.newBuilder()
                         .setIdentity("fan-identity")
-                        .putAttributes("role", "fan")
+                        .putAttributes("role", "FAN")
                         .putAttributes("call_session_id", CALL_SESSION_ID.toString()))
                 .build();
 
@@ -151,7 +151,7 @@ class LiveKitWebhookServiceTest {
 
         verify(realtimeStore).clearFanConnected(CALL_SESSION_ID);
         verify(callSession).openReconnectWindow(STARTED_AT.plusSeconds(60));
-        verify(realtimeStore).markDisconnectRole(CALL_SESSION_ID, "fan");
+        verify(realtimeStore).markDisconnectRole(CALL_SESSION_ID, "FAN");
         verifyNoInteractions(operationSettingRepository);
     }
 
@@ -182,7 +182,7 @@ class LiveKitWebhookServiceTest {
     private LivekitWebhook.WebhookEvent fanJoinedEvent(String eventId) {
         return joinedEvent(eventId, LivekitModels.ParticipantInfo.newBuilder()
                 .setIdentity("fan-identity")
-                .putAttributes("role", "fan")
+                .putAttributes("role", "FAN")
                 .putAttributes("call_session_id", CALL_SESSION_ID.toString())
                 .build());
     }
@@ -196,7 +196,7 @@ class LiveKitWebhookServiceTest {
     private LivekitWebhook.WebhookEvent hostJoinedEvent(String eventId) {
         return joinedEvent(eventId, LivekitModels.ParticipantInfo.newBuilder()
                 .setIdentity("host-identity")
-                .putAttributes("role", "host")
+                .putAttributes("role", "INFLUENCER")
                 .build());
     }
 

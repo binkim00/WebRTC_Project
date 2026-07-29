@@ -7,10 +7,10 @@ import { ManagerLayout } from '../layouts/ManagerLayout'
 import { LoginPage, SignupPage } from '../pages/auth/AuthRoutePages'
 import {
   HomePage,
-  MeetingFanListPage,
   MeetingStatisticsPage,
 } from '../pages/common/CommonRoutePages'
 import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
+import { LiveKitTestPage } from '../pages/common/LiveKitTestPage'
 import {
   ForbiddenPage,
   NotFoundPage,
@@ -25,25 +25,30 @@ import {
   FanMeetingWaitingPage,
   FanProfilePage,
 } from '../pages/fan/FanRoutePages'
+import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
+import { FanMeetingParticipantsPage } from '../pages/common/FanMeetingParticipantsPage'
+import { ManagerFanListPage } from '../pages/manager/ManagerFanListPage'
 import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
 import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
+import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
 import {
-  InfluencerFanMemoPage,
   InfluencerMeetingCallPage,
   InfluencerMeetingHistoryPage,
-  InfluencerMeetingReadyPage,
   InfluencerProfilePage,
 } from '../pages/influencer/InfluencerRoutePages'
+import { InfluencerMeetingReadyPage } from '../pages/influencer/InfluencerMeetingReadyPage'
 import {
   ManagerApplicationsPage,
   ManagerEventFormPage,
   ManagerEventListPage,
   ManagerMeetingFormPage,
-  ManagerMeetingListPage,
-  ManagerMeetingMonitorPage,
   ManagerMyPage,
   ManagerNoticesPage,
+  ManagerRiskIncidentPage,
+  ManagerStatisticsPage,
 } from '../pages/manager/ManagerRoutePages'
+import { ManagerMeetingListPage } from '../pages/manager/ManagerMeetingListPage'
+import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
 
 export const router = createBrowserRouter([
   {
@@ -81,7 +86,7 @@ export const router = createBrowserRouter([
         children: [
           {
             path: 'fans',
-            Component: MeetingFanListPage,
+            Component: FanMeetingParticipantsPage,
           },
           {
             path: 'device-check',
@@ -92,6 +97,30 @@ export const router = createBrowserRouter([
             Component: MeetingStatisticsPage,
           },
         ],
+      },
+      {
+        path: 'influencer/my-fan-meetings',
+        Component: InfluencerMyMeetingPage,
+      },
+      {
+        path: 'rtc/livekit-test',
+        Component: LiveKitTestPage,
+      },
+      {
+        path: 'influencer/fan-meetings',
+        Component: InfluencerMyMeetingPage,
+      },
+      {
+        path: 'influencer/fan-meetings/:fanMeetingId/fans',
+        Component: FanMeetingParticipantsPage,
+      },
+      {
+        path: 'influencer/fan-meetings/:fanMeetingId/ready',
+        Component: InfluencerMeetingReadyPage,
+      },
+      {
+        path: 'influencer/fan-meetings/:fanMeetingId/fans/:fanId/records',
+        Component: InfluencerFanRecordPage,
       },
       {
         path: 'fan',
@@ -144,20 +173,12 @@ export const router = createBrowserRouter([
             element: <Navigate replace to="mypage/profile" />,
           },
           {
-            path: 'fan-meetings/:fanMeetingId/ready',
-            Component: InfluencerMeetingReadyPage,
-          },
-          {
             path: 'fan-meetings/:fanMeetingId/call',
             Component: InfluencerMeetingCallPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: InfluencerMeetingCallPage,
-          },
-          {
-            path: 'fan-meetings/:fanMeetingId/fans/:fanId/memo',
-            Component: InfluencerFanMemoPage,
           },
           {
             path: 'mypage/fan-meetings',
@@ -210,8 +231,20 @@ export const router = createBrowserRouter([
             Component: ManagerNoticesPage,
           },
           {
+            path: 'fan-meetings/:fanMeetingId/statistics',
+            Component: ManagerStatisticsPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/monitor/risk',
+            Component: ManagerRiskIncidentPage,
+          },
+          {
             path: 'fan-meetings/:fanMeetingId/monitor',
-            Component: ManagerMeetingMonitorPage,
+            Component: LiveManagerMeetingMonitorPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/fans',
+            Component: ManagerFanListPage,
           },
           {
             path: 'mypage',

@@ -260,13 +260,19 @@ public class QueueCommandService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.QUEUE_ENTRY_NOT_FOUND));
         Long meetingId = entry.getMeeting().getId();
         meetingAccessService.requireManager(meetingId, manager);
+        CallSession callSession = callSessionRepository.findByQueueEntryIdForUpdate(entryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CALL_SESSION_NOT_FOUND));
+        LocalDateTime noShowAt = LocalDateTime.now(clock);
         try {
-            entry.markNoShow(LocalDateTime.now(clock));
+            entry.markNoShow(noShowAt);
+            callSession.failConnecting(noShowAt);
         } catch (IllegalStateException exception) {
             throw new BusinessException(ErrorCode.QUEUE_STATE_CONFLICT);
         }
         realtimeStore.updateStatus(meetingId, entryId, entry.getStatus());
         realtimeStore.clearCurrent(meetingId, entryId);
+        realtimeStore.clearFanConnected(callSession.getId());
+        realtimeStore.clearDisconnectRole(callSession.getId());
         return queryService.toOperationResponse(entry);
     }
 }

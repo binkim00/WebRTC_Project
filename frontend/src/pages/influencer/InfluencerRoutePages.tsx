@@ -2,17 +2,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components'
 import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
 
-export function InfluencerMeetingReadyPage() {
-  return (
-    <ScreenPage
-      description="인플루언서가 팬미팅 시작 전에 참여 상태를 확인하는 준비실입니다."
-      requiredParams={['fanMeetingId']}
-      screenId="ID-002"
-      title="팬미팅 준비실"
-    />
-  )
-}
-
 export function InfluencerMeetingCallPage() {
   const { fanMeetingId, callSessionId } = useParams()
   const [searchParams] = useSearchParams()
@@ -43,17 +32,7 @@ export function InfluencerMeetingCallPage() {
       meetingId={fanMeetingId}
       participantLabel="팬 영상"
       screenId="ID-003"
-    />
-  )
-}
-
-export function InfluencerFanMemoPage() {
-  return (
-    <ScreenPage
-      description="특정 팬미팅의 특정 팬에 대한 메모를 확인하고 작성하는 화면입니다."
-      requiredParams={['fanMeetingId', 'fanId']}
-      screenId="ID-004"
-      title="메모 화면"
+      forceEndOnLeave
     />
   )
 }

@@ -31,7 +31,7 @@ class LiveKitWebhookReceiverTest {
                   "room": {"name": "meeting-room-1"},
                   "participant": {
                     "identity": "fan-identity",
-                    "attributes": {"role": "fan", "call_session_id": "100"}
+                    "attributes": {"role": "FAN", "call_session_id": "100"}
                   }
                 }
                 """;

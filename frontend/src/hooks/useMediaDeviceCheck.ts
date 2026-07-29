@@ -13,6 +13,7 @@ export type MediaCheckStatus =
 type MediaDeviceLists = {
   cameras: MediaDeviceInfo[]
   microphones: MediaDeviceInfo[]
+  speakers: MediaDeviceInfo[]
 }
 
 type MediaErrorState = {
@@ -69,27 +70,33 @@ export function useMediaDeviceCheck() {
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([])
+  const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([])
   const [selectedCameraId, setSelectedCameraId] = useState('')
   const [selectedMicrophoneId, setSelectedMicrophoneId] = useState('')
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState('')
+  const [audioLevel, setAudioLevel] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string>()
   const localTracksRef = useRef<LocalTrack[]>([])
   const requestIdRef = useRef(0)
   const mountedRef = useRef(true)
 
   const readDevices = useCallback(async (): Promise<MediaDeviceLists> => {
-    const [nextCameras, nextMicrophones] = await Promise.all([
+    const [nextCameras, nextMicrophones, nextSpeakers] = await Promise.all([
       Room.getLocalDevices('videoinput', false),
       Room.getLocalDevices('audioinput', false),
+      Room.getLocalDevices('audiooutput', false),
     ])
 
     if (mountedRef.current) {
       setCameras(nextCameras)
       setMicrophones(nextMicrophones)
+      setSpeakers(nextSpeakers)
     }
 
     return {
       cameras: nextCameras,
       microphones: nextMicrophones,
+      speakers: nextSpeakers,
     }
   }, [])
 
@@ -151,6 +158,13 @@ export function useMediaDeviceCheck() {
             ? (activeMicrophoneId ?? '')
             : (deviceLists.microphones[0]?.deviceId ?? ''),
         )
+        setSelectedSpeakerId((currentId) => {
+          const savedId = window.sessionStorage.getItem('melly-speaker-id') ?? ''
+          const preferredId = currentId || savedId
+          return deviceLists.speakers.some((device) => device.deviceId === preferredId)
+            ? preferredId
+            : (deviceLists.speakers[0]?.deviceId ?? 'default')
+        })
         window.sessionStorage.setItem('melly-camera-id', activeCameraId ?? '')
         window.sessionStorage.setItem('melly-microphone-id', activeMicrophoneId ?? '')
         setStatus('ready')
@@ -185,6 +199,11 @@ export function useMediaDeviceCheck() {
     [openStream, selectedCameraId],
   )
 
+  const selectSpeaker = useCallback((deviceId: string) => {
+    setSelectedSpeakerId(deviceId)
+    window.sessionStorage.setItem('melly-speaker-id', deviceId)
+  }, [])
+
   useEffect(() => {
     mountedRef.current = true
 
@@ -216,14 +235,52 @@ export function useMediaDeviceCheck() {
     }
   }, [readDevices])
 
+  useEffect(() => {
+    const audioTrack = stream?.getAudioTracks()[0]
+
+    if (!audioTrack) {
+      setAudioLevel(0)
+      return
+    }
+
+    const audioContext = new AudioContext()
+    const analyser = audioContext.createAnalyser()
+    const source = audioContext.createMediaStreamSource(new MediaStream([audioTrack]))
+    const samples = new Uint8Array(analyser.frequencyBinCount)
+    let frameId = 0
+
+    analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.7
+    source.connect(analyser)
+
+    const measure = () => {
+      analyser.getByteFrequencyData(samples)
+      const average = samples.reduce((total, sample) => total + sample, 0) / samples.length
+      setAudioLevel(Math.min(1, average / 96))
+      frameId = requestAnimationFrame(measure)
+    }
+
+    measure()
+
+    return () => {
+      cancelAnimationFrame(frameId)
+      source.disconnect()
+      void audioContext.close()
+    }
+  }, [stream])
+
   return {
     cameras,
     errorMessage,
+    audioLevel,
     microphones,
+    speakers,
     selectedCameraId,
     selectedMicrophoneId,
+    selectedSpeakerId,
     selectCamera,
     selectMicrophone,
+    selectSpeaker,
     start,
     status,
     stream,

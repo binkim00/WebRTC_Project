@@ -136,6 +136,26 @@ public class CallSession extends BaseTimeEntity {
     }
 
     /**
+     * 실제 통화가 시작되기 전에 연결에 실패한 세션을 실패 상태로 마무리한다.
+     *
+     * @param failedAt 연결 실패가 확정된 서버 시각
+     * @throws IllegalStateException 연결 대기 상태가 아니거나 실패 시각이 없는 경우
+     */
+    public void failConnecting(LocalDateTime failedAt) {
+        if (status != CallSessionStatus.CONNECTING) {
+            throw new IllegalStateException("연결 대기 상태의 통화만 실패 처리할 수 있습니다.");
+        }
+        if (failedAt == null) {
+            throw new IllegalStateException("연결 실패 시각은 필수입니다.");
+        }
+        this.status = CallSessionStatus.FAILED;
+        this.endedAt = failedAt;
+        this.endReason = CallEndReason.CONNECTION_FAILED;
+        this.endedBy = null;
+        this.reconnectAllowedUntil = null;
+    }
+
+    /**
      * 활성 통화를 지정된 사유로 종료하고 종료 주체와 시각을 기록한다.
      *
      * @param endedAt 서버 기준 종료 시각

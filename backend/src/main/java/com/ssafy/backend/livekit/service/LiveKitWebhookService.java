@@ -31,8 +31,8 @@ public class LiveKitWebhookService {
     private static final String PARTICIPANT_CONNECTION_ABORTED = "participant_connection_aborted";
     private static final String ROLE_ATTRIBUTE = "role";
     private static final String CALL_SESSION_ID_ATTRIBUTE = "call_session_id";
-    private static final String FAN_ROLE = "fan";
-    private static final String HOST_ROLE = "host";
+    private static final String FAN_ROLE = "FAN";
+    private static final String HOST_ROLE = "INFLUENCER";
     private static final Duration RECONNECT_GRACE_PERIOD = Duration.ofSeconds(60);
 
     private final CallSessionRepository callSessionRepository;
