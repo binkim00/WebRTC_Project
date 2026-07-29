@@ -162,6 +162,9 @@ export function FanMeetingListPage() {
                                         </p>
                                         <Button
                                             className="w-full"
+                                            onClick={() =>
+                                                navigate(`/fan/fan-meetings/${fanMeeting.id}/waiting`)
+                                            }
                                             size="lg"
                                             variant={fanMeeting.canEnter ? 'primary' : 'secondary'}
                                         >

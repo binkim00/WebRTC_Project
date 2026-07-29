@@ -55,8 +55,8 @@ export type MeetingQueue = {
     callSessionId: string
     participantId: string
     nickname: string
-    startedAt: string
-    endsAt: string
+    startedAt?: string
+    endsAt?: string
   }
   entries: QueueEntry[]
 }
@@ -295,8 +295,8 @@ export async function fetchMeetingQueue(
           callSessionId: readString(currentCall.callSessionId, 'callSessionId'),
           participantId: readString(currentCall.participantId, 'participantId'),
           nickname: readString(currentCall.nickname, 'nickname'),
-          startedAt: readString(currentCall.startedAt, 'startedAt'),
-          endsAt: readString(currentCall.endsAt, 'endsAt'),
+          startedAt: readOptionalString(currentCall.startedAt),
+          endsAt: readOptionalString(currentCall.endsAt),
         }
       : undefined,
     entries: record.entries.map(parseQueueEntry),

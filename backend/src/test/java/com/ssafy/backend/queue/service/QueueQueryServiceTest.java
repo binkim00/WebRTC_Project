@@ -8,6 +8,7 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
+import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.queue.domain.QueueDisplayStatus;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
@@ -39,9 +40,10 @@ class QueueQueryServiceTest {
         MeetingOperationSettingRepository settingRepository =
                 mock(MeetingOperationSettingRepository.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        MeetingAccessService meetingAccessService = mock(MeetingAccessService.class);
         QueueQueryService service = new QueueQueryService(
                 currentUserService, entryRepository, callSessionRepository,
-                settingRepository, realtimeStore);
+                settingRepository, realtimeStore, meetingAccessService);
         User fan = mock(User.class);
         QueueEntry entry = mock(QueueEntry.class);
         CallSession callSession = mock(CallSession.class);
@@ -86,9 +88,10 @@ class QueueQueryServiceTest {
         MeetingOperationSettingRepository settingRepository =
                 mock(MeetingOperationSettingRepository.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        MeetingAccessService meetingAccessService = mock(MeetingAccessService.class);
         QueueQueryService service = new QueueQueryService(
                 currentUserService, entryRepository, callSessionRepository,
-                settingRepository, realtimeStore);
+                settingRepository, realtimeStore, meetingAccessService);
         User fan = mock(User.class);
         QueueEntry entry = mock(QueueEntry.class);
         CallSession callSession = mock(CallSession.class);
@@ -123,9 +126,10 @@ class QueueQueryServiceTest {
         MeetingOperationSettingRepository settingRepository =
                 mock(MeetingOperationSettingRepository.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        MeetingAccessService meetingAccessService = mock(MeetingAccessService.class);
         QueueQueryService service = new QueueQueryService(
                 currentUserService, entryRepository, callSessionRepository,
-                settingRepository, realtimeStore);
+                settingRepository, realtimeStore, meetingAccessService);
         User fan = mock(User.class);
         QueueEntry entry = mock(QueueEntry.class);
         MeetingOperationSetting setting = mock(MeetingOperationSetting.class);

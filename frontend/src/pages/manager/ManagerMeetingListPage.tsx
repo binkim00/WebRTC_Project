@@ -160,10 +160,13 @@ export function ManagerMeetingListPage() {
         </div>
 
         {error ? (
-          <div className="p-5 sm:p-7">
+          <div className="grid gap-4 p-5 sm:p-7">
             <AlertBanner title="팬미팅 목록을 표시할 수 없습니다" variant="error">
               {error}
             </AlertBanner>
+            <Button onClick={() => navigate('/manager/fan-meetings/1/monitor')}>
+              팬미팅 #1 모니터링 열기
+            </Button>
           </div>
         ) : loading ? (
           <div className="flex min-h-80 items-center justify-center">
@@ -235,10 +238,10 @@ function MeetingRow({ meeting }: { meeting: ManagerMeetingSummary }) {
       </Link>
       <Link
         className="inline-flex min-h-10 items-center gap-2 font-bold hover:text-[var(--color-primary-coral)]"
-        to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}/edit`}
+        to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}/monitor`}
       >
         <Gear aria-hidden="true" size={20} weight="bold" />
-        설정
+        모니터링
         <ArrowRight aria-hidden="true" size={17} />
       </Link>
     </article>

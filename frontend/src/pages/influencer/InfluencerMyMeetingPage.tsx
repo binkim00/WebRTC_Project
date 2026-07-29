@@ -206,7 +206,7 @@ export function InfluencerMyMeetingPage() {
                   className="w-full shadow-[var(--shadow-final-cta)]"
                   leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
                   onClick={() =>
-                    navigate(`/influencer/fan-meetings/${meeting.id}/call`)
+                    navigate(`/influencer/fan-meetings/${meeting.id}/ready`)
                   }
                   size="lg"
                 >

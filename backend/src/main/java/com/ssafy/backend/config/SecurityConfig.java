@@ -78,6 +78,8 @@ public class SecurityConfig {
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue/me")
                                 .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue")
+                                .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/call")
                                 .hasRole("MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings").authenticated()

@@ -16,7 +16,10 @@ import {
   CardContent,
   CardHeader,
 } from '../../components'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { getAuthSession } from '../../api/auth'
+import { fetchMeetingQueue } from '../../api/fanMeetingParticipants'
 
 
 /* TODO: API 연동 후 아래 mock 데이터를 서버 응답 데이터로 교체 */
@@ -49,6 +52,35 @@ const meetingStatus = 'in_progress'
 export function InfluencerMeetingReadyPage() {
   const navigate = useNavigate()
   const { fanMeetingId } = useParams()
+  const [callSessionId, setCallSessionId] = useState<string>()
+  const [queueError, setQueueError] = useState<string>()
+
+  useEffect(() => {
+    if (!fanMeetingId) return
+    const authToken = getAuthSession()?.accessToken
+    if (!authToken) {
+      setQueueError('로그인 정보가 없습니다. 다시 로그인해 주세요.')
+      return
+    }
+
+    let active = true
+    const refresh = async () => {
+      try {
+        const queue = await fetchMeetingQueue(fanMeetingId, authToken)
+        if (!active) return
+        setCallSessionId(queue.currentCall?.callSessionId)
+        setQueueError(undefined)
+      } catch (error: unknown) {
+        if (active) setQueueError(error instanceof Error ? error.message : '현재 호출 정보를 조회하지 못했습니다.')
+      }
+    }
+    void refresh()
+    const intervalId = window.setInterval(() => void refresh(), 2000)
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+    }
+  }, [fanMeetingId])
 
   const handleOpenMemo = () => {
     if (!fanMeetingId) { return }
@@ -65,10 +97,10 @@ export function InfluencerMeetingReadyPage() {
   }
 
   const handleEnterCall = () => {
-    if (!fanMeetingId) { return }
+    if (!fanMeetingId || !callSessionId) { return }
     if(!isDeviceChecked || meetingStatus !== 'in_progress') { return }
     navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/call`
+      `/influencer/fan-meetings/${fanMeetingId}/calls/${callSessionId}`
     )
   }
 
@@ -278,13 +310,18 @@ export function InfluencerMeetingReadyPage() {
               운영 일정에 따라 시작 시간이 20:00으로 조정되었습니다.
             </AlertBanner>
 
+            {queueError ? (
+              <AlertBanner title="호출 정보 연결 실패" variant="error">{queueError}</AlertBanner>
+            ) : null}
+
             <Button
               className="w-full shadow-[var(--shadow-final-cta)]"
+              disabled={!callSessionId}
               leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
               onClick={handleEnterCall}
               size="lg"
             >
-              영상 통화 입장
+              {callSessionId ? '영상 통화 입장' : '팬 호출 대기 중'}
             </Button>
           </div>
         </Card>

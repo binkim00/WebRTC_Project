@@ -1,6 +1,7 @@
 import { ApiError } from './ApiError'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+const AUTH_SESSION_KEY = 'melly-auth-session'
 
 type ErrorResponse = {
   code?: string
@@ -10,6 +11,23 @@ type ErrorResponse = {
 
 export type ApiRequestOptions = RequestInit & {
   authToken?: string
+}
+
+function getStoredAccessToken(): string | undefined {
+  const serialized =
+    window.localStorage.getItem(AUTH_SESSION_KEY) ??
+    window.sessionStorage.getItem(AUTH_SESSION_KEY)
+
+  if (!serialized) return undefined
+
+  try {
+    const session: unknown = JSON.parse(serialized)
+    if (typeof session !== 'object' || session === null) return undefined
+    const accessToken = (session as Record<string, unknown>).accessToken
+    return typeof accessToken === 'string' && accessToken.trim() ? accessToken : undefined
+  } catch {
+    return undefined
+  }
 }
 
 async function readErrorResponse(response: Response): Promise<ErrorResponse> {
@@ -43,13 +61,14 @@ export async function apiRequest<T = unknown>(
   options: ApiRequestOptions = {},
 ): Promise<T> {
   const { authToken, ...requestOptions } = options
+  const resolvedAuthToken = authToken ?? getStoredAccessToken()
 
   const response = await fetch(`${API_URL}${path}`, {
     ...requestOptions,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(resolvedAuthToken ? { Authorization: `Bearer ${resolvedAuthToken}` } : {}),
       ...requestOptions.headers,
     },
   })

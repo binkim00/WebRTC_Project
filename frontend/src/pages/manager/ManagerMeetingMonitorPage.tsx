@@ -18,13 +18,12 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/auth'
 import {
-  fetchMeetingDetail,
   fetchMeetingQueue,
-  fetchParticipants,
   type FanMeetingParticipant,
   type MeetingDetail,
   type MeetingQueue,
 } from '../../api/fanMeetingParticipants'
+import { callQueueEntry } from '../../api/queue'
 import remotePreviewImage from '../../assets/call-preview-remote.jpg'
 import localPreviewImage from '../../assets/call-preview-local.jpg'
 import { AlertBanner, Badge, Button, Card, Spinner } from '../../components'
@@ -40,6 +39,7 @@ export function ManagerMeetingMonitorPage() {
   const [queue, setQueue] = useState<MeetingQueue>({ entries: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [callingEntryId, setCallingEntryId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!fanMeetingId) {
@@ -85,15 +85,24 @@ export function ManagerMeetingMonitorPage() {
     }
 
     const controller = new AbortController()
-    setLoading(true)
-    Promise.all([
-      fetchMeetingDetail(fanMeetingId, token, controller.signal),
-      fetchParticipants(fanMeetingId, { page: 0, size: 4 }, token, controller.signal),
-      fetchMeetingQueue(fanMeetingId, token, controller.signal),
-    ])
-      .then(([meetingData, participantData, queueData]) => {
-        setMeeting(meetingData)
-        setParticipants(participantData.content)
+    const refresh = () => fetchMeetingQueue(fanMeetingId, token, controller.signal)
+      .then((queueData) => {
+        setMeeting({
+          meetingId: fanMeetingId,
+          title: `팬미팅 #${fanMeetingId}`,
+          status: 'IN_PROGRESS',
+          influencer: { influencerId: 'current', influencerName: '인플루언서' },
+          application: { capacity: Math.max(queueData.entries.length, 1) },
+        })
+        setParticipants(queueData.entries.slice(0, 4).map((entry) => ({
+          participantId: entry.participantId,
+          fanId: entry.fanId,
+          nickname: entry.nickname,
+          profileImageUrl: entry.profileImageUrl,
+          callOrder: entry.position,
+          participantStatus: 'ACTIVE',
+          queueStatus: entry.status,
+        })))
         setQueue(queueData)
         setError(null)
       })
@@ -103,8 +112,33 @@ export function ManagerMeetingMonitorPage() {
       })
       .finally(() => setLoading(false))
 
-    return () => controller.abort()
+    setLoading(true)
+    void refresh()
+    const intervalId = window.setInterval(() => void refresh(), 5000)
+
+    return () => {
+      controller.abort()
+      window.clearInterval(intervalId)
+    }
   }, [fanMeetingId, isPreview])
+
+  async function handleCall(queueEntryId: string) {
+    const token = getAuthSession()?.accessToken
+    if (!token) {
+      setError('로그인 정보가 없습니다. 다시 로그인해 주세요.')
+      return
+    }
+    setCallingEntryId(queueEntryId)
+    try {
+      await callQueueEntry(queueEntryId, token)
+      if (fanMeetingId) setQueue(await fetchMeetingQueue(fanMeetingId, token))
+      setError(null)
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : '팬을 호출하지 못했습니다.')
+    } finally {
+      setCallingEntryId(null)
+    }
+  }
 
   const inCallCount = useMemo(() => participants.filter((item) => item.queueStatus === 'IN_CALL').length, [participants])
   const completedCount = useMemo(() => queue.entries.filter((item) => item.status === 'COMPLETED').length, [queue.entries])
@@ -146,7 +180,35 @@ export function ManagerMeetingMonitorPage() {
         </Card>
       </div>
 
-      <Card className="p-5"><div className="flex items-center justify-between gap-3"><h2 className="text-lg font-extrabold">대기열 <span className="font-normal text-[var(--color-text-secondary)]">(참가 순서)</span></h2><span className="text-sm text-[var(--color-text-secondary)]">총 {waitingCount}명 대기 중</span></div><div className="mt-4 flex gap-3 overflow-x-auto pb-1">{queue.entries.map((entry) => <div className="min-w-[160px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-page)] p-3" key={entry.queueEntryId}><div className="flex items-center justify-between gap-2"><span className="flex size-7 items-center justify-center rounded-full bg-slate-100 text-xs font-black">{entry.position}</span><Badge variant={entry.status === 'IN_CALL' ? 'primary' : entry.status === 'COMPLETED' ? 'success' : 'neutral'}>{entry.status === 'IN_CALL' ? '통화 중' : entry.status === 'COMPLETED' ? '완료' : '대기'}</Badge></div><p className="mt-3 truncate font-bold">{entry.nickname}</p></div>)}</div></Card>
+      <Card className="p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-extrabold">대기열 <span className="font-normal text-[var(--color-text-secondary)]">(참가 순서)</span></h2>
+          <span className="text-sm text-[var(--color-text-secondary)]">총 {waitingCount}명 대기 중</span>
+        </div>
+        <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+          {queue.entries.map((entry) => (
+            <div className="min-w-[180px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-page)] p-3" key={entry.queueEntryId}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex size-7 items-center justify-center rounded-full bg-slate-100 text-xs font-black">{entry.position}</span>
+                <Badge variant={entry.status === 'IN_CALL' ? 'primary' : entry.status === 'COMPLETED' ? 'success' : 'neutral'}>
+                  {entry.status === 'IN_CALL' ? '통화 중' : entry.status === 'CALLED' ? '호출됨' : entry.status === 'COMPLETED' ? '완료' : '대기'}
+                </Badge>
+              </div>
+              <p className="mt-3 truncate font-bold">{entry.nickname}</p>
+              {entry.status === 'WAITING' || entry.status === 'CALLED' ? (
+                <Button
+                  className="mt-3 w-full"
+                  disabled={callingEntryId === entry.queueEntryId}
+                  onClick={() => void handleCall(entry.queueEntryId)}
+                  size="sm"
+                >
+                  {entry.status === 'CALLED' ? '재호출' : '호출'}
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   )
 }

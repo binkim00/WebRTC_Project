@@ -38,7 +38,8 @@ function App() {
   const isHomePage = pathname === '/'
   const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
-  const isAuthenticated = getAuthSession() !== null
+  const authSession = getAuthSession()
+  const isAuthenticated = authSession !== null
   const isQaCapture =
     import.meta.env.DEV &&
     isCallPage &&
@@ -94,13 +95,18 @@ function App() {
                 이벤트
               </Link>
               {isAuthenticated ? (
-                <button
-                  className="font-semibold hover:text-[var(--color-primary-coral)]"
-                  onClick={handleLogout}
-                  type="button"
-                >
-                  로그아웃
-                </button>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-[var(--color-text-primary)]">
+                    {authSession.nickname}님
+                  </span>
+                  <button
+                    className="font-semibold hover:text-[var(--color-primary-coral)]"
+                    onClick={handleLogout}
+                    type="button"
+                  >
+                    로그아웃
+                  </button>
+                </div>
               ) : (
                 <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
                   로그인
@@ -143,13 +149,18 @@ function App() {
               <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
             </Link>
           ) : isAuthenticated ? (
-            <button
-              className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-              onClick={handleLogout}
-              type="button"
-            >
-              로그아웃
-            </button>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="font-bold text-[var(--color-text-primary)]">
+                {authSession.nickname}님
+              </span>
+              <button
+                className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                onClick={handleLogout}
+                type="button"
+              >
+                로그아웃
+              </button>
+            </div>
           ) : undefined
         }
         brand="MELLY"
