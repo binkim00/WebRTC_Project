@@ -2,17 +2,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components'
 import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
 
-export function FanApplicationResultPage() {
-  return (
-    <ScreenPage
-      description="특정 이벤트의 응모 결과를 확인하는 화면입니다."
-      requiredParams={['eventId']}
-      screenId="FN-003"
-      title="응모 결과 확인 화면"
-    />
-  )
-}
-
 export function FanMeetingCallPage() {
   const { fanMeetingId, callSessionId } = useParams()
   const [searchParams] = useSearchParams()

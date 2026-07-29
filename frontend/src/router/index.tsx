@@ -17,13 +17,13 @@ import {
   RouterErrorPage,
 } from '../pages/errors/ErrorRoutePages'
 import {
-  FanApplicationResultPage,
   FanApplicationsPage,
   FanMeetingCallPage,
   FanProfilePage,
 } from '../pages/fan/FanRoutePages'
 import { FanEventListPage } from '../pages/fan/FanEventListPage'
 import { FanEventDetailPage } from '../pages/fan/FanEventDetailPage'
+import { FanApplicationResultPage } from '../pages/fan/FanApplicationResultPage'
 import { FanMeetingWaitingPage } from '../pages/fan/FanMeetingWaitingPage'
 import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
 import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
@@ -90,6 +90,10 @@ export const router = createBrowserRouter([
         Component: FanEventDetailPage,
       },
       {
+        path: 'fan/events/:eventId/application-result',
+        Component: FanApplicationResultPage,
+      },
+      {
         path: 'fan-meetings/:fanMeetingId',
         children: [
           {
@@ -125,10 +129,6 @@ export const router = createBrowserRouter([
           {
             index: true,
             element: <Navigate replace to="events" />,
-          },
-          {
-            path: 'events/:eventId/application-result',
-            Component: FanApplicationResultPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/call',
