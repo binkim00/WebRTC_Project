@@ -3,6 +3,7 @@ package com.ssafy.backend.queue.controller;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.queue.dto.QueueCallResponse;
+import com.ssafy.backend.queue.dto.QueueOperationResponse;
 import com.ssafy.backend.queue.service.QueueCommandService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,5 +40,20 @@ public class QueueEntryCommandController {
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
         return ApiResponse.success(commandService.call(queueEntryId, principal));
+    }
+
+    /**
+     * 매니저가 호출에 응답하지 않은 팬과 연결 대기 중인 영상통화 세션을 노쇼 처리한다.
+     *
+     * @param queueEntryId 노쇼 처리할 대기열 항목 식별자
+     * @param principal JWT 인증 사용자 정보
+     * @return 공통 성공 형식으로 감싼 노쇼 처리 결과
+     */
+    @PostMapping("/{queueEntryId}/no-show")
+    public ApiResponse<QueueOperationResponse> markNoShow(
+            @PathVariable Long queueEntryId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(commandService.markNoShow(queueEntryId, principal));
     }
 }

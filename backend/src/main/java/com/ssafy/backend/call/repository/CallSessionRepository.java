@@ -45,6 +45,20 @@ public interface CallSessionRepository extends JpaRepository<CallSession, Long> 
     Optional<CallSession> findByQueueEntry_Id(Long queueEntryId);
 
     /**
+     * 노쇼 처리와 LiveKit 입장 이벤트가 동시에 상태를 바꾸지 못하도록 세션을 잠금 조회한다.
+     *
+     * @param queueEntryId 노쇼 대상 대기열 항목 식별자
+     * @return 쓰기 잠금으로 조회된 영상통화 세션
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select callSession
+            from CallSession callSession
+            where callSession.queueEntry.id = :queueEntryId
+            """)
+    Optional<CallSession> findByQueueEntryIdForUpdate(@Param("queueEntryId") Long queueEntryId);
+
+    /**
      * LiveKit webhook 상태 전환에 필요한 세션을 쓰기 잠금과 함께 조회한다.
      *
      * @param callSessionId 통화 세션 식별자

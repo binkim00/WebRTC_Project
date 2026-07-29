@@ -15,6 +15,7 @@ import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.dto.QueueCallResponse;
+import com.ssafy.backend.queue.dto.QueueOperationResponse;
 import com.ssafy.backend.queue.redis.QueueClaimResult;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
@@ -241,5 +242,55 @@ class QueueCommandServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.CALL_ATTEMPT_LIMIT_EXCEEDED));
+    }
+
+    /** 노쇼 처리 시 대기열과 연결 대기 영상통화 세션을 함께 최종 상태로 변경하는지 검증한다. */
+    @Test
+    void marksCalledParticipantAndConnectingCallAsNoShow() {
+        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        MeetingAccessService accessService = mock(MeetingAccessService.class);
+        MeetingOperationSettingRepository settingRepository =
+                mock(MeetingOperationSettingRepository.class);
+        QueueEntryRepository entryRepository = mock(QueueEntryRepository.class);
+        CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
+        QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        QueueQueryService queryService = mock(QueueQueryService.class);
+        QueueInitializationService initializationService = mock(QueueInitializationService.class);
+        QueueCommandService service = new QueueCommandService(
+                currentUserService, accessService, settingRepository, entryRepository,
+                callSessionRepository, realtimeStore, queryService, initializationService, CLOCK);
+        User manager = mock(User.class);
+        FanMeeting meeting = mock(FanMeeting.class);
+        Participant participant = mock(Participant.class);
+        QueueEntry entry = QueueEntry.create(meeting, participant);
+        ReflectionTestUtils.setField(entry, "id", 7L);
+        entry.enter(LocalDateTime.of(2026, 7, 27, 0, 50));
+        entry.call(LocalDateTime.of(2026, 7, 27, 0, 59));
+        CallSession callSession = CallSession.createConnecting(entry, "meeting-room-1", "ko");
+        ReflectionTestUtils.setField(callSession, "id", 100L);
+        QueueOperationResponse expected = new QueueOperationResponse(
+                7L, 20L, 1, QueueEntryStatus.NO_SHOW, 1,
+                entry.getCalledAt(), LocalDateTime.of(2026, 7, 27, 1, 0));
+        when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(manager);
+        when(entryRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(entry));
+        when(meeting.getId()).thenReturn(1L);
+        when(callSessionRepository.findByQueueEntryIdForUpdate(7L))
+                .thenReturn(Optional.of(callSession));
+        when(queryService.toOperationResponse(entry)).thenReturn(expected);
+
+        QueueOperationResponse response = service.markNoShow(7L, PRINCIPAL);
+
+        verify(accessService).requireManager(1L, manager);
+        assertThat(entry.getStatus()).isEqualTo(QueueEntryStatus.NO_SHOW);
+        assertThat(entry.getNoShowAt()).isEqualTo(LocalDateTime.of(2026, 7, 27, 1, 0));
+        assertThat(callSession.getStatus()).isEqualTo(CallSessionStatus.FAILED);
+        assertThat(callSession.getEndReason()).isEqualTo(
+                com.ssafy.backend.call.domain.CallEndReason.CONNECTION_FAILED);
+        assertThat(callSession.getEndedAt()).isEqualTo(entry.getNoShowAt());
+        verify(realtimeStore).updateStatus(1L, 7L, QueueEntryStatus.NO_SHOW);
+        verify(realtimeStore).clearCurrent(1L, 7L);
+        verify(realtimeStore).clearFanConnected(100L);
+        verify(realtimeStore).clearDisconnectRole(100L);
+        assertThat(response).isSameAs(expected);
     }
 }
