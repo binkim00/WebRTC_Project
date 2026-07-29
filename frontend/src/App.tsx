@@ -15,7 +15,7 @@ const fanCallNavigationItems = [
   { label: '마이페이지', to: '/fan/mypage/profile' },
 ] as const
 
-const influencerCallNavigationItems = [
+const influencerNavigationItems = [
   { label: '팬미팅', to: '/influencer/mypage/fan-meetings' },
   { label: '마이페이지', to: '/influencer/mypage/profile' },
 ] as const
@@ -36,8 +36,8 @@ function App() {
     ? []
     : pathname.startsWith('/fan/fan-meetings/')
     ? fanCallNavigationItems
-    : pathname.startsWith('/influencer/fan-meetings/')
-      ? influencerCallNavigationItems
+    : pathname.startsWith('/influencer/')
+      ? influencerNavigationItems
       : defaultNavigationItems
 
   return (

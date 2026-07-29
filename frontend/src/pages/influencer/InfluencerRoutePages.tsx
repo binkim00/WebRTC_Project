@@ -35,23 +35,12 @@ export function InfluencerMeetingCallPage() {
     />
   )
 }
-
 export function InfluencerMeetingHistoryPage() {
   return (
     <ScreenPage
       description="인플루언서가 진행한 팬미팅 이력을 확인하는 화면입니다."
       screenId="ID-005"
       title="나의 팬미팅 이력"
-    />
-  )
-}
-
-export function InfluencerProfilePage() {
-  return (
-    <ScreenPage
-      description="인플루언서 마이페이지의 프로필 화면입니다."
-      screenId="ID-006"
-      title="인플루언서 마이페이지"
     />
   )
 }

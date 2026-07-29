@@ -32,9 +32,9 @@ import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeeting
 import {
   InfluencerMeetingCallPage,
   InfluencerMeetingHistoryPage,
-  InfluencerProfilePage,
 } from '../pages/influencer/InfluencerRoutePages'
 import { InfluencerMeetingReadyPage } from '../pages/influencer/InfluencerMeetingReadyPage'
+import { InfluencerProfilePage } from '../pages/influencer/InfluencerProfilePage'
 import {
   ManagerApplicationsPage,
   ManagerEventFormPage,
@@ -123,6 +123,10 @@ export const router = createBrowserRouter([
         Component: InfluencerMyMeetingPage,
       },
       {
+        path: 'influencer/mypage/profile',
+        Component: InfluencerProfilePage,
+      },
+      {
         path: 'influencer/fan-meetings/:fanMeetingId/ready',
         Component: InfluencerMeetingReadyPage,
       },
@@ -167,10 +171,6 @@ export const router = createBrowserRouter([
           {
             path: 'mypage/fan-meetings',
             Component: InfluencerMeetingHistoryPage,
-          },
-          {
-            path: 'mypage/profile',
-            Component: InfluencerProfilePage,
           },
         ],
       },
