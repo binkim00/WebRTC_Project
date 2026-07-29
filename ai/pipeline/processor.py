@@ -1,15 +1,21 @@
 """
-final(concluded) STT 결과를 받아서 Data Channel push (자막)만 수행.
+final(concluded) STT 결과를 받아서:
+  1. ai_subtitle INSERT (원문 + 번역 한 번에)
+  2. 유해발언 감지 (백그라운드) → ai_moderation INSERT + Spring API 알림
+  3. Data Channel push (자막)
 
 번역은 STT 어댑터(DeepL)가 이미 처리해서 FinalTranscript에 담겨옴.
-DB 저장, 유해발언 감지/알림은 현재 비활성화 상태 (재설계 예정).
 """
 
+import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 
+import httpx
 from livekit import rtc
 
+from db import queries
 from stt.base import FinalTranscript
 
 logger = logging.getLogger(__name__)
@@ -22,26 +28,60 @@ class SubtitleProcessor:
         *,
         call_session_id: int,
         local_participant: rtc.LocalParticipant,
+        pool,
+        spring_internal_url: str | None = None,
+        detect_fn: callable | None = None,         # async (text, lang) -> dict | None
         sequence_counters: dict,
     ):
         self.call_session_id = call_session_id
         self.local_participant = local_participant
+        self.pool = pool
+        self.spring_url = spring_internal_url
+        self._detect = detect_fn
         self._seq = sequence_counters
+        self._http_client = httpx.AsyncClient(timeout=5.0)
 
     async def handle_final(
         self,
         transcript: FinalTranscript,
         speaker_id: str,
-        speaker_role: str,      # "host" | "fan"
+        speaker_role: str,      # "INFLUENCER" | "FAN"
         target_lang: str,       # 상대방 언어 (push용)
     ) -> None:
-        """concluded 1건 처리. Data Channel push만 수행."""
+        """
+        concluded 1건 처리.
+        번역은 이미 transcript에 들어있으니 INSERT 한 번으로 끝.
+        """
         # 시퀀스 채번
         self._seq[speaker_id] = self._seq.get(speaker_id, 0) + 1
         seq = self._seq[speaker_id]
-        subtitle_id = seq
 
-        # Data Channel push
+        # 1. ai_subtitle INSERT (원문 + 번역 한 번에)
+        subtitle_id = await queries.insert_subtitle(
+            pool=self.pool,
+            call_session_id=self.call_session_id,
+            sequence=seq,
+            speaker_id=speaker_id,
+            speaker_role=speaker_role,
+            spoken_at=transcript.spoken_at,
+            original_text=transcript.text,
+            original_lang=transcript.language,
+            translated_text=transcript.translated_text,
+            translated_lang=transcript.translated_lang,
+        )
+
+        subtitle_id = seq 
+
+        # 2. 감지 (백그라운드)
+        asyncio.create_task(
+            self._detect_and_notify(
+                subtitle_id=subtitle_id,
+                text=transcript.text,
+                lang=transcript.language,
+            )
+        )
+
+        # 3. Data Channel push
         payload = json.dumps({
             "subtitle_id": subtitle_id,
             "speaker_role": speaker_role,
@@ -56,3 +96,54 @@ class SubtitleProcessor:
             reliable=True,
             topic="subtitle",
         )
+
+    # ── 내부 메서드 ───────────────────────────────────────────────────────────
+
+    async def _detect_and_notify(
+        self,
+        *,
+        subtitle_id: int,
+        text: str,
+        lang: str,
+    ) -> None:
+        try:
+            result = await self._detect(text, lang)
+            if result is None:
+                return
+
+            moderation_id = await queries.insert_moderation(
+                call_session_id=self.call_session_id,
+                subtitle_id=subtitle_id,
+                risk_type=result["risk_type"],
+                risk_level=result["risk_level"],
+                reason=result["reason"],
+                detected_at=datetime.now(timezone.utc),
+            )
+
+            await self._notify_spring(moderation_id, subtitle_id, result)
+
+        except Exception:
+            logger.exception("유해발언 감지/알림 실패 subtitle_id=%s", subtitle_id)
+
+    async def _notify_spring(
+        self,
+        moderation_id: int,
+        subtitle_id: int,
+        result: dict,
+    ) -> None:
+        body = {
+            "moderation_id": moderation_id,
+            "call_session_id": self.call_session_id,
+            "subtitle_id": subtitle_id,
+            "risk_type": result["risk_type"],
+            "risk_level": result["risk_level"],
+            "reason": result["reason"],
+        }
+        resp = await self._http_client.post(
+            f"{self.spring_url}/internal/ai/moderation",
+            json=body,
+        )
+        resp.raise_for_status()
+
+    async def close(self) -> None:
+        await self._http_client.aclose()
