@@ -1,6 +1,7 @@
 import { LiveKitRoom } from '@livekit/components-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { getAuthSession } from '../../api/auth'
 import {
   getCallSessionStatus,
   issueLiveKitAccessToken,
@@ -43,9 +44,10 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       setStatusError(undefined)
 
       try {
+        const authToken = getAuthSession()?.accessToken
         const [info, status] = await Promise.all([
-          issueLiveKitAccessToken(props.callSessionId, { signal }),
-          getCallSessionStatus(props.callSessionId, { signal }),
+          issueLiveKitAccessToken(props.callSessionId, { authToken, signal }),
+          getCallSessionStatus(props.callSessionId, { authToken, signal }),
         ])
         setConnectionInfo(info)
         setSessionStatus(status)
@@ -86,7 +88,9 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
     const refreshStatus = async () => {
       try {
-        const status = await getCallSessionStatus(callSessionId)
+        const status = await getCallSessionStatus(callSessionId, {
+          authToken: getAuthSession()?.accessToken,
+        })
 
         if (active) {
           setSessionStatus(status)

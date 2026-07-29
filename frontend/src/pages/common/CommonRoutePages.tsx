@@ -164,17 +164,6 @@ export function HomePage() {
   )
 }
 
-export function MeetingFanListPage() {
-  return (
-    <ScreenPage
-      description="특정 팬미팅에 참여하는 팬 목록을 확인하는 공통 화면입니다."
-      requiredParams={['fanMeetingId']}
-      screenId="CM-FN-ID-001"
-      title="팬 리스트 화면"
-    />
-  )
-}
-
 export function MeetingStatisticsPage() {
   return (
     <ScreenPage
