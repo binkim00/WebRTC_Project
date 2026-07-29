@@ -52,17 +52,37 @@ class LiveKitAgentDispatchServiceTest {
 
         verify(dispatchClient).createDispatch(
                 ROOM_NAME, LiveKitAgentDispatchService.AGENT_NAME);
-        verify(dispatchStore, never()).release(ROOM_NAME);
+        verify(dispatchStore).release(ROOM_NAME);
     }
 
-    /** 이미 선점된 Room이면 LiveKit에 중복 요청하지 않는지 검증한다. */
+    /** 다른 요청이 선점한 Room에도 실제 Agent가 있으면 중복 생성하지 않는지 검증한다. */
     @Test
-    void skipsAlreadyClaimedRoom() {
+    void acceptsExistingAgentWhileAnotherRequestOwnsClaim() throws IOException {
+        Call<List<AgentDispatch>> listCall = mock(Call.class);
         when(dispatchStore.claim(ROOM_NAME)).thenReturn(false);
+        when(dispatchClient.listDispatch(ROOM_NAME)).thenReturn(listCall);
+        when(listCall.execute()).thenReturn(Response.success(List.of(dispatch())));
 
         service.ensureDispatched(ROOM_NAME);
 
-        verify(dispatchClient, never()).listDispatch(ROOM_NAME);
+        verify(dispatchClient, never()).createDispatch(
+                ROOM_NAME, LiveKitAgentDispatchService.AGENT_NAME);
+        verify(dispatchStore, never()).release(ROOM_NAME);
+    }
+
+    /** 다른 요청이 배치 중인데 실제 Agent가 아직 없으면 토큰 발급 흐름을 차단하는지 검증한다. */
+    @Test
+    void rejectsRequestWhenClaimIsOwnedButAgentIsMissing() throws IOException {
+        Call<List<AgentDispatch>> listCall = mock(Call.class);
+        when(dispatchStore.claim(ROOM_NAME)).thenReturn(false);
+        when(dispatchClient.listDispatch(ROOM_NAME)).thenReturn(listCall);
+        when(listCall.execute()).thenReturn(Response.success(List.of()));
+
+        assertThatThrownBy(() -> service.ensureDispatched(ROOM_NAME))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.LIVEKIT_OPERATION_FAILED));
+        verify(dispatchStore, never()).release(ROOM_NAME);
     }
 
     /** LiveKit 통신 실패 시 Redis 선점을 해제하고 표준 오류를 반환하는지 검증한다. */

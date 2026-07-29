@@ -5,12 +5,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-/** 동일 팬미팅 Room에 AI Agent가 중복 배치되지 않도록 Redis 선점 상태를 관리한다. */
+/** 동일 공용 영상통화 Room에 AI Agent가 동시에 중복 배치되지 않도록 Redis 잠금을 관리한다. */
 @Component
 public class LiveKitAgentDispatchStore {
 
-    private static final Duration DISPATCH_MARKER_TTL = Duration.ofHours(12);
-    private static final String KEY_PREFIX = "livekit:agent-dispatch:";
+    private static final Duration DISPATCH_CLAIM_TTL = Duration.ofSeconds(30);
+    private static final String KEY_PREFIX = "livekit:agent-dispatch-claim:";
 
     private final StringRedisTemplate redisTemplate;
 
@@ -24,7 +24,7 @@ public class LiveKitAgentDispatchStore {
     }
 
     /**
-     * 해당 Room의 Agent 배치 권한을 원자적으로 선점한다.
+     * 해당 Room의 Agent 배치 권한을 짧은 시간 동안 원자적으로 선점한다.
      *
      * @param roomName LiveKit Room 이름
      * @return 최초 선점에 성공하면 {@code true}
@@ -33,12 +33,12 @@ public class LiveKitAgentDispatchStore {
         return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(
                 key(roomName),
                 "1",
-                DISPATCH_MARKER_TTL
+                DISPATCH_CLAIM_TTL
         ));
     }
 
     /**
-     * Agent 배치가 실패한 Room의 선점 상태를 제거해 다음 요청에서 재시도할 수 있게 한다.
+     * Agent 존재 확인 또는 배치를 마친 Room의 잠금을 해제한다.
      *
      * @param roomName LiveKit Room 이름
      */

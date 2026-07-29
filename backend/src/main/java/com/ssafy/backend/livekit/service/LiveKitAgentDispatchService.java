@@ -10,7 +10,7 @@ import retrofit2.Response;
 import java.io.IOException;
 import java.util.List;
 
-/** 팬미팅 Room마다 자막 AI Agent를 한 번만 자동 배치한다. */
+/** 공용 영상통화 Room의 실제 상태를 확인해 자막 AI Agent를 한 번만 자동 배치한다. */
 @Service
 public class LiveKitAgentDispatchService {
 
@@ -40,13 +40,14 @@ public class LiveKitAgentDispatchService {
      * @throws BusinessException LiveKit Dispatch 조회 또는 생성에 실패한 경우
      */
     public void ensureDispatched(String roomName) {
-        if (!dispatchStore.claim(roomName)) {
-            return;
-        }
+        boolean claimed = dispatchStore.claim(roomName);
 
         try {
             if (hasExistingDispatch(roomName)) {
                 return;
+            }
+            if (!claimed) {
+                throw new BusinessException(ErrorCode.LIVEKIT_OPERATION_FAILED);
             }
 
             Response<AgentDispatch> response = dispatchClient
@@ -56,11 +57,11 @@ public class LiveKitAgentDispatchService {
                 throw new BusinessException(ErrorCode.LIVEKIT_OPERATION_FAILED);
             }
         } catch (IOException exception) {
-            dispatchStore.release(roomName);
             throw new BusinessException(ErrorCode.LIVEKIT_OPERATION_FAILED);
-        } catch (RuntimeException exception) {
-            dispatchStore.release(roomName);
-            throw exception;
+        } finally {
+            if (claimed) {
+                dispatchStore.release(roomName);
+            }
         }
     }
 
