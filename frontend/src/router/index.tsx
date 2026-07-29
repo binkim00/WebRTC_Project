@@ -22,9 +22,9 @@ import {
   FanEventDetailPage,
   FanEventListPage,
   FanMeetingCallPage,
-  FanMeetingWaitingPage,
   FanProfilePage,
 } from '../pages/fan/FanRoutePages'
+import { FanMeetingWaitingPage } from '../pages/fan/FanMeetingWaitingPage'
 import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
 import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
 import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
@@ -72,6 +72,10 @@ export const router = createBrowserRouter([
       {
         path: 'fan/fan-meetings/:fanMeetingId/complete',
         Component: FanMeetingCompletePage,
+      },
+      {
+        path: 'fan/fan-meetings/:fanMeetingId/waiting',
+        Component: FanMeetingWaitingPage,
       },
       {
         path: 'fan/mypage/fan-meetings',
@@ -125,10 +129,6 @@ export const router = createBrowserRouter([
           {
             path: 'events/:eventId/application-result',
             Component: FanApplicationResultPage,
-          },
-          {
-            path: 'fan-meetings/:fanMeetingId/waiting',
-            Component: FanMeetingWaitingPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/call',

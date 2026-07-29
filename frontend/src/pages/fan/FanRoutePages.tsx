@@ -34,17 +34,6 @@ export function FanApplicationResultPage() {
   )
 }
 
-export function FanMeetingWaitingPage() {
-  return (
-    <ScreenPage
-      description="영상 통화 시작 전 순서를 기다리는 팬 화면입니다."
-      requiredParams={['fanMeetingId']}
-      screenId="FN-004"
-      title="대기 화면"
-    />
-  )
-}
-
 export function FanMeetingCallPage() {
   const { fanMeetingId, callSessionId } = useParams()
   const [searchParams] = useSearchParams()
