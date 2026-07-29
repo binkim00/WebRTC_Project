@@ -9,6 +9,10 @@ services:
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USERNAME}
       MYSQL_PASSWORD: ${DB_PASSWORD}
+    
+    ports:
+      - "127.0.0.1:3307:3306"
+    
 
     volumes:
       - /home/ubuntu/docker/project/mysql/data:/var/lib/mysql
@@ -76,8 +80,9 @@ services:
 
   backend:
     build:
-        context: ../../backend
-        dockerfile: Dockerfile
+      context: ../../backend
+      dockerfile: Dockerfile
+
     image: melly-backend:local
     container_name: backend
     restart: unless-stopped
@@ -88,16 +93,18 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
 
       LIVEKIT_URL: ${LIVEKIT_URL}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       LIVEKIT_TEST_TOKEN_ENABLED: ${LIVEKIT_TEST_TOKEN_ENABLED}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
 
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      JWT_SECRET: ${JWT_SECRET}
 
     depends_on:
       mysql:
@@ -112,9 +119,26 @@ services:
     build:
       context: ../../frontend
       dockerfile: Dockerfile
+
     image: melly-frontend:local
     container_name: frontend
     restart: unless-stopped
+
+    networks:
+      - melly-network
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "9443:9443"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
 
     networks:
       - melly-network
@@ -128,6 +152,7 @@ services:
       - backend
       - frontend
       - livekit
+      - portainer
 
     ports:
       - "80:80"
@@ -144,6 +169,7 @@ services:
     build:
       context: ./jenkins
       dockerfile: Dockerfile
+
     image: melly-jenkins:local
     container_name: jenkins
     restart: unless-stopped
@@ -154,13 +180,19 @@ services:
       - "50000:50000"
 
     volumes:
-      - ./jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/ubuntu/docker/project/jenkins_home:/var/jenkins_home
+      - /home/ubuntu/docker/project:/home/ubuntu/docker/project
 
     networks:
       - melly-network
 
+volumes:
+  portainer_data:
+    external: true
+    name: portainer_data
+
 networks:
   melly-network:
-    driver: bridge
+    external: true
+    name: project_melly-network

@@ -13,6 +13,9 @@ HELP.md
 .env.*
 !.env.example
 
+### Local Codex instructions ###
+/AGENTS.md
+
 ### Logs ###
 *.log
 logs/

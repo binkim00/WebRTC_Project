@@ -40,6 +40,10 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Node.js dependencies
+node_modules/
+
+
 # Python
 __pycache__/
 *.pyc
