@@ -7,7 +7,6 @@ import { ManagerLayout } from '../layouts/ManagerLayout'
 import { LoginPage, SignupPage } from '../pages/auth/AuthRoutePages'
 import {
   HomePage,
-  MeetingFanListPage,
   MeetingStatisticsPage,
 } from '../pages/common/CommonRoutePages'
 import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
@@ -26,6 +25,8 @@ import {
   FanProfilePage,
 } from '../pages/fan/FanRoutePages'
 import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
+import { FanMeetingParticipantsPage } from '../pages/common/FanMeetingParticipantsPage'
+import { ManagerFanListPage } from '../pages/manager/ManagerFanListPage'
 import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
 import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
 import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
@@ -82,7 +83,7 @@ export const router = createBrowserRouter([
         children: [
           {
             path: 'fans',
-            Component: MeetingFanListPage,
+            Component: FanMeetingParticipantsPage,
           },
           {
             path: 'device-check',
@@ -97,6 +98,14 @@ export const router = createBrowserRouter([
       {
         path: 'influencer/my-fan-meetings',
         Component: InfluencerMyMeetingPage,
+      },
+      {
+        path: 'influencer/fan-meetings',
+        Component: InfluencerMyMeetingPage,
+      },
+      {
+        path: 'influencer/fan-meetings/:fanMeetingId/fans',
+        Component: FanMeetingParticipantsPage,
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/ready',
@@ -217,6 +226,10 @@ export const router = createBrowserRouter([
           {
             path: 'fan-meetings/:fanMeetingId/monitor',
             Component: ManagerMeetingMonitorPage,
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/fans',
+            Component: ManagerFanListPage,
           },
           {
             path: 'mypage',

@@ -1,5 +1,6 @@
 import { ArrowRightIcon, SignOutIcon } from '@phosphor-icons/react'
-import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { clearAuthSession, getAuthSession } from './api/auth'
 import { TopNavigation } from './components'
 import { isVideoCallPath } from './router/routeState'
 
@@ -16,12 +17,13 @@ const fanCallNavigationItems = [
 ] as const
 
 const influencerCallNavigationItems = [
-  { label: '팬미팅', to: '/influencer/mypage/fan-meetings' },
-  { label: '마이페이지', to: '/influencer/mypage/profile' },
+  { label: '나의 팬미팅', to: '/influencer/fan-meetings' },
+  { label: '내 마이페이지', to: '/influencer/mypage/profile' },
 ] as const
 
 function App() {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const isCallPage = isVideoCallPath(pathname)
   const isLoginPage = pathname === '/login'
@@ -29,6 +31,8 @@ function App() {
   const isAuthPage = isLoginPage || isSignupPage
   const isHomePage = pathname === '/'
   const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
+  const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
+  const isAuthenticated = getAuthSession() !== null
   const isQaCapture =
     import.meta.env.DEV &&
     isCallPage &&
@@ -42,7 +46,14 @@ function App() {
     ? fanCallNavigationItems
     : pathname.startsWith('/influencer/fan-meetings/')
       ? influencerCallNavigationItems
-      : defaultNavigationItems
+      : isAuthenticated
+        ? defaultNavigationItems.filter((item) => item.label !== '로그인')
+        : defaultNavigationItems
+
+  function handleLogout() {
+    clearAuthSession()
+    navigate('/', { replace: true })
+  }
 
   return (
     <div
@@ -74,15 +85,27 @@ function App() {
               <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
                 이벤트
               </Link>
-              <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
-                로그인
-              </Link>
-              <Link
-                className="inline-flex min-h-11 items-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-white shadow-[var(--shadow-final-cta)] transition hover:bg-[var(--color-primary-coral-hover)]"
-                to="/signup"
-              >
-                회원가입
-              </Link>
+              {isAuthenticated ? (
+                <button
+                  className="font-semibold hover:text-[var(--color-primary-coral)]"
+                  onClick={handleLogout}
+                  type="button"
+                >
+                  로그아웃
+                </button>
+              ) : (
+                <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
+                  로그인
+                </Link>
+              )}
+              {!isAuthenticated ? (
+                <Link
+                  className="inline-flex min-h-11 items-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-white shadow-[var(--shadow-final-cta)] transition hover:bg-[var(--color-primary-coral-hover)]"
+                  to="/signup"
+                >
+                  회원가입
+                </Link>
+              ) : null}
             </nav>
           ) : isDeviceCheckPage ? (
             <Link
@@ -111,6 +134,14 @@ function App() {
               이벤트 둘러보기
               <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
             </Link>
+          ) : isAuthenticated ? (
+            <button
+              className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              onClick={handleLogout}
+              type="button"
+            >
+              로그아웃
+            </button>
           ) : undefined
         }
         brand="MELLY"
@@ -131,7 +162,7 @@ function App() {
       >
         <Outlet />
       </main>
-      {isCallPage || isAuthPage || isHomePage || isDeviceCheckPage ? null : (
+      {isCallPage || isAuthPage || isHomePage || isDeviceCheckPage || isFanListPage ? null : (
         <footer className="mt-auto border-t border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-4 py-4 text-center text-sm text-[var(--color-text-secondary)] sm:px-6">
           Notion 화면 라우팅 정의서를 기준으로 구성한 라우팅 학습 화면입니다.
         </footer>
