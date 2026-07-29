@@ -42,10 +42,10 @@ import {
   ManagerEventListPage,
   ManagerMeetingFormPage,
   ManagerMeetingListPage,
-  ManagerMeetingMonitorPage,
   ManagerMyPage,
   ManagerNoticesPage,
 } from '../pages/manager/ManagerRoutePages'
+import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
 
 export const router = createBrowserRouter([
   {
@@ -225,7 +225,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/:fanMeetingId/monitor',
-            Component: ManagerMeetingMonitorPage,
+            Component: LiveManagerMeetingMonitorPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/fans',

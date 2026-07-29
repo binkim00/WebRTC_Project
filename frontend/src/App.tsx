@@ -21,6 +21,12 @@ const influencerCallNavigationItems = [
   { label: '내 마이페이지', to: '/influencer/mypage/profile' },
 ] as const
 
+const managerMonitorNavigationItems = [
+  { label: '팬미팅 관리', to: '/manager/fan-meetings' },
+  { label: '홍보 및 응모 관리', to: '/manager/events' },
+  { label: '내 마이페이지', to: '/manager/mypage' },
+] as const
+
 function App() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -32,6 +38,7 @@ function App() {
   const isHomePage = pathname === '/'
   const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
+  const isManagerMonitorPage = /^\/manager\/fan-meetings\/[^/]+\/monitor$/.test(pathname)
   const isAuthenticated = getAuthSession() !== null
   const isQaCapture =
     import.meta.env.DEV &&
@@ -42,7 +49,9 @@ function App() {
     import.meta.env.DEV && !isCallPage && searchParams.get('qa') === '1'
   const navigationItems = isAuthPage || isHomePage || isDeviceCheckPage
     ? []
-    : pathname.startsWith('/fan/fan-meetings/')
+    : isManagerMonitorPage
+      ? managerMonitorNavigationItems
+      : pathname.startsWith('/fan/fan-meetings/')
     ? fanCallNavigationItems
     : pathname.startsWith('/influencer/fan-meetings/')
       ? influencerCallNavigationItems

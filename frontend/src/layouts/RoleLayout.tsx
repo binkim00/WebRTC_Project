@@ -15,8 +15,10 @@ type RoleLayoutProps = {
 
 export function RoleLayout({ title, description, navigation }: RoleLayoutProps) {
   const { pathname } = useLocation()
+  const isManagerMonitorPage =
+    /^\/manager\/fan-meetings\/[^/]+\/monitor\/?$/.test(pathname)
 
-  if (isVideoCallPath(pathname)) {
+  if (isVideoCallPath(pathname) || isManagerMonitorPage) {
     return <Outlet />
   }
 
