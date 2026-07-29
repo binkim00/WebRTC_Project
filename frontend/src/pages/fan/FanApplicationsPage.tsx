@@ -11,6 +11,7 @@ import {
   Button,
   Card,
   CardContent,
+  Pagination,
   Select,
   TextField,
 } from '../../components'
@@ -243,54 +244,12 @@ export function FanApplicationsPage() {
           })}
         </div>
 
-        <nav
-          aria-label="페이지 이동"
-          className="mt-8 flex items-center justify-center gap-5"
-        >
-          <button
-            aria-label="이전 페이지"
-            className="inline-flex size-12 items-center justify-center text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-divider)]"
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage((page) => page - 1)}
-            type="button"
-          >
-            <ArrowLeft aria-hidden size={28} />
-          </button>
-
-          {Array.from({ length: totalPagesMock }, (_, index) => index + 1).map(
-            (page) => {
-              const isCurrentPage = page === currentPage
-
-              return (
-                <button
-                  aria-current={isCurrentPage ? 'page' : undefined}
-                  aria-label={`${page}페이지`}
-                  className={[
-                    'inline-flex size-12 items-center justify-center rounded-xl border text-base font-bold transition-colors',
-                    isCurrentPage
-                      ? 'border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
-                      : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
-                  ].join(' ')}
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  type="button"
-                >
-                  {page}
-                </button>
-              )
-            },
-          )}
-
-          <button
-            aria-label="다음 페이지"
-            className="inline-flex size-12 items-center justify-center text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-divider)]"
-            disabled={currentPage === totalPagesMock}
-            onClick={() => setCurrentPage((page) => page + 1)}
-            type="button"
-          >
-            <ArrowRight aria-hidden size={28} />
-          </button>
-        </nav>
+        <Pagination
+          className="mt-8"
+          currentPage={currentPage}
+          onPageChange={setCurrentPage}
+          totalPages={totalPagesMock}
+        />
       </section>
     </div>
   )

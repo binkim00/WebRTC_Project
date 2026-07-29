@@ -31,10 +31,10 @@ import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
 import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
 import {
   InfluencerMeetingCallPage,
-  InfluencerMeetingHistoryPage,
 } from '../pages/influencer/InfluencerRoutePages'
 import { InfluencerMeetingReadyPage } from '../pages/influencer/InfluencerMeetingReadyPage'
 import { InfluencerProfilePage } from '../pages/influencer/InfluencerProfilePage'
+import { InfluencerMeetingHistoryPage } from '../pages/influencer/InfluencerMeetingHistoryPage'
 import {
   ManagerApplicationsPage,
   ManagerEventFormPage,
@@ -127,6 +127,10 @@ export const router = createBrowserRouter([
         Component: InfluencerProfilePage,
       },
       {
+        path: 'influencer/mypage/fan-meetings',
+        Component: InfluencerMeetingHistoryPage,
+      },
+      {
         path: 'influencer/fan-meetings/:fanMeetingId/ready',
         Component: InfluencerMeetingReadyPage,
       },
@@ -167,10 +171,6 @@ export const router = createBrowserRouter([
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: InfluencerMeetingCallPage,
-          },
-          {
-            path: 'mypage/fan-meetings',
-            Component: InfluencerMeetingHistoryPage,
           },
         ],
       },

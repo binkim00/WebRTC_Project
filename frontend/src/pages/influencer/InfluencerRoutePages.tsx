@@ -1,6 +1,6 @@
 import { useParams, useSearchParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components'
-import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
+import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 export function InfluencerMeetingCallPage() {
   const { fanMeetingId, callSessionId } = useParams()
@@ -32,15 +32,6 @@ export function InfluencerMeetingCallPage() {
       meetingId={fanMeetingId}
       participantLabel="팬 영상"
       screenId="ID-003"
-    />
-  )
-}
-export function InfluencerMeetingHistoryPage() {
-  return (
-    <ScreenPage
-      description="인플루언서가 진행한 팬미팅 이력을 확인하는 화면입니다."
-      screenId="ID-005"
-      title="나의 팬미팅 이력"
     />
   )
 }
