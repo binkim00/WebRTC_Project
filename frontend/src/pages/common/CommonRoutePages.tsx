@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import heroJellies from '../../assets/main-hero-jellies.webp'
 import eventSeoun from '../../assets/main-event-seoun.webp'
-import { Button, IconButton } from '../../components'
+import { IconButton } from '../../components'
 import { ScreenPage } from '../../components/routing/ScreenPage'
 
 const featuredMeetings = [
@@ -116,8 +116,11 @@ export function HomePage() {
               <dd>{activeMeeting.status}</dd>
             </div>
           </dl>
-          <Link to={`/fan/events/${activeMeeting.id}`}>
-            <Button className="mt-8">상세 보기</Button>
+          <Link
+            className="mt-8 inline-flex min-h-[var(--control-height)] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-transparent bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] py-2 text-sm font-semibold text-white shadow-[var(--shadow-control)] transition-colors hover:bg-[var(--color-primary-coral-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary-coral)]"
+            to={`/fan/events/${activeMeeting.id}`}
+          >
+            상세 보기
           </Link>
         </div>
 

@@ -150,40 +150,54 @@ export function DeviceCheckPage() {
   const allReady = Boolean(videoTrackReady && audioTrackReady && networkReady)
 
   async function playTestSound() {
+    if (isPlayingTestSound) return
+
     setIsPlayingTestSound(true)
 
-    const audioContext = new AudioContext()
-    const oscillator = audioContext.createOscillator()
-    const gain = audioContext.createGain()
-    const destination = audioContext.createMediaStreamDestination()
     const audio = new Audio()
+    let audioContext: AudioContext | null = null
+    let oscillator: OscillatorNode | null = null
 
-    oscillator.frequency.value = 620
-    gain.gain.setValueAtTime(0.12, audioContext.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.8)
-    oscillator.connect(gain)
-    gain.connect(destination)
-    audio.srcObject = destination.stream
+    try {
+      audioContext = new AudioContext()
+      oscillator = audioContext.createOscillator()
+      const gain = audioContext.createGain()
+      const destination = audioContext.createMediaStreamDestination()
 
-    if (
-      selectedSpeakerId &&
-      selectedSpeakerId !== 'default' &&
-      'setSinkId' in audio &&
-      typeof audio.setSinkId === 'function'
-    ) {
-      await (audio as SinkSelectableAudioElement).setSinkId(selectedSpeakerId)
-    }
+      oscillator.frequency.value = 620
+      gain.gain.setValueAtTime(0.12, audioContext.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.8)
+      oscillator.connect(gain)
+      gain.connect(destination)
+      audio.srcObject = destination.stream
 
-    await audio.play()
-    oscillator.start()
-    oscillator.stop(audioContext.currentTime + 0.8)
+      if (
+        selectedSpeakerId &&
+        selectedSpeakerId !== 'default' &&
+        'setSinkId' in audio &&
+        typeof audio.setSinkId === 'function'
+      ) {
+        await (audio as SinkSelectableAudioElement).setSinkId(selectedSpeakerId)
+      }
 
-    window.setTimeout(() => {
+      await audio.play()
+      oscillator.start()
+      oscillator.stop(audioContext.currentTime + 0.8)
+
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 900))
+    } catch (error) {
+      console.warn('스피커 테스트를 재생하지 못했습니다.', error)
+    } finally {
+      try {
+        oscillator?.stop()
+      } catch {
+        // 이미 종료된 oscillator는 다시 stop할 수 없습니다.
+      }
       audio.pause()
       audio.srcObject = null
-      void audioContext.close()
+      await audioContext?.close().catch(() => undefined)
       setIsPlayingTestSound(false)
-    }, 900)
+    }
   }
 
   return (
