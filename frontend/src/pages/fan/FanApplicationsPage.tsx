@@ -96,7 +96,7 @@ const dateOptions = [
   { label: '이번 달', value: 'this-month' },
 ]
 
-const totalPagesMock = 2
+const applicationsPerPage = 2
 
 type ApplicationStatusFilter =
   | 'all'
@@ -198,6 +198,15 @@ export function FanApplicationsPage() {
       matchesDateFilter(application.meetingAt, filters.date)
     )
   })
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredApplications.length / applicationsPerPage),
+  )
+  const firstApplicationIndex = (currentPage - 1) * applicationsPerPage
+  const paginatedApplications = filteredApplications.slice(
+    firstApplicationIndex,
+    firstApplicationIndex + applicationsPerPage,
+  )
 
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-8">
@@ -283,7 +292,7 @@ export function FanApplicationsPage() {
         </Card>
 
         <div className="mt-6 grid gap-6 md:grid-cols-2">
-          {filteredApplications.map((application) => {
+          {paginatedApplications.map((application) => {
             const statusContent = applicationStatusContent[application.status]
 
             return (
@@ -340,7 +349,7 @@ export function FanApplicationsPage() {
             className="mt-8"
             currentPage={currentPage}
             onPageChange={setCurrentPage}
-            totalPages={totalPagesMock}
+            totalPages={totalPages}
           />
         ) : (
           <div className="mt-6 rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
