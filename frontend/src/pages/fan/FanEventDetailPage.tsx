@@ -187,7 +187,7 @@ export function FanEventDetailPage() {
                 모든 항목에 동의해야 응모할 수 있어요.
               </p>
 
-              {/* TODO: 응모 API 호출 및 응모 결과 화면 이동 */}
+              {/* TODO: API 연동 후 현재 사용자의 응모 여부·상태에 따라 화면을 분기하고, 미응모 시 응모 API 호출 */}
               <Button className="w-full" disabled={!allAgreed} size="lg">
                 응모하기
               </Button>

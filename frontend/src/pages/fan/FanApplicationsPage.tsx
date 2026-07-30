@@ -294,6 +294,7 @@ export function FanApplicationsPage() {
         <div className="mt-6 grid gap-6 md:grid-cols-2">
           {paginatedApplications.map((application) => {
             const statusContent = applicationStatusContent[application.status]
+            const canViewResult = application.status === 'WON'
 
             return (
               <Card className="overflow-hidden" key={application.applicationId}>
@@ -332,9 +333,13 @@ export function FanApplicationsPage() {
                     </div>
                     <Link
                       className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 py-1.5 text-sm font-semibold transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
-                      to={`/fan/events/${application.eventId}`}
+                      to={
+                        canViewResult
+                          ? `/fan/events/${application.eventId}/application-result`
+                          : `/fan/events/${application.eventId}`
+                      }
                     >
-                      상세히 보기
+                      {canViewResult ? '결과 확인' : '상세히 보기'}
                       <ArrowRight aria-hidden size={18} weight="bold" />
                     </Link>
                   </div>
