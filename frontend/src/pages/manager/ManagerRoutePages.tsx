@@ -8,9 +8,9 @@ import {
   Plus,
   VideoCamera,
 } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { getAuthSession } from '../../api/auth'
+import { getAuthSession, replaceAuthSession } from '../../api/authSession'
 import { forceEndCallSession } from '../../api/callSessions'
 import {
   createFanMeeting,
@@ -19,7 +19,12 @@ import {
   type ManagerEvent,
   type ManagerNotice,
 } from '../../api/managerOperations'
-import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Select, TextField, Textarea } from '../../components'
+import {
+  getMyProfile,
+  updateMyProfile,
+  type UserProfile,
+} from '../../api/users'
+import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, Select, TextField, Textarea } from '../../components'
 
 type FormPageProps = { mode: 'create' | 'edit' }
 
@@ -438,17 +443,111 @@ export function ManagerNoticesPage() {
 }
 
 export function ManagerMyPage() {
-  const session = getAuthSession()
-  const profile = session
-    ? {
-        nickname: session.nickname,
-        role: session.role,
-        name: session.nickname,
-      }
-    : null
-  const loading = false
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [editOpen, setEditOpen] = useState(false)
+  const [nickname, setNickname] = useState('')
+  const [preferredLanguage, setPreferredLanguage] = useState('KOREAN')
+  const [submitting, setSubmitting] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
-  const displayName = profile?.name ?? profile?.nickname
+  useEffect(() => {
+    const session = getAuthSession()
+
+    if (!session) {
+      setLoadError('로그인 후 프로필을 확인할 수 있습니다.')
+      setLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+
+    getMyProfile(session.accessToken, controller.signal)
+      .then((nextProfile) => {
+        setProfile(nextProfile)
+        setNickname(nextProfile.nickname)
+        setPreferredLanguage(nextProfile.preferredLanguage)
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : '프로필 정보를 불러오지 못했습니다.',
+        )
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [])
+
+  function handleEditOpen() {
+    if (!profile) return
+
+    setNickname(profile.nickname)
+    setPreferredLanguage(profile.preferredLanguage)
+    setEditError('')
+    setEditOpen(true)
+  }
+
+  async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const trimmedNickname = nickname.trim()
+    if (!trimmedNickname) {
+      setEditError('닉네임을 입력해 주세요.')
+      return
+    }
+
+    const session = getAuthSession()
+    if (!session) {
+      setEditError('로그인 정보가 없습니다. 다시 로그인해 주세요.')
+      return
+    }
+
+    setSubmitting(true)
+    setEditError('')
+
+    try {
+      const updated = await updateMyProfile(
+        {
+          nickname: trimmedNickname,
+          preferredLanguage,
+        },
+        session.accessToken,
+      )
+
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              email: updated.email,
+              nickname: updated.nickname,
+              profileImageUrl: updated.profileImageUrl,
+              preferredLanguage: updated.preferredLanguage,
+            }
+          : current,
+      )
+      replaceAuthSession({ ...session, nickname: updated.nickname })
+      setSuccessMessage('회원정보가 수정되었습니다.')
+      setEditOpen(false)
+    } catch (error: unknown) {
+      setEditError(
+        error instanceof Error
+          ? error.message
+          : '회원정보를 수정하지 못했습니다.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const displayName = profile?.nickname
   const roleLabel = profile?.role === 'MANAGER' ? '매니저' : profile?.role
 
   return (
@@ -458,9 +557,25 @@ export function ManagerMyPage() {
         description="개인정보를 확인하고 팬미팅 관리 이력으로 이동하세요."
       />
 
+      {successMessage ? (
+        <AlertBanner
+          onDismiss={() => setSuccessMessage('')}
+          title="수정 완료"
+          variant="success"
+        >
+          {successMessage}
+        </AlertBanner>
+      ) : null}
+
       {loading ? <Card className="p-8">프로필 정보를 불러오는 중입니다.</Card> : null}
 
-      {!loading && !profile ? (
+      {!loading && loadError ? (
+        <AlertBanner title="프로필 조회 실패" variant="error">
+          {loadError}
+        </AlertBanner>
+      ) : null}
+
+      {!loading && !profile && !loadError ? (
         <Card className="grid gap-4 p-8">
           <h2 className="text-xl font-black">로그인이 필요합니다.</h2>
           <p className="text-sm text-[var(--color-text-secondary)]">
@@ -479,9 +594,17 @@ export function ManagerMyPage() {
         <>
           <Card className="p-6">
             <div className="flex flex-wrap items-center gap-6">
-              <div className="flex size-28 items-center justify-center rounded-2xl bg-[var(--color-primary-coral-soft)] text-4xl font-black text-[var(--color-primary-coral)]">
-                {displayName?.slice(0, 1)}
-              </div>
+              {profile.profileImageUrl ? (
+                <img
+                  alt={`${profile.nickname} 프로필`}
+                  className="size-28 rounded-2xl border border-[var(--color-border-panel)] object-cover"
+                  src={profile.profileImageUrl}
+                />
+              ) : (
+                <div className="flex size-28 items-center justify-center rounded-2xl bg-[var(--color-primary-coral-soft)] text-4xl font-black text-[var(--color-primary-coral)]">
+                  {displayName?.slice(0, 1)}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <Badge variant="primary">{roleLabel}</Badge>
                 <h2 className="mt-3 text-3xl font-black">{displayName}</h2>
@@ -492,10 +615,28 @@ export function ManagerMyPage() {
                       {profile.nickname}
                     </dd>
                   </div>
+                  <div>
+                    <dt className="inline">아이디 </dt>
+                    <dd className="inline font-bold text-[var(--color-text-primary)]">
+                      {profile.loginId}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="inline">이메일 </dt>
+                    <dd className="inline font-bold text-[var(--color-text-primary)]">
+                      {profile.email}
+                    </dd>
+                  </div>
                 </dl>
               </div>
               <div className="grid gap-2">
-                <Button leadingIcon={<PencilSimple size={17} />}>회원정보 수정</Button>
+                <Button
+                  leadingIcon={<PencilSimple size={17} />}
+                  onClick={handleEditOpen}
+                >
+                  회원정보 수정
+                </Button>
+                {/* TODO: 비밀번호 변경 API 연결 */}
                 <Button variant="secondary">비밀번호 변경</Button>
               </div>
             </div>
@@ -519,6 +660,59 @@ export function ManagerMyPage() {
           </Card>
         </>
       ) : null}
+
+      <Dialog
+        description="닉네임과 선호 언어를 변경할 수 있습니다."
+        footer={
+          <>
+            <Button
+              disabled={submitting}
+              onClick={() => setEditOpen(false)}
+              variant="secondary"
+            >
+              취소
+            </Button>
+            <Button
+              form="manager-profile-edit-form"
+              loading={submitting}
+              type="submit"
+            >
+              저장
+            </Button>
+          </>
+        }
+        onOpenChange={setEditOpen}
+        open={editOpen}
+        title="회원정보 수정"
+      >
+        <form
+          className="grid gap-5"
+          id="manager-profile-edit-form"
+          onSubmit={handleProfileSubmit}
+        >
+          <TextField
+            label="닉네임"
+            maxLength={30}
+            onChange={(event) => setNickname(event.currentTarget.value)}
+            required
+            value={nickname}
+          />
+          <Select
+            label="선호 언어"
+            onChange={(event) => setPreferredLanguage(event.currentTarget.value)}
+            options={[
+              { value: 'KOREAN', label: '한국어' },
+              { value: 'ENGLISH', label: '영어' },
+            ]}
+            value={preferredLanguage}
+          />
+          {editError ? (
+            <AlertBanner title="수정 실패" variant="error">
+              {editError}
+            </AlertBanner>
+          ) : null}
+        </form>
+      </Dialog>
     </div>
   )
 }
