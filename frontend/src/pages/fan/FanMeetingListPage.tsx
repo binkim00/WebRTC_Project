@@ -1,5 +1,17 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Badge, Button, Card, CardContent, CardFooter, Tabs } from '../../components'
+import { useState } from 'react'
+import { ApiError } from '../../api/ApiError'
+import { getAuthSession } from '../../api/authSession'
+import { enterQueue } from '../../api/queue'
+import {
+    AlertBanner,
+    Badge,
+    Button,
+    Card,
+    CardContent,
+    CardFooter,
+    Tabs,
+} from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 type FanMeetingListItem = {
@@ -63,6 +75,11 @@ const FAN_MEETING_TABS = [
 export function FanMeetingListPage() {
     const [searchParam] = useSearchParams()
     const navigate = useNavigate()
+    const [enteringMeetingId, setEnteringMeetingId] = useState<number>()
+    const [queueError, setQueueError] = useState<{
+        meetingId: number
+        message: string
+    }>()
     const status = searchParam.get('status')
 
     if (status !== 'upcoming' && status !== 'completed') {
@@ -78,6 +95,53 @@ export function FanMeetingListPage() {
     const fanMeetings = MOCK_FAN_MEETINGS.filter(
         (fanMeeting) => fanMeeting.status === status,
     )
+
+    async function handleEnterQueue(meetingId: number) {
+        if (enteringMeetingId !== undefined) return
+
+        const session = getAuthSession()
+
+        if (!session) {
+            setQueueError({
+                meetingId,
+                message: '대기실에 입장하려면 먼저 로그인해 주세요.',
+            })
+            return
+        }
+
+        if (session.role !== 'FAN') {
+            setQueueError({
+                meetingId,
+                message: '팬 계정으로 로그인한 확정 참가자만 대기실에 입장할 수 있습니다.',
+            })
+            return
+        }
+
+        setEnteringMeetingId(meetingId)
+        setQueueError(undefined)
+
+        try {
+            await enterQueue(meetingId, session.accessToken)
+            navigate(`/fan/fan-meetings/${meetingId}/waiting`)
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 409) {
+                navigate(`/fan/fan-meetings/${meetingId}/waiting`)
+                return
+            }
+
+            setQueueError({
+                meetingId,
+                message:
+                    error instanceof ApiError && error.status === 403
+                        ? '확정 참가자로 등록된 팬만 대기실에 입장할 수 있습니다.'
+                        : error instanceof ApiError || error instanceof TypeError
+                          ? error.message
+                          : '대기실에 입장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+            })
+        } finally {
+            setEnteringMeetingId(undefined)
+        }
+    }
 
     return (
         <div className="mx-auto w-full max-w-6xl">
@@ -162,11 +226,25 @@ export function FanMeetingListPage() {
                                         </p>
                                         <Button
                                             className="w-full"
+                                            disabled={enteringMeetingId !== undefined}
+                                            loading={enteringMeetingId === fanMeeting.id}
+                                            onClick={() =>
+                                                fanMeeting.canEnter
+                                                    ? void handleEnterQueue(fanMeeting.id)
+                                                    : navigate(
+                                                          `/fan-meetings/${fanMeeting.id}/device-check`,
+                                                      )
+                                            }
                                             size="lg"
                                             variant={fanMeeting.canEnter ? 'primary' : 'secondary'}
                                         >
                                             {fanMeeting.canEnter ? '입장하기' : '장비 점검하기'}
                                         </Button>
+                                        {queueError?.meetingId === fanMeeting.id ? (
+                                            <AlertBanner title="대기실 입장 실패" variant="error">
+                                                {queueError.message}
+                                            </AlertBanner>
+                                        ) : null}
                                     </>
                                 ) : (
                                     <>
