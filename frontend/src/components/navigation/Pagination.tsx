@@ -1,4 +1,4 @@
-import { Button } from '../ui/Button'
+import { ArrowLeft, ArrowRight } from '@phosphor-icons/react'
 import { cn } from '../ui/cn'
 
 type PageItem = number | 'ellipsis-start' | 'ellipsis-end'
@@ -13,10 +13,26 @@ function createPageItems(currentPage: number, totalPages: number): PageItem[] {
   }
 
   if (currentPage >= totalPages - 3) {
-    return [1, 'ellipsis-start', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+    return [
+      1,
+      'ellipsis-start',
+      totalPages - 4,
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ]
   }
 
-  return [1, 'ellipsis-start', currentPage - 1, currentPage, currentPage + 1, 'ellipsis-end', totalPages]
+  return [
+    1,
+    'ellipsis-start',
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    'ellipsis-end',
+    totalPages,
+  ]
 }
 
 export type PaginationProps = {
@@ -39,48 +55,55 @@ export function Pagination({
   return (
     <nav
       aria-label="페이지 이동"
-      className={cn('flex flex-wrap items-center justify-center gap-1', className)}
+      className={cn('flex flex-wrap items-center justify-center gap-5', className)}
     >
-      <Button
+      <button
         aria-label="이전 페이지"
+        className="inline-flex size-12 items-center justify-center text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-divider)]"
         disabled={safeCurrent === 1}
         onClick={() => onPageChange(safeCurrent - 1)}
-        size="sm"
-        variant="outline"
+        type="button"
       >
-        이전
-      </Button>
+        <ArrowLeft aria-hidden size={28} />
+      </button>
+
       {pageItems.map((item) =>
         typeof item === 'number' ? (
-          <Button
+          <button
             aria-current={item === safeCurrent ? 'page' : undefined}
             aria-label={`${item}페이지`}
+            className={cn(
+              'inline-flex size-12 items-center justify-center rounded-xl border text-base font-bold transition-colors',
+              item === safeCurrent
+                ? 'border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
+                : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
+            )}
             key={item}
             onClick={() => onPageChange(item)}
-            size="sm"
-            variant={item === safeCurrent ? 'primary' : 'ghost'}
+            type="button"
           >
             {item}
-          </Button>
+          </button>
         ) : (
           <span
-            aria-hidden="true"
-            className="px-2 text-[var(--color-text-tertiary)]"
+            aria-hidden
+            className="px-1 text-[var(--color-text-tertiary)]"
             key={item}
           >
             …
           </span>
         ),
       )}
-      <Button
+
+      <button
         aria-label="다음 페이지"
+        className="inline-flex size-12 items-center justify-center text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-divider)]"
         disabled={safeCurrent === safeTotal}
         onClick={() => onPageChange(safeCurrent + 1)}
-        size="sm"
-        variant="outline"
+        type="button"
       >
-        다음
-      </Button>
+        <ArrowRight aria-hidden size={28} />
+      </button>
     </nav>
   )
 }
