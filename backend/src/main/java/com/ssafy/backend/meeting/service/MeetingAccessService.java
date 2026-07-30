@@ -49,6 +49,24 @@ public class MeetingAccessService {
     }
 
     /**
+     * 사용자가 해당 팬미팅을 주최한 인플루언서 본인인지 검증한다.
+     * 매니저나 조직 구성원은 통과하지 못하므로 인플루언서 전용 기능에만 사용한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param user 검증할 활성 사용자
+     * @return 권한 검증을 통과한 팬미팅
+     * @throws BusinessException 팬미팅이 없거나 해당 팬미팅의 인플루언서가 아닌 경우
+     */
+    @Transactional(readOnly = true)
+    public FanMeeting requireInfluencer(Long meetingId, User user) {
+        FanMeeting meeting = requireMeeting(meetingId);
+        if (!sameUser(meeting.getInfluencer(), user)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        return meeting;
+    }
+
+    /**
      * 사용자가 해당 팬미팅의 매니저인지 검증한다.
      *
      * @param meetingId 팬미팅 식별자
