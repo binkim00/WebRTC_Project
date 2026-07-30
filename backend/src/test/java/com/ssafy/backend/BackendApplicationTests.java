@@ -16,6 +16,7 @@ import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.organization.repository.OrganizationRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
+import com.ssafy.backend.post.repository.PostRepository;
 import com.ssafy.backend.queue.repository.QueueChangeRequestRepository;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
 import com.ssafy.backend.user.repository.UserRepository;
@@ -91,6 +92,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private InfluencerProfileRepository influencerProfileRepository;
+
+    @MockitoBean
+    private PostRepository postRepository;
 
     /**
      * DB 자동 구성 없이도 Spring 애플리케이션 컨텍스트가 정상적으로 시작되는지 확인한다.
