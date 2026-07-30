@@ -12,9 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 /**
  * 팬과 인플루언서의 팔로잉 관계를 저장하는 엔티티다.
@@ -28,7 +26,6 @@ import lombok.NoArgsConstructor;
                 columnNames = {"follower_user_id", "followed_influencer_id"}
         )
 )
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Following extends BaseCreatedTimeEntity {
 
     @Id
@@ -43,4 +40,30 @@ public class Following extends BaseCreatedTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "followed_influencer_id", nullable = false)
     private User followedInfluencer;
+
+    /** JPA가 엔티티를 생성할 때 사용하는 기본 생성자다. */
+    protected Following() {
+    }
+
+    /**
+     * 검증된 팬과 인플루언서 사이의 팔로우 관계를 생성한다.
+     *
+     * @param follower 팔로우를 요청한 팬
+     * @param followedInfluencer 팔로우 대상 인플루언서
+     */
+    private Following(User follower, User followedInfluencer) {
+        this.follower = follower;
+        this.followedInfluencer = followedInfluencer;
+    }
+
+    /**
+     * 검증된 팬과 인플루언서 사이의 팔로우 관계를 생성한다.
+     *
+     * @param follower 팔로우를 요청한 팬
+     * @param followedInfluencer 팔로우 대상 인플루언서
+     * @return 새 팔로우 관계
+     */
+    public static Following follow(User follower, User followedInfluencer) {
+        return new Following(follower, followedInfluencer);
+    }
 }

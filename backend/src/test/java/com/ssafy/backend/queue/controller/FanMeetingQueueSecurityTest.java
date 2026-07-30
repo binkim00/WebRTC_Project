@@ -3,6 +3,8 @@ package com.ssafy.backend.queue.controller;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
 import com.ssafy.backend.call.repository.CallSessionRepository;
+import com.ssafy.backend.influencer.repository.FollowingRepository;
+import com.ssafy.backend.influencer.repository.InfluencerProfileRepository;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
@@ -96,6 +98,12 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private NotificationRepository notificationRepository;
+
+    @MockitoBean
+    private FollowingRepository followingRepository;
+
+    @MockitoBean
+    private InfluencerProfileRepository influencerProfileRepository;
 
     /** 인증 정보가 없어도 공개 팬미팅 목록 API에 접근할 수 있는지 검증한다. */
     @Test
