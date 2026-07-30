@@ -6,6 +6,7 @@ import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
 import com.ssafy.backend.call.repository.CallSessionRepository;
+import com.ssafy.backend.device.repository.DeviceCheckRepository;
 import com.ssafy.backend.influencer.repository.FollowingRepository;
 import com.ssafy.backend.influencer.repository.InfluencerProfileRepository;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
@@ -51,6 +52,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private ParticipantRepository participantRepository;
+
+    @MockitoBean
+    private DeviceCheckRepository deviceCheckRepository;
 
     @MockitoBean
     private QueueEntryRepository queueEntryRepository;
