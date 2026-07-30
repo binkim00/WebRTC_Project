@@ -3,6 +3,8 @@ package com.ssafy.backend;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
 import com.ssafy.backend.call.repository.CallSessionRepository;
+import com.ssafy.backend.influencer.repository.FollowingRepository;
+import com.ssafy.backend.influencer.repository.InfluencerProfileRepository;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
@@ -63,6 +65,12 @@ class BackendApplicationTests {
 
     @MockitoBean
     private NotificationRepository notificationRepository;
+
+    @MockitoBean
+    private FollowingRepository followingRepository;
+
+    @MockitoBean
+    private InfluencerProfileRepository influencerProfileRepository;
 
     /**
      * DB 자동 구성 없이도 Spring 애플리케이션 컨텍스트가 정상적으로 시작되는지 확인한다.
