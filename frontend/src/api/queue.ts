@@ -15,9 +15,9 @@ export type QueueEnterResponse = {
 export type QueueSnapshotResponse = {
   queueEntryId: number
   position: number
-  peopleAhead: number
-  estimatedWaitSeconds: number
-  status: string
+  aheadCount: number
+  estimatedWaitSec: number
+  displayStatus: string
   callAttemptCount: number
   calledAt: string | null
   callSessionId: number | null

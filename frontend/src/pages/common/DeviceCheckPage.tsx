@@ -463,7 +463,7 @@ export function DeviceCheckPage() {
           <Button
             className="w-full shadow-[var(--shadow-final-cta)]"
             disabled={!allReady}
-            onClick={() => navigate(`/fan/fan-meetings/${encodeURIComponent(fanMeetingId)}/call`)}
+            onClick={() => navigate(`/fan/fan-meetings/${encodeURIComponent(fanMeetingId)}/waiting`)}
             size="lg"
             trailingIcon={<ArrowRightIcon aria-hidden="true" size={20} weight="bold" />}
           >
