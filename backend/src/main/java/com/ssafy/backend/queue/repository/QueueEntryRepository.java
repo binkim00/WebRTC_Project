@@ -31,6 +31,15 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     @EntityGraph(attributePaths = {"participant", "participant.fan", "meeting"})
     Optional<QueueEntry> findByMeeting_IdAndId(Long meetingId, Long id);
 
+    /**
+     * 팬미팅 결과 통계 집계에 사용할 지정 상태의 대기열 항목 수를 반환한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param status 집계할 대기열 항목 상태
+     * @return 해당 상태의 대기열 항목 수
+     */
+    long countByMeeting_IdAndStatus(Long meetingId, QueueEntryStatus status);
+
     /** 팬미팅에서 지정한 상태인 첫 번째 대기열 항목을 조회한다. */
     Optional<QueueEntry> findFirstByMeeting_IdAndStatusOrderByQueuePositionAsc(
             Long meetingId, QueueEntryStatus status);
