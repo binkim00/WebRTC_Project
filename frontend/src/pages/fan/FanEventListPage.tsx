@@ -1,5 +1,6 @@
 import { ArrowRight, MagnifyingGlass } from '@phosphor-icons/react'
 import type { FormEvent } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Card, CardContent, Select, TextField } from '../../components'
 import { fanEventsMock } from '../../mocks/fanEventsMock'
@@ -23,11 +24,98 @@ const recruitmentStatusContent = {
   CLOSED: { label: '마감', variant: 'neutral' },
 } as const
 
+type RecruitmentStatusFilter = 'all' | 'recruiting' | 'announced' | 'closed'
+type DateFilter = 'all' | 'this-week' | 'this-month'
+
+type EventFilters = {
+  eventKeyword: string
+  influencerKeyword: string
+  status: RecruitmentStatusFilter
+  date: DateFilter
+}
+
+const initialFilters: EventFilters = {
+  eventKeyword: '',
+  influencerKeyword: '',
+  status: 'all',
+  date: 'all',
+}
+
+const recruitmentStatusFilterMap = {
+  recruiting: 'RECRUITING',
+  announced: 'ANNOUNCED',
+  closed: 'CLOSED',
+} as const
+
+function parseMeetingDate(meetingAt: string) {
+  const [date, time] = meetingAt.split(' ')
+  const [year, month, day] = date.split('.').map(Number)
+  const [hour, minute] = time.split(':').map(Number)
+
+  return new Date(year, month - 1, day, hour, minute)
+}
+
+function matchesDateFilter(meetingAt: string, dateFilter: DateFilter) {
+  if (dateFilter === 'all') {
+    return true
+  }
+
+  const now = new Date()
+  const meetingDate = parseMeetingDate(meetingAt)
+
+  if (dateFilter === 'this-month') {
+    return (
+      meetingDate.getFullYear() === now.getFullYear() &&
+      meetingDate.getMonth() === now.getMonth()
+    )
+  }
+
+  const startOfWeek = new Date(now)
+  const daysSinceMonday = (now.getDay() + 6) % 7
+  startOfWeek.setDate(now.getDate() - daysSinceMonday)
+  startOfWeek.setHours(0, 0, 0, 0)
+
+  const startOfNextWeek = new Date(startOfWeek)
+  startOfNextWeek.setDate(startOfWeek.getDate() + 7)
+
+  return meetingDate >= startOfWeek && meetingDate < startOfNextWeek
+}
+
 export function FanEventListPage() {
+  const [filters, setFilters] = useState<EventFilters>(initialFilters)
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    // TODO: 검색 및 필터 조건으로 이벤트 목록 조회
+    const formData = new FormData(event.currentTarget)
+
+    setFilters({
+      eventKeyword: String(formData.get('eventKeyword') ?? '').trim(),
+      influencerKeyword: String(formData.get('influencerKeyword') ?? '').trim(),
+      status: String(formData.get('status') ?? 'all') as RecruitmentStatusFilter,
+      date: String(formData.get('date') ?? 'all') as DateFilter,
+    })
   }
+
+  const normalizedEventKeyword = filters.eventKeyword.toLocaleLowerCase()
+  const normalizedInfluencerKeyword = filters.influencerKeyword.toLocaleLowerCase()
+  const filteredEvents = fanEventsMock.filter((event) => {
+    const matchesEventKeyword = event.title
+      .toLocaleLowerCase()
+      .includes(normalizedEventKeyword)
+    const matchesInfluencerKeyword = event.influencerName
+      .toLocaleLowerCase()
+      .includes(normalizedInfluencerKeyword)
+    const matchesStatus =
+      filters.status === 'all' ||
+      event.recruitmentStatus === recruitmentStatusFilterMap[filters.status]
+
+    return (
+      matchesEventKeyword &&
+      matchesInfluencerKeyword &&
+      matchesStatus &&
+      matchesDateFilter(event.meetingAt, filters.date)
+    )
+  })
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -72,7 +160,7 @@ export function FanEventListPage() {
 
               <Select
                 defaultValue="all"
-                label="날짜"
+                label="팬미팅 날짜"
                 name="date"
                 options={dateOptions}
               />
@@ -91,7 +179,7 @@ export function FanEventListPage() {
 
       <section>
         <div className="grid gap-6 sm:grid-cols-2">
-          {fanEventsMock.map((event) => (
+          {filteredEvents.map((event) => (
             <Card className="overflow-hidden" key={event.eventId}>
               <img
                 alt={`${event.title} 썸네일`}
@@ -137,9 +225,18 @@ export function FanEventListPage() {
             </Card>
           ))}
         </div>
-        <p className="mt-8 border-t border-[var(--color-divider)] pt-8 text-center text-sm text-[var(--color-text-secondary)]">
-          현재 확인할 수 있는 목록을 모두 불러왔어요.
-        </p>
+        {filteredEvents.length > 0 ? (
+          <p className="mt-8 border-t border-[var(--color-divider)] pt-8 text-center text-sm text-[var(--color-text-secondary)]">
+            현재 확인할 수 있는 목록을 모두 불러왔어요.
+          </p>
+        ) : (
+          <div className="rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
+            <h2 className="font-bold">검색 결과가 없습니다</h2>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+              검색어 또는 필터 조건을 변경해 주세요.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   )

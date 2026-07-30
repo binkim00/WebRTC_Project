@@ -128,7 +128,7 @@ export const fanEventsMock: FanEventMock[] = [
     influencerName: 'Min',
     recruitmentStatus: 'CLOSED',
     thumbnailUrl: remotePreviewImage,
-    meetingAt: '2026.08.17 20:00',
+    meetingAt: '2026.07.17 20:00',
     applicationDeadline: '2026.08.08',
     callDuration: '02:00',
     applicationPeriod: '2026.07.29 - 2026.08.08',
