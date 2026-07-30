@@ -12,6 +12,7 @@ public enum ErrorCode {
     APPLICATION_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST, "개인정보 수집 및 이용 동의가 필요합니다."),
     APPLICATION_ANSWER_INVALID(HttpStatus.BAD_REQUEST, "응모 답변이 올바르지 않습니다."),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
+    INFLUENCER_NOT_FOUND(HttpStatus.NOT_FOUND, "활성 인플루언서를 찾을 수 없습니다."),
     AUTHENTICATION_REQUIRED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
     ACTIVE_USER_NOT_FOUND(HttpStatus.UNAUTHORIZED, "활성 사용자를 찾을 수 없습니다."),
@@ -41,6 +42,8 @@ public enum ErrorCode {
     LIVEKIT_RECONNECT_EXPIRED(HttpStatus.CONFLICT, "LiveKit 재접속 허용 시간이 만료되었습니다."),
     LIVEKIT_OPERATION_FAILED(HttpStatus.BAD_GATEWAY, "LiveKit 요청에 실패했습니다."),
     INVALID_LIVEKIT_WEBHOOK(HttpStatus.UNAUTHORIZED, "유효하지 않은 webhook입니다."),
+    ORGANIZATION_INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "유효한 조직 초대를 찾을 수 없습니다."),
+    ORGANIZATION_MEMBERSHIP_CONFLICT(HttpStatus.CONFLICT, "현재 조직 소속 상태에서는 요청을 처리할 수 없습니다."),
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 
     private final HttpStatus status;

@@ -42,6 +42,9 @@ app:
     login-max-failures: ${LOGIN_MAX_FAILURES:5}
     login-block-duration: ${LOGIN_BLOCK_DURATION:900}
 
+  organization:
+    invitation-ttl-seconds: ${ORGANIZATION_INVITATION_TTL_SECONDS:86400}
+
 jwt:
   secret: ${JWT_SECRET}
   access-expiration: ${JWT_ACCESS_EXPIRATION:3600}

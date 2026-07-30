@@ -9,6 +9,7 @@ import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.meeting.service.FanMeetingQueryService;
 import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
+import com.ssafy.backend.organization.repository.OrganizationRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.dto.QueueEnterResponse;
@@ -74,6 +75,9 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private OrganizationMemberRepository organizationMemberRepository;
+
+    @MockitoBean
+    private OrganizationRepository organizationRepository;
 
     @MockitoBean
     private ParticipantRepository participantRepository;
