@@ -37,7 +37,7 @@ export function ForbiddenPage() {
   return (
     <ErrorPageShell
       code="403"
-      description="현재 인증 상태로는 이 화면에 접근할 수 없습니다. 실제 역할 Guard는 인증 저장소가 추가된 뒤 연결합니다."
+      description="현재 로그인한 역할로는 이 화면에 접근할 수 없습니다."
       title="접근 권한이 없습니다"
     />
   )

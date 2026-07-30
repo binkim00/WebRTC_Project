@@ -1,31 +1,45 @@
 import { ArrowRightIcon, SignOutIcon } from '@phosphor-icons/react'
-import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { clearAuthSession, getAuthSession } from './api/auth'
+import { useEffect } from 'react'
+import { Link, Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { AUTH_EXPIRED_EVENT, getAuthSession, logout, type LoginRole } from './api/auth'
 import { TopNavigation } from './components'
+import { getRoleNavigation } from './layouts/roleNavigation'
 import { isVideoCallPath } from './router/routeState'
 
-const defaultNavigationItems = [
+const publicNavigationItems = [
   { label: '로그인', to: '/login' },
-  { label: '팬', to: '/fan/events' },
-  { label: '인플루언서', to: '/influencer/mypage/profile' },
-  { label: '매니저', to: '/manager/events' },
 ] as const
 
-const fanCallNavigationItems = [
-  { label: '이벤트', to: '/fan/events' },
-  { label: '마이페이지', to: '/fan/mypage/profile' },
-] as const
+function canAccessRolePath(pathname: string, role: LoginRole) {
+  if (/^\/fan(?:\/|$)/.test(pathname)) {
+    return role === 'FAN'
+  }
 
-const influencerNavigationItems = [
-  { label: '나의 팬미팅', to: '/influencer/my-fan-meetings' },
-  { label: '내 마이페이지', to: '/influencer/mypage/profile' },
-] as const
+  if (/^\/influencer(?:\/|$)/.test(pathname)) {
+    return role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
+  }
 
-const managerMonitorNavigationItems = [
-  { label: '팬미팅 관리', to: '/manager/fan-meetings' },
-  { label: '홍보 및 응모 관리', to: '/manager/events' },
-  { label: '내 마이페이지', to: '/manager/mypage' },
-] as const
+  if (/^\/manager(?:\/|$)/.test(pathname)) {
+    return role === 'MANAGER' || role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
+  }
+
+  if (/^\/fan-meetings\/[^/]+\/(?:fans|statistics)\/?$/.test(pathname)) {
+    return role === 'MANAGER' || role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
+  }
+
+  return true
+}
+
+function isRolePath(pathname: string) {
+  return (
+    /^\/(?:fan|influencer|manager)(?:\/|$)/.test(pathname) ||
+    /^\/fan-meetings\/[^/]+\/(?:fans|statistics)\/?$/.test(pathname)
+  )
+}
+
+function isPublicEventPath(pathname: string) {
+  return /^\/fan\/events(?:\/[^/]+)?\/?$/.test(pathname)
+}
 
 function App() {
   const { pathname } = useLocation()
@@ -38,7 +52,8 @@ function App() {
   const isHomePage = pathname === '/'
   const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
-  const isAuthenticated = getAuthSession() !== null
+  const authSession = getAuthSession()
+  const isAuthenticated = authSession !== null
   const isQaCapture =
     import.meta.env.DEV &&
     isCallPage &&
@@ -46,21 +61,31 @@ function App() {
     searchParams.get('qa') === '1'
   const isPageQaCapture =
     import.meta.env.DEV && !isCallPage && searchParams.get('qa') === '1'
-  const navigationItems = isAuthPage || isHomePage || isDeviceCheckPage
+  const navigationItems = isAuthPage || isDeviceCheckPage
     ? []
-    : pathname.startsWith('/manager')
-      ? managerMonitorNavigationItems
-      : pathname.startsWith('/fan/fan-meetings/')
-    ? fanCallNavigationItems
-    : pathname.startsWith('/influencer/')
-      ? influencerNavigationItems
-      : isAuthenticated
-        ? defaultNavigationItems.filter((item) => item.label !== '로그인')
-        : defaultNavigationItems
+    : authSession
+      ? getRoleNavigation(authSession.role)
+      : isHomePage
+        ? []
+        : publicNavigationItems
 
-  function handleLogout() {
-    clearAuthSession()
+  useEffect(() => {
+    const handleAuthExpired = () => navigate('/login', { replace: true })
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+  }, [navigate])
+
+  async function handleLogout() {
+    await logout().catch(() => undefined)
     navigate('/', { replace: true })
+  }
+
+  if (isRolePath(pathname) && !isPublicEventPath(pathname) && !authSession) {
+    return <Navigate replace to="/login" />
+  }
+
+  if (authSession && !canAccessRolePath(pathname, authSession.role)) {
+    return <Navigate replace to="/403" />
   }
 
   return (
@@ -87,24 +112,23 @@ function App() {
         actions={
           isHomePage ? (
             <nav aria-label="메인 메뉴" className="flex items-center gap-7 text-sm font-semibold">
-              <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/mypage/fan-meetings">
-                나의 팬미팅
-              </Link>
-              <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
-                이벤트
-              </Link>
               {isAuthenticated ? (
                 <button
                   className="font-semibold hover:text-[var(--color-primary-coral)]"
-                  onClick={handleLogout}
+                  onClick={() => void handleLogout()}
                   type="button"
                 >
                   로그아웃
                 </button>
               ) : (
-                <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
-                  로그인
-                </Link>
+                <>
+                  <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
+                    이벤트
+                  </Link>
+                  <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
+                    로그인
+                  </Link>
+                </>
               )}
               {!isAuthenticated ? (
                 <Link
@@ -145,7 +169,7 @@ function App() {
           ) : isAuthenticated ? (
             <button
               className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               type="button"
             >
               로그아웃
