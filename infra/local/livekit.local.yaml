@@ -1,16 +1,8 @@
-
 port: 7880
 
 rtc:
   tcp_port: 7881
   port_range_start: 50000
-  port_range_end: 50010
+  port_range_end: 50100
   use_external_ip: false
 
-keys:
-  devkey: melly_local_dev_secret_1234567890abcdef
-
-webhook:
-  api_key: devkey
-  urls:
-    - http://host.docker.internal:8080/api/v1/livekit/webhook

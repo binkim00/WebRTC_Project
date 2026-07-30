@@ -5,13 +5,13 @@ services:
     restart: unless-stopped
 
     environment:
-      MYSQL_DATABASE: ${DB_NAME:-melly}
-      MYSQL_USER: ${DB_USERNAME:-melly_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-change-me}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
 
     ports:
-      - "${DB_PORT:-3306}:3306"
+      - "${DB_PORT}:3306"
 
     volumes:
       - melly-local-mysql-data:/var/lib/mysql
@@ -26,9 +26,6 @@ services:
       timeout: 5s
       retries: 10
 
-    networks:
-      - melly-local-network
-
   redis:
     image: redis:7.4-alpine
     container_name: melly-local-redis
@@ -37,7 +34,7 @@ services:
     command: redis-server --appendonly yes
 
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT}:6379"
 
     volumes:
       - melly-local-redis-data:/data
@@ -47,9 +44,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-
-    networks:
-      - melly-local-network
 
   livekit:
     image: livekit/livekit-server:v1.13.4
@@ -61,27 +55,16 @@ services:
       - /etc/livekit.yaml
 
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-melly_local_dev}: ${LIVEKIT_API_SECRET:-melly_local_dev_secret_1234567890abcdef}"
-
-    depends_on:
-      redis:
-        condition: service_healthy
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
 
     ports:
-      - "${LIVEKIT_HTTP_PORT:-17880}:7880"
-      - "${LIVEKIT_TCP_PORT:-17881}:7881"
-      - "18000-18010:50000-50010/udp"
+      - "${LIVEKIT_HTTP_PORT}:7880"
+      - "${LIVEKIT_TCP_PORT}:7881"
+      - "${LIVEKIT_UDP_PORT_START}-${LIVEKIT_UDP_PORT_END}:50000-50100/udp"
 
     volumes:
       - ./livekit.local.yaml:/etc/livekit.yaml:ro
 
-    networks:
-      - melly-local-network
-
 volumes:
   melly-local-mysql-data:
   melly-local-redis-data:
-
-networks:
-  melly-local-network:
-    driver: bridge
