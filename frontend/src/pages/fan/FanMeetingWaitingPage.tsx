@@ -7,8 +7,12 @@ import {
   WifiHigh,
   Wrench,
 } from '@phosphor-icons/react'
+import { useEffect, useState } from 'react'
 import { AlertBanner, Badge, Button, Card } from '../../components'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ApiError } from '../../api/ApiError'
+import { getAuthSession } from '../../api/authSession'
+import { getMyQueue, type QueueSnapshotResponse } from '../../api/queue'
 
 /*
  * TODO: API 연동 후 처리
@@ -18,35 +22,10 @@ import { useParams } from 'react-router-dom'
  * 4. 로딩·오류·연결 끊김 상태를 처리한다.
  * 5. 초기 배정 번호와 호출 제한시간 응답을 백엔드와 확정한다.
  */
-type WaitingStatus = 'WAITING' | 'IN_CALL' | 'COMPLETED'
-type QueueSnapshot = {
-  queueEntryId: number
-  position: number
-  aheadCount: number
-  estimatedWaitSec: number
-  displayStatus: WaitingStatus
-  callAttemptCount: number
-  calledAt: string | null
-  callSessionId: number | null
-  canEnterCall: boolean
-}
-
 const meetingInfoMock = {
   meetingTitle: 'Melly와의 봄날 팬미팅',
   influencerName: 'Melly',
   assignedOrder: 12,
-}
-
-const queueSnapshotMock: QueueSnapshot = {
-  queueEntryId: 1,
-  position: 3,
-  aheadCount: 2,
-  estimatedWaitSec: 180,
-  displayStatus: 'WAITING',
-  callAttemptCount: 1,
-  calledAt: '2026-07-29T14:00:00',
-  callSessionId: 1,
-  canEnterCall: true,
 }
 
 const deviceStatusMock = {
@@ -56,15 +35,125 @@ const deviceStatusMock = {
 
 export function FanMeetingWaitingPage() {
   const { fanMeetingId } = useParams()
-  const currentPosition = queueSnapshotMock.position
-  const estimatedWaitMinutes = Math.ceil(queueSnapshotMock.estimatedWaitSec / 60)
-  const isCalled =
-    queueSnapshotMock.displayStatus === 'WAITING' &&
-    queueSnapshotMock.canEnterCall
+  const navigate = useNavigate()
+  const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshotResponse>()
+  const [queueError, setQueueError] = useState<string>()
+  const [isQueueLoading, setIsQueueLoading] = useState(true)
+
+  useEffect(() => {
+    if (!fanMeetingId?.trim()) return
+
+    const meetingId = fanMeetingId
+    const session = getAuthSession()
+
+    if (!session) {
+      setQueueError('대기 상태를 확인하려면 먼저 로그인해 주세요.')
+      setIsQueueLoading(false)
+      return
+    }
+
+    let cancelled = false
+    let timeoutId: number | undefined
+    let activeController: AbortController | undefined
+
+    async function pollQueue() {
+      activeController = new AbortController()
+
+      try {
+        const currentSession = getAuthSession()
+
+        if (!currentSession) {
+          setQueueError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+          setIsQueueLoading(false)
+          return
+        }
+
+        const snapshot = await getMyQueue(
+          meetingId,
+          currentSession.accessToken,
+          activeController.signal,
+        )
+
+        if (cancelled) return
+
+        setQueueSnapshot(snapshot)
+        setQueueError(undefined)
+        setIsQueueLoading(false)
+
+        if (snapshot.displayStatus === 'IN_CALL' && snapshot.callSessionId !== null) {
+          navigate(
+            `/fan/fan-meetings/${encodeURIComponent(meetingId)}/calls/${snapshot.callSessionId}`,
+            { replace: true },
+          )
+          return
+        }
+
+        if (snapshot.displayStatus === 'COMPLETED') {
+          navigate(`/fan/fan-meetings/${encodeURIComponent(meetingId)}/complete`, {
+            replace: true,
+          })
+          return
+        }
+
+        timeoutId = window.setTimeout(() => void pollQueue(), 3000)
+      } catch (error) {
+        if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) return
+
+        const isFatalError =
+          error instanceof ApiError && [401, 403, 404].includes(error.status)
+
+        setQueueError(
+          error instanceof ApiError || error instanceof TypeError
+            ? error.message
+            : '대기열 상태를 불러오지 못했습니다.',
+        )
+        setIsQueueLoading(false)
+
+        if (!isFatalError) {
+          timeoutId = window.setTimeout(() => void pollQueue(), 3000)
+        }
+      }
+    }
+
+    void pollQueue()
+
+    return () => {
+      cancelled = true
+      activeController?.abort()
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+    }
+  }, [fanMeetingId, navigate])
 
   if (!fanMeetingId) {
     return null
   }
+
+  if (!queueSnapshot) {
+    return (
+      <Card>
+        <div className="grid min-h-64 place-items-center p-6 text-center">
+          {queueError ? (
+            <AlertBanner title="대기열 상태 확인 실패" variant="error">
+              {queueError}
+            </AlertBanner>
+          ) : (
+            <div>
+              <h1 className="text-xl font-black">대기열 상태를 확인하고 있어요</h1>
+              <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
+                잠시만 기다려 주세요.
+              </p>
+            </div>
+          )}
+        </div>
+      </Card>
+    )
+  }
+
+  const currentPosition = queueSnapshot.position
+  const estimatedWaitMinutes = Math.ceil(queueSnapshot.estimatedWaitSec / 60)
+  const isCalled =
+    queueSnapshot.displayStatus === 'WAITING' &&
+    queueSnapshot.canEnterCall
 
   return (
     <div className="grid gap-6 pb-8">
@@ -132,6 +221,12 @@ export function FanMeetingWaitingPage() {
       <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Card className="overflow-hidden">
           <div className="grid gap-8 p-5 sm:p-7 lg:p-8">
+            {queueError ? (
+              <AlertBanner title="대기열 상태 갱신 실패" variant="warning">
+                {queueError}
+              </AlertBanner>
+            ) : null}
+
             <header className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-black tracking-[-0.035em] sm:text-3xl">
@@ -169,7 +264,7 @@ export function FanMeetingWaitingPage() {
                   {currentPosition}번째
                 </dd>
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                  앞에 {queueSnapshotMock.aheadCount}명이 기다리고 있어요
+                  앞에 {queueSnapshot.aheadCount}명이 기다리고 있어요
                 </p>
               </div>
 
@@ -234,9 +329,17 @@ export function FanMeetingWaitingPage() {
               {/* TODO: canEnterCall이면 callSessionId를 사용해 통화 화면으로 이동 */}
               <Button
                 className="w-full"
-                disabled={!queueSnapshotMock.canEnterCall}
+                disabled={!queueSnapshot.canEnterCall || queueSnapshot.callSessionId === null}
+                loading={isQueueLoading}
+                onClick={() =>
+                  queueSnapshot.callSessionId === null
+                    ? undefined
+                    : navigate(
+                        `/fan/fan-meetings/${encodeURIComponent(fanMeetingId)}/calls/${queueSnapshot.callSessionId}`,
+                      )
+                }
                 size="lg"
-                variant={queueSnapshotMock.canEnterCall ? 'primary' : 'secondary'}
+                variant={queueSnapshot.canEnterCall ? 'primary' : 'secondary'}
               >
                 {isCalled ? '팬미팅 입장' : '호출 대기 중'}
               </Button>
