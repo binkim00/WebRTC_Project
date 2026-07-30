@@ -15,6 +15,7 @@ import {
 } from '../../api/managerMeetings'
 import { AlertBanner, Button, Card, EmptyState, Pagination, Spinner } from '../../components'
 
+/** 목록 API가 준비되기 전 레이아웃 검증에만 사용하는 개발 미리보기 데이터다. */
 const previewMeetings: ManagerMeetingSummary[] = [
   { meetingId: 'meeting-1', title: 'MELLY DAY 팬미팅', influencerName: 'Melly', scheduledStartAt: '2026-07-28T20:00:00', status: 'SCHEDULED' },
   { meetingId: 'meeting-2', title: '서윤의 여름밤 팬미팅', influencerName: '서윤', scheduledStartAt: '2026-08-15T20:00:00', status: 'SCHEDULED' },
@@ -23,6 +24,7 @@ const previewMeetings: ManagerMeetingSummary[] = [
   { meetingId: 'meeting-5', title: '첫 만남 온라인 팬사인회', influencerName: 'Hana', scheduledStartAt: '2026-09-19T20:00:00', status: 'SCHEDULED' },
 ]
 
+/** 서버 데이터가 없을 때도 페이지 컴포넌트가 동일한 구조를 사용하도록 하는 빈 페이지 값이다. */
 const emptyPage: ManagerMeetingPage = {
   content: [],
   page: 0,
@@ -32,6 +34,7 @@ const emptyPage: ManagerMeetingPage = {
   hasNext: false,
 }
 
+/** ISO 날짜 문자열을 팬미팅 목록에서 읽기 쉬운 `YYYY.MM.DD HH:mm` 형식으로 바꾼다. */
 function formatMeetingDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -45,6 +48,7 @@ function formatMeetingDate(value: string): string {
   return `${year}.${month}.${day} ${hour}:${minute}`
 }
 
+/** 팬미팅을 검색하고 참가자·설정 관리 화면으로 연결하는 목록 페이지다. */
 export function ManagerMeetingListPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -82,6 +86,7 @@ export function ManagerMeetingListPage() {
     setLoading(false)
   }, [isPreview, keyword, page])
 
+  /** 검색 폼 제출 시 첫 페이지로 돌아가고 입력 키워드를 실제 검색 조건으로 적용한다. */
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPage(1)
@@ -190,6 +195,7 @@ export function ManagerMeetingListPage() {
   )
 }
 
+/** 팬미팅 한 건의 기본 정보와 참가자·설정 화면 링크를 한 행으로 표시한다. */
 function MeetingRow({ meeting }: { meeting: ManagerMeetingSummary }) {
   return (
     <article className="grid gap-5 px-5 py-5 transition-colors hover:bg-[var(--color-surface-page)] sm:px-7 lg:grid-cols-[minmax(260px,1.35fr)_minmax(140px,.7fr)_minmax(190px,.9fr)_minmax(175px,.8fr)_minmax(120px,.55fr)] lg:items-center lg:gap-4">

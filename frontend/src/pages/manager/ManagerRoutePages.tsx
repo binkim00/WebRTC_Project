@@ -21,11 +21,13 @@ import {
 } from '../../api/managerOperations'
 import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Select, TextField, Textarea } from '../../components'
 
+/** 개발 환경에서만 샘플 화면을 열 수 있는 `preview=1` 여부를 반환한다. */
 function usePreview() {
   const [params] = useSearchParams()
   return import.meta.env.DEV && params.get('preview') === '1'
 }
 
+/** 매니저 페이지의 제목, 설명, 선택적 뒤로가기 링크를 같은 형태로 표시한다. */
 function PageHeader({ eyebrow, title, description, backTo }: { eyebrow?: string; title: string; description: string; backTo?: string }) {
   return (
     <header className="grid gap-2">
@@ -37,6 +39,7 @@ function PageHeader({ eyebrow, title, description, backTo }: { eyebrow?: string;
   )
 }
 
+/** 3단계 입력 폼에서 현재 단계와 완료 단계를 시각적으로 표시한다. */
 function Stepper({ step, labels = ['기본 정보', '응모 설정', '미리보기'] }: { step: number; labels?: string[] }) {
   return <ol className="mx-auto grid w-full max-w-4xl grid-cols-3 gap-0 px-5 py-8 sm:px-12 sm:py-10">
     {labels.map((label, index) => <li className="relative text-center" key={label}>
@@ -61,14 +64,17 @@ function Stepper({ step, labels = ['기본 정보', '응모 설정', '미리보�
   </ol>
 }
 
+/** 단계형 폼의 임시 저장, 이전 단계, 다음 단계 버튼을 공통 배치한다. */
 function FormActions({ onBack, onSave, nextLabel = '다음 단계', nextDisabled = false, nextLoading = false }: { onBack?: () => void; onSave?: () => void; nextLabel?: string; nextDisabled?: boolean; nextLoading?: boolean }) {
   return <div className="flex flex-wrap items-center justify-end gap-3">{onSave ? <Button leadingIcon={<FloppyDisk size={18} />} onClick={onSave} variant="secondary">임시 저장</Button> : null}<div className="flex gap-2">{onBack ? <Button disabled={nextLoading} leadingIcon={<ArrowLeft size={18} />} onClick={onBack} variant="secondary">이전 단계</Button> : null}<Button disabled={nextDisabled} loading={nextLoading} trailingIcon={<ArrowRight size={18} />} type="submit">{nextLabel}</Button></div></div>
 }
 
+/** datetime-local 입력값에 초가 없으면 백엔드 LocalDateTime 형식에 맞게 초를 붙인다. */
 function toApiLocalDateTime(value: string): string {
   return value.length === 16 ? `${value}:00` : value
 }
 
+/** 예정 팬미팅과 대기열 시작 시간의 선후 관계를 검사하고 오류 메시지를 반환한다. */
 function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
   const scheduledStart = new Date(form.scheduledStartAt)
   const queueOpen = new Date(form.operation.queueOpenAt)
@@ -86,6 +92,7 @@ function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
   return undefined
 }
 
+/** 아직 백엔드 API가 없는 화면에서 샘플 데이터를 실제 데이터처럼 보이지 않게 안내한다. */
 function ApiUnavailablePage({
   title,
   description,
@@ -108,6 +115,7 @@ function ApiUnavailablePage({
   )
 }
 
+/** 이벤트 목록 API가 준비되기 전 개발 미리보기에서만 사용하는 샘플 이벤트다. */
 const sampleEvents: ManagerEvent[] = [
   { eventId: 'event-1', title: 'MELLY DAY 응모 안내', createdAt: '2026-07-24', applicationCount: 241 },
   { eventId: 'event-2', title: '멜리와 함께하는 SUMMER CALL', createdAt: '2026-07-18', applicationCount: 98 },
@@ -115,6 +123,7 @@ const sampleEvents: ManagerEvent[] = [
   { eventId: 'event-4', title: '서윤의 여름밤 팬미팅', createdAt: '2026-06-28', applicationCount: 72 },
 ]
 
+/** 등록된 홍보·응모 이벤트를 검색하고 관리 화면으로 연결하는 목록 페이지다. */
 export function ManagerEventListPage() {
   const preview = usePreview()
   const [keyword, setKeyword] = useState('')
@@ -131,6 +140,7 @@ export function ManagerEventListPage() {
     )
   }
 
+  /** 현재 입력한 키워드가 제목에 포함된 샘플 이벤트만 남긴다. */
   function search() {
     setEvents(sampleEvents.filter((item) => item.title.includes(keyword)))
   }
@@ -138,6 +148,7 @@ export function ManagerEventListPage() {
   return <div className="grid gap-7 pb-10"><PageHeader title="이벤트 관리" description="작성한 이벤트와 응모 설정을 확인하고 관리하세요." /><AlertBanner title="개발 미리보기" variant="warning">현재 화면은 <code>?preview=1</code>에서만 제공하는 샘플 데이터입니다.</AlertBanner><Card className="overflow-hidden"><div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--color-divider)] p-6"><div className="flex min-w-0 flex-1 flex-wrap items-end gap-2"><TextField containerClassName="min-w-[260px] flex-1" label="이벤트명 검색" onChange={(e) => setKeyword(e.target.value)} placeholder="이벤트명을 입력하세요" value={keyword} /><Button onClick={search} variant="secondary">검색</Button></div><Button leadingIcon={<Plus size={19} />} onClick={() => navigate('/manager/events/new?preview=1')}>새 이벤트</Button></div><div className="hidden grid-cols-[1.4fr_.8fr_.8fr] gap-4 bg-[var(--color-surface-page)] px-6 py-4 text-xs font-bold text-[var(--color-text-secondary)] sm:grid"><span>이벤트명</span><span>작성일</span><span>관리</span></div><div className="divide-y divide-[var(--color-divider)]">{events.map((event) => <div className="grid gap-3 px-6 py-5 sm:grid-cols-[1.4fr_.8fr_.8fr] sm:items-center" key={event.eventId}><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-[var(--color-surface-page)]"><Megaphone size={19} /></span><strong>{event.title}</strong></div><time className="text-sm text-[var(--color-text-secondary)]">{event.createdAt}</time><div className="flex gap-3 text-sm font-bold"><Link to={`/manager/events/${event.eventId}/applications?preview=1`}>응모자 관리 <ArrowRight className="inline" size={15} /></Link><Link to={`/manager/events/${event.eventId}/edit?preview=1`}>설정 <ArrowRight className="inline" size={15} /></Link></div></div>)}</div></Card></div>
 }
 
+/** 이벤트 수정 API가 준비되기 전 수정 화면의 UI 흐름을 확인하는 페이지다. */
 export function ManagerEventEditPage() {
   const [step, setStep] = useState(0)
   const [saved, setSaved] = useState(false)
@@ -153,6 +164,7 @@ export function ManagerEventEditPage() {
     question: '',
   })
 
+  /** 제출 시 다음 단계로 이동하고 마지막 단계에서는 화면 내 저장 완료 상태만 표시한다. */
   function submit(event: React.FormEvent) {
     event.preventDefault()
     if (step < 2) {
@@ -241,6 +253,7 @@ export function ManagerEventEditPage() {
   )
 }
 
+/** 응모 관리 API가 준비되기 전 상태별 UI를 확인하기 위한 샘플 응모자다. */
 const sampleApplications: ManagerApplication[] = [
   { applicationId: 'a-1', nickname: '별빛소다', answer: '지난 공연에서 들었던 노래가 가장 기억에 남아요.', status: 'SELECTED', memo: '답변이 구체적이고 참여 의지가 잘 드러남' },
   { applicationId: 'a-2', nickname: '유진라이트', answer: 'Melly에게 힘들 때 다시 일어나는 방법을 물어보고 싶어요.', status: 'HOLD', memo: '답변 내용을 조금 더 검토할 예정' },
@@ -249,6 +262,7 @@ const sampleApplications: ManagerApplication[] = [
   { applicationId: 'a-5', nickname: '멜로디정원', answer: '첫 무대 전날의 기분과 준비 과정을 듣고 싶어요.', status: 'UNSELECTED', memo: '모집 인원 초과로 미선정' },
 ]
 
+/** 이벤트 응모자를 검토하고 선정·보류·미선정 상태를 관리하는 페이지다. */
 export function ManagerApplicationsPage() {
   const preview = usePreview()
   const [applications, setApplications] = useState(sampleApplications)
@@ -268,6 +282,7 @@ export function ManagerApplicationsPage() {
     )
   }
 
+  /** 선택된 응모자의 검토 상태와 메모를 현재 미리보기 상태에 반영한다. */
   function updateStatus(status: ManagerApplication['status']) {
     setApplications((items) => items.map((item) => item.applicationId === selected ? { ...item, status, memo } : item))
     setSaved(true)
@@ -276,6 +291,10 @@ export function ManagerApplicationsPage() {
   return <div className="grid gap-7 pb-10"><PageHeader title="응모 관리" description="응모자의 답변을 검토하고 팬미팅 참가자를 확정하세요." backTo="/manager/events?preview=1" /><AlertBanner title="개발 미리보기" variant="warning">응모 API가 구현되지 않아 변경 내용은 현재 화면에만 반영됩니다.</AlertBanner><Card className="p-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs text-[var(--color-text-secondary)]">이벤트명</p><h2 className="mt-1 text-xl font-black">MELLY와의 봄날 팬미팅</h2></div><div className="flex gap-8 text-right"><div><p className="text-xs text-[var(--color-text-secondary)]">전체 응모자</p><strong className="text-2xl">{applications.length}명</strong></div><div><p className="text-xs text-[var(--color-text-secondary)]">현재 선정</p><strong className="text-2xl text-[var(--color-primary-coral)]">{applications.filter((item) => item.status === 'SELECTED').length}명</strong></div></div></div></Card><div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,.7fr)]"><Card className="overflow-hidden"><div className="divide-y">{applications.map((application) => <button className={`grid w-full gap-3 p-5 text-left transition hover:bg-[var(--color-surface-page)] sm:grid-cols-[auto_1fr_1fr_auto] sm:items-center ${selected === application.applicationId ? 'border-l-4 border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)]' : ''}`} key={application.applicationId} onClick={() => { setSelected(application.applicationId); setMemo(application.memo ?? ''); setSaved(false) }} type="button"><input aria-label={`${application.nickname} 선택`} checked={selected === application.applicationId} className="size-4 accent-[var(--color-primary-coral)]" readOnly type="checkbox" /><strong>{application.nickname}</strong><span className="text-sm text-[var(--color-text-secondary)]">{application.answer}</span><Badge variant={application.status === 'SELECTED' ? 'success' : application.status === 'HOLD' ? 'warning' : 'neutral'}>{application.status === 'SELECTED' ? '선정' : application.status === 'HOLD' ? '보류' : application.status === 'UNSELECTED' ? '미선정' : '미검토'}</Badge></button>)}</div></Card><Card><CardHeader><Badge variant="primary">응모자 상세</Badge><CardTitle as="h2" className="mt-3">{current?.nickname ?? '선택된 응모자'}</CardTitle></CardHeader><CardContent className="grid gap-5"><div><p className="text-xs font-bold text-[var(--color-text-secondary)]">질문 답변</p><p className="mt-2 leading-6">{current?.answer}</p></div><div><p className="text-xs font-bold text-[var(--color-text-secondary)]">현재 상태</p><div className="mt-2 grid grid-cols-3 gap-2"><Button onClick={() => updateStatus('SELECTED')} variant={current?.status === 'SELECTED' ? 'primary' : 'secondary'}>선정</Button><Button onClick={() => updateStatus('HOLD')} variant={current?.status === 'HOLD' ? 'outline' : 'secondary'}>보류</Button><Button onClick={() => updateStatus('UNSELECTED')} variant="secondary">미선정</Button></div></div><Textarea label="선정 사유 또는 검토 메모" maxLength={200} value={memo} onChange={(e) => setMemo(e.target.value)} />{saved ? <AlertBanner title="미리보기에 반영했습니다" variant="success">서버에는 저장되지 않았습니다.</AlertBanner> : null}</CardContent></Card></div></div>
 }
 
+/**
+ * 홍보·응모 이벤트를 생성하는 실제 API 연결 페이지다.
+ * 현재 백엔드 계약상 예정 팬미팅 운영 값도 같은 요청 본문에 포함한다.
+ */
 export function ManagerEventCreatePage() {
   const session = getAuthSession()
   const isInfluencerAccount = session?.role === 'INFLUENCER' || session?.role === 'SOLO_INFLUENCER'
@@ -306,6 +325,9 @@ export function ManagerEventCreatePage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string>()
 
+  /**
+   * 앞 단계에서는 화면만 이동하고, 마지막 단계에서 입력값을 API 형식으로 변환해 등록한다.
+   */
   async function submit(event: React.FormEvent) {
     event.preventDefault()
 
@@ -510,6 +532,7 @@ export function ManagerEventCreatePage() {
   )
 }
 
+/** 팬미팅 수정 API가 제공되지 않은 현재 상태를 명확하게 안내하는 페이지다. */
 export function ManagerMeetingSettingsPage() {
   return (
     <ApiUnavailablePage
@@ -521,6 +544,7 @@ export function ManagerMeetingSettingsPage() {
   )
 }
 
+/** 팬미팅 공지 목록과 선택한 공지 내용을 확인하는 관리 페이지다. */
 export function ManagerNoticesPage() {
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? 'demo-meeting'
   const preview = usePreview()
@@ -544,6 +568,7 @@ export function ManagerNoticesPage() {
   return <div className="grid gap-7 pb-10"><PageHeader title="팬미팅 공지 관리" description="진행 중인 팬미팅의 운영 안내를 작성하고 게시 상태를 관리하세요." backTo={`/manager/fan-meetings/${meetingId}/monitor?preview=1`} /><AlertBanner title="개발 미리보기" variant="warning">공지 API가 구현되지 않아 읽기 전용 샘플만 표시합니다.</AlertBanner><div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]"><Card className="overflow-hidden"><CardHeader><CardTitle as="h2">공지 목록</CardTitle></CardHeader><div className="divide-y">{notices.map((notice) => <button className={`w-full p-5 text-left hover:bg-[var(--color-surface-page)] ${selected.noticeId === notice.noticeId ? 'border-l-4 border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)]' : ''}`} key={notice.noticeId} onClick={() => setSelected(notice)} type="button"><Badge variant={notice.status === 'PUBLISHED' ? 'success' : 'warning'}>{notice.status === 'PUBLISHED' ? '게시' : '예약'}</Badge><strong className="mt-3 block text-sm">{notice.title}</strong></button>)}</div></Card><Card><CardHeader><Badge variant="primary">선택한 공지</Badge><CardTitle as="h2" className="mt-3">{selected.title}</CardTitle></CardHeader><CardContent><p className="leading-7">{selected.content}</p></CardContent></Card></div></div>
 }
 
+/** 로그인 응답에 저장된 현재 매니저 정보를 표시하는 마이페이지다. */
 export function ManagerMyPage() {
   const session = getAuthSession()
   const profile = session
@@ -630,6 +655,7 @@ export function ManagerMyPage() {
   )
 }
 
+/** 팬미팅 진행률과 참가자 상태를 요약하는 통계 페이지다. */
 export function ManagerStatisticsPage() {
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? 'demo-meeting'
   const metrics = [
@@ -642,6 +668,7 @@ export function ManagerStatisticsPage() {
   return <div className="grid gap-7 pb-10"><PageHeader title="팬미팅 통계" description="팬미팅 진행률과 참가자·장비 상태를 한눈에 확인하세요." backTo={`/manager/fan-meetings/${meetingId}/monitor`} /><AlertBanner title="샘플 통계 화면" variant="warning">통계 API가 아직 구현되지 않아 아래 지표는 샘플 데이터입니다. 백엔드 API 연결 후 실제 팬미팅 수치로 교체됩니다.</AlertBanner><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value, helper]) => <Card className="p-5" key={label}><p className="text-sm text-[var(--color-text-secondary)]">{label}</p><p className="mt-3 text-3xl font-black">{value}</p><p className="mt-2 text-xs font-semibold text-[var(--color-primary-coral)]">{helper}</p></Card>)}</div><Card><CardHeader><CardTitle as="h2">세션 진행 현황</CardTitle></CardHeader><CardContent className="grid gap-5"><div className="flex items-center justify-between text-sm"><span>완료 24명 / 전체 32명</span><strong className="text-[var(--color-primary-coral)]">75%</strong></div><div className="h-4 overflow-hidden rounded-full bg-[var(--color-surface-page)]"><div className="h-full w-3/4 rounded-full bg-[var(--color-primary-coral)]" /></div></CardContent></Card></div>
 }
 
+/** 위험 감지 통화 세션을 확인하고 필요하면 강제 종료하는 처리 페이지다. */
 export function ManagerRiskIncidentPage() {
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? 'demo-meeting'
   const [params] = useSearchParams()
@@ -651,6 +678,7 @@ export function ManagerRiskIncidentPage() {
   const [ended, setEnded] = useState(false)
   const [error, setError] = useState<string>()
 
+  /** URL로 전달된 통화 세션 ID를 사용해 백엔드 강제 종료 API를 호출한다. */
   async function forceEnd() {
     if (!callSessionId) return
 

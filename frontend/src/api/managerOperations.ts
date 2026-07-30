@@ -23,6 +23,7 @@ export type ManagerNotice = {
   publishAt?: string
 }
 
+/** 백엔드가 요구하는 이벤트 응모 기간과 모집 정원 설정이다. */
 export type ApplicationSettingRequest = {
   enabled: boolean
   startAt: string | null
@@ -31,6 +32,7 @@ export type ApplicationSettingRequest = {
   capacity: number
 }
 
+/** 당첨자 팬미팅에서 사용할 대기열과 영상통화 운영 설정이다. */
 export type OperationSettingRequest = {
   queueOpenAt: string
   callDurationSec: number
@@ -41,6 +43,10 @@ export type OperationSettingRequest = {
   maxRecallCount?: number | null
 }
 
+/**
+ * 현재 백엔드의 `POST /api/v1/fan-meetings` 요청 본문 구조이다.
+ * 엔드포인트 이름과 달리 프런트에서는 홍보·응모 이벤트를 등록할 때 사용한다.
+ */
 export type FanMeetingCreateRequest = {
   influencerId: number
   title: string
@@ -53,6 +59,7 @@ export type FanMeetingCreateRequest = {
 
 export type FanMeetingForm = FanMeetingCreateRequest
 
+/** 이벤트 생성 후 백엔드가 돌려주는 생성 결과의 최소 구조이다. */
 export type FanMeetingCreateResponse = FanMeetingCreateRequest & {
   meetingId: number
   status: 'DRAFT'
@@ -61,6 +68,10 @@ export type FanMeetingCreateResponse = FanMeetingCreateRequest & {
   createdAt: string
 }
 
+/**
+ * 일부 API가 `{ data: ... }` 응답 포맷을 사용하므로 실제 데이터만 꺼낸다.
+ * 가공되지 않은 응답은 그대로 반환해 두 응답 형식을 모두 지원한다.
+ */
 function unwrap(value: unknown): unknown {
   if (typeof value === 'object' && value !== null && 'data' in value) {
     return (value as { data: unknown }).data
@@ -68,6 +79,7 @@ function unwrap(value: unknown): unknown {
   return value
 }
 
+/** 런타임 응답이 이벤트 생성 결과로 사용 가능한지 안전하게 확인한다. */
 function isFanMeetingCreateResponse(value: unknown): value is FanMeetingCreateResponse {
   if (typeof value !== 'object' || value === null) return false
 
@@ -81,6 +93,10 @@ function isFanMeetingCreateResponse(value: unknown): value is FanMeetingCreateRe
   )
 }
 
+/**
+ * 커버 이미지 주소를 백엔드 URL 검증에 맞는 http/https 문자열로 정규화한다.
+ * 빈 값과 브라우저 미리보기용 data URL은 서버에 보내지 않는다.
+ */
 function normalizeCoverImageUrl(value: string | null): string | null {
   const trimmed = value?.trim() ?? ''
 
@@ -111,6 +127,7 @@ function normalizeCoverImageUrl(value: string | null): string | null {
   return normalizedUrl.toString()
 }
 
+/** 서버 요청 전에 필수 값과 숫자 범위를 검사해 잘못된 요청을 빠르게 차단한다. */
 function assertFanMeetingCreateRequest(payload: FanMeetingCreateRequest) {
   normalizeCoverImageUrl(payload.coverImageUrl)
 

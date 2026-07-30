@@ -55,6 +55,10 @@ import {
 } from '../pages/manager/ManagerManagementHubPage'
 import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
 
+/**
+ * 브라우저 URL과 페이지 컴포넌트를 연결하는 애플리케이션 최상위 라우터다.
+ * 공통 App 아래에 인증·역할별 Layout을 중첩하고 각 Layout의 Outlet에 자식 화면을 렌더링한다.
+ */
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -233,6 +237,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/new',
+            // 예전 팬미팅 생성 주소를 북마크한 사용자를 실제 이벤트 생성 흐름으로 보낸다.
             element: <Navigate replace to="/manager/events/new" />,
           },
           {

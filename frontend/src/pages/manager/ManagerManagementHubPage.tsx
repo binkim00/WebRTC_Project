@@ -24,6 +24,7 @@ type ManagementHubCopy = {
   manageIcon: ReactNode
 }
 
+/** 팬미팅 관리 허브에 표시할 설명과 이동 경로를 한곳에서 관리한다. */
 const meetingHubCopy: ManagementHubCopy = {
   eyebrow: '팬미팅 운영',
   title: '팬미팅 관리',
@@ -40,6 +41,7 @@ const meetingHubCopy: ManagementHubCopy = {
   manageIcon: <ListChecks aria-hidden="true" size={30} weight="bold" />,
 }
 
+/** 홍보·응모 관리 허브에 표시할 설명과 이동 경로를 한곳에서 관리한다. */
 const eventHubCopy: ManagementHubCopy = {
   eyebrow: '팬 대상 콘텐츠',
   title: '홍보 및 응모 관리',
@@ -56,6 +58,7 @@ const eventHubCopy: ManagementHubCopy = {
   manageIcon: <CalendarDots aria-hidden="true" size={30} weight="bold" />,
 }
 
+/** 생성 또는 관리 작업 하나를 아이콘, 설명, 이동 버튼으로 표시한다. */
 function HubAction({
   eyebrow,
   title,
@@ -121,6 +124,7 @@ function HubAction({
   )
 }
 
+/** 전달받은 문구 설정을 이용해 매니저용 2가지 작업 선택 화면을 구성한다. */
 function ManagerManagementHubPage({ copy }: { copy: ManagementHubCopy }) {
   return (
     <div className="py-5 lg:py-6">
@@ -168,10 +172,12 @@ function ManagerManagementHubPage({ copy }: { copy: ManagementHubCopy }) {
   )
 }
 
+/** 팬미팅 운영 시작점과 기존 팬미팅 관리 진입점을 보여준다. */
 export function ManagerMeetingHubPage() {
   return <ManagerManagementHubPage copy={meetingHubCopy} />
 }
 
+/** 새 이벤트 생성과 기존 이벤트 관리 진입점을 보여준다. */
 export function ManagerEventHubPage() {
   return <ManagerManagementHubPage copy={eventHubCopy} />
 }
