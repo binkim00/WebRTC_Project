@@ -30,7 +30,11 @@ public enum ErrorCode {
     LIVEKIT_RECONNECT_EXPIRED(HttpStatus.CONFLICT, "LiveKit 재접속 허용 시간이 만료되었습니다."),
     LIVEKIT_OPERATION_FAILED(HttpStatus.BAD_GATEWAY, "LiveKit 요청에 실패했습니다."),
     INVALID_LIVEKIT_WEBHOOK(HttpStatus.UNAUTHORIZED, "유효하지 않은 webhook입니다."),
-    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다."),
+    FAN_MEMO_NOT_FOUND(HttpStatus.NOT_FOUND, "메모를 찾을 수 없습니다."),
+    FAN_MEMO_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 해당 회차에 작성된 메모가 있습니다."),
+    FAN_MEMO_ACCESS_DENIED(HttpStatus.FORBIDDEN, "작성자만 수정·삭제할 수 있습니다."),
+    FAN_MEMO_ALREADY_DELETED(HttpStatus.CONFLICT, "이미 삭제된 메모입니다.");
 
     private final HttpStatus status;
     private final String message;

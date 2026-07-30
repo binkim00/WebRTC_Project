@@ -69,6 +69,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login",
                                 "/api/v1/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
+                        // Swagger UI는 문서 확인용이므로 인증 없이 열어둔다.
+                        .requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**",
+                                "/v3/api-docs", "/v3/api-docs/**").permitAll()
                         // 테스트 토큰 컨트롤러는 설정으로 활성화된 환경에서만 등록된다.
                         .requestMatchers(HttpMethod.GET, "/livekit-test.html").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/test-token").permitAll()
