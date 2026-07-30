@@ -20,6 +20,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 /**
  * 팬미팅의 실제 참가자로 확정된 팬을 저장하는 엔티티다.
@@ -35,6 +36,13 @@ import java.time.LocalDateTime;
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Participant extends BaseTimeEntity {
+
+    /**
+     * 참가 확정 직후의 초기 상태값이다.
+     *
+     * <p>참가자 상태는 스키마상 문자열 컬럼이므로 기존 시드와 대기열 흐름이 사용하는 값을 그대로 쓴다.
+     */
+    public static final String READY_STATUS = "READY";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -61,4 +69,28 @@ public class Participant extends BaseTimeEntity {
 
     @Column(name = "recording_consent_at")
     private LocalDateTime recordingConsentAt;
+
+    /**
+     * 추첨에 당첨된 응모를 참가자로 확정한다.
+     *
+     * @param meeting 참가할 팬미팅
+     * @param fan 당첨된 팬
+     * @param application 당첨 근거가 되는 응모
+     * @param assignedOrder 1부터 시작하는 호출 순번
+     * @return 참가 대기 상태로 생성된 참가자
+     * @throws IllegalArgumentException 호출 순번이 1보다 작은 경우
+     */
+    public static Participant create(FanMeeting meeting, User fan,
+                                     Application application, int assignedOrder) {
+        if (assignedOrder < 1) {
+            throw new IllegalArgumentException("호출 순번은 1부터 배정해야 합니다.");
+        }
+        Participant participant = new Participant();
+        participant.meeting = Objects.requireNonNull(meeting);
+        participant.fan = Objects.requireNonNull(fan);
+        participant.application = Objects.requireNonNull(application);
+        participant.status = READY_STATUS;
+        participant.assignedOrder = assignedOrder;
+        return participant;
+    }
 }

@@ -106,4 +106,41 @@ public class Application extends BaseTimeEntity {
         this.status = ApplicationStatus.WITHDRAWN;
         this.withdrawnAt = Objects.requireNonNull(withdrawnAt);
     }
+
+    /**
+     * 추첨에 당첨된 응모를 선정 상태로 전환한다.
+     *
+     * @param resultDecidedAt 추첨 결과가 확정된 시각
+     * @throws IllegalStateException 접수 상태가 아닌 응모를 선정하려는 경우
+     */
+    public void select(LocalDateTime resultDecidedAt) {
+        requireSubmittedForDraw();
+        this.status = ApplicationStatus.SELECTED;
+        this.resultDecidedAt = Objects.requireNonNull(resultDecidedAt);
+    }
+
+    /**
+     * 추첨에서 탈락한 응모를 미선정 상태로 전환한다.
+     *
+     * @param resultDecidedAt 추첨 결과가 확정된 시각
+     * @throws IllegalStateException 접수 상태가 아닌 응모를 탈락 처리하려는 경우
+     */
+    public void reject(LocalDateTime resultDecidedAt) {
+        requireSubmittedForDraw();
+        this.status = ApplicationStatus.NOT_SELECTED;
+        this.resultDecidedAt = Objects.requireNonNull(resultDecidedAt);
+    }
+
+    /**
+     * 추첨 대상이 되는 접수 상태인지 검증한다.
+     *
+     * <p>취소된 응모와 이미 결과가 확정된 응모는 다시 추첨할 수 없다.
+     *
+     * @throws IllegalStateException 접수 상태가 아닌 경우
+     */
+    private void requireSubmittedForDraw() {
+        if (status != ApplicationStatus.SUBMITTED) {
+            throw new IllegalStateException("접수 상태의 응모만 추첨 결과를 확정할 수 있습니다.");
+        }
+    }
 }
