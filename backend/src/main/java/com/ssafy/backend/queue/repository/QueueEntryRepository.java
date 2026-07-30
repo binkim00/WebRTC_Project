@@ -73,4 +73,18 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select q from QueueEntry q join fetch q.meeting where q.meeting.id = :meetingId")
     List<QueueEntry> findAllByMeetingIdForUpdate(@Param("meetingId") Long meetingId);
+
+    /**
+     * 순서 재정렬을 위해 팬미팅의 전체 대기열 항목을 식별자 순서로 잠금 조회한다.
+     *
+     * <p>동시에 들어온 순서 변경 요청이 항상 같은 순서로 행 잠금을 얻도록 식별자로 정렬한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @return 식별자 오름차순으로 잠금이 적용된 전체 대기열 항목
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from QueueEntry q join fetch q.meeting m "
+            + "join fetch q.participant p join fetch p.fan "
+            + "where m.id = :meetingId order by q.id asc")
+    List<QueueEntry> findAllByMeetingIdOrderByIdForUpdate(@Param("meetingId") Long meetingId);
 }
