@@ -12,6 +12,7 @@ import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.organization.repository.OrganizationRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
+import com.ssafy.backend.queue.repository.QueueChangeRequestRepository;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
 import com.ssafy.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private QueueEntryRepository queueEntryRepository;
+
+    @MockitoBean
+    private QueueChangeRequestRepository queueChangeRequestRepository;
 
     @MockitoBean
     private CallSessionRepository callSessionRepository;
