@@ -97,11 +97,11 @@ export function ManagerMeetingListPage() {
         </header>
         <AlertBanner title="팬미팅 목록 API가 아직 구현되지 않았습니다" variant="warning">
           첨부된 API 구현 현황 기준으로 <code>GET /api/v1/fan-meetings</code>를 사용할 수 없습니다.
-          팬미팅 생성 API는 구현되어 있으므로 새 팬미팅 등록은 가능합니다.
+          현재 등록 API는 홍보·응모 이벤트 생성에 사용하므로 이벤트 생성 화면에서 먼저 응모를 진행해 주세요.
         </AlertBanner>
         <div>
-          <Button leadingIcon={<Plus size={20} weight="bold" />} onClick={() => navigate('/manager/fan-meetings/new')}>
-            새 팬미팅 등록
+          <Button leadingIcon={<Plus size={20} weight="bold" />} onClick={() => navigate('/manager/events/new')}>
+            새 이벤트 등록
           </Button>
         </div>
       </div>
@@ -140,9 +140,9 @@ export function ManagerMeetingListPage() {
           <Button
             className="min-h-12 self-start px-6 lg:self-auto"
             leadingIcon={<Plus size={20} weight="bold" />}
-            onClick={() => navigate('/manager/fan-meetings/new')}
+            onClick={() => navigate('/manager/events/new')}
           >
-            새 팬미팅
+            새 이벤트
           </Button>
         </div>
 
@@ -158,7 +158,7 @@ export function ManagerMeetingListPage() {
           </div>
         ) : meetingPage.content.length === 0 ? (
           <EmptyState
-            action={<Button onClick={() => navigate('/manager/fan-meetings/new')}>새 팬미팅 만들기</Button>}
+            action={<Button onClick={() => navigate('/manager/events/new')}>새 이벤트 만들기</Button>}
             description="검색 조건에 맞는 팬미팅이 없습니다."
             title="팬미팅을 찾을 수 없습니다"
           />

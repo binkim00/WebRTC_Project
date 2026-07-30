@@ -150,7 +150,12 @@ function assertFanMeetingCreateRequest(payload: FanMeetingCreateRequest) {
   }
 }
 
-export async function createFanMeeting(
+/**
+ * 현재 백엔드 명세는 이벤트 등록 요청도 `/api/v1/fan-meetings`에서 받는다.
+ * 프런트에서는 사용자에게 보이는 업무 의미에 맞춰 이벤트 생성 함수로 노출한다.
+ * 백엔드에서 이벤트 전용 엔드포인트가 분리되면 이 함수의 요청 경로만 교체한다.
+ */
+export async function createEvent(
   payload: FanMeetingCreateRequest,
   authToken: string,
 ): Promise<FanMeetingCreateResponse> {
@@ -192,7 +197,7 @@ export async function createFanMeeting(
   }
 
   if (import.meta.env.DEV) {
-    console.info('[fan-meeting:create] request body', requestBody)
+    console.info('[event:create] request body', requestBody)
   }
 
   const value = unwrap(
@@ -204,7 +209,7 @@ export async function createFanMeeting(
   )
 
   if (!isFanMeetingCreateResponse(value)) {
-    throw new TypeError('팬미팅 생성 응답 형식이 올바르지 않습니다.')
+    throw new TypeError('이벤트 생성 응답 형식이 올바르지 않습니다.')
   }
 
   return value

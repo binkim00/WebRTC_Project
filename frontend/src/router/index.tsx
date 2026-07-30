@@ -39,9 +39,10 @@ import { InfluencerProfilePage } from '../pages/influencer/InfluencerProfilePage
 import { InfluencerMeetingHistoryPage } from '../pages/influencer/InfluencerMeetingHistoryPage'
 import {
   ManagerApplicationsPage,
-  ManagerEventFormPage,
+  ManagerEventCreatePage,
+  ManagerEventEditPage,
   ManagerEventListPage,
-  ManagerMeetingFormPage,
+  ManagerMeetingSettingsPage,
   ManagerMyPage,
   ManagerNoticesPage,
   ManagerRiskIncidentPage,
@@ -212,11 +213,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'events/new',
-            element: <ManagerEventFormPage mode="create" />,
+            Component: ManagerEventCreatePage,
           },
           {
             path: 'events/:eventId/edit',
-            element: <ManagerEventFormPage mode="edit" />,
+            Component: ManagerEventEditPage,
           },
           {
             path: 'events/:eventId/applications',
@@ -232,11 +233,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/new',
-            element: <ManagerMeetingFormPage mode="create" />,
+            element: <Navigate replace to="/manager/events/new" />,
           },
           {
             path: 'fan-meetings/:fanMeetingId/edit',
-            element: <ManagerMeetingFormPage mode="edit" />,
+            Component: ManagerMeetingSettingsPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/notices',

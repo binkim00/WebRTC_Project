@@ -13,15 +13,13 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import { forceEndCallSession } from '../../api/callSessions'
 import {
-  createFanMeeting,
+  createEvent,
   type FanMeetingForm,
   type ManagerApplication,
   type ManagerEvent,
   type ManagerNotice,
 } from '../../api/managerOperations'
 import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Select, TextField, Textarea } from '../../components'
-
-type FormPageProps = { mode: 'create' | 'edit' }
 
 function usePreview() {
   const [params] = useSearchParams()
@@ -140,11 +138,11 @@ export function ManagerEventListPage() {
   return <div className="grid gap-7 pb-10"><PageHeader title="이벤트 관리" description="작성한 이벤트와 응모 설정을 확인하고 관리하세요." /><AlertBanner title="개발 미리보기" variant="warning">현재 화면은 <code>?preview=1</code>에서만 제공하는 샘플 데이터입니다.</AlertBanner><Card className="overflow-hidden"><div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--color-divider)] p-6"><div className="flex min-w-0 flex-1 flex-wrap items-end gap-2"><TextField containerClassName="min-w-[260px] flex-1" label="이벤트명 검색" onChange={(e) => setKeyword(e.target.value)} placeholder="이벤트명을 입력하세요" value={keyword} /><Button onClick={search} variant="secondary">검색</Button></div><Button leadingIcon={<Plus size={19} />} onClick={() => navigate('/manager/events/new?preview=1')}>새 이벤트</Button></div><div className="hidden grid-cols-[1.4fr_.8fr_.8fr] gap-4 bg-[var(--color-surface-page)] px-6 py-4 text-xs font-bold text-[var(--color-text-secondary)] sm:grid"><span>이벤트명</span><span>작성일</span><span>관리</span></div><div className="divide-y divide-[var(--color-divider)]">{events.map((event) => <div className="grid gap-3 px-6 py-5 sm:grid-cols-[1.4fr_.8fr_.8fr] sm:items-center" key={event.eventId}><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-[var(--color-surface-page)]"><Megaphone size={19} /></span><strong>{event.title}</strong></div><time className="text-sm text-[var(--color-text-secondary)]">{event.createdAt}</time><div className="flex gap-3 text-sm font-bold"><Link to={`/manager/events/${event.eventId}/applications?preview=1`}>응모자 관리 <ArrowRight className="inline" size={15} /></Link><Link to={`/manager/events/${event.eventId}/edit?preview=1`}>설정 <ArrowRight className="inline" size={15} /></Link></div></div>)}</div></Card></div>
 }
 
-export function ManagerEventFormPage({ mode }: FormPageProps) {
+export function ManagerEventEditPage() {
   const [step, setStep] = useState(0)
   const [saved, setSaved] = useState(false)
   const [form, setForm] = useState({
-    title: mode === 'edit' ? 'MELLY와의 봄날 팬미팅' : '',
+    title: 'MELLY와의 봄날 팬미팅',
     summary: '',
     description: '',
     coverImageUrl: '',
@@ -168,7 +166,7 @@ export function ManagerEventFormPage({ mode }: FormPageProps) {
     <div className="grid gap-7 pb-10">
       <PageHeader
         eyebrow="PROMOTION & APPLICATION"
-        title={mode === 'create' ? '새 홍보·응모 이벤트' : '홍보·응모 이벤트 수정'}
+        title="홍보·응모 이벤트 수정"
         description="팬에게 공개할 소개와 응모 기간·질문을 구성하세요."
         backTo="/manager/events"
       />
@@ -278,7 +276,7 @@ export function ManagerApplicationsPage() {
   return <div className="grid gap-7 pb-10"><PageHeader title="응모 관리" description="응모자의 답변을 검토하고 팬미팅 참가자를 확정하세요." backTo="/manager/events?preview=1" /><AlertBanner title="개발 미리보기" variant="warning">응모 API가 구현되지 않아 변경 내용은 현재 화면에만 반영됩니다.</AlertBanner><Card className="p-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs text-[var(--color-text-secondary)]">이벤트명</p><h2 className="mt-1 text-xl font-black">MELLY와의 봄날 팬미팅</h2></div><div className="flex gap-8 text-right"><div><p className="text-xs text-[var(--color-text-secondary)]">전체 응모자</p><strong className="text-2xl">{applications.length}명</strong></div><div><p className="text-xs text-[var(--color-text-secondary)]">현재 선정</p><strong className="text-2xl text-[var(--color-primary-coral)]">{applications.filter((item) => item.status === 'SELECTED').length}명</strong></div></div></div></Card><div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,.7fr)]"><Card className="overflow-hidden"><div className="divide-y">{applications.map((application) => <button className={`grid w-full gap-3 p-5 text-left transition hover:bg-[var(--color-surface-page)] sm:grid-cols-[auto_1fr_1fr_auto] sm:items-center ${selected === application.applicationId ? 'border-l-4 border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)]' : ''}`} key={application.applicationId} onClick={() => { setSelected(application.applicationId); setMemo(application.memo ?? ''); setSaved(false) }} type="button"><input aria-label={`${application.nickname} 선택`} checked={selected === application.applicationId} className="size-4 accent-[var(--color-primary-coral)]" readOnly type="checkbox" /><strong>{application.nickname}</strong><span className="text-sm text-[var(--color-text-secondary)]">{application.answer}</span><Badge variant={application.status === 'SELECTED' ? 'success' : application.status === 'HOLD' ? 'warning' : 'neutral'}>{application.status === 'SELECTED' ? '선정' : application.status === 'HOLD' ? '보류' : application.status === 'UNSELECTED' ? '미선정' : '미검토'}</Badge></button>)}</div></Card><Card><CardHeader><Badge variant="primary">응모자 상세</Badge><CardTitle as="h2" className="mt-3">{current?.nickname ?? '선택된 응모자'}</CardTitle></CardHeader><CardContent className="grid gap-5"><div><p className="text-xs font-bold text-[var(--color-text-secondary)]">질문 답변</p><p className="mt-2 leading-6">{current?.answer}</p></div><div><p className="text-xs font-bold text-[var(--color-text-secondary)]">현재 상태</p><div className="mt-2 grid grid-cols-3 gap-2"><Button onClick={() => updateStatus('SELECTED')} variant={current?.status === 'SELECTED' ? 'primary' : 'secondary'}>선정</Button><Button onClick={() => updateStatus('HOLD')} variant={current?.status === 'HOLD' ? 'outline' : 'secondary'}>보류</Button><Button onClick={() => updateStatus('UNSELECTED')} variant="secondary">미선정</Button></div></div><Textarea label="선정 사유 또는 검토 메모" maxLength={200} value={memo} onChange={(e) => setMemo(e.target.value)} />{saved ? <AlertBanner title="미리보기에 반영했습니다" variant="success">서버에는 저장되지 않았습니다.</AlertBanner> : null}</CardContent></Card></div></div>
 }
 
-export function ManagerMeetingFormPage({ mode }: FormPageProps) {
+export function ManagerEventCreatePage() {
   const session = getAuthSession()
   const isInfluencerAccount = session?.role === 'INFLUENCER' || session?.role === 'SOLO_INFLUENCER'
   const resolvedInfluencerId = isInfluencerAccount ? session?.userId : undefined
@@ -291,11 +289,11 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
     coverImageUrl: null,
     scheduledStartAt: '',
     application: {
-      enabled: false,
+      enabled: true,
       startAt: null,
       endAt: null,
       resultAnnouncementAt: null,
-      capacity: 1,
+      capacity: 30,
     },
     operation: {
       queueOpenAt: '',
@@ -308,17 +306,6 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string>()
 
-  if (mode === 'edit') {
-    return (
-      <ApiUnavailablePage
-        title="팬미팅 설정"
-        description="팬미팅 일정과 운영 설정을 수정하세요."
-        endpoint="PATCH /api/v1/fan-meetings/{meetingId}"
-        backTo="/manager/fan-meetings"
-      />
-    )
-  }
-
   async function submit(event: React.FormEvent) {
     event.preventDefault()
 
@@ -329,7 +316,7 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('팬미팅을 등록하려면 먼저 로그인해 주세요.')
+      setError('이벤트를 등록하려면 먼저 로그인해 주세요.')
       return
     }
 
@@ -372,10 +359,10 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
     setSubmitting(true)
     setError(undefined)
     try {
-      const created = await createFanMeeting(payload, token)
+      const created = await createEvent(payload, token)
       setCreatedMeetingId(created.meetingId)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '팬미팅 등록에 실패했습니다.')
+      setError(reason instanceof Error ? reason.message : '이벤트 등록에 실패했습니다.')
     } finally {
       setSubmitting(false)
     }
@@ -383,24 +370,25 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
 
   return (
     <div className="grid gap-7 pb-10">
-      <PageHeader title="팬미팅 생성" description="1:1 영상통화를 위한 팬미팅 방과 운영 정보를 등록하세요." backTo="/manager/fan-meetings" />
-      <AlertBanner title="팬미팅 방은 DRAFT 상태로 생성됩니다" variant="info">
-        팬미팅 기본 정보와 API 문서에 정의된 응모·영상통화 운영 설정을 저장합니다. 날짜 입력값은 백엔드의 LocalDateTime 형식으로 변환해 전송합니다.
+      <PageHeader title="이벤트 생성" description="팬에게 공개할 홍보·응모 정보와 이후 팬미팅 운영 조건을 등록하세요." backTo="/manager/events" />
+      <AlertBanner title="현재 백엔드의 이벤트 등록 경로를 사용합니다" variant="info">
+        현재 명세에서는 이벤트 등록 요청을 <code>POST /api/v1/fan-meetings</code>로 받습니다.
+        화면에서는 실제 업무 의미에 맞게 이벤트로 표시하며, 생성 결과의 <code>meetingId</code>는 서버 참조 ID로 보관합니다.
       </AlertBanner>
-      <Stepper step={step} labels={['기본 정보', '응모·영상통화 운영', '최종 확인']} />
+      <Stepper step={step} labels={['홍보 정보', '응모·운영 설정', '최종 확인']} />
       <form className="grid gap-5" onSubmit={submit}>
         <Card>
           <CardHeader>
             <Badge variant="primary">STEP {step + 1}</Badge>
             <CardTitle as="h2" className="mt-3">
-              {step === 0 ? '팬미팅 기본 정보' : step === 1 ? '응모와 영상통화 운영 설정' : '생성 정보 최종 확인'}
+              {step === 0 ? '이벤트 홍보 정보' : step === 1 ? '응모와 이후 팬미팅 운영 설정' : '이벤트 정보 최종 확인'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {step === 0 ? (
               <div className="grid gap-5 sm:grid-cols-2">
-                <TextField label="팬미팅명" maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText="팬과 운영 화면에 표시할 이름입니다." />
-                <TextField label="행사 시작 일시" required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
+                <TextField label="이벤트명" maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText="팬에게 공개되는 홍보·응모 페이지의 제목입니다." />
+                <TextField label="예정 팬미팅 일시" required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
                 <div className="sm:col-span-2 rounded-2xl border border-[var(--color-divider)] bg-[var(--color-surface-page)] p-5">
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--color-primary-coral)]">담당 인플루언서</p>
                   {isInfluencerAccount ? (
@@ -426,10 +414,10 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
                 </div>
                 <Textarea
                   containerClassName="sm:col-span-2"
-                  label="팬미팅 설명"
+                  label="이벤트 상세 소개"
                   value={form.description ?? ''}
                   onChange={(event) => setForm({ ...form, description: event.target.value })}
-                  placeholder="팬에게 보여 줄 팬미팅 소개를 입력해 주세요."
+                  placeholder="팬에게 보여 줄 이벤트와 응모 안내를 입력해 주세요."
                 />
                 <TextField
                   containerClassName="sm:col-span-2"
@@ -450,7 +438,7 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
                   <Checkbox
                     checked={form.application.enabled}
                     description="응모를 사용하면 기간·결과 발표 일시·정원을 함께 전송합니다."
-                    label="팬 응모를 사용합니다."
+                    label="팬 응모를 진행합니다."
                     onChange={(event) => setForm({
                       ...form,
                       application: { ...form.application, enabled: event.target.checked },
@@ -464,13 +452,13 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
                       <TextField label="응모 정원" min={1} required type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
                     </div>
                   ) : (
-                    <p className="text-sm text-[var(--color-text-secondary)]">응모를 사용하지 않으면 `{`enabled: false`}`만 전송됩니다.</p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">응모 없는 이벤트로 등록하면 기간과 정원은 서버 규약에 맞게 비활성 값으로 전송됩니다.</p>
                   )}
                 </section>
                 <section className="grid gap-5 sm:grid-cols-2">
                   <div className="sm:col-span-2">
                     <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--color-primary-coral)]">영상통화 운영</p>
-                    <p className="mt-2 text-sm text-[var(--color-text-secondary)]">팬미팅 방의 입장 시점과 1명당 통화 조건을 설정합니다.</p>
+                    <p className="mt-2 text-sm text-[var(--color-text-secondary)]">당첨자 선정 뒤 진행할 팬미팅의 예정 대기열과 1명당 통화 조건입니다.</p>
                   </div>
                 <TextField label="대기열 오픈 일시" required type="datetime-local" value={form.operation.queueOpenAt} onChange={(event) => setForm({ ...form, operation: { ...form.operation, queueOpenAt: event.target.value } })} />
                 <Select label="1인 통화 시간" options={[{ value: '120', label: '2분' }, { value: '180', label: '3분' }, { value: '300', label: '5분' }]} value={String(form.operation.callDurationSec)} onChange={(event) => setForm({ ...form, operation: { ...form.operation, callDurationSec: Number(event.target.value) } })} />
@@ -485,13 +473,13 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
             {step === 2 ? (
               <div className="grid gap-5 sm:grid-cols-[1fr_.9fr]">
                 <div className="rounded-xl bg-[var(--color-surface-page)] p-6">
-                  <p className="text-sm font-bold text-[var(--color-primary-coral)]">1:1 영상통화 팬미팅</p>
+                  <p className="text-sm font-bold text-[var(--color-primary-coral)]">홍보·응모 이벤트</p>
                   <h3 className="mt-3 text-2xl font-black">{form.title}</h3>
-                  <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{form.description?.trim() || '등록된 팬미팅 설명이 없습니다.'}</p>
+                  <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{form.description?.trim() || '등록된 이벤트 소개가 없습니다.'}</p>
                 </div>
                 <dl className="grid gap-3 text-sm">
                   <div className="flex justify-between border-b py-3"><dt>인플루언서</dt><dd className="font-bold">{isInfluencerAccount ? `${influencerNickname} (#${resolvedInfluencerId})` : `사용자 #${form.influencerId || '-'}`}</dd></div>
-                  <div className="flex justify-between border-b py-3"><dt>행사 시작</dt><dd className="font-bold">{form.scheduledStartAt}</dd></div>
+                  <div className="flex justify-between border-b py-3"><dt>예정 팬미팅</dt><dd className="font-bold">{form.scheduledStartAt}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>응모</dt><dd className="font-bold">{form.application.enabled ? `${form.application.capacity}명 모집` : '사용 안 함'}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>대기열 오픈</dt><dd className="font-bold">{form.operation.queueOpenAt}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>통화 시간</dt><dd className="font-bold">{form.operation.callDurationSec}초</dd></div>
@@ -503,22 +491,33 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
         </Card>
 
         {error ? <AlertBanner title="등록 실패" variant="error">{error}</AlertBanner> : null}
-        {createdMeetingId ? <AlertBanner title="팬미팅 방이 DRAFT 상태로 생성되었습니다" variant="success">생성된 팬미팅 ID는 {createdMeetingId}입니다.</AlertBanner> : null}
+        {createdMeetingId ? <AlertBanner title="이벤트가 DRAFT 상태로 생성되었습니다" variant="success">백엔드가 반환한 참조 ID(meetingId)는 {createdMeetingId}입니다.</AlertBanner> : null}
         <FormActions
           nextDisabled={Boolean(createdMeetingId)}
           nextLoading={submitting}
           onBack={step > 0 && !createdMeetingId ? () => setStep(step - 1) : undefined}
-          nextLabel={step === 2 ? '최종 등록' : '다음 단계'}
+          nextLabel={step === 2 ? '이벤트 등록' : '다음 단계'}
         />
         {createdMeetingId ? (
           <div className="flex justify-end">
-            <Link className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-white px-[var(--control-padding-inline)] text-sm font-semibold" to="/manager/fan-meetings/manage">
-              팬미팅 관리 목록으로 이동 <ArrowRight size={18} />
+            <Link className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-white px-[var(--control-padding-inline)] text-sm font-semibold" to="/manager/events/manage">
+              이벤트 관리 목록으로 이동 <ArrowRight size={18} />
             </Link>
           </div>
         ) : null}
       </form>
     </div>
+  )
+}
+
+export function ManagerMeetingSettingsPage() {
+  return (
+    <ApiUnavailablePage
+      title="팬미팅 설정"
+      description="응모 당첨자로 구성된 팬미팅 일정과 운영 설정을 수정하세요."
+      endpoint="PATCH /api/v1/fan-meetings/{meetingId}"
+      backTo="/manager/fan-meetings"
+    />
   )
 }
 
