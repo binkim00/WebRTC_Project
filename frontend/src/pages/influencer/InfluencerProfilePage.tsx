@@ -25,7 +25,6 @@ import {
   updateMyProfile,
   type UserProfile,
 } from '../../api/users'
-import profileImage from '../../assets/call-preview-remote.jpg'
 
 /*
  * TODO: 비밀번호 변경과 회원탈퇴 API가 확정되면 각 버튼의 처리 흐름을 연결한다.
@@ -167,11 +166,21 @@ export function InfluencerProfilePage() {
         <Card>
           <CardContent className="grid gap-7 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div className="flex min-w-0 flex-col gap-6 sm:flex-row sm:items-center">
-              <img
-                alt={`${profile.nickname} 프로필`}
-                className="size-32 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
-                src={profile.profileImageUrl || profileImage}
-              />
+              {profile.profileImageUrl ? (
+                <img
+                  alt={`${profile.nickname} 프로필`}
+                  className="size-32 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
+                  src={profile.profileImageUrl}
+                />
+              ) : (
+                <div
+                  aria-label={`${profile.nickname} 기본 프로필`}
+                  className="flex size-32 shrink-0 items-center justify-center rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-primary-coral-soft)] text-4xl font-black text-[var(--color-primary-coral)]"
+                  role="img"
+                >
+                  {profile.nickname.slice(0, 1)}
+                </div>
+              )}
 
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-primary-coral)]">
