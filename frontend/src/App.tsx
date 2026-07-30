@@ -26,7 +26,7 @@ function canAccessRolePath(pathname: string, role: LoginRole) {
   }
 
   if (/^\/manager(?:\/|$)/.test(pathname)) {
-    return role === 'MANAGER' || role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
+    return role === 'MANAGER' || role === 'SOLO_INFLUENCER'
   }
 
   if (/^\/fan-meetings\/[^/]+\/(?:fans|statistics)\/?$/.test(pathname)) {
@@ -49,7 +49,8 @@ function isPublicEventPath(pathname: string) {
 
 function roleLabel(role: LoginRole) {
   if (role === 'FAN') return '팬'
-  if (role === 'INFLUENCER' || role === 'SOLO_INFLUENCER') return '인플루언서'
+  if (role === 'INFLUENCER') return '인플루언서'
+  if (role === 'SOLO_INFLUENCER') return '솔로 인플루언서'
   return '매니저'
 }
 

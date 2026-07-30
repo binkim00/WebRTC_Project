@@ -8,6 +8,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
+  isSignupRole,
   login,
   saveAuthSession,
   signup,
@@ -39,11 +40,8 @@ const roleOptions = [
   { label: '팬', value: 'FAN' },
   { label: '인플루언서', value: 'INFLUENCER' },
   { label: '매니저', value: 'MANAGER' },
+  { label: '솔로 인플루언서', value: 'SOLO_INFLUENCER' },
 ] as const
-
-function isSignupRole(value: string): value is SignupRole {
-  return value === 'FAN' || value === 'INFLUENCER' || value === 'MANAGER'
-}
 
 function isPreferredLanguage(value: string): value is PreferredLanguage {
   return value === 'KOREAN' || value === 'ENGLISH'

@@ -63,8 +63,29 @@ function Stepper({ step, labels = ['기본 정보', '응모 설정', '미리보�
   </ol>
 }
 
-function FormActions({ onBack, onSave, nextLabel = '다음 단계' }: { onBack?: () => void; onSave?: () => void; nextLabel?: string }) {
-  return <div className="flex flex-wrap items-center justify-end gap-3">{onSave ? <Button leadingIcon={<FloppyDisk size={18} />} onClick={onSave} variant="secondary">임시 저장</Button> : null}<div className="flex gap-2">{onBack ? <Button leadingIcon={<ArrowLeft size={18} />} onClick={onBack} variant="secondary">이전 단계</Button> : null}<Button trailingIcon={<ArrowRight size={18} />} type="submit">{nextLabel}</Button></div></div>
+function FormActions({ onBack, onSave, nextLabel = '다음 단계', nextDisabled = false, nextLoading = false }: { onBack?: () => void; onSave?: () => void; nextLabel?: string; nextDisabled?: boolean; nextLoading?: boolean }) {
+  return <div className="flex flex-wrap items-center justify-end gap-3">{onSave ? <Button leadingIcon={<FloppyDisk size={18} />} onClick={onSave} variant="secondary">임시 저장</Button> : null}<div className="flex gap-2">{onBack ? <Button disabled={nextLoading} leadingIcon={<ArrowLeft size={18} />} onClick={onBack} variant="secondary">이전 단계</Button> : null}<Button disabled={nextDisabled} loading={nextLoading} trailingIcon={<ArrowRight size={18} />} type="submit">{nextLabel}</Button></div></div>
+}
+
+function toApiLocalDateTime(value: string): string {
+  return value.length === 16 ? `${value}:00` : value
+}
+
+function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
+  const scheduledStart = new Date(form.scheduledStartAt)
+  const queueOpen = new Date(form.operation.queueOpenAt)
+
+  const minimumStart = new Date(Date.now() + 60_000)
+
+  if (Number.isNaN(scheduledStart.getTime()) || scheduledStart <= minimumStart) {
+    return '팬미팅 시작 일시는 현재 시각보다 1분 이상 이후로 입력해 주세요.'
+  }
+
+  if (Number.isNaN(queueOpen.getTime()) || queueOpen >= scheduledStart) {
+    return '대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.'
+  }
+
+  return undefined
 }
 
 function ApiUnavailablePage({
@@ -278,7 +299,7 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
     },
     operation: {
       queueOpenAt: '',
-      callDurationSec: 120,
+      callDurationSec: 180,
       recordingEnabled: true,
       translationEnabled: false,
     },
@@ -314,13 +335,37 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
 
     const payload: FanMeetingForm = {
       ...form,
-      influencerId: resolvedInfluencerId ?? 0,
+      influencerId: resolvedInfluencerId ?? form.influencerId,
       description: form.description?.trim() || null,
       coverImageUrl: form.coverImageUrl?.trim() || null,
+      scheduledStartAt: toApiLocalDateTime(form.scheduledStartAt),
+      application: {
+        ...form.application,
+        startAt: form.application.enabled && form.application.startAt
+          ? toApiLocalDateTime(form.application.startAt)
+          : null,
+        endAt: form.application.enabled && form.application.endAt
+          ? toApiLocalDateTime(form.application.endAt)
+          : null,
+        resultAnnouncementAt:
+          form.application.enabled && form.application.resultAnnouncementAt
+            ? toApiLocalDateTime(form.application.resultAnnouncementAt)
+            : null,
+      },
+      operation: {
+        ...form.operation,
+        queueOpenAt: toApiLocalDateTime(form.operation.queueOpenAt),
+      },
     }
 
-    if (!resolvedInfluencerId) {
-      setError('담당 인플루언서를 자동 연결할 수 없습니다. 매니저용 인플루언서 조회 API가 필요합니다.')
+    if (!Number.isInteger(payload.influencerId) || payload.influencerId <= 0) {
+      setError('담당 인플루언서 ID를 입력해 주세요.')
+      return
+    }
+
+    const scheduleError = validateMeetingSchedule(payload)
+    if (scheduleError) {
+      setError(scheduleError)
       return
     }
 
@@ -338,23 +383,23 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
 
   return (
     <div className="grid gap-7 pb-10">
-      <PageHeader title="팬미팅 운영 생성" description="홍보·응모와 분리하여 영상통화 일정과 대기열 운영만 설정하세요." backTo="/manager/fan-meetings" />
-      <AlertBanner title="홍보·응모 이벤트는 별도 메뉴에서 관리합니다" variant="info">
-        팬에게 보이는 소개·응모 기간·질문은 홍보 및 응모 관리에서 작성하세요. 이 화면은 실제 영상통화 운영 정보만 생성합니다.
+      <PageHeader title="팬미팅 생성" description="1:1 영상통화를 위한 팬미팅 방과 운영 정보를 등록하세요." backTo="/manager/fan-meetings" />
+      <AlertBanner title="팬미팅 방은 DRAFT 상태로 생성됩니다" variant="info">
+        팬미팅 기본 정보와 API 문서에 정의된 응모·영상통화 운영 설정을 저장합니다. 날짜 입력값은 백엔드의 LocalDateTime 형식으로 변환해 전송합니다.
       </AlertBanner>
-      <Stepper step={step} labels={['기본 정보', '운영 설정', '최종 확인']} />
+      <Stepper step={step} labels={['기본 정보', '응모·영상통화 운영', '최종 확인']} />
       <form className="grid gap-5" onSubmit={submit}>
         <Card>
           <CardHeader>
             <Badge variant="primary">STEP {step + 1}</Badge>
             <CardTitle as="h2" className="mt-3">
-              {step === 0 ? '영상통화 팬미팅 기본 정보' : step === 1 ? '대기열과 통화 운영 설정' : '운영 정보 최종 확인'}
+              {step === 0 ? '팬미팅 기본 정보' : step === 1 ? '응모와 영상통화 운영 설정' : '생성 정보 최종 확인'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {step === 0 ? (
               <div className="grid gap-5 sm:grid-cols-2">
-                <TextField label="운영용 팬미팅명" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText="매니저와 인플루언서가 운영 화면에서 구분할 이름입니다." />
+                <TextField label="팬미팅명" maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText="팬과 운영 화면에 표시할 이름입니다." />
                 <TextField label="행사 시작 일시" required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
                 <div className="sm:col-span-2 rounded-2xl border border-[var(--color-divider)] bg-[var(--color-surface-page)] p-5">
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--color-primary-coral)]">담당 인플루언서</p>
@@ -367,23 +412,73 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
                       <Badge variant="success">자동 연결</Badge>
                     </div>
                   ) : (
-                    <div className="mt-3">
-                      <Select disabled label="인플루언서 선택" options={[{ value: '', label: '담당 인플루언서 조회 API가 필요합니다' }]} value="" />
-                      <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">사용자가 숫자 ID를 입력하지 않도록 제거했습니다. 매니저 계정에서는 담당 인플루언서 목록 API가 제공된 뒤 이름·프로필 선택 방식으로 연결해야 합니다.</p>
-                    </div>
+                    <TextField
+                      containerClassName="mt-3"
+                      helperText="현재 명세에는 인플루언서 목록 조회 API가 없어 생성 요청에 필요한 사용자 ID를 직접 입력합니다."
+                      label="인플루언서 사용자 ID"
+                      min={1}
+                      required
+                      type="number"
+                      value={form.influencerId || ''}
+                      onChange={(event) => setForm({ ...form, influencerId: Number(event.target.value) })}
+                    />
                   )}
                 </div>
+                <Textarea
+                  containerClassName="sm:col-span-2"
+                  label="팬미팅 설명"
+                  value={form.description ?? ''}
+                  onChange={(event) => setForm({ ...form, description: event.target.value })}
+                  placeholder="팬에게 보여 줄 팬미팅 소개를 입력해 주세요."
+                />
+                <TextField
+                  containerClassName="sm:col-span-2"
+                  helperText="이미지 업로드 API가 명세에 없으므로 접근 가능한 이미지 URL을 입력합니다."
+                  label="커버 이미지 URL"
+                  maxLength={2048}
+                  type="url"
+                  value={form.coverImageUrl ?? ''}
+                  onChange={(event) => setForm({ ...form, coverImageUrl: event.target.value })}
+                  placeholder="https://example.com/cover.jpg"
+                />
               </div>
             ) : null}
 
             {step === 1 ? (
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid gap-6">
+                <section className="grid gap-5 rounded-2xl border border-[var(--color-divider)] p-5">
+                  <Checkbox
+                    checked={form.application.enabled}
+                    description="응모를 사용하면 기간·결과 발표 일시·정원을 함께 전송합니다."
+                    label="팬 응모를 사용합니다."
+                    onChange={(event) => setForm({
+                      ...form,
+                      application: { ...form.application, enabled: event.target.checked },
+                    })}
+                  />
+                  {form.application.enabled ? (
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <TextField label="응모 시작 일시" required type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
+                      <TextField label="응모 종료 일시" required type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
+                      <TextField label="결과 발표 일시" required type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
+                      <TextField label="응모 정원" min={1} required type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[var(--color-text-secondary)]">응모를 사용하지 않으면 `{`enabled: false`}`만 전송됩니다.</p>
+                  )}
+                </section>
+                <section className="grid gap-5 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--color-primary-coral)]">영상통화 운영</p>
+                    <p className="mt-2 text-sm text-[var(--color-text-secondary)]">팬미팅 방의 입장 시점과 1명당 통화 조건을 설정합니다.</p>
+                  </div>
                 <TextField label="대기열 오픈 일시" required type="datetime-local" value={form.operation.queueOpenAt} onChange={(event) => setForm({ ...form, operation: { ...form.operation, queueOpenAt: event.target.value } })} />
                 <Select label="1인 통화 시간" options={[{ value: '120', label: '2분' }, { value: '180', label: '3분' }, { value: '300', label: '5분' }]} value={String(form.operation.callDurationSec)} onChange={(event) => setForm({ ...form, operation: { ...form.operation, callDurationSec: Number(event.target.value) } })} />
-                <div className="grid gap-3 rounded-xl border border-[var(--color-divider)] p-4">
+                <div className="grid gap-3 rounded-xl border border-[var(--color-divider)] p-4 sm:col-span-2">
                   <Checkbox checked={form.operation.recordingEnabled} label="통화 녹화를 사용합니다." onChange={(event) => setForm({ ...form, operation: { ...form.operation, recordingEnabled: event.target.checked } })} />
                   <Checkbox checked={form.operation.translationEnabled} label="실시간 번역을 사용합니다." onChange={(event) => setForm({ ...form, operation: { ...form.operation, translationEnabled: event.target.checked } })} />
                 </div>
+                </section>
               </div>
             ) : null}
 
@@ -392,10 +487,12 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
                 <div className="rounded-xl bg-[var(--color-surface-page)] p-6">
                   <p className="text-sm font-bold text-[var(--color-primary-coral)]">1:1 영상통화 팬미팅</p>
                   <h3 className="mt-3 text-2xl font-black">{form.title}</h3>
-                  <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{isInfluencerAccount ? `${influencerNickname} 계정과 자동 연결` : '담당 인플루언서 연결 대기'}</p>
+                  <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{form.description?.trim() || '등록된 팬미팅 설명이 없습니다.'}</p>
                 </div>
                 <dl className="grid gap-3 text-sm">
+                  <div className="flex justify-between border-b py-3"><dt>인플루언서</dt><dd className="font-bold">{isInfluencerAccount ? `${influencerNickname} (#${resolvedInfluencerId})` : `사용자 #${form.influencerId || '-'}`}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>행사 시작</dt><dd className="font-bold">{form.scheduledStartAt}</dd></div>
+                  <div className="flex justify-between border-b py-3"><dt>응모</dt><dd className="font-bold">{form.application.enabled ? `${form.application.capacity}명 모집` : '사용 안 함'}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>대기열 오픈</dt><dd className="font-bold">{form.operation.queueOpenAt}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>통화 시간</dt><dd className="font-bold">{form.operation.callDurationSec}초</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>녹화 / 번역</dt><dd className="font-bold">{form.operation.recordingEnabled ? '녹화 사용' : '녹화 미사용'} · {form.operation.translationEnabled ? '번역 사용' : '번역 미사용'}</dd></div>
@@ -406,9 +503,20 @@ export function ManagerMeetingFormPage({ mode }: FormPageProps) {
         </Card>
 
         {error ? <AlertBanner title="등록 실패" variant="error">{error}</AlertBanner> : null}
-        {createdMeetingId ? <AlertBanner title="팬미팅이 등록되었습니다" variant="success">생성된 팬미팅 ID는 {createdMeetingId}입니다.</AlertBanner> : null}
-        {!resolvedInfluencerId && step === 2 ? <AlertBanner title="매니저 계정에서는 아직 최종 등록할 수 없습니다" variant="warning">백엔드에 담당 인플루언서 목록·선택 API가 없어 올바른 influencerId를 결정할 수 없습니다.</AlertBanner> : null}
-        <FormActions onBack={step > 0 ? () => setStep(step - 1) : undefined} nextLabel={step === 2 ? (submitting ? '등록 중…' : '최종 등록') : '다음 단계'} />
+        {createdMeetingId ? <AlertBanner title="팬미팅 방이 DRAFT 상태로 생성되었습니다" variant="success">생성된 팬미팅 ID는 {createdMeetingId}입니다.</AlertBanner> : null}
+        <FormActions
+          nextDisabled={Boolean(createdMeetingId)}
+          nextLoading={submitting}
+          onBack={step > 0 && !createdMeetingId ? () => setStep(step - 1) : undefined}
+          nextLabel={step === 2 ? '최종 등록' : '다음 단계'}
+        />
+        {createdMeetingId ? (
+          <div className="flex justify-end">
+            <Link className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-white px-[var(--control-padding-inline)] text-sm font-semibold" to="/manager/fan-meetings/manage">
+              팬미팅 관리 목록으로 이동 <ArrowRight size={18} />
+            </Link>
+          </div>
+        ) : null}
       </form>
     </div>
   )

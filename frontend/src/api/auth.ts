@@ -15,8 +15,21 @@ export {
   type LoginRole,
 } from './authSession'
 
-export type SignupRole = 'FAN' | 'INFLUENCER' | 'MANAGER'
+export type SignupRole =
+  | 'FAN'
+  | 'INFLUENCER'
+  | 'MANAGER'
+  | 'SOLO_INFLUENCER'
 export type PreferredLanguage = 'KOREAN' | 'ENGLISH'
+
+export function isSignupRole(value: unknown): value is SignupRole {
+  return (
+    value === 'FAN' ||
+    value === 'INFLUENCER' ||
+    value === 'MANAGER' ||
+    value === 'SOLO_INFLUENCER'
+  )
+}
 
 export type SignupRequest = {
   loginId: string
@@ -31,7 +44,7 @@ export type SignupRequest = {
 
 export type SignupResponse = {
   userId: number
-  role: string
+  role: SignupRole
   createdAt: string
 }
 
@@ -50,8 +63,7 @@ function isSignupResponse(value: unknown): value is SignupResponse {
   return (
     typeof response.userId === 'number' &&
     Number.isFinite(response.userId) &&
-    typeof response.role === 'string' &&
-    response.role.trim().length > 0 &&
+    isSignupRole(response.role) &&
     typeof response.createdAt === 'string' &&
     response.createdAt.trim().length > 0
   )

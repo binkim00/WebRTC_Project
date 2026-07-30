@@ -23,28 +23,37 @@ export type ManagerNotice = {
   publishAt?: string
 }
 
-export type FanMeetingForm = {
+export type ApplicationSettingRequest = {
+  enabled: boolean
+  startAt: string | null
+  endAt: string | null
+  resultAnnouncementAt: string | null
+  capacity: number
+}
+
+export type OperationSettingRequest = {
+  queueOpenAt: string
+  callDurationSec: number
+  recordingEnabled: boolean
+  translationEnabled: boolean
+  reconnectGraceSec?: number | null
+  earlyStartMinutes?: number | null
+  maxRecallCount?: number | null
+}
+
+export type FanMeetingCreateRequest = {
   influencerId: number
   title: string
   description: string | null
   coverImageUrl: string | null
   scheduledStartAt: string
-  application: {
-    enabled: boolean
-    startAt: string | null
-    endAt: string | null
-    resultAnnouncementAt: string | null
-    capacity: number
-  }
-  operation: {
-    queueOpenAt: string
-    callDurationSec: number
-    recordingEnabled: boolean
-    translationEnabled: boolean
-  }
+  application: ApplicationSettingRequest
+  operation: OperationSettingRequest
 }
 
-export type FanMeetingCreateResponse = FanMeetingForm & {
+export type FanMeetingForm = FanMeetingCreateRequest
+
+export type FanMeetingCreateResponse = FanMeetingCreateRequest & {
   meetingId: number
   status: 'DRAFT'
   organizationId: number | null
@@ -72,15 +81,125 @@ function isFanMeetingCreateResponse(value: unknown): value is FanMeetingCreateRe
   )
 }
 
+function normalizeCoverImageUrl(value: string | null): string | null {
+  const trimmed = value?.trim() ?? ''
+
+  if (!trimmed || trimmed.startsWith('data:')) {
+    return null
+  }
+
+  if (trimmed.length > 2048) {
+    throw new TypeError('커버 이미지 URL은 2048자 이하로 입력해 주세요.')
+  }
+
+  let normalizedUrl: URL
+  try {
+    normalizedUrl = new URL(trimmed)
+    if (normalizedUrl.protocol !== 'http:' && normalizedUrl.protocol !== 'https:') {
+      throw new TypeError('커버 이미지는 http 또는 https URL이어야 합니다.')
+    }
+  } catch (error) {
+    if (error instanceof TypeError && error.message === '커버 이미지는 http 또는 https URL이어야 합니다.') {
+      throw error
+    }
+    throw new TypeError('커버 이미지는 올바른 URL이어야 합니다.')
+  }
+
+  // Java URL 검증기에서 경로의 대괄호를 거부할 수 있어 퍼센트 인코딩한다.
+  // URL 객체의 직렬화 결과를 사용해 대괄호·공백 같은 문자를
+  // 표준 percent-encoding으로 정규화한다.
+  return normalizedUrl.toString()
+}
+
+function assertFanMeetingCreateRequest(payload: FanMeetingCreateRequest) {
+  normalizeCoverImageUrl(payload.coverImageUrl)
+
+  if (!Number.isInteger(payload.influencerId) || payload.influencerId <= 0) {
+    throw new TypeError('담당 인플루언서 ID는 1 이상의 정수여야 합니다.')
+  }
+
+  if (!payload.title.trim()) {
+    throw new TypeError('팬미팅명을 입력해 주세요.')
+  }
+
+  if (!payload.scheduledStartAt.trim()) {
+    throw new TypeError('팬미팅 시작 일시를 입력해 주세요.')
+  }
+
+  if (!payload.operation.queueOpenAt.trim()) {
+    throw new TypeError('대기열 오픈 일시를 입력해 주세요.')
+  }
+
+  if (
+    !Number.isInteger(payload.operation.callDurationSec) ||
+    payload.operation.callDurationSec <= 0
+  ) {
+    throw new TypeError('1인 통화 시간은 1초 이상의 정수여야 합니다.')
+  }
+
+  if (payload.application.enabled) {
+    if (
+      !payload.application.startAt ||
+      !payload.application.endAt ||
+      !payload.application.resultAnnouncementAt ||
+      !Number.isInteger(payload.application.capacity) ||
+      payload.application.capacity <= 0
+    ) {
+      throw new TypeError('응모를 사용하는 경우 응모 기간·결과 발표 일시·정원을 입력해 주세요.')
+    }
+  }
+}
+
 export async function createFanMeeting(
-  payload: FanMeetingForm,
+  payload: FanMeetingCreateRequest,
   authToken: string,
 ): Promise<FanMeetingCreateResponse> {
+  assertFanMeetingCreateRequest(payload)
+
+  // lab 브랜치의 FanMeetingCreateRequest 계약에 정의된 필드만 전송한다.
+  // 응모를 사용하지 않아도 capacity는 @NotNull이므로 0을 보내고,
+  // 날짜는 null이어야 서비스의 비활성 응모 검증을 통과한다.
+  const requestBody = {
+    influencerId: payload.influencerId,
+    title: payload.title.trim(),
+    description: payload.description?.trim() || null,
+    coverImageUrl: normalizeCoverImageUrl(payload.coverImageUrl),
+    scheduledStartAt: payload.scheduledStartAt,
+    application: payload.application.enabled
+      ? {
+          enabled: true,
+          startAt: payload.application.startAt,
+          endAt: payload.application.endAt,
+          resultAnnouncementAt: payload.application.resultAnnouncementAt,
+          capacity: payload.application.capacity,
+        }
+      : {
+          enabled: false,
+          startAt: null,
+          endAt: null,
+          resultAnnouncementAt: null,
+          capacity: 0,
+        },
+    operation: {
+      queueOpenAt: payload.operation.queueOpenAt,
+      callDurationSec: payload.operation.callDurationSec,
+      recordingEnabled: payload.operation.recordingEnabled,
+      translationEnabled: payload.operation.translationEnabled,
+      reconnectGraceSec: payload.operation.reconnectGraceSec ?? null,
+      earlyStartMinutes: payload.operation.earlyStartMinutes ?? null,
+      maxRecallCount: payload.operation.maxRecallCount ?? null,
+    },
+  }
+
+  if (import.meta.env.DEV) {
+    console.info('[fan-meeting:create] request body', requestBody)
+  }
+
   const value = unwrap(
     await apiRequest<unknown>('/api/v1/fan-meetings', {
       method: 'POST',
       authToken,
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestBody),
     }),
   )
 
