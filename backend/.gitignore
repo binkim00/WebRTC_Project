@@ -16,6 +16,9 @@ HELP.md
 ### Local Codex instructions ###
 /AGENTS.md
 
+### Local Claude instructions ###
+/CLAUDE.md
+
 ### Logs ###
 *.log
 logs/
