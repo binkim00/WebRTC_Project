@@ -42,6 +42,22 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     Optional<QueueEntry> findForUpdate(@Param("meetingId") Long meetingId,
                                        @Param("entryId") Long entryId);
 
+    /**
+     * 팬 본인의 대기열 항목을 비관적 쓰기 잠금으로 조회한다.
+     *
+     * <p>잠금 조회는 트랜잭션 시작 시점의 스냅샷이 아니라 최신 커밋 데이터를 읽는다.
+     * 별도 트랜잭션으로 초기화된 대기열 항목을 같은 요청에서 바로 사용할 때 필요하다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param fanId 팬 사용자 식별자
+     * @return 잠금이 적용된 본인의 대기열 항목
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from QueueEntry q join fetch q.participant p join fetch p.fan f "
+            + "where q.meeting.id = :meetingId and f.id = :fanId")
+    Optional<QueueEntry> findForUpdateByMeetingAndFan(@Param("meetingId") Long meetingId,
+                                                      @Param("fanId") Long fanId);
+
     /** 대기열 식별자로 항목과 팬미팅을 조회하면서 비관적 쓰기 잠금을 획득한다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select q from QueueEntry q join fetch q.meeting m "

@@ -52,8 +52,19 @@ public record FanMeetingManagementResponse(
     public record ApplicationSetting(boolean enabled, LocalDateTime startAt,
                                      LocalDateTime endAt, LocalDateTime resultAnnouncementAt,
                                      int capacity) {
-        /** 응모 설정 엔티티를 응답으로 변환한다. */
+        /**
+         * 응모 설정 엔티티를 응답으로 변환한다.
+         *
+         * <p>설정이 없으면 응모를 사용하지 않는 형태로 반환한다.
+         * 이는 응모를 끈 팬미팅을 생성할 때 저장하는 값과 같은 모양이다.
+         *
+         * @param setting 응모 설정이며 없으면 null
+         * @return 응모 설정 응답
+         */
         private static ApplicationSetting from(MeetingApplicationSetting setting) {
+            if (setting == null) {
+                return new ApplicationSetting(false, null, null, null, 0);
+            }
             return new ApplicationSetting(setting.isEnabled(), setting.getApplicationOpenAt(),
                     setting.getApplicationCloseAt(), setting.getResultAnnouncementAt(),
                     setting.getCapacity());
