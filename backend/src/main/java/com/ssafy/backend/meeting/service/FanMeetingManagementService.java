@@ -1,6 +1,7 @@
 package com.ssafy.backend.meeting.service;
 
 import com.ssafy.backend.application.domain.Application;
+import com.ssafy.backend.application.domain.ApplicationStatus;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.call.domain.CallEndReason;
@@ -183,7 +184,8 @@ public class FanMeetingManagementService {
         } catch (IllegalStateException exception) {
             throw new BusinessException(ErrorCode.FAN_MEETING_STATE_CONFLICT);
         }
-        List<Notification> notifications = applicationRepository.findAllByMeeting_Id(meetingId)
+        List<Notification> notifications = applicationRepository
+                .findAllByMeeting_IdAndStatusNot(meetingId, ApplicationStatus.WITHDRAWN)
                 .stream()
                 .map(Application::getFan)
                 .map(fan -> Notification.create(fan, meeting, NotificationType.MEETING_CANCELED,

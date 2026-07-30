@@ -4,6 +4,14 @@ import org.springframework.http.HttpStatus;
 
 /** 행사 운영 API에서 사용하는 비즈니스 오류 코드다. */
 public enum ErrorCode {
+    APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "응모 내역을 찾을 수 없습니다."),
+    APPLICATION_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이미 접수된 응모가 있습니다."),
+    APPLICATION_PERIOD_CLOSED(HttpStatus.CONFLICT, "현재 응모하거나 취소할 수 있는 기간이 아닙니다."),
+    APPLICATION_ALREADY_WITHDRAWN(HttpStatus.CONFLICT, "이미 취소된 응모입니다."),
+    APPLICATION_STATE_CONFLICT(HttpStatus.CONFLICT, "현재 응모 상태에서는 요청을 처리할 수 없습니다."),
+    APPLICATION_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST, "개인정보 수집 및 이용 동의가 필요합니다."),
+    APPLICATION_ANSWER_INVALID(HttpStatus.BAD_REQUEST, "응모 답변이 올바르지 않습니다."),
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
     AUTHENTICATION_REQUIRED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
     ACTIVE_USER_NOT_FOUND(HttpStatus.UNAUTHORIZED, "활성 사용자를 찾을 수 없습니다."),

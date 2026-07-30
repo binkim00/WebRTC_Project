@@ -1,6 +1,7 @@
 package com.ssafy.backend;
 
 import com.ssafy.backend.application.repository.ApplicationRepository;
+import com.ssafy.backend.application.service.ApplicationService;
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
@@ -52,6 +53,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private ApplicationRepository applicationRepository;
+
+    @MockitoBean
+    private ApplicationService applicationService;
 
     @MockitoBean
     private NotificationRepository notificationRepository;

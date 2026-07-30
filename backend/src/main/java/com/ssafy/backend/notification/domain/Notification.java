@@ -76,4 +76,15 @@ public class Notification extends BaseCreatedTimeEntity {
         notification.message = Objects.requireNonNull(message);
         return notification;
     }
+
+    /**
+     * 아직 읽지 않은 알림에 최초 확인 시각을 기록한다.
+     *
+     * @param readAt 사용자가 알림을 확인한 시각
+     */
+    public void markAsRead(LocalDateTime readAt) {
+        if (this.readAt == null) {
+            this.readAt = Objects.requireNonNull(readAt);
+        }
+    }
 }

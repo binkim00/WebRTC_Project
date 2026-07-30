@@ -1,6 +1,8 @@
 package com.ssafy.backend.meeting.service;
 
 import com.ssafy.backend.application.repository.ApplicationRepository;
+import com.ssafy.backend.application.domain.Application;
+import com.ssafy.backend.application.domain.ApplicationStatus;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
@@ -111,6 +113,45 @@ class FanMeetingQueryServiceTest {
         assertThat(response.viewer().canApply()).isTrue();
         assertThat(response.viewer().canEnter()).isFalse();
         assertThat(response.viewer().applicationStatus()).isNull();
+    }
+
+    /** 취소 상태의 응모가 있는 팬에게 응모 기간 중 재응모 가능 상태를 제공하는지 검증한다. */
+    @Test
+    void allowsWithdrawnFanToReapplyDuringOpenPeriod() {
+        User influencer = mock(User.class);
+        when(influencer.getId()).thenReturn(10L);
+        when(influencer.getNickname()).thenReturn("인플루언서");
+        FanMeeting meeting = meeting(influencer);
+        meeting.publish(LocalDateTime.now(Clock.fixed(NOW, SEOUL)).minusDays(2));
+        meeting.openApplications();
+
+        LocalDateTime now = LocalDateTime.now(Clock.fixed(NOW, SEOUL));
+        MeetingApplicationSetting applicationSetting = MeetingApplicationSetting.create(
+                meeting, true, now.minusDays(1), now.plusDays(1), now.plusDays(2), 20
+        );
+        MeetingOperationSetting operation = MeetingOperationSetting.create(
+                meeting, now.plusHours(1), 120, true, true
+        );
+        User fan = mock(User.class);
+        when(fan.getId()).thenReturn(20L);
+        when(fan.getRole()).thenReturn(UserRole.FAN);
+        Application withdrawn = Application.submit(meeting, fan, now.minusHours(2));
+        withdrawn.withdraw(now.minusHours(1));
+        AuthenticatedUser principal = new AuthenticatedUser(20L, UserRole.FAN);
+
+        when(fanMeetingRepository.findById(1L)).thenReturn(Optional.of(meeting));
+        when(currentUserService.requireActiveUser(principal)).thenReturn(fan);
+        when(applicationSettingRepository.findById(1L)).thenReturn(Optional.of(applicationSetting));
+        when(operationSettingRepository.findById(1L)).thenReturn(Optional.of(operation));
+        when(applicationRepository.findByMeeting_IdAndFan_Id(1L, 20L))
+                .thenReturn(Optional.of(withdrawn));
+        when(participantRepository.findByMeeting_IdAndFan_Id(1L, 20L))
+                .thenReturn(Optional.empty());
+
+        FanMeetingDetailResponse response = queryService.getDetail(1L, principal);
+
+        assertThat(response.viewer().applicationStatus()).isEqualTo(ApplicationStatus.WITHDRAWN);
+        assertThat(response.viewer().canApply()).isTrue();
     }
 
     /** 공개 목록에서 초안 상태 필터를 요청하면 잘못된 요청으로 거부하는지 검증한다. */

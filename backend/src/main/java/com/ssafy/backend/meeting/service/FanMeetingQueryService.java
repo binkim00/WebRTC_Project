@@ -212,7 +212,9 @@ public class FanMeetingQueryService {
                 meeting,
                 requireApplicationSetting(meetingId),
                 findApplicationStatus(meetingId, viewer),
-                applicationRepository.countByMeeting_Id(meetingId),
+                applicationRepository.countByMeeting_IdAndStatusNot(
+                        meetingId, ApplicationStatus.WITHDRAWN
+                ),
                 participantRepository.countByMeeting_Id(meetingId)
         );
     }
@@ -253,7 +255,9 @@ public class FanMeetingQueryService {
             User viewer, ApplicationStatus applicationStatus
     ) {
         if (viewer == null || viewer.getRole() != UserRole.FAN
-                || applicationStatus != null || !application.isEnabled()
+                || (applicationStatus != null
+                && applicationStatus != ApplicationStatus.WITHDRAWN)
+                || !application.isEnabled()
                 || meeting.getStatus() != FanMeetingStatus.APPLICATION_OPEN) {
             return false;
         }
