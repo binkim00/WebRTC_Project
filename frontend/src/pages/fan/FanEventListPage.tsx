@@ -2,8 +2,7 @@ import { ArrowRight, MagnifyingGlass } from '@phosphor-icons/react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Card, CardContent, Select, TextField } from '../../components'
-import localPreviewImage from '../../assets/call-preview-local.jpg'
-import remotePreviewImage from '../../assets/call-preview-remote.jpg'
+import { fanEventsMock } from '../../mocks/fanEventsMock'
 
 const recruitmentStatusOptions = [
   { label: '전체', value: 'all' },
@@ -16,73 +15,6 @@ const dateOptions = [
   { label: '전체 날짜', value: 'all' },
   { label: '이번 주', value: 'this-week' },
   { label: '이번 달', value: 'this-month' },
-]
-
-type EventItem = {
-  eventId: number
-  title: string
-  influencerName: string
-  recruitmentStatus: 'RECRUITING' | 'ANNOUNCED' | 'CLOSED'
-  thumbnailUrl: string
-  meetingAt: string
-  applicationDeadline: string
-}
-
-const eventListMock: EventItem[] = [
-  {
-    eventId: 1,
-    title: 'Melly와의 봄날 팬미팅',
-    influencerName: 'Melly',
-    recruitmentStatus: 'RECRUITING',
-    thumbnailUrl: remotePreviewImage,
-    meetingAt: '2026.08.02 19:00',
-    applicationDeadline: '2026.07.25',
-  },
-  {
-    eventId: 2,
-    title: '여름밤 라이브 콜',
-    influencerName: 'Hana',
-    recruitmentStatus: 'ANNOUNCED',
-    thumbnailUrl: localPreviewImage,
-    meetingAt: '2026.08.05 20:00',
-    applicationDeadline: '2026.07.28',
-  },
-  {
-    eventId: 3,
-    title: '첫 만남 온라인 팬사인회',
-    influencerName: 'Hana',
-    recruitmentStatus: 'RECRUITING',
-    thumbnailUrl: localPreviewImage,
-    meetingAt: '2026.08.10 19:30',
-    applicationDeadline: '2026.08.01',
-  },
-  {
-    eventId: 4,
-    title: 'Melly Special Call',
-    influencerName: 'Melly',
-    recruitmentStatus: 'CLOSED',
-    thumbnailUrl: remotePreviewImage,
-    meetingAt: '2026.08.12 16:00',
-    applicationDeadline: '2026.08.03',
-  },
-  {
-    eventId: 5,
-    title: 'Weekend Fan Talk',
-    influencerName: 'Sora',
-    recruitmentStatus: 'ANNOUNCED',
-    thumbnailUrl: localPreviewImage,
-    meetingAt: '2026.08.15 21:00',
-    applicationDeadline: '2026.08.05',
-  },
-  {
-    eventId: 6,
-    title: 'Hello Again 팬미팅',
-    influencerName: 'Min',
-    recruitmentStatus: 'CLOSED',
-    thumbnailUrl: remotePreviewImage,
-    meetingAt: '2026.08.17 20:00',
-    applicationDeadline: '2026.08.08',
-  },
 ]
 
 const recruitmentStatusContent = {
@@ -159,7 +91,7 @@ export function FanEventListPage() {
 
       <section>
         <div className="grid gap-6 sm:grid-cols-2">
-          {eventListMock.map((event) => (
+          {fanEventsMock.map((event) => (
             <Card className="overflow-hidden" key={event.eventId}>
               <img
                 alt={`${event.title} 썸네일`}

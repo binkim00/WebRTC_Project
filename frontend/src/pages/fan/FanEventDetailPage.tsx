@@ -8,32 +8,13 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Badge, Button, Card, CardContent, Checkbox } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
-import eventPreviewImage from '../../assets/call-preview-remote.jpg'
+import { fanEventsMock } from '../../mocks/fanEventsMock'
 
-const eventDetailMock = {
-  title: 'Melly와의 봄날 팬미팅',
-  influencerName: 'Melly',
-  recruitmentStatus: '모집 중',
-  thumbnailUrl: eventPreviewImage,
-  meetingAt: '2026.08.02 19:00',
-  callDuration: '02:00',
-  applicationPeriod: '2026.07.15 - 2026.07.25',
-  capacity: 30,
-  description: [
-    'Melly와 함께 1:1 영상통화로 만나는 온라인 팬미팅입니다.',
-    '행사 운영을 위해 응모 정보와 참여 기록이 사용됩니다.',
-  ],
-  participationConditions: [
-    '본인 명의 계정으로 응모해 주세요.',
-    '팬미팅 시작 전에 장비 점검을 완료해 주세요.',
-    '안내된 시간에 대기실에 입장해 주세요.',
-  ],
-  notices: [
-    '영상통화는 행사 운영 및 안전 관리를 위해 녹화될 수 있습니다.',
-    '부적절한 상황이 발생하면 운영자가 통화를 종료할 수 있습니다.',
-    '당첨자 본인이 아닌 경우 팬미팅 참여가 제한됩니다.',
-  ],
-}
+const recruitmentStatusContent = {
+  RECRUITING: { label: '모집 중', variant: 'success' },
+  ANNOUNCED: { label: '결과 발표', variant: 'warning' },
+  CLOSED: { label: '마감', variant: 'neutral' },
+} as const
 
 const agreementItems = [
   { id: 'privacy', label: '개인정보 수집·이용 동의' },
@@ -45,6 +26,7 @@ type AgreementId = (typeof agreementItems)[number]['id']
 
 export function FanEventDetailPage() {
   const { eventId } = useParams()
+  const event = fanEventsMock.find((item) => item.eventId === Number(eventId))
   const [agreements, setAgreements] = useState<Record<AgreementId, boolean>>({
     privacy: false,
     recording: false,
@@ -56,11 +38,11 @@ export function FanEventDetailPage() {
     setAgreements((current) => ({ ...current, [id]: checked }))
   }
 
-  if (!eventId?.trim()) {
+  if (!eventId?.trim() || !event) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 eventId 값이 없습니다. 이벤트 목록에서 다시 선택해 주세요."
-        title="필수 URL 파라미터가 없습니다"
+        message="해당 이벤트를 찾을 수 없습니다. 이벤트 목록에서 다시 선택해 주세요."
+        title="이벤트 정보가 없습니다"
       />
     )
   }
@@ -69,22 +51,25 @@ export function FanEventDetailPage() {
     <div className="grid gap-10">
       <section className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
         <img
-          alt={`${eventDetailMock.title} 대표 이미지`}
+          alt={`${event.title} 대표 이미지`}
           className="aspect-[16/10] w-full rounded-[var(--radius-panel)] object-cover shadow-[var(--shadow-panel)]"
-          src={eventDetailMock.thumbnailUrl}
+          src={event.thumbnailUrl}
         />
 
         <div className="grid content-start gap-8 py-5">
           <div className="grid gap-5">
-            <Badge className="w-fit" variant="success">
-              {eventDetailMock.recruitmentStatus}
+            <Badge
+              className="w-fit"
+              variant={recruitmentStatusContent[event.recruitmentStatus].variant}
+            >
+              {recruitmentStatusContent[event.recruitmentStatus].label}
             </Badge>
             <div>
               <h1 className="text-3xl font-black tracking-[-0.04em]">
-                {eventDetailMock.title}
+                {event.title}
               </h1>
               <p className="mt-3 text-sm font-semibold text-[var(--color-text-secondary)]">
-                인플루언서 {eventDetailMock.influencerName}
+                인플루언서 {event.influencerName}
               </p>
             </div>
           </div>
@@ -98,7 +83,7 @@ export function FanEventDetailPage() {
                 <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
                   팬미팅 일정
                 </dt>
-                <dd className="mt-1 text-sm font-bold">{eventDetailMock.meetingAt}</dd>
+                <dd className="mt-1 text-sm font-bold">{event.meetingAt}</dd>
               </div>
             </div>
 
@@ -110,7 +95,7 @@ export function FanEventDetailPage() {
                 <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
                   통화 시간
                 </dt>
-                <dd className="mt-1 text-sm font-bold">{eventDetailMock.callDuration}</dd>
+                <dd className="mt-1 text-sm font-bold">{event.callDuration}</dd>
               </div>
             </div>
 
@@ -123,7 +108,7 @@ export function FanEventDetailPage() {
                   응모 기간
                 </dt>
                 <dd className="mt-1 text-sm font-bold">
-                  {eventDetailMock.applicationPeriod}
+                  {event.applicationPeriod}
                 </dd>
               </div>
             </div>
@@ -136,7 +121,7 @@ export function FanEventDetailPage() {
                 <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
                   모집 인원
                 </dt>
-                <dd className="mt-1 text-sm font-bold">{eventDetailMock.capacity}명</dd>
+                <dd className="mt-1 text-sm font-bold">{event.capacity}명</dd>
               </div>
             </div>
           </dl>
@@ -148,7 +133,7 @@ export function FanEventDetailPage() {
           <section className="border-b border-[var(--color-divider)] pb-8">
             <h2 className="text-2xl font-black tracking-[-0.03em]">상세 소개</h2>
             <div className="mt-5 grid gap-3 text-sm leading-7 text-[var(--color-text-secondary)]">
-              {eventDetailMock.description.map((paragraph) => (
+              {event.description.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
             </div>
@@ -157,7 +142,7 @@ export function FanEventDetailPage() {
           <section className="border-b border-[var(--color-divider)] pb-8">
             <h2 className="text-2xl font-black tracking-[-0.03em]">참여 조건</h2>
             <ul className="mt-5 grid list-disc gap-3 pl-5 text-sm leading-7 text-[var(--color-text-secondary)]">
-              {eventDetailMock.participationConditions.map((condition) => (
+              {event.participationConditions.map((condition) => (
                 <li key={condition}>{condition}</li>
               ))}
             </ul>
@@ -166,7 +151,7 @@ export function FanEventDetailPage() {
           <section>
             <h2 className="text-2xl font-black tracking-[-0.03em]">유의사항</h2>
             <ul className="mt-5 grid list-disc gap-3 pl-5 text-sm leading-7 text-[var(--color-text-secondary)]">
-              {eventDetailMock.notices.map((notice) => (
+              {event.notices.map((notice) => (
                 <li key={notice}>{notice}</li>
               ))}
             </ul>
