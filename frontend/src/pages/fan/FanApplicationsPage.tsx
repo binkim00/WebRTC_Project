@@ -82,7 +82,7 @@ const applicationStatusContent = {
   NOT_SELECTED: { label: '비당첨', variant: 'neutral' },
 } as const
 
-const recruitmentStatusOptions = [
+const applicationStatusOptions = [
   { label: '전체 상태', value: 'all' },
   { label: '모집 중', value: 'recruiting' },
   { label: '발표 전', value: 'pending' },
@@ -96,24 +96,108 @@ const dateOptions = [
   { label: '이번 달', value: 'this-month' },
 ]
 
-const influencerOptions = [
-  { label: '전체', value: 'all' },
-  { label: 'Melly', value: 'melly' },
-  { label: '서윤', value: 'seoyun' },
-  { label: '민', value: 'min' },
-  { label: '하나', value: 'hana' },
-]
-
 const totalPagesMock = 2
+
+type ApplicationStatusFilter =
+  | 'all'
+  | 'recruiting'
+  | 'pending'
+  | 'won'
+  | 'not-selected'
+type DateFilter = 'all' | 'this-week' | 'this-month'
+
+type ApplicationFilters = {
+  eventKeyword: string
+  influencerKeyword: string
+  status: ApplicationStatusFilter
+  date: DateFilter
+}
+
+const initialFilters: ApplicationFilters = {
+  eventKeyword: '',
+  influencerKeyword: '',
+  status: 'all',
+  date: 'all',
+}
+
+const applicationStatusFilterMap = {
+  recruiting: 'RECRUITING',
+  pending: 'PENDING',
+  won: 'WON',
+  'not-selected': 'NOT_SELECTED',
+} as const
+
+function parseMeetingDate(meetingAt: string) {
+  const [date, time] = meetingAt.split(' ')
+  const [year, month, day] = date.split('.').map(Number)
+  const [hour, minute] = time.split(':').map(Number)
+
+  return new Date(year, month - 1, day, hour, minute)
+}
+
+function matchesDateFilter(meetingAt: string, dateFilter: DateFilter) {
+  if (dateFilter === 'all') {
+    return true
+  }
+
+  const now = new Date()
+  const meetingDate = parseMeetingDate(meetingAt)
+
+  if (dateFilter === 'this-month') {
+    return (
+      meetingDate.getFullYear() === now.getFullYear() &&
+      meetingDate.getMonth() === now.getMonth()
+    )
+  }
+
+  const startOfWeek = new Date(now)
+  const daysSinceMonday = (now.getDay() + 6) % 7
+  startOfWeek.setDate(now.getDate() - daysSinceMonday)
+  startOfWeek.setHours(0, 0, 0, 0)
+
+  const startOfNextWeek = new Date(startOfWeek)
+  startOfNextWeek.setDate(startOfWeek.getDate() + 7)
+
+  return meetingDate >= startOfWeek && meetingDate < startOfNextWeek
+}
 
 export function FanApplicationsPage() {
   const [currentPage, setCurrentPage] = useState(1)
+  const [filters, setFilters] = useState<ApplicationFilters>(initialFilters)
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    // TODO: 검색·필터 조건 반영 후 첫 페이지부터 조회
+    const formData = new FormData(event.currentTarget)
+
+    setFilters({
+      eventKeyword: String(formData.get('eventKeyword') ?? '').trim(),
+      influencerKeyword: String(formData.get('influencerKeyword') ?? '').trim(),
+      status: String(formData.get('status') ?? 'all') as ApplicationStatusFilter,
+      date: String(formData.get('date') ?? 'all') as DateFilter,
+    })
     setCurrentPage(1)
   }
+
+  const normalizedEventKeyword = filters.eventKeyword.toLocaleLowerCase()
+  const normalizedInfluencerKeyword = filters.influencerKeyword.toLocaleLowerCase()
+  const filteredApplications = eventApplicationsMock.filter((application) => {
+    const matchesEventKeyword = application.title
+      .toLocaleLowerCase()
+      .includes(normalizedEventKeyword)
+    const matchesInfluencerKeyword = application.influencerName
+      .toLocaleLowerCase()
+      .includes(normalizedInfluencerKeyword)
+    const matchesStatus =
+      filters.status === 'all' ||
+      application.status === applicationStatusFilterMap[filters.status]
+
+    return (
+      matchesEventKeyword &&
+      matchesInfluencerKeyword &&
+      matchesStatus &&
+      matchesDateFilter(application.meetingAt, filters.date)
+    )
+  })
 
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-8">
@@ -140,7 +224,7 @@ export function FanApplicationsPage() {
             </p>
           </div>
           <p className="text-sm font-bold text-[var(--color-text-secondary)]">
-            총 {eventApplicationsMock.length}개
+            총 {filteredApplications.length}개
           </p>
         </div>
 
@@ -158,28 +242,35 @@ export function FanApplicationsPage() {
                     size={18}
                   />
                 }
-                label="검색"
-                name="keyword"
-                placeholder="이벤트명 또는 인플루언서명"
+                label="이벤트"
+                name="eventKeyword"
+                placeholder="이벤트명 입력"
+                type="search"
+              />
+              <TextField
+                endAdornment={
+                  <MagnifyingGlass
+                    aria-hidden
+                    className="mr-3 text-[var(--color-text-tertiary)]"
+                    size={18}
+                  />
+                }
+                label="인플루언서"
+                name="influencerKeyword"
+                placeholder="인플루언서명 입력"
                 type="search"
               />
               <Select
                 defaultValue="all"
-                label="모집 상태"
+                label="응모 상태"
                 name="status"
-                options={recruitmentStatusOptions}
+                options={applicationStatusOptions}
               />
               <Select
                 defaultValue="all"
-                label="날짜"
+                label="팬미팅 날짜"
                 name="date"
                 options={dateOptions}
-              />
-              <Select
-                defaultValue="all"
-                label="인플루언서"
-                name="influencer"
-                options={influencerOptions}
               />
               <Button
                 leadingIcon={<MagnifyingGlass aria-hidden size={18} weight="bold" />}
@@ -192,7 +283,7 @@ export function FanApplicationsPage() {
         </Card>
 
         <div className="mt-6 grid gap-6 md:grid-cols-2">
-          {eventApplicationsMock.map((application) => {
+          {filteredApplications.map((application) => {
             const statusContent = applicationStatusContent[application.status]
 
             return (
@@ -244,12 +335,21 @@ export function FanApplicationsPage() {
           })}
         </div>
 
-        <Pagination
-          className="mt-8"
-          currentPage={currentPage}
-          onPageChange={setCurrentPage}
-          totalPages={totalPagesMock}
-        />
+        {filteredApplications.length > 0 ? (
+          <Pagination
+            className="mt-8"
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            totalPages={totalPagesMock}
+          />
+        ) : (
+          <div className="mt-6 rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
+            <h3 className="font-bold">검색 결과가 없습니다</h3>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+              검색어 또는 필터 조건을 변경해 주세요.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   )
