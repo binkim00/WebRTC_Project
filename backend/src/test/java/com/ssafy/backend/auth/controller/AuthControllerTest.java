@@ -80,14 +80,14 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.nickname").value("melly"));
     }
 
-    /** 유효한 Refresh Token 요청이 회전된 토큰 응답을 반환하는지 검증한다. */
+    /** 명세 경로 /api/v1/auth/reissue 로 보낸 유효한 Refresh Token 요청이 회전된 토큰 응답을 반환하는지 검증한다. */
     @Test
     void returnsRotatedTokensForValidRefreshToken() throws Exception {
         when(refreshTokenService.refresh(any())).thenReturn(new LoginResponse(
                 "new-access", "new-refresh", 3600, 1L, UserRole.FAN, "melly"
         ));
 
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/reissue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken":"current-refresh"}
@@ -159,7 +159,7 @@ class AuthControllerTest {
                 .andExpect(status().isTooManyRequests());
 
         when(refreshTokenService.refresh(any())).thenThrow(new InvalidRefreshTokenException());
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/reissue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken":"invalid-refresh"}

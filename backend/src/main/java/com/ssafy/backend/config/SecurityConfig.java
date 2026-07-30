@@ -67,7 +67,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login",
-                                "/api/v1/auth/refresh").permitAll()
+                                "/api/v1/auth/reissue").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                         // 테스트 토큰 컨트롤러는 설정으로 활성화된 환경에서만 등록된다.
                         .requestMatchers(HttpMethod.GET, "/livekit-test.html").permitAll()
@@ -95,9 +95,81 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/call")
                                 .hasRole("MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings").authenticated()
-                        // 보호 대상 API가 확정될 때까지 기존 접근 정책을 유지한다.
-                        .requestMatchers("/api/v1/fan-meetings/*/queue/operations/**")
+                        // --- 이하 WAVE 1~3 신규 엔드포인트 권한 선반영 ---
+                        // 병렬 작업 세션이 이 파일을 동시에 수정하면 충돌이 확정적이므로 규칙만 미리 등록한다.
+                        // 아직 컨트롤러가 없는 경로는 인증·권한 통과 후 404가 되며 기능에 영향을 주지 않는다.
+                        // 팬미팅 단위 소유권은 MeetingAccessService 로 서비스 계층에서 다시 검증한다.
+
+                        // 참가자 조회 (PART-001, PART-002)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/participants",
+                                "/api/v1/fan-meetings/*/participants/*")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
+                        // 장비 점검 결과 저장 (DEV-001)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/device-checks")
+                                .hasAnyRole("FAN", "INFLUENCER", "SOLO_INFLUENCER")
+                        // 팬 메모 (MEMO-001, MEMO-002)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/influencers/me/fans/*/memos")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER", "MANAGER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/influencers/me/fans/*/memos")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
+
+                        // 응모 폼 (FORM-001, FORM-002)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/application-form")
+                                .permitAll()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/fan-meetings/*/application-form")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        // 응모 조회·통계 (APP-002, APP-003, APP-004, APP-007)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/applications/me")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/me/applications")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/applications/statistics")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/applications")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        // 추첨·결과 공개 (APP-005, APP-006)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/applications/draw",
+                                "/api/v1/fan-meetings/*/applications/results/publish")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+
+                        // 대기 순서 변경 (QUEUE-005, QREQ-001~003)
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/queue-entries/*/position")
+                                .hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/change-requests")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue-change-requests")
+                                .hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/queue-change-requests/*")
+                                .hasRole("MANAGER")
+
+                        // 팬미팅 결과 통계 (STAT-001)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/statistics")
+                                .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
+
+                        // 공지·커뮤니티 조회 (POST-001, POST-002, COMMENT-001)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/service-notices",
+                                "/api/v1/service-notices/*",
+                                "/api/v1/fan-meetings/*/notices",
+                                "/api/v1/fan-meetings/*/notices/*",
+                                "/api/v1/fan-meetings/*/community/posts",
+                                "/api/v1/community/posts/*",
+                                "/api/v1/community/posts/*/comments").permitAll()
+                        // 공지·커뮤니티 작성 (POST-003)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/notices",
+                                "/api/v1/fan-meetings/*/community/posts")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        // 댓글 작성·신고 (COMMENT-002, COMMENT-004)
+                        // 참가 Participant 자격은 서비스 계층에서 검증하므로 여기서는 인증만 요구한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/community/posts/*/comments",
+                                "/api/v1/comments/*/reports").authenticated()
+
+                        // AI 요약·모니터링 (AI-001, AI-002, AI-003)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/summary")
+                                .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/moderations")
+                                .hasAnyRole("MANAGER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/moderations/*/review")
+                                .hasAnyRole("MANAGER", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)
