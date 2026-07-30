@@ -24,14 +24,15 @@ type ManagementHubCopy = {
   manageIcon: ReactNode
 }
 
+/** 팬미팅 관리 허브에 표시할 설명과 이동 경로를 한곳에서 관리한다. */
 const meetingHubCopy: ManagementHubCopy = {
   eyebrow: '팬미팅 운영',
   title: '팬미팅 관리',
-  description: '홍보·응모와 분리된 영상통화 일정과 대기열 운영 정보를 관리하세요.',
-  createEyebrow: '영상통화 운영 준비',
-  createTitle: '팬미팅 운영 생성하기',
-  createDescription: '새 1:1 영상통화 팬미팅의 일정과 통화 운영 정보를 등록합니다.',
-  createTo: '/manager/fan-meetings/new',
+  description: '이벤트 응모와 당첨자 선정을 마친 뒤 영상통화 일정과 대기열 운영 정보를 관리하세요.',
+  createEyebrow: '팬미팅 준비의 첫 단계',
+  createTitle: '홍보·응모 이벤트 만들기',
+  createDescription: '먼저 이벤트를 등록하고 응모자 중 실제 팬미팅 참가자를 선정합니다.',
+  createTo: '/manager/events/new',
   createIcon: <VideoCamera aria-hidden="true" size={30} weight="bold" />,
   manageEyebrow: '기존 팬미팅 운영',
   manageTitle: '팬미팅 관리',
@@ -40,6 +41,7 @@ const meetingHubCopy: ManagementHubCopy = {
   manageIcon: <ListChecks aria-hidden="true" size={30} weight="bold" />,
 }
 
+/** 홍보·응모 관리 허브에 표시할 설명과 이동 경로를 한곳에서 관리한다. */
 const eventHubCopy: ManagementHubCopy = {
   eyebrow: '팬 대상 콘텐츠',
   title: '홍보 및 응모 관리',
@@ -56,6 +58,7 @@ const eventHubCopy: ManagementHubCopy = {
   manageIcon: <CalendarDots aria-hidden="true" size={30} weight="bold" />,
 }
 
+/** 생성 또는 관리 작업 하나를 아이콘, 설명, 이동 버튼으로 표시한다. */
 function HubAction({
   eyebrow,
   title,
@@ -121,6 +124,7 @@ function HubAction({
   )
 }
 
+/** 전달받은 문구 설정을 이용해 매니저용 2가지 작업 선택 화면을 구성한다. */
 function ManagerManagementHubPage({ copy }: { copy: ManagementHubCopy }) {
   return (
     <div className="py-5 lg:py-6">
@@ -168,10 +172,12 @@ function ManagerManagementHubPage({ copy }: { copy: ManagementHubCopy }) {
   )
 }
 
+/** 팬미팅 운영 시작점과 기존 팬미팅 관리 진입점을 보여준다. */
 export function ManagerMeetingHubPage() {
   return <ManagerManagementHubPage copy={meetingHubCopy} />
 }
 
+/** 새 이벤트 생성과 기존 이벤트 관리 진입점을 보여준다. */
 export function ManagerEventHubPage() {
   return <ManagerManagementHubPage copy={eventHubCopy} />
 }

@@ -15,6 +15,7 @@ import {
 } from '../../api/managerMeetings'
 import { AlertBanner, Button, Card, EmptyState, Pagination, Spinner } from '../../components'
 
+/** 목록 API가 준비되기 전 레이아웃 검증에만 사용하는 개발 미리보기 데이터다. */
 const previewMeetings: ManagerMeetingSummary[] = [
   { meetingId: 'meeting-1', title: 'MELLY DAY 팬미팅', influencerName: 'Melly', scheduledStartAt: '2026-07-28T20:00:00', status: 'SCHEDULED' },
   { meetingId: 'meeting-2', title: '서윤의 여름밤 팬미팅', influencerName: '서윤', scheduledStartAt: '2026-08-15T20:00:00', status: 'SCHEDULED' },
@@ -23,6 +24,7 @@ const previewMeetings: ManagerMeetingSummary[] = [
   { meetingId: 'meeting-5', title: '첫 만남 온라인 팬사인회', influencerName: 'Hana', scheduledStartAt: '2026-09-19T20:00:00', status: 'SCHEDULED' },
 ]
 
+/** 서버 데이터가 없을 때도 페이지 컴포넌트가 동일한 구조를 사용하도록 하는 빈 페이지 값이다. */
 const emptyPage: ManagerMeetingPage = {
   content: [],
   page: 0,
@@ -32,6 +34,7 @@ const emptyPage: ManagerMeetingPage = {
   hasNext: false,
 }
 
+/** ISO 날짜 문자열을 팬미팅 목록에서 읽기 쉬운 `YYYY.MM.DD HH:mm` 형식으로 바꾼다. */
 function formatMeetingDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -45,6 +48,7 @@ function formatMeetingDate(value: string): string {
   return `${year}.${month}.${day} ${hour}:${minute}`
 }
 
+/** 팬미팅을 검색하고 참가자·설정 관리 화면으로 연결하는 목록 페이지다. */
 export function ManagerMeetingListPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -82,6 +86,7 @@ export function ManagerMeetingListPage() {
     setLoading(false)
   }, [isPreview, keyword, page])
 
+  /** 검색 폼 제출 시 첫 페이지로 돌아가고 입력 키워드를 실제 검색 조건으로 적용한다. */
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPage(1)
@@ -97,11 +102,11 @@ export function ManagerMeetingListPage() {
         </header>
         <AlertBanner title="팬미팅 목록 API가 아직 구현되지 않았습니다" variant="warning">
           첨부된 API 구현 현황 기준으로 <code>GET /api/v1/fan-meetings</code>를 사용할 수 없습니다.
-          팬미팅 생성 API는 구현되어 있으므로 새 팬미팅 등록은 가능합니다.
+          현재 등록 API는 홍보·응모 이벤트 생성에 사용하므로 이벤트 생성 화면에서 먼저 응모를 진행해 주세요.
         </AlertBanner>
         <div>
-          <Button leadingIcon={<Plus size={20} weight="bold" />} onClick={() => navigate('/manager/fan-meetings/new')}>
-            새 팬미팅 등록
+          <Button leadingIcon={<Plus size={20} weight="bold" />} onClick={() => navigate('/manager/events/new')}>
+            새 이벤트 등록
           </Button>
         </div>
       </div>
@@ -140,9 +145,9 @@ export function ManagerMeetingListPage() {
           <Button
             className="min-h-12 self-start px-6 lg:self-auto"
             leadingIcon={<Plus size={20} weight="bold" />}
-            onClick={() => navigate('/manager/fan-meetings/new')}
+            onClick={() => navigate('/manager/events/new')}
           >
-            새 팬미팅
+            새 이벤트
           </Button>
         </div>
 
@@ -158,7 +163,7 @@ export function ManagerMeetingListPage() {
           </div>
         ) : meetingPage.content.length === 0 ? (
           <EmptyState
-            action={<Button onClick={() => navigate('/manager/fan-meetings/new')}>새 팬미팅 만들기</Button>}
+            action={<Button onClick={() => navigate('/manager/events/new')}>새 이벤트 만들기</Button>}
             description="검색 조건에 맞는 팬미팅이 없습니다."
             title="팬미팅을 찾을 수 없습니다"
           />
@@ -190,6 +195,7 @@ export function ManagerMeetingListPage() {
   )
 }
 
+/** 팬미팅 한 건의 기본 정보와 참가자·설정 화면 링크를 한 행으로 표시한다. */
 function MeetingRow({ meeting }: { meeting: ManagerMeetingSummary }) {
   return (
     <article className="grid gap-5 px-5 py-5 transition-colors hover:bg-[var(--color-surface-page)] sm:px-7 lg:grid-cols-[minmax(260px,1.35fr)_minmax(140px,.7fr)_minmax(190px,.9fr)_minmax(175px,.8fr)_minmax(120px,.55fr)] lg:items-center lg:gap-4">
