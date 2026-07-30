@@ -166,7 +166,7 @@ public class QueueCommandService {
     }
 
     /**
-     * 현재 선점된 참가자를 명세상 허용된 한 번만 재호출한다.
+     * 현재 선점된 참가자를 팬미팅에 설정된 최대 횟수 안에서 재호출한다.
      *
      * @param meetingId 팬미팅 식별자
      * @param entry 재호출할 대기열 항목
@@ -178,13 +178,15 @@ public class QueueCommandService {
         if (!entry.getId().equals(currentEntryId)) {
             throw new BusinessException(ErrorCode.QUEUE_STATE_CONFLICT);
         }
-        if (entry.getRecallCount() >= 1) {
+        MeetingOperationSetting setting = operationSettingRepository.findById(meetingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_SETTING_NOT_FOUND));
+        if (entry.getRecallCount() >= setting.getMaxRecallCount()) {
             throw new BusinessException(ErrorCode.CALL_ATTEMPT_LIMIT_EXCEEDED);
         }
         CallSession callSession = callSessionRepository.findByQueueEntry_Id(entry.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.CALL_SESSION_NOT_FOUND));
         try {
-            entry.recall(LocalDateTime.now(clock));
+            entry.recall(LocalDateTime.now(clock), setting.getMaxRecallCount());
         } catch (IllegalStateException exception) {
             throw new BusinessException(ErrorCode.QUEUE_STATE_CONFLICT);
         }

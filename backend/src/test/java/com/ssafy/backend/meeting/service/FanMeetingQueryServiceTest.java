@@ -92,7 +92,7 @@ class FanMeetingQueryServiceTest {
                 meeting, true, now.minusDays(1), now.plusDays(1), now.plusDays(2), 20
         );
         MeetingOperationSetting operation = MeetingOperationSetting.create(
-                meeting, now.plusHours(1), 120, true, true
+                meeting, now.plusHours(1), 120, true, true, 60, 30, 1
         );
         User fan = mock(User.class);
         when(fan.getId()).thenReturn(20L);
@@ -130,7 +130,7 @@ class FanMeetingQueryServiceTest {
                 meeting, true, now.minusDays(1), now.plusDays(1), now.plusDays(2), 20
         );
         MeetingOperationSetting operation = MeetingOperationSetting.create(
-                meeting, now.plusHours(1), 120, true, true
+                meeting, now.plusHours(1), 120, true, true, 60, 30, 1
         );
         User fan = mock(User.class);
         when(fan.getId()).thenReturn(20L);

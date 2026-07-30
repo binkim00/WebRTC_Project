@@ -154,6 +154,7 @@ class QueueCommandServiceTest {
         QueueEntry entry = mock(QueueEntry.class);
         FanMeeting meeting = mock(FanMeeting.class);
         CallSession callSession = mock(CallSession.class);
+        MeetingOperationSetting setting = mock(MeetingOperationSetting.class);
         when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(manager);
         when(entryRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(entry));
         when(entry.getId()).thenReturn(7L);
@@ -162,13 +163,15 @@ class QueueCommandServiceTest {
         when(entry.getCallAttemptCount()).thenReturn(2);
         when(meeting.getId()).thenReturn(1L);
         when(realtimeStore.getCurrentEntryId(1L)).thenReturn(7L);
+        when(settingRepository.findById(1L)).thenReturn(Optional.of(setting));
+        when(setting.getMaxRecallCount()).thenReturn(2);
         when(callSessionRepository.findByQueueEntry_Id(7L))
                 .thenReturn(Optional.of(callSession));
         when(callSession.getId()).thenReturn(100L);
 
         QueueCallResponse response = service.call(7L, PRINCIPAL);
 
-        verify(entry).recall(LocalDateTime.of(2026, 7, 27, 1, 0));
+        verify(entry).recall(LocalDateTime.of(2026, 7, 27, 1, 0), 2);
         verify(callSessionRepository, never()).saveAndFlush(any(CallSession.class));
         assertThat(response.callSessionId()).isEqualTo(100L);
         assertThat(response.callAttemptCount()).isEqualTo(2);
@@ -229,6 +232,7 @@ class QueueCommandServiceTest {
         User manager = mock(User.class);
         QueueEntry entry = mock(QueueEntry.class);
         FanMeeting meeting = mock(FanMeeting.class);
+        MeetingOperationSetting setting = mock(MeetingOperationSetting.class);
         when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(manager);
         when(entryRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(entry));
         when(entry.getId()).thenReturn(7L);
@@ -237,6 +241,8 @@ class QueueCommandServiceTest {
         when(entry.getStatus()).thenReturn(QueueEntryStatus.CALLED);
         when(entry.getRecallCount()).thenReturn(1);
         when(realtimeStore.getCurrentEntryId(1L)).thenReturn(7L);
+        when(settingRepository.findById(1L)).thenReturn(Optional.of(setting));
+        when(setting.getMaxRecallCount()).thenReturn(1);
 
         assertThatThrownBy(() -> service.call(7L, PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class,

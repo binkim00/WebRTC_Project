@@ -52,12 +52,18 @@ public record FanMeetingUpdateRequest(
      * @param callDurationSec 참가자당 영상통화 제한 시간
      * @param recordingEnabled 녹화 사용 여부
      * @param translationEnabled 번역 사용 여부
+     * @param reconnectGraceSec 재접속 유예시간(초)
+     * @param earlyStartMinutes 예정 시각 전 조기 시작 허용시간(분)
+     * @param maxRecallCount 최초 호출 이후 최대 재호출 횟수
      */
     public record OperationSettingPatch(
             LocalDateTime queueOpenAt,
             @Positive Integer callDurationSec,
             Boolean recordingEnabled,
-            Boolean translationEnabled
+            Boolean translationEnabled,
+            @PositiveOrZero Integer reconnectGraceSec,
+            @PositiveOrZero Integer earlyStartMinutes,
+            @PositiveOrZero Integer maxRecallCount
     ) {
     }
 }

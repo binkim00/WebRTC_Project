@@ -133,10 +133,13 @@ class LiveKitWebhookServiceTest {
     /** 팬 퇴장 이벤트가 해당 통화 세션의 접속 표시를 제거하는지 검증한다. */
     @Test
     void clearsFanPresenceWhenFanLeavesRoom() {
+        MeetingOperationSetting setting = mock(MeetingOperationSetting.class);
         when(realtimeStore.claimWebhookEvent("fan-left-event")).thenReturn(true);
         when(callSession.getStatus()).thenReturn(CallSessionStatus.ACTIVE);
         when(callSessionRepository.findWebhookContextById(CALL_SESSION_ID))
                 .thenReturn(Optional.of(callSession));
+        when(operationSettingRepository.findById(MEETING_ID)).thenReturn(Optional.of(setting));
+        when(setting.getReconnectGraceSec()).thenReturn(90);
         LivekitWebhook.WebhookEvent event = LivekitWebhook.WebhookEvent.newBuilder()
                 .setEvent("participant_left")
                 .setId("fan-left-event")
@@ -150,9 +153,8 @@ class LiveKitWebhookServiceTest {
         service.handle(event);
 
         verify(realtimeStore).clearFanConnected(CALL_SESSION_ID);
-        verify(callSession).openReconnectWindow(STARTED_AT.plusSeconds(60));
+        verify(callSession).openReconnectWindow(STARTED_AT.plusSeconds(90));
         verify(realtimeStore).markDisconnectRole(CALL_SESSION_ID, "FAN");
-        verifyNoInteractions(operationSettingRepository);
     }
 
     /** 재접속 유예 중 양측이 다시 연결되면 기존 타이머를 유지하고 유예만 해제하는지 검증한다. */

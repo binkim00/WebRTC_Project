@@ -62,12 +62,15 @@ public record FanMeetingManagementResponse(
 
     /** 팬미팅 대기실과 개별 영상통화 운영 설정 응답이다. */
     public record OperationSetting(LocalDateTime queueOpenAt, int callDurationSec,
-                                   boolean recordingEnabled, boolean translationEnabled) {
+                                   boolean recordingEnabled, boolean translationEnabled,
+                                   int reconnectGraceSec, int earlyStartMinutes,
+                                   int maxRecallCount) {
         /** 운영 설정 엔티티를 응답으로 변환한다. */
         private static OperationSetting from(MeetingOperationSetting setting) {
             return new OperationSetting(setting.getWaitingRoomOpenAt(),
                     setting.getCallDurationSec(), setting.isRecordingEnabled(),
-                    setting.isTranslationEnabled());
+                    setting.isTranslationEnabled(), setting.getReconnectGraceSec(),
+                    setting.getEarlyStartMinutes(), setting.getMaxRecallCount());
         }
     }
 }

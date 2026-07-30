@@ -24,12 +24,12 @@ class QueueEntryTest {
 
         entry.enter(firstCalledAt.minusMinutes(1));
         entry.call(firstCalledAt);
-        entry.recall(recalledAt);
+        entry.recall(recalledAt, 1);
 
         assertThat(entry.getCallAttemptCount()).isEqualTo(2);
         assertThat(entry.getRecallCount()).isEqualTo(1);
         assertThat(entry.getCalledAt()).isEqualTo(recalledAt);
-        assertThatThrownBy(() -> entry.recall(recalledAt.plusSeconds(30)))
+        assertThatThrownBy(() -> entry.recall(recalledAt.plusSeconds(30), 1))
                 .isInstanceOf(IllegalStateException.class);
     }
 

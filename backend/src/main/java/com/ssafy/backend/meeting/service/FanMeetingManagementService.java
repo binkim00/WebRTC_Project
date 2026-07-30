@@ -42,13 +42,21 @@ import org.springframework.util.StringUtils;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /** 팬미팅 수정·게시·취소·시작·종료 명령을 처리한다. */
 @Service
 public class FanMeetingManagementService {
 
-    private static final long START_EARLY_MINUTES = 30L;
+    private static final Set<FanMeetingStatus> PRE_LIVE_STATUSES = EnumSet.of(
+            FanMeetingStatus.DRAFT,
+            FanMeetingStatus.PUBLISHED,
+            FanMeetingStatus.APPLICATION_OPEN,
+            FanMeetingStatus.APPLICATION_CLOSED,
+            FanMeetingStatus.READY
+    );
 
     private final CurrentUserService currentUserService;
     private final FanMeetingRepository fanMeetingRepository;
@@ -116,10 +124,11 @@ public class FanMeetingManagementService {
         MeetingApplicationSetting application = requireApplicationSetting(meetingId);
         MeetingOperationSetting operation = requireOperationSetting(meetingId);
         LocalDateTime now = LocalDateTime.now(clock);
-        if ((meeting.getStatus() != FanMeetingStatus.DRAFT
-                && meeting.getStatus() != FanMeetingStatus.PUBLISHED)
-                || application.isEnabled() && application.getApplicationOpenAt() != null
-                && !now.isBefore(application.getApplicationOpenAt())) {
+        if (!PRE_LIVE_STATUSES.contains(meeting.getStatus())) {
+            throw new BusinessException(ErrorCode.FAN_MEETING_STATE_CONFLICT);
+        }
+        boolean applicationStarted = hasApplicationStarted(meeting, application, now);
+        if (applicationStarted && hasApplicationRestrictedChanges(request)) {
             throw new BusinessException(ErrorCode.FAN_MEETING_STATE_CONFLICT);
         }
 
@@ -136,12 +145,16 @@ public class FanMeetingManagementService {
         ApplicationValues applicationValues = mergeApplication(application, request.application());
         OperationValues operationValues = mergeOperation(operation, request.operation());
         validateSchedule(scheduledStartAt, applicationValues, operationValues);
-        meeting.update(influencer, title, description, coverImageUrl, scheduledStartAt);
-        application.update(applicationValues.enabled(), applicationValues.startAt(),
-                applicationValues.endAt(), applicationValues.resultAnnouncementAt(),
-                applicationValues.capacity());
+        if (!applicationStarted) {
+            meeting.update(influencer, title, description, coverImageUrl, scheduledStartAt);
+            application.update(applicationValues.enabled(), applicationValues.startAt(),
+                    applicationValues.endAt(), applicationValues.resultAnnouncementAt(),
+                    applicationValues.capacity());
+        }
         operation.update(operationValues.queueOpenAt(), operationValues.callDurationSec(),
-                operationValues.recordingEnabled(), operationValues.translationEnabled());
+                operationValues.recordingEnabled(), operationValues.translationEnabled(),
+                operationValues.reconnectGraceSec(), operationValues.earlyStartMinutes(),
+                operationValues.maxRecallCount());
         fanMeetingRepository.flush();
         return FanMeetingManagementResponse.of(meeting, application, operation);
     }
@@ -195,16 +208,17 @@ public class FanMeetingManagementService {
         return response(meeting);
     }
 
-    /** 시작 예정 시각 30분 전부터 준비 완료 팬미팅을 시작한다. */
+    /** 설정된 조기 시작 허용 시각부터 준비 완료 팬미팅을 시작한다. */
     @Transactional
     public FanMeetingManagementResponse start(Long meetingId, AuthenticatedUser principal) {
         User actor = currentUserService.requireActiveUser(principal);
         FanMeeting meeting = requireMeetingForUpdate(meetingId);
         requireMeetingOperator(meeting, actor);
-        requireOperationSetting(meetingId);
+        MeetingOperationSetting operation = requireOperationSetting(meetingId);
         LocalDateTime now = LocalDateTime.now(clock);
         if (meeting.getStatus() != FanMeetingStatus.READY
-                || now.isBefore(meeting.getScheduledStartAt().minusMinutes(START_EARLY_MINUTES))
+                || now.isBefore(meeting.getScheduledStartAt()
+                .minusMinutes(operation.getEarlyStartMinutes()))
                 || participantRepository.countByMeeting_Id(meetingId) == 0) {
             throw new BusinessException(ErrorCode.FAN_MEETING_START_NOT_ALLOWED);
         }
@@ -342,7 +356,9 @@ public class FanMeetingManagementService {
                                             FanMeetingUpdateRequest.OperationSettingPatch patch) {
         if (patch == null) {
             return new OperationValues(current.getWaitingRoomOpenAt(), current.getCallDurationSec(),
-                    current.isRecordingEnabled(), current.isTranslationEnabled());
+                    current.isRecordingEnabled(), current.isTranslationEnabled(),
+                    current.getReconnectGraceSec(), current.getEarlyStartMinutes(),
+                    current.getMaxRecallCount());
         }
         return new OperationValues(
                 patch.queueOpenAt() == null ? current.getWaitingRoomOpenAt() : patch.queueOpenAt(),
@@ -350,7 +366,13 @@ public class FanMeetingManagementService {
                 patch.recordingEnabled() == null
                         ? current.isRecordingEnabled() : patch.recordingEnabled(),
                 patch.translationEnabled() == null
-                        ? current.isTranslationEnabled() : patch.translationEnabled()
+                        ? current.isTranslationEnabled() : patch.translationEnabled(),
+                patch.reconnectGraceSec() == null
+                        ? current.getReconnectGraceSec() : patch.reconnectGraceSec(),
+                patch.earlyStartMinutes() == null
+                        ? current.getEarlyStartMinutes() : patch.earlyStartMinutes(),
+                patch.maxRecallCount() == null
+                        ? current.getMaxRecallCount() : patch.maxRecallCount()
         );
     }
 
@@ -358,7 +380,10 @@ public class FanMeetingManagementService {
     private void validateSchedule(LocalDateTime scheduledStartAt, ApplicationValues application,
                                   OperationValues operation) {
         if (scheduledStartAt == null || operation.queueOpenAt() == null
-                || !operation.queueOpenAt().isBefore(scheduledStartAt)) {
+                || !operation.queueOpenAt().isBefore(scheduledStartAt)
+                || operation.reconnectGraceSec() < 0
+                || operation.earlyStartMinutes() < 0
+                || operation.maxRecallCount() < 0) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
         if (application.enabled()) {
@@ -387,6 +412,31 @@ public class FanMeetingManagementService {
         return StringUtils.hasText(value) ? value.trim() : null;
     }
 
+    /** 응모 상태 또는 응모 시작 시각을 기준으로 기본 정보 수정 제한 시점을 판단한다. */
+    private boolean hasApplicationStarted(
+            FanMeeting meeting, MeetingApplicationSetting application, LocalDateTime now
+    ) {
+        return (meeting.getStatus() != FanMeetingStatus.DRAFT
+                && meeting.getStatus() != FanMeetingStatus.PUBLISHED)
+                || (application.isEnabled()
+                && application.getApplicationOpenAt() != null
+                && !now.isBefore(application.getApplicationOpenAt()));
+    }
+
+    /** 응모 시작 이후 변경할 수 없는 기본 정보·응모·기존 운영 설정 요청인지 확인한다. */
+    private boolean hasApplicationRestrictedChanges(FanMeetingUpdateRequest request) {
+        if (request.influencerId() != null || request.title() != null
+                || request.description() != null || request.coverImageUrl() != null
+                || request.scheduledStartAt() != null || request.application() != null) {
+            return true;
+        }
+        FanMeetingUpdateRequest.OperationSettingPatch operation = request.operation();
+        return operation != null && (operation.queueOpenAt() != null
+                || operation.callDurationSec() != null
+                || operation.recordingEnabled() != null
+                || operation.translationEnabled() != null);
+    }
+
     /** 검증에 사용할 응모 설정의 병합 결과다. */
     private record ApplicationValues(boolean enabled, LocalDateTime startAt,
                                      LocalDateTime endAt, LocalDateTime resultAnnouncementAt,
@@ -395,6 +445,8 @@ public class FanMeetingManagementService {
 
     /** 검증에 사용할 운영 설정의 병합 결과다. */
     private record OperationValues(LocalDateTime queueOpenAt, int callDurationSec,
-                                   boolean recordingEnabled, boolean translationEnabled) {
+                                   boolean recordingEnabled, boolean translationEnabled,
+                                   int reconnectGraceSec, int earlyStartMinutes,
+                                   int maxRecallCount) {
     }
 }
