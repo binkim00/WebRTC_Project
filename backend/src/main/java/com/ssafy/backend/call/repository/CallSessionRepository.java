@@ -128,4 +128,16 @@ public interface CallSessionRepository extends JpaRepository<CallSession, Long> 
      */
     boolean existsByQueueEntry_Meeting_IdAndStatusIn(
             Long meetingId, Collection<CallSessionStatus> statuses);
+
+    /**
+     * 팬미팅 종료 시 아직 연결 중이거나 활성 상태인 영상통화 세션을 잠금 조회한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param statuses 조회할 영상통화 상태 목록
+     * @return 종료 처리가 필요한 영상통화 세션 목록
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"queueEntry", "queueEntry.meeting"})
+    List<CallSession> findByQueueEntry_Meeting_IdAndStatusIn(
+            Long meetingId, Collection<CallSessionStatus> statuses);
 }

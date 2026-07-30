@@ -74,6 +74,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/test-token").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/webhook").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings",
+                                "/api/v1/fan-meetings/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/queue/enter")
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue/me")

@@ -11,6 +11,9 @@ import java.util.Optional;
  * 팬미팅 참가자 영속성 처리를 담당한다.
  */
 public interface ParticipantRepository extends JpaRepository<Participant, Long> {
+    /** 팬미팅에 확정된 참가자 수를 반환한다. */
+    long countByMeeting_Id(Long meetingId);
+
     /** 팬미팅 참가자를 배정 순번대로 조회한다. */
     @EntityGraph(attributePaths = {"fan", "meeting"})
     List<Participant> findByMeeting_IdOrderByAssignedOrderAsc(Long meetingId);

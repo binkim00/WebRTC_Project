@@ -298,4 +298,20 @@ public class QueueRealtimeStore {
     public void clearDisconnectRole(Long callSessionId) {
         redisTemplate.delete(QueueRedisKeys.liveKitDisconnectRole(callSessionId));
     }
+
+    /**
+     * 팬미팅 종료 후 대기열과 LiveKit 호스트 접속 상태를 모두 제거한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param roomId LiveKit Room 식별자
+     */
+    public void clearMeeting(Long meetingId, String roomId) {
+        redisTemplate.delete(List.of(
+                QueueRedisKeys.initialized(meetingId),
+                QueueRedisKeys.order(meetingId),
+                QueueRedisKeys.status(meetingId),
+                QueueRedisKeys.current(meetingId),
+                QueueRedisKeys.liveKitHostPresence(roomId)
+        ));
+    }
 }

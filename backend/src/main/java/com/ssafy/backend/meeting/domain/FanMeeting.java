@@ -72,9 +72,23 @@ public class FanMeeting extends BaseTimeEntity {
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 
+    @Column(name = "canceled_at")
+    private LocalDateTime canceledAt;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    /**
+     * 팬미팅 생성에 필요한 기본 정보로 초안 엔티티를 초기화한다.
+     *
+     * @param organization 소속 조직이며 1인 인플루언서 팬미팅이면 null
+     * @param manager 담당 매니저이며 1인 인플루언서 팬미팅이면 null
+     * @param influencer 팬미팅을 진행할 인플루언서
+     * @param title 팬미팅 제목
+     * @param description 팬미팅 설명
+     * @param coverImageUrl 커버 이미지 URL
+     * @param scheduledStartAt 예정 시작 시각
+     */
     private FanMeeting(Organization organization,
                        User manager,
                        User influencer,
@@ -107,5 +121,120 @@ public class FanMeeting extends BaseTimeEntity {
                 organization, manager, influencer, title,
                 description, coverImageUrl, scheduledStartAt
         );
+    }
+
+    /**
+     * 초안 또는 응모 시작 전 공개 팬미팅의 기본 정보와 담당 인플루언서를 수정한다.
+     *
+     * @param influencer 변경할 인플루언서
+     * @param title 변경할 제목
+     * @param description 변경할 설명
+     * @param coverImageUrl 변경할 커버 이미지 URL
+     * @param scheduledStartAt 변경할 예정 시작 시각
+     */
+    public void update(User influencer, String title, String description,
+                       String coverImageUrl, LocalDateTime scheduledStartAt) {
+        if ((status != FanMeetingStatus.DRAFT && status != FanMeetingStatus.PUBLISHED)
+                || deletedAt != null) {
+            throw new IllegalStateException("응모 시작 전 팬미팅만 수정할 수 있습니다.");
+        }
+        this.influencer = Objects.requireNonNull(influencer);
+        this.title = Objects.requireNonNull(title);
+        this.description = description;
+        this.coverImageUrl = coverImageUrl;
+        this.scheduledStartAt = Objects.requireNonNull(scheduledStartAt);
+    }
+
+    /**
+     * 초안 팬미팅을 공개 상태로 전환한다.
+     *
+     * @param publishedAt 공개 시각
+     */
+    public void publish(LocalDateTime publishedAt) {
+        if (status != FanMeetingStatus.DRAFT || deletedAt != null) {
+            throw new IllegalStateException("초안 상태의 팬미팅만 게시할 수 있습니다.");
+        }
+        this.status = FanMeetingStatus.PUBLISHED;
+        this.publishedAt = Objects.requireNonNull(publishedAt);
+    }
+
+    /**
+     * 공개 전 초안 팬미팅을 논리 삭제한다.
+     *
+     * @param deletedAt 삭제 시각
+     */
+    public void deleteDraft(LocalDateTime deletedAt) {
+        if (status != FanMeetingStatus.DRAFT || this.deletedAt != null) {
+            throw new IllegalStateException("초안 상태의 팬미팅만 삭제할 수 있습니다.");
+        }
+        this.deletedAt = Objects.requireNonNull(deletedAt);
+    }
+
+    /**
+     * 공개된 팬미팅을 취소 상태로 전환한다.
+     *
+     * @param canceledAt 취소 시각
+     */
+    public void cancel(LocalDateTime canceledAt) {
+        if (status == FanMeetingStatus.DRAFT || status == FanMeetingStatus.LIVE
+                || status == FanMeetingStatus.ENDED || status == FanMeetingStatus.CANCELED
+                || deletedAt != null) {
+            throw new IllegalStateException("현재 상태의 팬미팅은 취소할 수 없습니다.");
+        }
+        this.status = FanMeetingStatus.CANCELED;
+        this.canceledAt = Objects.requireNonNull(canceledAt);
+    }
+
+    /** 응모 시작 시각이 지난 공개 팬미팅을 응모 접수 상태로 전환한다. */
+    public void openApplications() {
+        if (status != FanMeetingStatus.PUBLISHED) {
+            throw new IllegalStateException("공개 상태의 팬미팅만 응모를 시작할 수 있습니다.");
+        }
+        this.status = FanMeetingStatus.APPLICATION_OPEN;
+    }
+
+    /** 응모 종료 시각이 지난 팬미팅을 응모 마감 상태로 전환한다. */
+    public void closeApplications() {
+        if (status != FanMeetingStatus.APPLICATION_OPEN) {
+            throw new IllegalStateException("응모 중인 팬미팅만 응모를 마감할 수 있습니다.");
+        }
+        this.status = FanMeetingStatus.APPLICATION_CLOSED;
+    }
+
+    /** 참가자 선정과 운영 준비가 끝난 팬미팅을 시작 대기 상태로 전환한다. */
+    public void markReady() {
+        if (status != FanMeetingStatus.APPLICATION_CLOSED) {
+            throw new IllegalStateException("응모가 마감된 팬미팅만 준비 완료 처리할 수 있습니다.");
+        }
+        this.status = FanMeetingStatus.READY;
+    }
+
+    /**
+     * 시작 대기 중인 팬미팅을 진행 상태로 전환한다.
+     *
+     * @param actualStartAt 실제 시작 시각
+     */
+    public void start(LocalDateTime actualStartAt) {
+        if (status != FanMeetingStatus.READY) {
+            throw new IllegalStateException("준비 완료 상태의 팬미팅만 시작할 수 있습니다.");
+        }
+        this.status = FanMeetingStatus.LIVE;
+        this.actualStartAt = Objects.requireNonNull(actualStartAt);
+    }
+
+    /**
+     * 진행 중인 팬미팅을 종료 상태로 전환한다.
+     *
+     * @param actualEndAt 실제 종료 시각
+     */
+    public void end(LocalDateTime actualEndAt) {
+        if (status == FanMeetingStatus.ENDED) {
+            return;
+        }
+        if (status != FanMeetingStatus.LIVE) {
+            throw new IllegalStateException("진행 중인 팬미팅만 종료할 수 있습니다.");
+        }
+        this.status = FanMeetingStatus.ENDED;
+        this.actualEndAt = Objects.requireNonNull(actualEndAt);
     }
 }

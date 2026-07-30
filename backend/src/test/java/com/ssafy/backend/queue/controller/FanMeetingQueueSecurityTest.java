@@ -1,9 +1,12 @@
 package com.ssafy.backend.queue.controller;
 
+import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
+import com.ssafy.backend.meeting.service.FanMeetingQueryService;
+import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
@@ -26,6 +29,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -53,6 +57,9 @@ class FanMeetingQueueSecurityTest {
     private QueueQueryService queryService;
 
     @MockitoBean
+    private FanMeetingQueryService fanMeetingQueryService;
+
+    @MockitoBean
     private UserRepository userRepository;
 
     @MockitoBean
@@ -75,6 +82,20 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private CallSessionRepository callSessionRepository;
+
+    @MockitoBean
+    private ApplicationRepository applicationRepository;
+
+    @MockitoBean
+    private NotificationRepository notificationRepository;
+
+    /** 인증 정보가 없어도 공개 팬미팅 목록 API에 접근할 수 있는지 검증한다. */
+    @Test
+    void allowsAnonymousPublicMeetingList() throws Exception {
+        mockMvc.perform(get("/api/v1/fan-meetings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
 
     /** 인증 정보가 없으면 팬 대기실 입장 API가 HTTP 401을 반환하는지 검증한다. */
     @Test

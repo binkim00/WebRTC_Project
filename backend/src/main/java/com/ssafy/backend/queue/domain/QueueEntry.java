@@ -134,6 +134,16 @@ public class QueueEntry extends BaseTimeEntity {
         this.status = QueueEntryStatus.DONE;
     }
 
+    /** 팬미팅 종료 또는 운영자 조치로 미완료 대기열 항목을 제거 상태로 전환한다. */
+    public void remove() {
+        if (status == QueueEntryStatus.REMOVED
+                || status == QueueEntryStatus.DONE
+                || status == QueueEntryStatus.NO_SHOW) {
+            return;
+        }
+        this.status = QueueEntryStatus.REMOVED;
+    }
+
     /** 대기 전 또는 대기 중인 참가자의 순서를 변경한다. */
     public void changePosition(int newPosition) {
         if (status != QueueEntryStatus.NOT_ENTERED && status != QueueEntryStatus.WAITING) {
