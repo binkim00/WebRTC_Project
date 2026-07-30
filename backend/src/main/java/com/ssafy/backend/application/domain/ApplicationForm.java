@@ -15,6 +15,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.Objects;
+
 /**
  * 팬미팅별 응모 폼 식별자와 안내문을 저장하는 엔티티다.
  */
@@ -35,4 +37,27 @@ public class ApplicationForm extends BaseTimeEntity {
 
     @Column(name = "form_description", columnDefinition = "TEXT")
     private String formDescription;
+
+    /**
+     * 팬미팅에 응모 폼을 새로 생성한다.
+     *
+     * @param meeting 폼을 등록할 팬미팅
+     * @param formDescription 응모 안내문이며 없으면 null
+     * @return 생성된 응모 폼
+     */
+    public static ApplicationForm create(FanMeeting meeting, String formDescription) {
+        ApplicationForm form = new ApplicationForm();
+        form.meeting = Objects.requireNonNull(meeting);
+        form.formDescription = formDescription;
+        return form;
+    }
+
+    /**
+     * 응모 안내문을 교체한다.
+     *
+     * @param formDescription 변경할 응모 안내문이며 없으면 null
+     */
+    public void updateDescription(String formDescription) {
+        this.formDescription = formDescription;
+    }
 }
