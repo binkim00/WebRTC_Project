@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Check,
   FloppyDisk,
+  Key,
   Megaphone,
   PencilSimple,
   Plus,
@@ -548,7 +549,6 @@ export function ManagerMyPage() {
   }
 
   const displayName = profile?.nickname
-  const roleLabel = profile?.role === 'MANAGER' ? '매니저' : profile?.role
 
   return (
     <div className="grid gap-7 pb-10">
@@ -592,54 +592,62 @@ export function ManagerMyPage() {
 
       {!loading && profile ? (
         <>
-          <Card className="p-6">
-            <div className="flex flex-wrap items-center gap-6">
-              {profile.profileImageUrl ? (
-                <img
-                  alt={`${profile.nickname} 프로필`}
-                  className="size-28 rounded-2xl border border-[var(--color-border-panel)] object-cover"
-                  src={profile.profileImageUrl}
-                />
-              ) : (
-                <div className="flex size-28 items-center justify-center rounded-2xl bg-[var(--color-primary-coral-soft)] text-4xl font-black text-[var(--color-primary-coral)]">
-                  {displayName?.slice(0, 1)}
+          <Card>
+            <CardContent className="grid gap-7 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+              <div className="flex min-w-0 flex-col gap-6 sm:flex-row sm:items-center">
+                {profile.profileImageUrl ? (
+                  <img
+                    alt={`${profile.nickname} 프로필`}
+                    className="size-32 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
+                    src={profile.profileImageUrl}
+                  />
+                ) : (
+                  <div className="flex size-32 shrink-0 items-center justify-center rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-primary-coral-soft)] text-4xl font-black text-[var(--color-primary-coral)]">
+                    {displayName?.slice(0, 1)}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-[var(--color-primary-coral)]">
+                    매니저 프로필
+                  </p>
+                  <h2 className="mt-2 text-3xl font-black tracking-[-0.04em]">
+                    {displayName}
+                  </h2>
+                  <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-3 text-sm">
+                    <div className="flex items-center gap-3">
+                      <dt className="font-semibold text-[var(--color-text-tertiary)]">
+                        아이디
+                      </dt>
+                      <dd className="font-bold">{profile.loginId}</dd>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <dt className="font-semibold text-[var(--color-text-tertiary)]">
+                        이메일
+                      </dt>
+                      <dd className="truncate font-bold">{profile.email}</dd>
+                    </div>
+                  </dl>
                 </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <Badge variant="primary">{roleLabel}</Badge>
-                <h2 className="mt-3 text-3xl font-black">{displayName}</h2>
-                <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-sm text-[var(--color-text-secondary)]">
-                  <div>
-                    <dt className="inline">닉네임 </dt>
-                    <dd className="inline font-bold text-[var(--color-text-primary)]">
-                      {profile.nickname}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="inline">아이디 </dt>
-                    <dd className="inline font-bold text-[var(--color-text-primary)]">
-                      {profile.loginId}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="inline">이메일 </dt>
-                    <dd className="inline font-bold text-[var(--color-text-primary)]">
-                      {profile.email}
-                    </dd>
-                  </div>
-                </dl>
               </div>
-              <div className="grid gap-2">
+
+              <div className="flex flex-wrap gap-3 border-t border-[var(--color-divider)] pt-6 lg:flex-col lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
                 <Button
-                  leadingIcon={<PencilSimple size={17} />}
+                  leadingIcon={<PencilSimple aria-hidden size={17} weight="bold" />}
                   onClick={handleEditOpen}
+                  size="sm"
                 >
                   회원정보 수정
                 </Button>
                 {/* TODO: 비밀번호 변경 API 연결 */}
-                <Button variant="secondary">비밀번호 변경</Button>
+                <Button
+                  leadingIcon={<Key aria-hidden size={17} weight="bold" />}
+                  size="sm"
+                  variant="secondary"
+                >
+                  비밀번호 변경
+                </Button>
               </div>
-            </div>
+            </CardContent>
           </Card>
           <Card className="flex flex-wrap items-center gap-5 p-6">
             <span className="flex size-12 items-center justify-center rounded-xl bg-[var(--color-surface-page)]">

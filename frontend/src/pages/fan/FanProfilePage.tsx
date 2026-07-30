@@ -155,9 +155,9 @@ export function FanProfilePage() {
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-7">
       <header>
-        <h1 className="text-4xl font-black tracking-[-0.045em]">마이페이지</h1>
+        <h1 className="text-4xl font-black tracking-[-0.045em]">내 마이페이지</h1>
         <p className="mt-3 text-[var(--color-text-secondary)]">
-          내 정보와 참여 내역을 관리하세요.
+          개인정보를 확인하고 참여 내역을 관리하세요.
         </p>
       </header>
 
@@ -181,29 +181,29 @@ export function FanProfilePage() {
 
       {!loading && profile ? (
         <Card>
-          <CardContent className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
+          <CardContent className="grid gap-7 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="flex min-w-0 flex-col gap-6 sm:flex-row sm:items-center">
               <img
                 alt={`${profile.nickname} 프로필`}
-                className="size-24 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
+                className="size-32 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
                 src={profile.profileImageUrl || profileImage}
               />
 
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
-                  프로필
+                <p className="text-sm font-bold text-[var(--color-primary-coral)]">
+                  팬 프로필
                 </p>
-                <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
+                <h2 className="mt-2 text-3xl font-black tracking-[-0.04em]">
                   {profile.nickname}
                 </h2>
-                <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-                  <div className="flex gap-3">
+                <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-3 text-sm">
+                  <div className="flex items-center gap-3">
                     <dt className="font-semibold text-[var(--color-text-tertiary)]">
                       아이디
                     </dt>
                     <dd className="font-bold">{profile.loginId}</dd>
                   </div>
-                  <div className="flex min-w-0 gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <dt className="font-semibold text-[var(--color-text-tertiary)]">
                       이메일
                     </dt>
@@ -213,7 +213,7 @@ export function FanProfilePage() {
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 border-t border-[var(--color-divider)] pt-6 lg:flex-col lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
               <Button
                 leadingIcon={<PencilSimple aria-hidden size={17} weight="bold" />}
                 onClick={handleEditOpen}
