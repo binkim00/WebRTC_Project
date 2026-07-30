@@ -1,7 +1,13 @@
-import { ArrowRightIcon, SignOutIcon } from '@phosphor-icons/react'
+import { ArrowRightIcon, SignOutIcon, UserCircle } from '@phosphor-icons/react'
 import { useEffect } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { AUTH_EXPIRED_EVENT, getAuthSession, logout, type LoginRole } from './api/auth'
+import {
+  AUTH_EXPIRED_EVENT,
+  getAuthSession,
+  logout,
+  type LoginResponse,
+  type LoginRole,
+} from './api/auth'
 import { TopNavigation } from './components'
 import { getRoleNavigation } from './layouts/roleNavigation'
 import { isVideoCallPath } from './router/routeState'
@@ -39,6 +45,33 @@ function isRolePath(pathname: string) {
 
 function isPublicEventPath(pathname: string) {
   return /^\/fan\/events(?:\/[^/]+)?\/?$/.test(pathname)
+}
+
+function roleLabel(role: LoginRole) {
+  if (role === 'FAN') return '팬'
+  if (role === 'INFLUENCER' || role === 'SOLO_INFLUENCER') return '인플루언서'
+  return '매니저'
+}
+
+function UserProfileSummary({ session }: { session: LoginResponse }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-left">
+      <UserCircle
+        aria-hidden="true"
+        className="text-[var(--color-text-tertiary)]"
+        size={28}
+        weight="duotone"
+      />
+      <span className="grid leading-tight">
+        <strong className="max-w-28 truncate text-sm text-[var(--color-text-primary)]">
+          {session.nickname || '회원'}
+        </strong>
+        <span className="text-xs font-medium text-[var(--color-text-tertiary)]">
+          {roleLabel(session.role)}
+        </span>
+      </span>
+    </span>
+  )
 }
 
 function App() {
@@ -112,14 +145,17 @@ function App() {
         actions={
           isHomePage ? (
             <nav aria-label="메인 메뉴" className="flex items-center gap-7 text-sm font-semibold">
-              {isAuthenticated ? (
-                <button
-                  className="font-semibold hover:text-[var(--color-primary-coral)]"
-                  onClick={() => void handleLogout()}
-                  type="button"
-                >
-                  로그아웃
-                </button>
+              {authSession ? (
+                <>
+                  <UserProfileSummary session={authSession} />
+                  <button
+                    className="font-semibold hover:text-[var(--color-primary-coral)]"
+                    onClick={() => void handleLogout()}
+                    type="button"
+                  >
+                    로그아웃
+                  </button>
+                </>
               ) : (
                 <>
                   <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
@@ -166,14 +202,17 @@ function App() {
               이벤트 둘러보기
               <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
             </Link>
-          ) : isAuthenticated ? (
-            <button
-              className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-              onClick={() => void handleLogout()}
-              type="button"
-            >
-              로그아웃
-            </button>
+          ) : authSession ? (
+            <div className="flex items-center gap-5">
+              <UserProfileSummary session={authSession} />
+              <button
+                className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                onClick={() => void handleLogout()}
+                type="button"
+              >
+                로그아웃
+              </button>
+            </div>
           ) : undefined
         }
         brand="MELLY"
