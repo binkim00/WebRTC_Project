@@ -17,14 +17,14 @@ import {
   RouterErrorPage,
 } from '../pages/errors/ErrorRoutePages'
 import {
-  FanApplicationResultPage,
-  FanApplicationsPage,
-  FanEventDetailPage,
-  FanEventListPage,
   FanMeetingCallPage,
-  FanMeetingWaitingPage,
-  FanProfilePage,
 } from '../pages/fan/FanRoutePages'
+import { FanEventListPage } from '../pages/fan/FanEventListPage'
+import { FanEventDetailPage } from '../pages/fan/FanEventDetailPage'
+import { FanApplicationResultPage } from '../pages/fan/FanApplicationResultPage'
+import { FanProfilePage } from '../pages/fan/FanProfilePage'
+import { FanApplicationsPage } from '../pages/fan/FanApplicationsPage'
+import { FanMeetingWaitingPage } from '../pages/fan/FanMeetingWaitingPage'
 import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
 import { FanMeetingParticipantsPage } from '../pages/common/FanMeetingParticipantsPage'
 import { ManagerFanListPage } from '../pages/manager/ManagerFanListPage'
@@ -33,10 +33,10 @@ import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
 import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
 import {
   InfluencerMeetingCallPage,
-  InfluencerMeetingHistoryPage,
-  InfluencerProfilePage,
 } from '../pages/influencer/InfluencerRoutePages'
 import { InfluencerMeetingReadyPage } from '../pages/influencer/InfluencerMeetingReadyPage'
+import { InfluencerProfilePage } from '../pages/influencer/InfluencerProfilePage'
+import { InfluencerMeetingHistoryPage } from '../pages/influencer/InfluencerMeetingHistoryPage'
 import {
   ManagerApplicationsPage,
   ManagerEventFormPage,
@@ -82,8 +82,32 @@ export const router = createBrowserRouter([
         Component: FanMeetingCompletePage,
       },
       {
+        path: 'fan/fan-meetings/:fanMeetingId/waiting',
+        Component: FanMeetingWaitingPage,
+      },
+      {
         path: 'fan/mypage/fan-meetings',
         Component: FanMeetingListPage,
+      },
+      {
+        path: 'fan/mypage/profile',
+        Component: FanProfilePage,
+      },
+      {
+        path: 'fan/mypage/applications',
+        Component: FanApplicationsPage,
+      },
+      {
+        path: 'fan/events',
+        Component: FanEventListPage,
+      },
+      {
+        path: 'fan/events/:eventId',
+        Component: FanEventDetailPage,
+      },
+      {
+        path: 'fan/events/:eventId/application-result',
+        Component: FanApplicationResultPage,
       },
       {
         path: 'fan-meetings/:fanMeetingId',
@@ -105,6 +129,14 @@ export const router = createBrowserRouter([
       {
         path: 'influencer/my-fan-meetings',
         Component: InfluencerMyMeetingPage,
+      },
+      {
+        path: 'influencer/mypage/profile',
+        Component: InfluencerProfilePage,
+      },
+      {
+        path: 'influencer/mypage/fan-meetings',
+        Component: InfluencerMeetingHistoryPage,
       },
       {
         path: 'rtc/livekit-test',
@@ -135,36 +167,12 @@ export const router = createBrowserRouter([
             element: <Navigate replace to="events" />,
           },
           {
-            path: 'events',
-            Component: FanEventListPage,
-          },
-          {
-            path: 'events/:eventId',
-            Component: FanEventDetailPage,
-          },
-          {
-            path: 'events/:eventId/application-result',
-            Component: FanApplicationResultPage,
-          },
-          {
-            path: 'fan-meetings/:fanMeetingId/waiting',
-            Component: FanMeetingWaitingPage,
-          },
-          {
             path: 'fan-meetings/:fanMeetingId/call',
             Component: FanMeetingCallPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: FanMeetingCallPage,
-          },
-          {
-            path: 'mypage/profile',
-            Component: FanProfilePage,
-          },
-          {
-            path: 'mypage/applications',
-            Component: FanApplicationsPage,
           },
         ],
       },
@@ -183,14 +191,6 @@ export const router = createBrowserRouter([
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: InfluencerMeetingCallPage,
-          },
-          {
-            path: 'mypage/fan-meetings',
-            Component: InfluencerMeetingHistoryPage,
-          },
-          {
-            path: 'mypage/profile',
-            Component: InfluencerProfilePage,
           },
         ],
       },
