@@ -58,6 +58,7 @@ public enum ErrorCode {
     // 팬 메모 (MEMO-001, MEMO-002)
     FAN_MEMO_NOT_FOUND(HttpStatus.NOT_FOUND, "팬 메모를 찾을 수 없습니다."),
     FAN_MEMO_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 팬의 메모를 조회할 권한이 없습니다."),
+    FAN_MEMO_ALREADY_DELETED(HttpStatus.CONFLICT, "이미 삭제된 팬 메모입니다."),
     FAN_NOT_FOUND(HttpStatus.NOT_FOUND, "활성 팬 사용자를 찾을 수 없습니다."),
 
     // 응모 폼 (FORM-001, FORM-002)

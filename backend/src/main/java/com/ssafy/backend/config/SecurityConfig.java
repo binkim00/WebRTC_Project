@@ -112,6 +112,12 @@ public class SecurityConfig {
                                 .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER", "MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/influencers/me/fans/*/memos")
                                 .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
+                        // 팬 메모 수정·삭제 (MEMO-003)
+                        // 작성자 본인 여부는 FanMemoService 에서 다시 검증한다.
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/fan-memos/*")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/fan-memos/*")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
 
                         // 응모 폼 (FORM-001, FORM-002)
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/application-form")
