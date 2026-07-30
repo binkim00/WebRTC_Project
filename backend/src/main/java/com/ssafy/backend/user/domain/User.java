@@ -89,6 +89,30 @@ public class User extends BaseTimeEntity {
         this.lastLoginAt = loginAt;
     }
 
+    /**
+     * 전달된 값만 회원의 수정 가능한 프로필 정보에 반영한다.
+     *
+     * @param nickname 변경할 닉네임, 변경하지 않으면 {@code null}
+     * @param email 변경할 이메일, 변경하지 않으면 {@code null}
+     * @param profileImageUrl 변경할 프로필 이미지 URL, 변경하지 않으면 {@code null}
+     * @param preferredLanguage 변경할 선호 언어, 변경하지 않으면 {@code null}
+     */
+    public void updateProfile(String nickname, String email, String profileImageUrl,
+                              PreferredLanguage preferredLanguage) {
+        if (nickname != null) {
+            this.nickname = nickname;
+        }
+        if (email != null) {
+            this.email = email;
+        }
+        if (profileImageUrl != null) {
+            this.profileImageUrl = profileImageUrl;
+        }
+        if (preferredLanguage != null) {
+            this.preferredLanguage = preferredLanguage;
+        }
+    }
+
     /** 데이터베이스가 생성한 사용자 식별자를 반환한다. */
     public Long getId() { return id; }
     /** 로그인에 사용하는 고유 ID를 반환한다. */
