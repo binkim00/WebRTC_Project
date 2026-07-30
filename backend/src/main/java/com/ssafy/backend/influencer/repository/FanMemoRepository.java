@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 팬 메모 영속성 처리를 담당한다.
@@ -29,4 +30,14 @@ public interface FanMemoRepository extends JpaRepository<FanMemo, Long> {
      * @return 삭제되지 않은 메모가 이미 있으면 true
      */
     boolean existsByFan_IdAndMeeting_IdAndDeletedAtIsNull(Long fanId, Long meetingId);
+
+    /**
+     * 수정·삭제 대상 메모를 회차 정보와 함께 조회한다.
+     * 이미 삭제된 메모를 없는 메모와 구분해 응답하기 위해 deletedAt 조건은 걸지 않는다.
+     *
+     * @param memoId 메모 ID
+     * @return 소프트 삭제 여부와 무관하게 존재하는 메모 (없으면 empty)
+     */
+    @EntityGraph(attributePaths = {"meeting"})
+    Optional<FanMemo> findWithMeetingById(Long memoId);
 }
