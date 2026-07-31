@@ -217,8 +217,9 @@ export async function fetchMeetingDetail(
       signal,
     }),
   )
-  const record = asRecord(data)
-  const influencer = asRecord(record?.influencer)
+  const root = asRecord(data)
+  const record = asRecord(root?.meeting) ?? root
+  const influencer = asRecord(root?.influencer) ?? asRecord(record?.influencer)
   const application = asRecord(record?.application)
 
   if (!record || !influencer) {
@@ -232,7 +233,10 @@ export async function fetchMeetingDetail(
     scheduledStartAt: readOptionalString(record.scheduledStartAt),
     influencer: {
       influencerId: readString(influencer.influencerId, 'influencerId'),
-      influencerName: readString(influencer.influencerName, 'influencerName'),
+      influencerName: readString(
+        influencer.influencerName ?? influencer.name,
+        'influencerName',
+      ),
       profileImageUrl: readOptionalString(influencer.profileImageUrl),
     },
     application: application

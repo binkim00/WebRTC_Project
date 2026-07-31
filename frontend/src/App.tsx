@@ -84,7 +84,10 @@ function App() {
   const isSignupPage = pathname === '/signup'
   const isAuthPage = isLoginPage || isSignupPage
   const isHomePage = pathname === '/'
-  const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
+  const isEditorialExamplePage = pathname === '/examples/yestalgia-home'
+  const isDeviceCheckPage =
+    /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname) ||
+    /^\/influencer\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
   const authSession = getAuthSession()
   const isAuthenticated = authSession !== null
@@ -130,7 +133,7 @@ function App() {
         isPageQaCapture ? 'w-[1758px]' : '',
       ].join(' ')}
     >
-      <TopNavigation
+      {isEditorialExamplePage ? null : <TopNavigation
         ariaLabel="주요 화면"
         centerContent={
           isDeviceCheckPage ? (
@@ -138,7 +141,7 @@ function App() {
               <span>입장 예정 팬미팅</span>
               <span aria-hidden="true" className="h-4 w-px bg-[var(--color-divider)]" />
               <strong className="text-[var(--color-text-primary)]">
-                서윤의 비밀 정원 팬미팅&nbsp;&nbsp; 오늘 19:00
+                선택한 팬미팅 장비 점검
               </strong>
             </p>
           ) : undefined
@@ -218,13 +221,15 @@ function App() {
         }
         brand="MELLY"
         items={navigationItems}
-      />
+      />}
       <main
         className={
           isCallPage
             ? 'mx-auto w-full max-w-[1440px] flex-1 px-3 py-5 sm:px-6 lg:px-10 lg:py-6'
             : isHomePage
               ? 'mx-auto w-full max-w-[1480px] flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:pb-16 lg:pt-10'
+            : isEditorialExamplePage
+              ? 'w-full flex-1'
             : isDeviceCheckPage
               ? 'mx-auto w-full max-w-[1360px] flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:py-10'
             : isAuthPage
@@ -234,7 +239,7 @@ function App() {
       >
         <Outlet />
       </main>
-      {isCallPage || isAuthPage || isHomePage || isDeviceCheckPage || isFanListPage ? null : (
+      {isCallPage || isAuthPage || isHomePage || isEditorialExamplePage || isDeviceCheckPage || isFanListPage ? null : (
         <footer className="mt-auto border-t border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-4 py-4 text-center text-sm text-[var(--color-text-secondary)] sm:px-6">
           Notion 화면 라우팅 정의서를 기준으로 구성한 라우팅 학습 화면입니다.
         </footer>

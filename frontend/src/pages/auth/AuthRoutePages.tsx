@@ -69,7 +69,13 @@ export function LoginPage() {
       })
 
       saveAuthSession(response, formData.get('remember') === 'on')
-      navigate('/', { replace: true })
+      const landingPath =
+        response.role === 'FAN'
+          ? '/fan/mypage/fan-meetings?status=upcoming'
+          : response.role === 'INFLUENCER'
+            ? '/influencer/fan-meetings'
+            : '/manager/fan-meetings'
+      navigate(landingPath, { replace: true })
     } catch (error: unknown) {
       setSubmitError(
         error instanceof ApiError || error instanceof TypeError

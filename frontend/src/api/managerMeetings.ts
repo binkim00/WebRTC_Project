@@ -134,42 +134,53 @@ export async function fetchOwnedMeetings(
 ): Promise<ManagerMeetingPage> {
   const search = new URLSearchParams()
   if (query.status) search.set('status', query.status)
+  if (query.keyword?.trim()) search.set('keyword', query.keyword.trim())
   if (query.page !== undefined) search.set('page', String(query.page))
   if (query.size !== undefined) search.set('size', String(query.size))
 
   const suffix = search.size ? `?${search.toString()}` : ''
   const value = unwrapData(
-    await apiRequest<unknown>(
-      `/api/v1/users/me/fan-meetings${suffix}`,
-      {
-        authToken,
-        signal,
-      },
-    ),
+    await apiRequest<unknown>(`/api/v1/users/me/fan-meetings${suffix}`, {
+      authToken,
+      signal,
+    }),
   )
   const record = asRecord(value)
+  const rawContent = Array.isArray(value)
+    ? value
+    : record && Array.isArray(record.content)
+      ? record.content
+      : null
 
-  if (!record || !Array.isArray(record.content)) {
-    throw new TypeError('담당 팬미팅 목록 응답 형식이 올바르지 않습니다.')
+  if (!rawContent) {
+    throw new TypeError('내 팬미팅 목록 응답 형식이 올바르지 않습니다.')
   }
 
-  const rawContent = record.content
   const content = rawContent.map(parseMeeting)
-  const size = readNumber(record.size, query.size ?? 20)
-  const totalElements = readNumber(record.totalElements, content.length)
+  const size = record
+    ? readNumber(record.size, query.size ?? 20)
+    : query.size ?? 20
+  const totalElements = record
+    ? readNumber(record.totalElements, content.length)
+    : content.length
 
   return {
     content,
-    page: readNumber(record.page, query.page ?? 0),
+    page: record ? readNumber(record.page, query.page ?? 0) : query.page ?? 0,
     size,
     totalElements,
-    totalPages: Math.max(
-      1,
-      readNumber(
-        record.totalPages,
-        Math.ceil(totalElements / Math.max(size, 1)),
-      ),
-    ),
-    hasNext: record.hasNext === true,
+    totalPages: record
+      ? Math.max(
+          1,
+          readNumber(
+            record.totalPages,
+            Math.ceil(totalElements / Math.max(size, 1)),
+          ),
+        )
+      : 1,
+    hasNext: record?.hasNext === true,
   }
 }
+
+/** 기존 화면에서 사용하는 내 팬미팅 조회 함수명과의 호환을 유지한다. */
+export const fetchMyMeetings = fetchOwnedMeetings

@@ -1,8 +1,9 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import { enterQueue } from '../../api/queue'
+import { fetchManagerMeetings } from '../../api/managerMeetings'
 import {
     AlertBanner,
     Badge,
@@ -24,49 +25,6 @@ type FanMeetingListItem = {
     recordingExpiresAt?: string
 }
 
-const MOCK_FAN_MEETINGS: FanMeetingListItem[] = [
-    {
-        id: 1,
-        title: 'Melly와의 봄날 팬미팅',
-        influencerName: 'Melly',
-        meetingAt: '2026.08.02 19:00',
-        status: 'upcoming',
-        canEnter: true,
-    },
-    {
-        id: 2,
-        title: '서윤의 여름밤 팬미팅',
-        influencerName: '서윤',
-        meetingAt: '2026.08.15 20:00',
-        status: 'upcoming',
-        canEnter: false,
-    },
-    {
-        id: 3,
-        title: '하나와 첫 온라인 팬사인회',
-        influencerName: '하나',
-        meetingAt: '2026.07.25 19:30',
-        status: 'completed',
-        recordingExpiresAt: '2026.07.30',
-    },
-    {
-        id: 4,
-        title: '민과 함께한 여름 오후',
-        influencerName: '민',
-        meetingAt: '2026.07.24 17:00',
-        status: 'completed',
-        recordingExpiresAt: '2026.07.29',
-    },
-    {
-        id: 5,
-        title: 'Melly와의 첫 번째 팬미팅',
-        influencerName: 'Melly',
-        meetingAt: '2026.07.22 20:00',
-        status: 'completed',
-        recordingExpiresAt: '2026.07.27',
-    },
-]
-
 const FAN_MEETING_TABS = [
     { value: 'upcoming', label: '예정' },
     { value: 'completed', label: '히스토리' },
@@ -80,7 +38,55 @@ export function FanMeetingListPage() {
         meetingId: number
         message: string
     }>()
+    const [serverMeetings, setServerMeetings] = useState<FanMeetingListItem[]>()
+    const [listError, setListError] = useState<string>()
     const status = searchParam.get('status')
+
+    useEffect(() => {
+        const controller = new AbortController()
+        const session = getAuthSession()
+
+        if (!session || session.role !== 'FAN') {
+            setListError('팬 계정으로 로그인해 주세요.')
+            return () => controller.abort()
+        }
+
+        void fetchManagerMeetings(
+            { page: 0, size: 100 },
+            session.accessToken,
+            controller.signal,
+        )
+            .then((result) => {
+                setServerMeetings(
+                    result.content.map((item) => {
+                        const completed =
+                            item.status === 'COMPLETED' ||
+                            item.status === 'ENDED' ||
+                            item.status === 'CANCELED'
+
+                        return {
+                            id: Number(item.meetingId),
+                            title: item.title,
+                            influencerName: item.influencerName,
+                            meetingAt: new Date(item.scheduledStartAt).toLocaleString('ko-KR'),
+                            status: completed ? 'completed' : 'upcoming',
+                            canEnter: false,
+                        }
+                    }),
+                )
+                setListError(undefined)
+            })
+            .catch((reason: unknown) => {
+                if (controller.signal.aborted) return
+                setListError(
+                    reason instanceof ApiError || reason instanceof TypeError
+                        ? reason.message
+                        : '팬미팅 목록을 불러오지 못했습니다.',
+                )
+            })
+
+        return () => controller.abort()
+    }, [])
 
     if (status !== 'upcoming' && status !== 'completed') {
         return (
@@ -92,7 +98,7 @@ export function FanMeetingListPage() {
     }
 
     const isUpcoming = status === 'upcoming'
-    const fanMeetings = MOCK_FAN_MEETINGS.filter(
+    const fanMeetings = (serverMeetings ?? []).filter(
         (fanMeeting) => fanMeeting.status === status,
     )
 
@@ -162,6 +168,11 @@ export function FanMeetingListPage() {
                 </p>
             </header>
             <section className="mt-12">
+                {listError ? (
+                    <AlertBanner className="mb-6" title="팬미팅 목록을 확인할 수 없습니다" variant="error">
+                        {listError}
+                    </AlertBanner>
+                ) : null}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">팬미팅</h2>
