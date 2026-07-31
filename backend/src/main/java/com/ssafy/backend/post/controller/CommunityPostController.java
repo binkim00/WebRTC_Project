@@ -3,10 +3,10 @@ package com.ssafy.backend.post.controller;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.common.api.PageResponse;
-import com.ssafy.backend.post.dto.NoticeCreateRequest;
-import com.ssafy.backend.post.dto.NoticeCreateResponse;
-import com.ssafy.backend.post.dto.NoticeDetailResponse;
-import com.ssafy.backend.post.dto.NoticeSummaryResponse;
+import com.ssafy.backend.post.dto.CommunityPostCreateRequest;
+import com.ssafy.backend.post.dto.CommunityPostCreateResponse;
+import com.ssafy.backend.post.dto.CommunityPostDetailResponse;
+import com.ssafy.backend.post.dto.CommunityPostSummaryResponse;
 import com.ssafy.backend.post.dto.PostDeleteResponse;
 import com.ssafy.backend.post.dto.PostUpdateRequest;
 import com.ssafy.backend.post.dto.PostUpdateResponse;
@@ -27,126 +27,117 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 팬미팅 공지 조회·작성 API를 제공한다.
+ * 커뮤니티 게시글 조회·작성·수정·삭제 API를 제공한다.
  *
- * <p>경로가 게시글 유형을 {@code MEETING_NOTICE}로 고정하므로 클라이언트는 유형을 보내지 않는다.
+ * <p>목록과 작성은 팬미팅 하위 경로를, 상세·수정·삭제는 게시글 단독 경로를 사용하므로
+ * 메서드마다 전체 경로를 지정한다. 게시글 유형은 경로가 {@code COMMUNITY}로 고정한다.
  */
 @RestController
-@RequestMapping("/api/v1/fan-meetings/{meetingId}/notices")
-public class FanMeetingNoticeController {
+@RequestMapping("/api/v1")
+public class CommunityPostController {
 
     private final PostQueryService postQueryService;
     private final PostCommandService postCommandService;
 
     /**
-     * 공지 조회·작성 서비스를 주입받는다.
+     * 커뮤니티 게시글 조회·명령 서비스를 주입받는다.
      *
-     * @param postQueryService 공지 조회 서비스
-     * @param postCommandService 공지 작성 서비스
+     * @param postQueryService 게시글 조회 서비스
+     * @param postCommandService 게시글 작성·수정·삭제 서비스
      */
-    public FanMeetingNoticeController(PostQueryService postQueryService,
-                                      PostCommandService postCommandService) {
+    public CommunityPostController(PostQueryService postQueryService,
+                                   PostCommandService postCommandService) {
         this.postQueryService = postQueryService;
         this.postCommandService = postCommandService;
     }
 
     /**
-     * 특정 팬미팅의 공지 목록을 조회한다(POST-001b).
+     * 특정 팬미팅의 커뮤니티 게시글 목록을 조회한다(POST-001c).
      *
      * @param meetingId 팬미팅 식별자
      * @param keyword 제목·본문 검색어
      * @param page 페이지 번호이며 기본값 0
      * @param size 페이지 크기이며 기본값 20, 최대 100
-     * @return 해당 팬미팅의 공지 목록 페이지
+     * @return 해당 팬미팅의 커뮤니티 게시글 목록 페이지
      */
-    @GetMapping
-    public ApiResponse<PageResponse<NoticeSummaryResponse>> getMeetingNotices(
+    @GetMapping("/fan-meetings/{meetingId}/community/posts")
+    public ApiResponse<PageResponse<CommunityPostSummaryResponse>> getCommunityPosts(
             @PathVariable Long meetingId,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         return ApiResponse.success(
-                postQueryService.getMeetingNotices(meetingId, keyword, page, size)
+                postQueryService.getCommunityPosts(meetingId, keyword, page, size)
         );
     }
 
     /**
-     * 특정 팬미팅의 공지 상세를 조회한다(POST-002b).
+     * 커뮤니티 게시글 상세를 조회한다(POST-002c).
      *
-     * @param meetingId 팬미팅 식별자
-     * @param noticeId 공지 식별자
+     * @param postId 커뮤니티 게시글 식별자
      * @param principal 선택적 로그인 사용자 정보
-     * @return 팬미팅 공지 상세
+     * @return 커뮤니티 게시글 상세
      */
-    @GetMapping("/{noticeId}")
-    public ApiResponse<NoticeDetailResponse> getMeetingNotice(
-            @PathVariable Long meetingId,
-            @PathVariable Long noticeId,
+    @GetMapping("/community/posts/{postId}")
+    public ApiResponse<CommunityPostDetailResponse> getCommunityPost(
+            @PathVariable Long postId,
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
-        return ApiResponse.success(
-                postQueryService.getMeetingNotice(meetingId, noticeId, principal)
-        );
+        return ApiResponse.success(postQueryService.getCommunityPost(postId, principal));
     }
 
     /**
-     * 해당 팬미팅 운영자가 공지를 작성한다(POST-003a).
+     * 해당 팬미팅 소유 운영자가 커뮤니티 게시글을 작성한다(POST-003b).
      *
      * @param meetingId 팬미팅 식별자
      * @param request 제목과 본문을 담은 작성 요청
      * @param principal 로그인 사용자 정보
-     * @return 생성된 공지 정보
+     * @return 생성된 커뮤니티 게시글 정보
      */
-    @PostMapping
+    @PostMapping("/fan-meetings/{meetingId}/community/posts")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<NoticeCreateResponse> createMeetingNotice(
+    public ApiResponse<CommunityPostCreateResponse> createCommunityPost(
             @PathVariable Long meetingId,
-            @Valid @RequestBody NoticeCreateRequest request,
+            @Valid @RequestBody CommunityPostCreateRequest request,
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
         return ApiResponse.success(
-                postCommandService.createMeetingNotice(meetingId, request, principal)
+                postCommandService.createCommunityPost(meetingId, request, principal)
         );
     }
 
     /**
-     * 작성한 운영자나 서비스 운영자가 팬미팅 공지를 부분 수정한다(POST-004a).
+     * 작성자가 자신의 커뮤니티 게시글을 부분 수정한다(POST-004b).
      *
-     * @param meetingId 팬미팅 식별자
-     * @param noticeId 공지 식별자
+     * @param postId 커뮤니티 게시글 식별자
      * @param request 수정할 제목·본문을 담은 요청
      * @param principal 로그인 사용자 정보
-     * @return 수정된 공지 정보
+     * @return 수정된 게시글 정보
      */
-    @PatchMapping("/{noticeId}")
-    public ApiResponse<PostUpdateResponse> updateMeetingNotice(
-            @PathVariable Long meetingId,
-            @PathVariable Long noticeId,
+    @PatchMapping("/community/posts/{postId}")
+    public ApiResponse<PostUpdateResponse> updateCommunityPost(
+            @PathVariable Long postId,
             @Valid @RequestBody PostUpdateRequest request,
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
         return ApiResponse.success(
-                postCommandService.updateMeetingNotice(meetingId, noticeId, request, principal)
+                postCommandService.updateCommunityPost(postId, request, principal)
         );
     }
 
     /**
-     * 작성한 운영자나 서비스 운영자가 팬미팅 공지를 삭제한다(POST-005a).
+     * 작성자나 해당 팬미팅 소유 운영자가 커뮤니티 게시글을 삭제한다(POST-005b).
      *
-     * @param meetingId 팬미팅 식별자
-     * @param noticeId 공지 식별자
+     * @param postId 커뮤니티 게시글 식별자
      * @param principal 로그인 사용자 정보
      * @return 삭제 처리 결과
      */
-    @DeleteMapping("/{noticeId}")
-    public ApiResponse<PostDeleteResponse> deleteMeetingNotice(
-            @PathVariable Long meetingId,
-            @PathVariable Long noticeId,
+    @DeleteMapping("/community/posts/{postId}")
+    public ApiResponse<PostDeleteResponse> deleteCommunityPost(
+            @PathVariable Long postId,
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
-        return ApiResponse.success(
-                postCommandService.deleteMeetingNotice(meetingId, noticeId, principal)
-        );
+        return ApiResponse.success(postCommandService.deleteCommunityPost(postId, principal));
     }
 }

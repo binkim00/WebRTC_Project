@@ -117,6 +117,81 @@ public class Post extends BaseTimeEntity {
     }
 
     /**
+     * 팬미팅에 연결된 커뮤니티 게시글을 공개 상태로 생성한다.
+     *
+     * <p>커뮤니티 게시글은 요청 경로의 팬미팅에 반드시 연결되므로 대상 팬미팅이 필요하다.
+     * 게시글 유형은 요청 경로가 고정하므로 클라이언트 값을 받지 않는다.
+     *
+     * @param author 작성자
+     * @param meeting 게시글을 연결할 팬미팅
+     * @param title 게시글 제목
+     * @param content 게시글 본문
+     * @return 공개 상태로 초기화된 커뮤니티 게시글
+     * @throws IllegalArgumentException 대상 팬미팅이 없는 경우
+     */
+    public static Post createCommunity(User author, FanMeeting meeting,
+                                       String title, String content) {
+        if (meeting == null) {
+            throw new IllegalArgumentException("커뮤니티 게시글은 대상 팬미팅이 필요합니다.");
+        }
+        return new Post(author, meeting, PostType.COMMUNITY, title, content);
+    }
+
+    /**
+     * 노출 가능한 게시글의 제목과 본문을 수정한다.
+     *
+     * <p>부분 수정을 지원하므로 null인 항목은 기존 값을 유지한다.
+     * 삭제·숨김 상태의 게시글은 존재하지 않는 것으로 취급해야 하므로 수정을 거부한다.
+     *
+     * @param title 새 제목이며 유지하려면 null
+     * @param content 새 본문이며 유지하려면 null
+     * @throws IllegalStateException 이미 삭제되었거나 공개 상태가 아닌 경우
+     */
+    public void update(String title, String content) {
+        if (!isVisibleToPublic()) {
+            throw new IllegalStateException("노출 가능한 게시글만 수정할 수 있습니다.");
+        }
+        if (title != null) {
+            this.title = title;
+        }
+        if (content != null) {
+            this.content = content;
+        }
+    }
+
+    /**
+     * 작성자 요청으로 게시글을 논리 삭제한다.
+     *
+     * <p>실제 행을 지우지 않고 삭제 시각만 기록해 목록·상세 조회에서 제외한다.
+     *
+     * @param deletedAt 삭제 시각
+     * @throws IllegalStateException 이미 삭제된 경우
+     */
+    public void softDelete(LocalDateTime deletedAt) {
+        if (this.deletedAt != null) {
+            throw new IllegalStateException("이미 삭제된 게시글입니다.");
+        }
+        this.deletedAt = Objects.requireNonNull(deletedAt);
+    }
+
+    /**
+     * 운영자 요청으로 게시글을 숨김 처리한다.
+     *
+     * <p>작성자가 아닌 운영자가 글을 내리는 경우이며 행을 지우지 않고 상태만 바꾼다.
+     *
+     * @throws IllegalStateException 이미 삭제되었거나 이미 숨김 상태인 경우
+     */
+    public void hide() {
+        if (deletedAt != null) {
+            throw new IllegalStateException("이미 삭제된 게시글입니다.");
+        }
+        if (status == PostStatus.HIDDEN) {
+            throw new IllegalStateException("이미 숨김 처리된 게시글입니다.");
+        }
+        this.status = PostStatus.HIDDEN;
+    }
+
+    /**
      * 일반 사용자에게 노출할 수 있는 게시글인지 확인한다.
      *
      * @return 삭제되지 않았고 공개 상태이면 true
