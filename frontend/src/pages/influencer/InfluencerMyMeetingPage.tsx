@@ -7,17 +7,21 @@ import {
   NotePencil,
   VideoCamera,
 } from '@phosphor-icons/react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
+  AlertBanner,
   Avatar,
   Badge,
   Button,
   Card,
   LinearProgress,
 } from '../../components'
+import { ApiError } from '../../api/ApiError'
+import { getAuthSession } from '../../api/authSession'
+import { fetchMyMeetings, type ManagerMeetingSummary } from '../../api/managerMeetings'
 
-/* TODO: API 연동 후 아래 mock 데이터를 서버 응답 데이터로 교체 */
-const meeting = {
+const previewMeeting = {
   id: '1',
   title: 'MELLY DAY 팬미팅',
   date: '2026년 7월 26일',
@@ -34,12 +38,60 @@ const meeting = {
 
 export function InfluencerMyMeetingPage() {
   const navigate = useNavigate()
+  const [meetingSummary, setMeetingSummary] = useState<ManagerMeetingSummary>()
+  const [error, setError] = useState<string>()
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const session = getAuthSession()
+
+    if (!session || (session.role !== 'INFLUENCER' && session.role !== 'SOLO_INFLUENCER')) {
+      setError('인플루언서 계정으로 로그인해 주세요.')
+      return () => controller.abort()
+    }
+
+    void fetchMyMeetings({ page: 0, size: 20 }, session.accessToken, controller.signal)
+      .then((result) => {
+        const activeMeeting =
+          result.content.find((item) => item.status === 'LIVE') ??
+          result.content.find((item) => item.status !== 'COMPLETED')
+
+        setMeetingSummary(activeMeeting)
+        setError(activeMeeting ? undefined : '현재 입장할 수 있는 팬미팅이 없습니다.')
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        setError(
+          reason instanceof ApiError || reason instanceof TypeError
+            ? reason.message
+            : '내 팬미팅을 불러오지 못했습니다.',
+        )
+      })
+
+    return () => controller.abort()
+  }, [])
+
+  const meeting = meetingSummary
+    ? {
+        ...previewMeeting,
+        id: meetingSummary.meetingId,
+        title: meetingSummary.title,
+        date: new Date(meetingSummary.scheduledStartAt).toLocaleDateString('ko-KR'),
+        startTime: new Date(meetingSummary.scheduledStartAt).toLocaleString('ko-KR'),
+      }
+    : previewMeeting
   const progress = Math.round(
     (meeting.completedSessionCount / meeting.totalSessionCount) * 100,
   )
 
   return (
     <div className="grid gap-12 pb-8">
+      {error ? (
+        <AlertBanner title="팬미팅을 선택할 수 없습니다" variant="error">
+          {error}
+        </AlertBanner>
+      ) : null}
+
       <header className="grid gap-3">
         <h1 className="text-4xl font-black leading-tight tracking-[-0.04em]">
           나의 팬미팅
@@ -204,13 +256,14 @@ export function InfluencerMyMeetingPage() {
               <div className="border-t border-[var(--color-divider)] pt-5">
                 <Button
                   className="w-full shadow-[var(--shadow-final-cta)]"
+                  disabled={!meetingSummary}
                   leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
                   onClick={() =>
-                    navigate(`/influencer/fan-meetings/${meeting.id}/call`)
+                    navigate(`/influencer/fan-meetings/${meeting.id}/device-check`)
                   }
                   size="lg"
                 >
-                  팬미팅 입장
+                  장비 점검 후 입장
                 </Button>
               </div>
             </div>

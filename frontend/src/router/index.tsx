@@ -156,6 +156,10 @@ export const router = createBrowserRouter([
         Component: FanMeetingParticipantsPage,
       },
       {
+        path: 'influencer/fan-meetings/:fanMeetingId/device-check',
+        Component: DeviceCheckPage,
+      },
+      {
         path: 'influencer/fan-meetings/:fanMeetingId/ready',
         Component: InfluencerMeetingReadyPage,
       },

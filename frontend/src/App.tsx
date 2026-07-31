@@ -84,7 +84,9 @@ function App() {
   const isSignupPage = pathname === '/signup'
   const isAuthPage = isLoginPage || isSignupPage
   const isHomePage = pathname === '/'
-  const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
+  const isDeviceCheckPage =
+    /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname) ||
+    /^\/influencer\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
   const authSession = getAuthSession()
   const isAuthenticated = authSession !== null
@@ -138,7 +140,7 @@ function App() {
               <span>입장 예정 팬미팅</span>
               <span aria-hidden="true" className="h-4 w-px bg-[var(--color-divider)]" />
               <strong className="text-[var(--color-text-primary)]">
-                서윤의 비밀 정원 팬미팅&nbsp;&nbsp; 오늘 19:00
+                선택한 팬미팅 장비 점검
               </strong>
             </p>
           ) : undefined
