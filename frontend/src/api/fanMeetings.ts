@@ -8,6 +8,11 @@ export type PublicFanMeetingStatus =
   | 'LIVE'
   | 'ENDED'
 
+export type FanMeetingDetailStatus =
+  | 'DRAFT'
+  | PublicFanMeetingStatus
+  | 'CANCELED'
+
 export type FanMeetingApplicationStatus =
   | 'SUBMITTED'
   | 'WITHDRAWN'
@@ -42,6 +47,45 @@ export type PublicFanMeetingQuery = {
   status?: PublicFanMeetingStatus
   page?: number
   size?: number
+}
+
+export type PublicFanMeetingDetail = {
+  meeting: {
+    meetingId: number
+    status: FanMeetingDetailStatus
+    influencerId: number
+    title: string
+    description: string
+    coverImageUrl: string | null
+    scheduledStartAt: string
+    application: {
+      enabled: boolean
+      startAt: string | null
+      endAt: string | null
+      resultAnnouncementAt: string | null
+      capacity: number
+    }
+    operation: {
+      queueOpenAt: string
+      callDurationSec: number
+      recordingEnabled: boolean
+      translationEnabled: boolean
+      reconnectGraceSec: number
+      earlyStartMinutes: number
+      maxRecallCount: number
+    }
+  }
+  influencer: {
+    influencerId: number
+    name: string
+    profileImageUrl: string | null
+  }
+  viewer: {
+    applicationStatus: FanMeetingApplicationStatus | null
+    participantStatus: string | null
+    canApply: boolean
+    canEnter: boolean
+  }
 }
 
 const publicMeetingStatuses: readonly PublicFanMeetingStatus[] = [
@@ -83,6 +127,11 @@ function readNullableString(value: unknown, fieldName: string): string | null {
 
 function readNumber(value: unknown, fieldName: string): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
+  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+}
+
+function readBoolean(value: unknown, fieldName: string): boolean {
+  if (typeof value === 'boolean') return value
   throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
 }
 
@@ -149,6 +198,128 @@ function parsePage(value: unknown): PublicFanMeetingPage {
   }
 }
 
+function parseDetail(value: unknown): PublicFanMeetingDetail {
+  const detail = asRecord(unwrapData(value))
+  const meeting = asRecord(detail?.meeting)
+  const application = asRecord(meeting?.application)
+  const operation = asRecord(meeting?.operation)
+  const influencer = asRecord(detail?.influencer)
+  const viewer = asRecord(detail?.viewer)
+
+  const status = meeting?.status
+  const detailStatuses: readonly FanMeetingDetailStatus[] = [
+    'DRAFT',
+    ...publicMeetingStatuses,
+    'CANCELED',
+  ]
+
+  if (
+    !detail ||
+    !meeting ||
+    !application ||
+    !operation ||
+    !influencer ||
+    !viewer ||
+    typeof status !== 'string' ||
+    !detailStatuses.includes(status as FanMeetingDetailStatus)
+  ) {
+    throw new TypeError('팬미팅 상세 응답 형식이 올바르지 않습니다.')
+  }
+
+  return {
+    meeting: {
+      meetingId: readNumber(meeting.meetingId, 'meeting.meetingId'),
+      status: status as FanMeetingDetailStatus,
+      influencerId: readNumber(
+        meeting.influencerId,
+        'meeting.influencerId',
+      ),
+      title: readString(meeting.title, 'meeting.title'),
+      description: readString(meeting.description, 'meeting.description'),
+      coverImageUrl: readNullableString(
+        meeting.coverImageUrl,
+        'meeting.coverImageUrl',
+      ),
+      scheduledStartAt: readString(
+        meeting.scheduledStartAt,
+        'meeting.scheduledStartAt',
+      ),
+      application: {
+        enabled: readBoolean(
+          application.enabled,
+          'meeting.application.enabled',
+        ),
+        startAt: readNullableString(
+          application.startAt,
+          'meeting.application.startAt',
+        ),
+        endAt: readNullableString(
+          application.endAt,
+          'meeting.application.endAt',
+        ),
+        resultAnnouncementAt: readNullableString(
+          application.resultAnnouncementAt,
+          'meeting.application.resultAnnouncementAt',
+        ),
+        capacity: readNumber(
+          application.capacity,
+          'meeting.application.capacity',
+        ),
+      },
+      operation: {
+        queueOpenAt: readString(
+          operation.queueOpenAt,
+          'meeting.operation.queueOpenAt',
+        ),
+        callDurationSec: readNumber(
+          operation.callDurationSec,
+          'meeting.operation.callDurationSec',
+        ),
+        recordingEnabled: readBoolean(
+          operation.recordingEnabled,
+          'meeting.operation.recordingEnabled',
+        ),
+        translationEnabled: readBoolean(
+          operation.translationEnabled,
+          'meeting.operation.translationEnabled',
+        ),
+        reconnectGraceSec: readNumber(
+          operation.reconnectGraceSec,
+          'meeting.operation.reconnectGraceSec',
+        ),
+        earlyStartMinutes: readNumber(
+          operation.earlyStartMinutes,
+          'meeting.operation.earlyStartMinutes',
+        ),
+        maxRecallCount: readNumber(
+          operation.maxRecallCount,
+          'meeting.operation.maxRecallCount',
+        ),
+      },
+    },
+    influencer: {
+      influencerId: readNumber(
+        influencer.influencerId,
+        'influencer.influencerId',
+      ),
+      name: readString(influencer.name, 'influencer.name'),
+      profileImageUrl: readNullableString(
+        influencer.profileImageUrl,
+        'influencer.profileImageUrl',
+      ),
+    },
+    viewer: {
+      applicationStatus: readApplicationStatus(viewer.applicationStatus),
+      participantStatus: readNullableString(
+        viewer.participantStatus,
+        'viewer.participantStatus',
+      ),
+      canApply: readBoolean(viewer.canApply, 'viewer.canApply'),
+      canEnter: readBoolean(viewer.canEnter, 'viewer.canEnter'),
+    },
+  }
+}
+
 export async function fetchPublicFanMeetings(
   query: PublicFanMeetingQuery,
   authToken?: string,
@@ -167,4 +338,20 @@ export async function fetchPublicFanMeetings(
   })
 
   return parsePage(response)
+}
+
+export async function fetchPublicFanMeetingDetail(
+  meetingId: number,
+  authToken?: string,
+  signal?: AbortSignal,
+): Promise<PublicFanMeetingDetail> {
+  const response = await apiRequest<unknown>(
+    `/api/v1/fan-meetings/${meetingId}`,
+    {
+      authToken,
+      signal,
+    },
+  )
+
+  return parseDetail(response)
 }
