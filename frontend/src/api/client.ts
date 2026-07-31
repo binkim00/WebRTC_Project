@@ -61,7 +61,7 @@ async function refreshStoredSession(): Promise<LoginResponse | null> {
   const session = getAuthSession()
   if (!session) return null
 
-  refreshPromise = fetch(`${API_URL}/api/v1/auth/refresh`, {
+  refreshPromise = fetch(`${API_URL}/api/v1/auth/reissue`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

@@ -11,6 +11,7 @@ import {
 } from '../pages/common/CommonRoutePages'
 import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
 import { LiveKitTestPage } from '../pages/common/LiveKitTestPage'
+import { YestalgiaHomeExamplePage } from '../pages/common/YestalgiaHomeExamplePage'
 import {
   ForbiddenPage,
   NotFoundPage,
@@ -68,6 +69,10 @@ export const router = createBrowserRouter([
       {
         index: true,
         Component: HomePage,
+      },
+      {
+        path: 'examples/yestalgia-home',
+        Component: YestalgiaHomeExamplePage,
       },
       {
         Component: AuthLayout,
@@ -154,6 +159,10 @@ export const router = createBrowserRouter([
       {
         path: 'influencer/fan-meetings/:fanMeetingId/fans',
         Component: FanMeetingParticipantsPage,
+      },
+      {
+        path: 'influencer/fan-meetings/:fanMeetingId/device-check',
+        Component: DeviceCheckPage,
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/ready',

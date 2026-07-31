@@ -7,47 +7,13 @@ import {
   WifiHigh,
   Wrench,
 } from '@phosphor-icons/react'
+import { useCallback, useEffect, useState } from 'react'
 import { AlertBanner, Badge, Button, Card } from '../../components'
-import { useParams } from 'react-router-dom'
-
-/*
- * TODO: API 연동 후 처리
- * 1. 팬미팅·대기열·장비 mock을 실제 데이터로 교체한다.
- * 2. polling으로 순번, 예상 시간, 호출 가능 여부를 갱신한다.
- * 3. IN_CALL은 통화 화면, COMPLETED는 완료 화면으로 이동한다.
- * 4. 로딩·오류·연결 끊김 상태를 처리한다.
- * 5. 초기 배정 번호와 호출 제한시간 응답을 백엔드와 확정한다.
- */
-type WaitingStatus = 'WAITING' | 'IN_CALL' | 'COMPLETED'
-type QueueSnapshot = {
-  queueEntryId: number
-  position: number
-  aheadCount: number
-  estimatedWaitSec: number
-  displayStatus: WaitingStatus
-  callAttemptCount: number
-  calledAt: string | null
-  callSessionId: number | null
-  canEnterCall: boolean
-}
-
-const meetingInfoMock = {
-  meetingTitle: 'Melly와의 봄날 팬미팅',
-  influencerName: 'Melly',
-  assignedOrder: 12,
-}
-
-const queueSnapshotMock: QueueSnapshot = {
-  queueEntryId: 1,
-  position: 3,
-  aheadCount: 2,
-  estimatedWaitSec: 180,
-  displayStatus: 'WAITING',
-  callAttemptCount: 1,
-  calledAt: '2026-07-29T14:00:00',
-  callSessionId: 1,
-  canEnterCall: true,
-}
+import { useNavigate, useParams } from 'react-router-dom'
+import { getAuthSession } from '../../api/authSession'
+import { ApiError } from '../../api/ApiError'
+import { fetchMeetingDetail, type MeetingDetail } from '../../api/fanMeetingParticipants'
+import { getMyQueue, type QueueSnapshotResponse } from '../../api/queue'
 
 const deviceStatusMock = {
   connectionHealthy: true,
@@ -56,26 +22,88 @@ const deviceStatusMock = {
 
 export function FanMeetingWaitingPage() {
   const { fanMeetingId } = useParams()
-  const currentPosition = queueSnapshotMock.position
-  const estimatedWaitMinutes = Math.ceil(queueSnapshotMock.estimatedWaitSec / 60)
-  const isCalled =
-    queueSnapshotMock.displayStatus === 'WAITING' &&
-    queueSnapshotMock.canEnterCall
+  const navigate = useNavigate()
+  const [meetingInfo, setMeetingInfo] = useState<MeetingDetail>()
+  const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshotResponse>()
+  const [error, setError] = useState<string>()
+
+  const loadWaitingState = useCallback(async (signal?: AbortSignal) => {
+    if (!fanMeetingId) return
+
+    const session = getAuthSession()
+    if (!session || session.role !== 'FAN') {
+      setError('팬 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
+      return
+    }
+
+    try {
+      const [nextMeetingInfo, nextQueueSnapshot] = await Promise.all([
+        fetchMeetingDetail(fanMeetingId, session.accessToken, signal),
+        getMyQueue(fanMeetingId, session.accessToken, signal),
+      ])
+
+      setMeetingInfo(nextMeetingInfo)
+      setQueueSnapshot(nextQueueSnapshot)
+      setError(undefined)
+
+      if (nextQueueSnapshot.displayStatus === 'COMPLETED') {
+        navigate(`/fan/fan-meetings/${fanMeetingId}/complete`, { replace: true })
+      }
+    } catch (reason) {
+      if (signal?.aborted) return
+      setError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : '대기열 상태를 불러오지 못했습니다.',
+      )
+    }
+  }, [fanMeetingId, navigate])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadWaitingState(controller.signal)
+
+    const timer = window.setInterval(() => {
+      void loadWaitingState(controller.signal)
+    }, 3_000)
+
+    return () => {
+      controller.abort()
+      window.clearInterval(timer)
+    }
+  }, [loadWaitingState])
 
   if (!fanMeetingId) {
     return null
   }
 
+  const currentPosition = queueSnapshot?.position ?? 0
+  const estimatedWaitMinutes = Math.ceil((queueSnapshot?.estimatedWaitSec ?? 0) / 60)
+  const isCalled = Boolean(queueSnapshot?.canEnterCall && queueSnapshot.callSessionId)
+
+  const handleEnterCall = () => {
+    if (!queueSnapshot?.canEnterCall || !queueSnapshot.callSessionId) return
+    navigate(
+      `/fan/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(String(queueSnapshot.callSessionId))}`,
+    )
+  }
+
   return (
     <div className="grid gap-6 pb-8">
+      {error ? (
+        <AlertBanner title="대기실 정보를 확인할 수 없습니다" variant="error">
+          {error}
+        </AlertBanner>
+      ) : null}
+
       <Card className="overflow-hidden">
         <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
             <h1 className="text-2xl font-black tracking-[-0.035em] sm:text-3xl">
-              {meetingInfoMock.meetingTitle}
+              {meetingInfo?.title ?? '팬미팅 대기실'}
             </h1>
             <p className="mt-2 text-sm font-semibold text-[var(--color-text-secondary)]">
-              인플루언서 {meetingInfoMock.influencerName}
+              인플루언서 {meetingInfo?.influencer.influencerName ?? '확인 중'}
             </p>
           </div>
 
@@ -153,7 +181,7 @@ export function FanMeetingWaitingPage() {
                   초기 배정 번호
                 </dt>
                 <dd className="text-4xl font-black tracking-[-0.04em] text-[var(--color-text-primary)]">
-                  {meetingInfoMock.assignedOrder}번
+                  {queueSnapshot?.position ?? '-'}번
                 </dd>
                 <p className="text-sm text-[var(--color-text-secondary)]">
                   팬미팅 참여 시 처음 배정된 번호예요
@@ -169,7 +197,7 @@ export function FanMeetingWaitingPage() {
                   {currentPosition}번째
                 </dd>
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                  앞에 {queueSnapshotMock.aheadCount}명이 기다리고 있어요
+                  앞에 {queueSnapshot?.aheadCount ?? '-'}명이 기다리고 있어요
                 </p>
               </div>
 
@@ -231,12 +259,12 @@ export function FanMeetingWaitingPage() {
             </div>
 
             <div className="border-t border-[var(--color-divider)] p-5 sm:p-6">
-              {/* TODO: canEnterCall이면 callSessionId를 사용해 통화 화면으로 이동 */}
               <Button
                 className="w-full"
-                disabled={!queueSnapshotMock.canEnterCall}
+                disabled={!isCalled}
+                onClick={handleEnterCall}
                 size="lg"
-                variant={queueSnapshotMock.canEnterCall ? 'primary' : 'secondary'}
+                variant={isCalled ? 'primary' : 'secondary'}
               >
                 {isCalled ? '팬미팅 입장' : '호출 대기 중'}
               </Button>

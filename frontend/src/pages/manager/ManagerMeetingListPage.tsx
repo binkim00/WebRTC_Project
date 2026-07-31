@@ -10,9 +10,12 @@ import {
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  fetchMyMeetings,
   type ManagerMeetingPage,
   type ManagerMeetingSummary,
 } from '../../api/managerMeetings'
+import { ApiError } from '../../api/ApiError'
+import { getAuthSession } from '../../api/authSession'
 import { AlertBanner, Button, Card, EmptyState, Pagination, Spinner } from '../../components'
 
 /** 목록 API가 준비되기 전 레이아웃 검증에만 사용하는 개발 미리보기 데이터다. */
@@ -61,29 +64,60 @@ export function ManagerMeetingListPage() {
   const [error, setError] = useState<string>()
 
   useEffect(() => {
-    if (!isPreview) {
+    const controller = new AbortController()
+
+    if (isPreview) {
+      const normalizedKeyword = keyword.trim().toLocaleLowerCase()
+      const filteredMeetings = normalizedKeyword
+        ? previewMeetings.filter((meeting) =>
+            `${meeting.title} ${meeting.influencerName}`
+              .toLocaleLowerCase()
+              .includes(normalizedKeyword),
+          )
+        : previewMeetings
+      setMeetingPage({
+        content: filteredMeetings,
+        page: 0,
+        size: 5,
+        totalElements: filteredMeetings.length,
+        totalPages: normalizedKeyword ? 1 : 2,
+        hasNext: !normalizedKeyword && page < 2,
+      })
+      setError(undefined)
       setLoading(false)
-      return
+      return () => controller.abort()
     }
 
-    const normalizedKeyword = keyword.trim().toLocaleLowerCase()
-    const filteredMeetings = normalizedKeyword
-      ? previewMeetings.filter((meeting) =>
-          `${meeting.title} ${meeting.influencerName}`
-            .toLocaleLowerCase()
-            .includes(normalizedKeyword),
+    const session = getAuthSession()
+    if (!session || (session.role !== 'MANAGER' && session.role !== 'SOLO_INFLUENCER')) {
+      setError('팬미팅을 운영할 수 있는 계정으로 로그인해 주세요.')
+      setLoading(false)
+      return () => controller.abort()
+    }
+
+    setLoading(true)
+    void fetchMyMeetings(
+      { keyword, page: page - 1, size: 5 },
+      session.accessToken,
+      controller.signal,
+    )
+      .then((result) => {
+        setMeetingPage(result)
+        setError(undefined)
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        setError(
+          reason instanceof ApiError || reason instanceof TypeError
+            ? reason.message
+            : '팬미팅 목록을 불러오지 못했습니다.',
         )
-      : previewMeetings
-    setMeetingPage({
-      content: filteredMeetings,
-      page: 0,
-      size: 5,
-      totalElements: filteredMeetings.length,
-      totalPages: normalizedKeyword ? 1 : 2,
-      hasNext: !normalizedKeyword && page < 2,
-    })
-    setError(undefined)
-    setLoading(false)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
   }, [isPreview, keyword, page])
 
   /** 검색 폼 제출 시 첫 페이지로 돌아가고 입력 키워드를 실제 검색 조건으로 적용한다. */
@@ -91,26 +125,6 @@ export function ManagerMeetingListPage() {
     event.preventDefault()
     setPage(1)
     setKeyword(keywordInput)
-  }
-
-  if (!isPreview) {
-    return (
-      <div className="grid min-w-0 gap-7 pb-10">
-        <header>
-          <h1 className="text-4xl font-black tracking-[-0.05em]">팬미팅 관리</h1>
-          <p className="mt-3 text-[var(--color-text-secondary)]">팬미팅을 새로 등록하거나 운영 화면으로 이동하세요.</p>
-        </header>
-        <AlertBanner title="팬미팅 목록 API가 아직 구현되지 않았습니다" variant="warning">
-          첨부된 API 구현 현황 기준으로 <code>GET /api/v1/fan-meetings</code>를 사용할 수 없습니다.
-          현재 등록 API는 홍보·응모 이벤트 생성에 사용하므로 이벤트 생성 화면에서 먼저 응모를 진행해 주세요.
-        </AlertBanner>
-        <div>
-          <Button leadingIcon={<Plus size={20} weight="bold" />} onClick={() => navigate('/manager/events/new')}>
-            새 이벤트 등록
-          </Button>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -226,14 +240,23 @@ function MeetingRow({ meeting }: { meeting: ManagerMeetingSummary }) {
         확정 팬리스트
         <ArrowRight aria-hidden="true" size={17} />
       </Link>
-      <Link
-        className="inline-flex min-h-10 items-center gap-2 font-bold hover:text-[var(--color-primary-coral)]"
-        to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}/edit`}
-      >
-        <Gear aria-hidden="true" size={20} weight="bold" />
-        설정
-        <ArrowRight aria-hidden="true" size={17} />
-      </Link>
+      <div className="grid gap-2">
+        <Link
+          className="inline-flex min-h-10 items-center gap-2 font-bold text-[var(--color-primary-coral)]"
+          to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}/monitor`}
+        >
+          <VideoCamera aria-hidden="true" size={20} weight="fill" />
+          운영
+          <ArrowRight aria-hidden="true" size={17} />
+        </Link>
+        <Link
+          className="inline-flex min-h-10 items-center gap-2 text-sm font-bold hover:text-[var(--color-primary-coral)]"
+          to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}/edit`}
+        >
+          <Gear aria-hidden="true" size={18} weight="bold" />
+          설정
+        </Link>
+      </div>
     </article>
   )
 }
