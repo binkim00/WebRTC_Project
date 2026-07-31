@@ -94,6 +94,68 @@ function toDateTimeLocalValue(value: string | null): string {
   return value ? value.replace(' ', 'T').slice(0, 16) : ''
 }
 
+/** 입력된 일정 사이의 선후 관계를 백엔드 검증 규칙과 동일하게 검사한다. */
+function getMeetingScheduleErrors(form: FanMeetingForm): string[] {
+  const errors: string[] = []
+  const scheduledStart = form.scheduledStartAt
+    ? new Date(form.scheduledStartAt)
+    : null
+  const applicationStart = form.application.startAt
+    ? new Date(form.application.startAt)
+    : null
+  const applicationEnd = form.application.endAt
+    ? new Date(form.application.endAt)
+    : null
+  const resultAnnouncement = form.application.resultAnnouncementAt
+    ? new Date(form.application.resultAnnouncementAt)
+    : null
+  const queueOpen = form.operation.queueOpenAt
+    ? new Date(form.operation.queueOpenAt)
+    : null
+
+  if (
+    form.application.enabled &&
+    applicationStart &&
+    applicationEnd &&
+    applicationEnd <= applicationStart
+  ) {
+    errors.push('응모 마감 일시는 응모 시작 일시보다 이후여야 합니다.')
+  }
+
+  if (
+    form.application.enabled &&
+    applicationEnd &&
+    resultAnnouncement &&
+    resultAnnouncement < applicationEnd
+  ) {
+    errors.push('결과 발표 일시는 응모 마감 일시보다 빠를 수 없습니다.')
+  }
+
+  if (
+    form.application.enabled &&
+    applicationEnd &&
+    scheduledStart &&
+    applicationEnd >= scheduledStart
+  ) {
+    errors.push('응모 마감 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+  }
+
+  if (
+    form.application.enabled &&
+    resultAnnouncement &&
+    scheduledStart &&
+    resultAnnouncement >= scheduledStart
+  ) {
+    errors.push('결과 발표 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+  }
+
+  if (queueOpen && scheduledStart && queueOpen >= scheduledStart) {
+    errors.push('대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+  }
+
+  return errors
+}
+
 /** 예정 팬미팅과 대기열 시작 시간의 선후 관계를 검사하고 오류 메시지를 반환한다. */
 function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
   const scheduledStart = new Date(form.scheduledStartAt)
@@ -105,11 +167,12 @@ function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
     return '팬미팅 시작 일시는 현재 시각보다 1분 이상 이후로 입력해 주세요.'
   }
 
-  if (Number.isNaN(queueOpen.getTime()) || queueOpen >= scheduledStart) {
-    return '대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.'
-  }
-
-  return undefined
+  return (
+    getMeetingScheduleErrors(form)[0] ??
+    (Number.isNaN(queueOpen.getTime())
+      ? '대기열 오픈 일시를 입력해 주세요.'
+      : undefined)
+  )
 }
 
 /** 아직 백엔드 API가 없는 화면에서 샘플 데이터를 실제 데이터처럼 보이지 않게 안내한다. */
@@ -357,6 +420,16 @@ export function ManagerEventCreatePage() {
   const [draftTotalPages, setDraftTotalPages] = useState(1)
   const [draftLoading, setDraftLoading] = useState(false)
   const [draftError, setDraftError] = useState<string>()
+  const scheduleErrors = getMeetingScheduleErrors(form)
+  const applicationEndError = scheduleErrors.find((message) =>
+    message.startsWith('응모 마감'),
+  )
+  const resultAnnouncementError = scheduleErrors.find((message) =>
+    message.startsWith('결과 발표'),
+  )
+  const queueOpenError = scheduleErrors.find((message) =>
+    message.startsWith('대기열 오픈'),
+  )
 
   async function openDraftDialog() {
     setDraftDialogOpen(true)
@@ -648,10 +721,10 @@ export function ManagerEventCreatePage() {
                   />
                   {form.application.enabled ? (
                     <div className="grid gap-5 sm:grid-cols-2">
-                      <TextField label="응모 시작 일시" required type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
-                      <TextField label="응모 종료 일시" required type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
-                      <TextField label="결과 발표 일시" required type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
-                      <TextField label="응모 정원" min={1} required type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
+                      <TextField label="응모 시작 일시" required reserveMessageSpace type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
+                      <TextField error={applicationEndError} label="응모 종료 일시" required reserveMessageSpace type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
+                      <TextField error={resultAnnouncementError} label="결과 발표 일시" required reserveMessageSpace type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
+                      <TextField label="응모 정원" min={1} required reserveMessageSpace type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
                     </div>
                   ) : (
                     <p className="text-sm text-[var(--color-text-secondary)]">응모 없는 이벤트로 등록하면 기간과 정원은 서버 규약에 맞게 비활성 값으로 전송됩니다.</p>
@@ -662,8 +735,8 @@ export function ManagerEventCreatePage() {
                     <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--color-primary-coral)]">영상통화 운영</p>
                     <p className="mt-2 text-sm text-[var(--color-text-secondary)]">당첨자 선정 뒤 진행할 팬미팅의 예정 대기열과 1명당 통화 조건입니다.</p>
                   </div>
-                <TextField label="대기열 오픈 일시" required type="datetime-local" value={form.operation.queueOpenAt} onChange={(event) => setForm({ ...form, operation: { ...form.operation, queueOpenAt: event.target.value } })} />
-                <Select label="1인 통화 시간" options={[{ value: '120', label: '2분' }, { value: '180', label: '3분' }, { value: '300', label: '5분' }]} value={String(form.operation.callDurationSec)} onChange={(event) => setForm({ ...form, operation: { ...form.operation, callDurationSec: Number(event.target.value) } })} />
+                <TextField error={queueOpenError} label="대기열 오픈 일시" required reserveMessageSpace type="datetime-local" value={form.operation.queueOpenAt} onChange={(event) => setForm({ ...form, operation: { ...form.operation, queueOpenAt: event.target.value } })} />
+                <Select label="1인 통화 시간" options={[{ value: '120', label: '2분' }, { value: '180', label: '3분' }, { value: '300', label: '5분' }]} reserveMessageSpace value={String(form.operation.callDurationSec)} onChange={(event) => setForm({ ...form, operation: { ...form.operation, callDurationSec: Number(event.target.value) } })} />
                 <div className="grid gap-3 rounded-xl border border-[var(--color-divider)] p-4 sm:col-span-2">
                   <Checkbox checked={form.operation.recordingEnabled} label="통화 녹화를 사용합니다." onChange={(event) => setForm({ ...form, operation: { ...form.operation, recordingEnabled: event.target.checked } })} />
                   <Checkbox checked={form.operation.translationEnabled} label="실시간 번역을 사용합니다." onChange={(event) => setForm({ ...form, operation: { ...form.operation, translationEnabled: event.target.checked } })} />
@@ -723,7 +796,10 @@ export function ManagerEventCreatePage() {
             </Button>
           ) : null}
           <FormActions
-            nextDisabled={createdMeetingStatus === 'PUBLISHED'}
+            nextDisabled={
+              createdMeetingStatus === 'PUBLISHED' ||
+              (step === 1 && scheduleErrors.length > 0)
+            }
             nextLoading={submitting}
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
             onSave={
