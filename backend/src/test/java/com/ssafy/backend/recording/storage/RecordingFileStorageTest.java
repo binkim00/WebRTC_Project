@@ -165,6 +165,81 @@ class RecordingFileStorageTest {
         assertThat(storage.delete("../outside.webm")).isFalse();
     }
 
+    /** 삭제로 비게 된 날짜 디렉터리가 최상위 경로까지 정리되는지 검증한다. */
+    @Test
+    void deleteRemovesEmptyDateDirectories() {
+        String key = storage.newStorageKey("webm", TODAY);
+        storage.store(key, stream("내용"), MAX_SIZE);
+        assertThat(Files.isDirectory(root.resolve("2026/07/31"))).isTrue();
+
+        assertThat(storage.delete(key)).isTrue();
+
+        assertThat(Files.exists(root.resolve("2026/07/31"))).isFalse();
+        assertThat(Files.exists(root.resolve("2026/07"))).isFalse();
+        assertThat(Files.exists(root.resolve("2026"))).isFalse();
+        // 최상위 경로와 임시 디렉터리는 항상 남아 있어야 다음 업로드가 가능하다.
+        assertThat(Files.isDirectory(root)).isTrue();
+        assertThat(Files.isDirectory(root.resolve(".tmp"))).isTrue();
+    }
+
+    /** 같은 날짜에 다른 녹화가 남아 있으면 디렉터리를 지우지 않는지 검증한다. */
+    @Test
+    void keepsDateDirectoryWhenAnotherRecordingRemains() {
+        String first = storage.newStorageKey("webm", TODAY);
+        String second = storage.newStorageKey("webm", TODAY);
+        storage.store(first, stream("첫 번째"), MAX_SIZE);
+        storage.store(second, stream("두 번째"), MAX_SIZE);
+
+        storage.delete(first);
+
+        assertThat(Files.isDirectory(root.resolve("2026/07/31"))).isTrue();
+        assertThat(storage.exists(second)).isTrue();
+
+        storage.delete(second);
+
+        assertThat(Files.exists(root.resolve("2026"))).isFalse();
+    }
+
+    /** 다른 달의 녹화가 남아 있으면 연도 디렉터리를 지우지 않는지 검증한다. */
+    @Test
+    void keepsYearDirectoryWhenAnotherMonthRemains() {
+        String july = storage.newStorageKey("webm", TODAY);
+        String august = storage.newStorageKey("webm", LocalDate.of(2026, 8, 1));
+        storage.store(july, stream("7월"), MAX_SIZE);
+        storage.store(august, stream("8월"), MAX_SIZE);
+
+        storage.delete(july);
+
+        assertThat(Files.exists(root.resolve("2026/07"))).isFalse();
+        assertThat(Files.isDirectory(root.resolve("2026/08/01"))).isTrue();
+        assertThat(Files.isDirectory(root.resolve("2026"))).isTrue();
+    }
+
+    /** 파일이 이미 없어도 남은 빈 디렉터리를 정리하는지 검증한다. */
+    @Test
+    void prunesEmptyDirectoriesEvenWhenFileAlreadyGone() throws IOException {
+        String key = storage.newStorageKey("webm", TODAY);
+        Files.createDirectories(root.resolve("2026/07/31"));
+
+        assertThat(storage.delete(key)).isFalse();
+
+        assertThat(Files.exists(root.resolve("2026"))).isFalse();
+    }
+
+    /** 삭제 후 같은 날짜에 다시 업로드할 수 있는지 검증한다. */
+    @Test
+    void allowsUploadAfterDirectoryWasPruned() {
+        String first = storage.newStorageKey("webm", TODAY);
+        storage.store(first, stream("첫 번째"), MAX_SIZE);
+        storage.delete(first);
+        assertThat(Files.exists(root.resolve("2026"))).isFalse();
+
+        String second = storage.newStorageKey("webm", TODAY);
+        storage.store(second, stream("두 번째"), MAX_SIZE);
+
+        assertThat(storage.exists(second)).isTrue();
+    }
+
     /** 저장된 파일 크기를 읽고 없는 파일은 재생 불가로 처리하는지 검증한다. */
     @Test
     void readsSizeAndRejectsMissingFile() {
