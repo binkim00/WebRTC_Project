@@ -47,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class InfluencerQueryIntegrationTest {
 
     @Autowired
-    private InfluencerQueryService influencerQueryService;
+    private InfluencerService influencerService;
 
     @Autowired
     private UserRepository userRepository;

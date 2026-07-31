@@ -5,7 +5,7 @@ import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.influencer.dto.InfluencerDetailResponse;
 import com.ssafy.backend.influencer.dto.InfluencerSummaryResponse;
-import com.ssafy.backend.influencer.service.InfluencerQueryService;
+import com.ssafy.backend.influencer.service.InfluencerService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,15 +18,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/influencers")
 public class InfluencerController {
 
-    private final InfluencerQueryService influencerQueryService;
+    private final InfluencerService influencerService;
 
     /**
      * 인플루언서 탐색 서비스를 주입받는다.
      *
-     * @param influencerQueryService 인플루언서 목록·상세 조회 서비스
+     * @param influencerService 인플루언서 목록·상세 조회 서비스
      */
-    public InfluencerController(InfluencerQueryService influencerQueryService) {
-        this.influencerQueryService = influencerQueryService;
+    public InfluencerController(InfluencerService influencerService) {
+        this.influencerService = influencerService;
     }
 
     /**
@@ -46,7 +46,7 @@ public class InfluencerController {
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
         return ApiResponse.success(
-                influencerQueryService.getInfluencers(page, size, keyword, principal)
+                influencerService.getInfluencers(page, size, keyword, principal)
         );
     }
 
@@ -62,6 +62,6 @@ public class InfluencerController {
             @PathVariable Long influencerId,
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
-        return ApiResponse.success(influencerQueryService.getInfluencer(influencerId, principal));
+        return ApiResponse.success(influencerService.getInfluencer(influencerId, principal));
     }
 }

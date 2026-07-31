@@ -2,7 +2,7 @@ package com.ssafy.backend.influencer.controller;
 
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.influencer.dto.InfluencerSummaryResponse;
-import com.ssafy.backend.influencer.service.InfluencerQueryService;
+import com.ssafy.backend.influencer.service.InfluencerService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -42,7 +42,7 @@ class InfluencerSecurityTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private InfluencerQueryService influencerQueryService;
+    private InfluencerService influencerQueryService;
 
     /** 비로그인 사용자의 인플루언서 목록 조회가 허용되는지 검증한다. */
     @Test

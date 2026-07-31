@@ -23,13 +23,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /** 비로그인 사용자도 접근하는 인플루언서 탐색 목록·상세 조회를 처리한다. */
 @Service
-public class InfluencerQueryService {
+public class InfluencerService {
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<UserRole> DISCOVERABLE_ROLES =
@@ -56,7 +55,7 @@ public class InfluencerQueryService {
      * @param influencerProfileRepository 인플루언서 프로필 저장소
      * @param followingRepository 팔로우 관계 저장소
      */
-    public InfluencerQueryService(InfluencerProfileRepository influencerProfileRepository,
+    public InfluencerService(InfluencerProfileRepository influencerProfileRepository,
                                   FollowingRepository followingRepository) {
         this.influencerProfileRepository = influencerProfileRepository;
         this.followingRepository = followingRepository;

@@ -53,7 +53,7 @@ class InfluencerDetailIntegrationTest {
     private static final LocalDateTime BASE = LocalDateTime.of(2026, 8, 1, 12, 0);
 
     @Autowired
-    private InfluencerQueryService influencerQueryService;
+    private InfluencerService influencerService;
 
     @Autowired
     private UserRepository userRepository;
