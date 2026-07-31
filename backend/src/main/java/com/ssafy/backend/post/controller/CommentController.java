@@ -5,15 +5,20 @@ import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.post.dto.CommentCreateRequest;
 import com.ssafy.backend.post.dto.CommentCreateResponse;
+import com.ssafy.backend.post.dto.CommentDeleteResponse;
 import com.ssafy.backend.post.dto.CommentReportCreateRequest;
 import com.ssafy.backend.post.dto.CommentReportCreateResponse;
 import com.ssafy.backend.post.dto.CommentSummaryResponse;
+import com.ssafy.backend.post.dto.CommentUpdateRequest;
+import com.ssafy.backend.post.dto.CommentUpdateResponse;
 import com.ssafy.backend.post.service.CommentReportService;
 import com.ssafy.backend.post.service.CommentService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -102,5 +107,37 @@ public class CommentController {
         return ApiResponse.success(
                 commentReportService.reportComment(commentId, request, principal)
         );
+    }
+
+    /**
+     * 작성자가 자신의 댓글 본문을 수정한다(COMMENT-003a).
+     *
+     * @param commentId 댓글 식별자
+     * @param request 새 댓글 본문을 담은 요청
+     * @param principal 로그인 사용자 정보
+     * @return 수정된 댓글 정보
+     */
+    @PatchMapping("/comments/{commentId}")
+    public ApiResponse<CommentUpdateResponse> updateComment(
+            @PathVariable Long commentId,
+            @Valid @RequestBody CommentUpdateRequest request,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(commentService.updateComment(commentId, request, principal));
+    }
+
+    /**
+     * 작성자나 해당 팬미팅 소유 운영자가 댓글을 삭제한다(COMMENT-003b).
+     *
+     * @param commentId 댓글 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 삭제 처리 결과
+     */
+    @DeleteMapping("/comments/{commentId}")
+    public ApiResponse<CommentDeleteResponse> deleteComment(
+            @PathVariable Long commentId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(commentService.deleteComment(commentId, principal));
     }
 }

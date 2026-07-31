@@ -7,11 +7,15 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
+import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.post.domain.Post;
 import com.ssafy.backend.post.domain.PostStatus;
 import com.ssafy.backend.post.domain.PostType;
+import com.ssafy.backend.post.dto.CommunityPostDetailResponse;
+import com.ssafy.backend.post.dto.CommunityPostSummaryResponse;
 import com.ssafy.backend.post.dto.NoticeDetailResponse;
 import com.ssafy.backend.post.dto.NoticeSummaryResponse;
+import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
 import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
@@ -47,17 +51,22 @@ class PostQueryServiceTest {
 
     private CurrentUserService currentUserService;
     private MeetingAccessService meetingAccessService;
+    private OrganizationMemberRepository organizationMemberRepository;
     private PostRepository postRepository;
+    private PostCommentRepository postCommentRepository;
     private PostQueryService queryService;
 
-    /** 각 테스트마다 mock 협력 객체로 공지 조회 서비스를 새로 구성한다. */
+    /** 각 테스트마다 mock 협력 객체로 공지·커뮤니티 조회 서비스를 새로 구성한다. */
     @BeforeEach
     void setUp() {
         currentUserService = mock(CurrentUserService.class);
         meetingAccessService = mock(MeetingAccessService.class);
+        organizationMemberRepository = mock(OrganizationMemberRepository.class);
         postRepository = mock(PostRepository.class);
+        postCommentRepository = mock(PostCommentRepository.class);
         queryService = new PostQueryService(
-                currentUserService, meetingAccessService, postRepository
+                currentUserService, meetingAccessService, organizationMemberRepository,
+                postRepository, postCommentRepository
         );
     }
 
@@ -316,6 +325,166 @@ class PostQueryServiceTest {
             return exception.getErrorCode();
         }
         throw new AssertionError("BusinessException이 발생하지 않았습니다.");
+    }
+
+    /** 커뮤니티 목록이 COMMUNITY·PUBLISHED 조건과 pinned 우선 정렬로 조회되는지 검증한다. */
+    @Test
+    void findsCommunityPostsWithPinnedFirstSort() {
+        Post post = communityPost(200L, MEETING_ID, 1L, "커뮤니티 글");
+        when(meetingAccessService.requireMeeting(MEETING_ID)).thenReturn(meeting(MEETING_ID));
+        when(postRepository.findVisibleCommunityPosts(
+                eq(MEETING_ID), eq(PostStatus.PUBLISHED), eq("%"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(post), PageRequest.of(0, 20), 1));
+
+        PageResponse<CommunityPostSummaryResponse> response =
+                queryService.getCommunityPosts(MEETING_ID, null, 0, 20);
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(postRepository).findVisibleCommunityPosts(
+                eq(MEETING_ID), eq(PostStatus.PUBLISHED), eq("%"), captor.capture());
+        assertThat(captor.getValue().getSort()).isEqualTo(Sort.by(
+                Sort.Order.desc("pinned"), Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        assertThat(response.content()).hasSize(1);
+        assertThat(response.content().get(0).postId()).isEqualTo(200L);
+        assertThat(response.content().get(0).meetingId()).isEqualTo(MEETING_ID);
+    }
+
+    /** 커뮤니티 목록 검색어가 소문자 LIKE 패턴으로 변환되는지 검증한다. */
+    @Test
+    void convertsCommunityKeywordToLowerCaseLikePattern() {
+        when(meetingAccessService.requireMeeting(MEETING_ID)).thenReturn(meeting(MEETING_ID));
+        when(postRepository.findVisibleCommunityPosts(
+                anyLong(), any(PostStatus.class), any(String.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        queryService.getCommunityPosts(MEETING_ID, "  GoodS  ", 0, 20);
+
+        verify(postRepository).findVisibleCommunityPosts(
+                eq(MEETING_ID), eq(PostStatus.PUBLISHED), eq("%goods%"), any(Pageable.class));
+    }
+
+    /** 커뮤니티 목록의 페이지 값 경계가 검증되는지 확인한다. */
+    @Test
+    void validatesCommunityPageBoundaries() {
+        assertThat(errorCodeOf(() -> queryService.getCommunityPosts(MEETING_ID, null, -1, 20)))
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        assertThat(errorCodeOf(() -> queryService.getCommunityPosts(MEETING_ID, null, 0, 0)))
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        assertThat(errorCodeOf(() -> queryService.getCommunityPosts(MEETING_ID, null, 0, 101)))
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        verifyNoInteractions(postRepository);
+    }
+
+    /** 작성자 본인 조회에서 수정·삭제가 모두 가능하다고 계산되는지 검증한다. */
+    @Test
+    void marksAuthorAsAbleToEditAndDeleteCommunityPost() {
+        Post post = communityPost(200L, MEETING_ID, 5L, "내 글");
+        User author = user(5L, UserRole.SOLO_INFLUENCER);
+        AuthenticatedUser principal = new AuthenticatedUser(5L, UserRole.SOLO_INFLUENCER);
+        when(postRepository.findDetailById(200L)).thenReturn(Optional.of(post));
+        when(currentUserService.requireActiveUser(principal)).thenReturn(author);
+        when(postCommentRepository.countVisibleByPost(200L)).thenReturn(3L);
+
+        CommunityPostDetailResponse response = queryService.getCommunityPost(200L, principal);
+
+        assertThat(response.canEdit()).isTrue();
+        assertThat(response.canDelete()).isTrue();
+        assertThat(response.commentCount()).isEqualTo(3L);
+        assertThat(response.attachments()).isEmpty();
+        assertThat(response.thumbnailUrl()).isNull();
+    }
+
+    /** 소유 운영자는 삭제만 가능하고 수정은 불가능하다고 계산되는지 검증한다. */
+    @Test
+    void marksOwningOperatorAsDeleteOnlyForOthersCommunityPost() {
+        // 팬미팅 주최 인플루언서(2L)가 다른 사람(5L)의 글을 조회한다.
+        Post post = communityPost(200L, MEETING_ID, 5L, "남의 글");
+        User influencer = user(2L, UserRole.INFLUENCER);
+        AuthenticatedUser principal = new AuthenticatedUser(2L, UserRole.INFLUENCER);
+        when(postRepository.findDetailById(200L)).thenReturn(Optional.of(post));
+        when(currentUserService.requireActiveUser(principal)).thenReturn(influencer);
+        when(postCommentRepository.countVisibleByPost(200L)).thenReturn(0L);
+
+        CommunityPostDetailResponse response = queryService.getCommunityPost(200L, principal);
+
+        assertThat(response.canEdit()).isFalse();
+        assertThat(response.canDelete()).isTrue();
+    }
+
+    /** 비로그인 조회에서는 수정·삭제가 모두 불가능하다고 계산되는지 검증한다. */
+    @Test
+    void marksAnonymousViewerAsUnableToModifyCommunityPost() {
+        Post post = communityPost(200L, MEETING_ID, 5L, "글");
+        when(postRepository.findDetailById(200L)).thenReturn(Optional.of(post));
+        when(postCommentRepository.countVisibleByPost(200L)).thenReturn(0L);
+
+        CommunityPostDetailResponse response = queryService.getCommunityPost(200L, null);
+
+        assertThat(response.canEdit()).isFalse();
+        assertThat(response.canDelete()).isFalse();
+        verifyNoInteractions(currentUserService);
+    }
+
+    /** 관계없는 사용자는 수정·삭제가 모두 불가능하다고 계산되는지 검증한다. */
+    @Test
+    void marksUnrelatedViewerAsUnableToModifyCommunityPost() {
+        Post post = communityPost(200L, MEETING_ID, 5L, "글");
+        User outsider = user(9L, UserRole.FAN);
+        AuthenticatedUser principal = new AuthenticatedUser(9L, UserRole.FAN);
+        when(postRepository.findDetailById(200L)).thenReturn(Optional.of(post));
+        when(currentUserService.requireActiveUser(principal)).thenReturn(outsider);
+        when(postCommentRepository.countVisibleByPost(200L)).thenReturn(0L);
+
+        CommunityPostDetailResponse response = queryService.getCommunityPost(200L, principal);
+
+        assertThat(response.canEdit()).isFalse();
+        assertThat(response.canDelete()).isFalse();
+    }
+
+    /** 공지를 커뮤니티 상세로 조회하면 유형 불일치 오류가 발생하는지 검증한다. */
+    @Test
+    void rejectsNoticeThroughCommunityDetail() {
+        when(postRepository.findDetailById(100L))
+                .thenReturn(Optional.of(meetingNotice(100L, MEETING_ID, "공지")));
+
+        assertThat(errorCodeOf(() -> queryService.getCommunityPost(100L, null)))
+                .isEqualTo(ErrorCode.POST_TYPE_MISMATCH);
+    }
+
+    /** 삭제·숨김 커뮤니티 글이 상세에서 제외되는지 검증한다. */
+    @Test
+    void hidesDeletedAndHiddenCommunityPostFromDetail() {
+        Post deleted = communityPost(200L, MEETING_ID, 5L, "삭제된 글");
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.of(2026, 7, 29, 9, 0));
+        Post hidden = communityPost(201L, MEETING_ID, 5L, "숨김 글");
+        ReflectionTestUtils.setField(hidden, "status", PostStatus.HIDDEN);
+        when(postRepository.findDetailById(200L)).thenReturn(Optional.of(deleted));
+        when(postRepository.findDetailById(201L)).thenReturn(Optional.of(hidden));
+
+        assertThat(errorCodeOf(() -> queryService.getCommunityPost(200L, null)))
+                .isEqualTo(ErrorCode.POST_NOT_FOUND);
+        assertThat(errorCodeOf(() -> queryService.getCommunityPost(201L, null)))
+                .isEqualTo(ErrorCode.POST_NOT_FOUND);
+    }
+
+    /** 존재하지 않는 커뮤니티 글 조회가 404 오류를 반환하는지 검증한다. */
+    @Test
+    void rejectsMissingCommunityPost() {
+        when(postRepository.findDetailById(999L)).thenReturn(Optional.empty());
+
+        assertThat(errorCodeOf(() -> queryService.getCommunityPost(999L, null)))
+                .isEqualTo(ErrorCode.POST_NOT_FOUND);
+    }
+
+    /** 식별자·팬미팅·작성자를 지정한 커뮤니티 게시글을 생성한다. */
+    private Post communityPost(Long postId, Long meetingId, Long authorId, String title) {
+        Post post = Post.createCommunity(
+                user(authorId, UserRole.SOLO_INFLUENCER), meeting(meetingId), title, "본문"
+        );
+        ReflectionTestUtils.setField(post, "id", postId);
+        ReflectionTestUtils.setField(post, "createdAt", LocalDateTime.of(2026, 7, 30, 10, 0));
+        ReflectionTestUtils.setField(post, "updatedAt", LocalDateTime.of(2026, 7, 30, 10, 0));
+        return post;
     }
 
     /** 테스트에 사용할 활성 사용자를 생성한다. */
