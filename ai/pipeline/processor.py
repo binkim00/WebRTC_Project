@@ -10,12 +10,12 @@ final(concluded) STT 결과를 받아서:
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 
 import httpx
 from livekit import rtc
 
 from db import queries
+from db.timeutil import now_kst
 from stt.base import FinalTranscript
 
 logger = logging.getLogger(__name__)
@@ -117,7 +117,7 @@ class SubtitleProcessor:
                 risk_type=result["risk_type"],
                 risk_level=result["risk_level"],
                 reason=result["reason"],
-                detected_at=datetime.now(timezone.utc),
+                detected_at=now_kst(),
             )
 
             await self._notify_spring(moderation_id, subtitle_id, result)

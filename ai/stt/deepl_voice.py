@@ -13,11 +13,11 @@ import asyncio
 import json
 import logging
 import base64
-from datetime import datetime, timezone
 
 import httpx
 import websockets
 
+from db.timeutil import now_kst
 from stt.base import STTAdapter, FinalTranscript
 
 logger = logging.getLogger(__name__)
@@ -180,7 +180,7 @@ class DeepLVoiceAdapter(STTAdapter):
                     transcript = FinalTranscript(
                         text=source_text,
                         language=source_lang,
-                        spoken_at=datetime.now(timezone.utc),
+                        spoken_at=now_kst(),
                         translated_text=target_text if target_text else None,
                         translated_lang=self._target_lang if target_text else None,
                     )
@@ -246,7 +246,7 @@ class DeepLVoiceAdapter(STTAdapter):
                             transcript = FinalTranscript(
                                 text=source_text,
                                 language=source_lang,
-                                spoken_at=datetime.now(timezone.utc),
+                                spoken_at=now_kst(),
                                 translated_text=target_text if target_text else None,
                                 translated_lang=self._target_lang if target_text else None,
                             )

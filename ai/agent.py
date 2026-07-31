@@ -44,6 +44,10 @@ logger = logging.getLogger(__name__)
 
 DEEPL_API_KEY = os.environ.get("DEEPL_API_KEY")
 
+# 이벤트 종료 시 진행 중인 요약을 기다리는 한도.
+# 요약은 LLM 호출과 최대 3회 재시도를 포함하므로 여유를 둔다.
+SUMMARY_WAIT_TIMEOUT_SECONDS = 90
+
 
 # ── 팬 1명과의 통화 상태 ─────────────────────────────────────────────────────
 
@@ -72,18 +76,25 @@ async def my_agent(ctx: JobContext) -> None:
     influencer_lang: str = "ko"
 
     logger.info("에이전트 시작")
-    
+
     # 1.5 DB pool 초기화 — 이벤트 단위로 1개
-    await init_pool()
-    pool = get_pool()
+    # shutdown 훅은 아래에서 등록되므로, 여기서 실패하면 직접 정리하고 중단한다.
+    try:
+        await init_pool()
+        pool = get_pool()
+    except BaseException:
+        logger.exception("DB pool 초기화 실패 — 에이전트를 중단한다")
+        await close_pool()
+        raise
     logger.info("DB pool 초기화 완료")
 
 
     # 현재 통화 상태
     current_call: CallState | None = None
 
-    # 진행 중인 요약 task 모음 — 이벤트 종료 시 전부 완료를 기다린 뒤 pool을 닫기 위함
-    pending_summaries: set[asyncio.Task] = set()
+    # 진행 중인 요약 task — 이벤트 종료 시 전부 완료를 기다린 뒤 pool을 닫기 위함.
+    # 대기 시간을 초과한 통화는 상태를 실패로 남겨야 하므로 통화 식별자를 함께 보관한다.
+    pending_summaries: dict[asyncio.Task, int] = {}
 
     # 4. 인플루언서 트랙 저장용 (팬 입장 전에 트랙만 보관)
     influencer_track: rtc.Track | None = None
@@ -94,6 +105,15 @@ async def my_agent(ctx: JobContext) -> None:
 
     async def start_fan_call(participant: rtc.RemoteParticipant) -> None:
         nonlocal current_call
+
+        # 퇴장 이벤트가 새 팬 입장보다 늦게 도착하면 이전 통화가 정리되지 않은 채 덮여
+        # 어댑터·STT task가 누수되고 그 통화의 요약도 트리거되지 않는다.
+        if current_call is not None:
+            logger.warning(
+                "이전 통화가 정리되지 않은 상태에서 새 팬 입장 — 먼저 정리한다 prev_call_session_id=%s",
+                current_call.call_session_id,
+            )
+            await end_fan_call()
 
         attributes = participant.attributes
         try:
@@ -187,18 +207,34 @@ async def my_agent(ctx: JobContext) -> None:
         await call.processor.close()
 
         task = asyncio.create_task(_trigger_summary(call.call_session_id))
-        pending_summaries.add(task)
-        task.add_done_callback(pending_summaries.discard)
-    
+        pending_summaries[task] = call.call_session_id
+        task.add_done_callback(pending_summaries.pop)
+
     async def _trigger_summary(call_session_id: int) -> None:
         try:
             subtitles = await queries.get_subtitles_by_call(pool, call_session_id)
             if not subtitles:
+                # STT가 아무것도 인식하지 못한 경우다. 조회 API가 "생성 중"과 구분할 수 있도록
+                # 조용히 끝내지 않고 실패 사유를 남긴다.
                 logger.warning("자막 없음 — 요약 스킵 call_session_id=%s", call_session_id)
+                await queries.fail_call_summary(pool, call_session_id, "NO_SUBTITLE")
                 return
             await generate_and_save_summary(pool, call_session_id, subtitles)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("요약 트리거 실패 call_session_id=%s", call_session_id)
+            await _mark_summary_failed(call_session_id, "TRIGGER_ERROR")
+
+    async def _mark_summary_failed(call_session_id: int, reason: str) -> None:
+        """요약 상태를 실패로 남긴다. 이 기록마저 실패하면 로그만 남기고 넘어간다."""
+        try:
+            await queries.fail_call_summary(pool, call_session_id, reason)
+        except Exception:
+            logger.exception(
+                "요약 실패 상태 기록 실패 call_session_id=%s reason=%s",
+                call_session_id, reason,
+            )
 
     # ── 인플루언서 STT 루프 ───────────────────────────────────────────────
 
@@ -220,13 +256,19 @@ async def my_agent(ctx: JobContext) -> None:
                 target_lang=current_call.fan_lang,
             )
 
-        #어댑터에게 시킬일, 어댑터가 on_final의 상태를 결정함
-        await current_call.influencer_adapter.transcribe(
-            audio_stream=audio_stream,
-            language=influencer_lang,
-            # 문장이 확정되면 on_final을 처리하라는 뜻
-            on_final=on_final,
-        )
+        # 예외를 잡지 않으면 task가 조용히 죽어 자막이 멈춘 이유를 알 수 없다.
+        try:
+            #어댑터에게 시킬일, 어댑터가 on_final의 상태를 결정함
+            await current_call.influencer_adapter.transcribe(
+                audio_stream=audio_stream,
+                language=influencer_lang,
+                # 문장이 확정되면 on_final을 처리하라는 뜻
+                on_final=on_final,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("인플루언서 STT 중단 influencer_lang=%s", influencer_lang)
 
     # ── 트랙 구독 핸들러 ──────────────────────────────────────────────────
     # 새로운 사용자(인플루언서, 팬)이 입장하면 들어왔다고 알려주는 함수.
@@ -250,7 +292,14 @@ async def my_agent(ctx: JobContext) -> None:
 
         if role == "INFLUENCER":
             # 인플루언서 트랙 저장만. STT는 팬 입장 시 시작. 왜냐면 fan_lang을 모르니까
-            influencer_user_id = int(attributes["user_id"])
+            try:
+                influencer_user_id = int(attributes["user_id"])
+            except (KeyError, TypeError, ValueError):
+                logger.exception(
+                    "인플루언서 attributes 오류 participant=%s attributes=%s",
+                    participant.identity, attributes,
+                )
+                return
             influencer_lang = attributes.get("influencer_lang", "ko")
             influencer_track = track
             influencer_participant = participant
@@ -268,6 +317,10 @@ async def my_agent(ctx: JobContext) -> None:
                 if current_call is None:
                     return
 
+                # 실행 중인 자기 자신을 등록한다.
+                # 별도 task에서 나중에 넣으면 start_fan_call의 await 지점에 따라 누락될 수 있다.
+                current_call.fan_audio_task = asyncio.current_task()
+
                 audio_stream = rtc.AudioStream(track)
 
                 async def on_final(transcript: FinalTranscript) -> None:
@@ -279,22 +332,20 @@ async def my_agent(ctx: JobContext) -> None:
                             target_lang=influencer_lang,
                         )
 
-                await current_call.fan_adapter.transcribe(
-                    audio_stream=audio_stream,
-                    language=current_call.fan_lang,
-                    on_final=on_final,
-                )
+                # 예외를 잡지 않으면 task가 조용히 죽어 자막이 멈춘 이유를 알 수 없다.
+                try:
+                    await current_call.fan_adapter.transcribe(
+                        audio_stream=audio_stream,
+                        language=current_call.fan_lang,
+                        on_final=on_final,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("팬 STT 중단 participant=%s", participant.identity)
 
-            task = asyncio.create_task(fan_stt_loop())
-            # fan_audio_task는 start_fan_call 이후에 설정
-            asyncio.create_task(_set_fan_task(task))
+            asyncio.create_task(fan_stt_loop())
             logger.info("팬 오디오 처리 시작 participant=%s", participant.identity)
-
-    async def _set_fan_task(task: asyncio.Task) -> None:
-        """start_fan_call이 current_call을 만든 후 fan_audio_task 설정."""
-        await asyncio.sleep(0)  # start_fan_call이 먼저 실행되게 양보
-        if current_call:
-            current_call.fan_audio_task = task
 
     ctx.room.on("track_subscribed", on_track_subscribed)
 
@@ -314,18 +365,30 @@ async def my_agent(ctx: JobContext) -> None:
         logger.info("이벤트 종료 — shutdown 시작")
         await end_fan_call()
         # 진행 중인 요약(방금 트리거된 것 포함)이 끝날 때까지 기다린 뒤 pool 종료.
-        # 최대 30초까지만 기다리고, 넘으면 유실을 감수하고 pool을 닫는다.
         if pending_summaries:
+            # 순회 중 done_callback이 dict를 변경하므로 스냅샷을 뜬다.
+            tasks = list(pending_summaries.keys())
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*pending_summaries, return_exceptions=True),
-                    timeout=30,
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=SUMMARY_WAIT_TIMEOUT_SECONDS,
                 )
             except asyncio.TimeoutError:
+                # 여기서 그냥 닫으면 행이 GENERATING으로 남아 조회 API가 계속 202를 반환한다.
+                # pool을 닫기 전에 남은 요약을 실패로 확정한다.
+                unfinished = {
+                    task: call_session_id
+                    for task, call_session_id in pending_summaries.items()
+                    if not task.done()
+                }
                 logger.warning(
-                    "요약 완료 대기 30초 초과 — 미완료 요약 %d건 남기고 pool 종료",
-                    len(pending_summaries),
+                    "요약 완료 대기 %d초 초과 — 미완료 요약 %d건을 실패로 기록한다",
+                    SUMMARY_WAIT_TIMEOUT_SECONDS, len(unfinished),
                 )
+                for task in unfinished:
+                    task.cancel()
+                for call_session_id in unfinished.values():
+                    await _mark_summary_failed(call_session_id, "SHUTDOWN_TIMEOUT")
         await close_pool()
 
     ctx.add_shutdown_callback(on_shutdown)
