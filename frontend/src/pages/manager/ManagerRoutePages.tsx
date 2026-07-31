@@ -13,19 +13,28 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { getAuthSession, replaceAuthSession } from '../../api/authSession'
 import { forceEndCallSession } from '../../api/callSessions'
+import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import {
   createEvent,
+  publishFanMeeting,
+  updateFanMeeting,
   type FanMeetingForm,
   type ManagerApplication,
   type ManagerEvent,
   type ManagerNotice,
 } from '../../api/managerOperations'
 import {
+  fetchOwnedMeetings,
+  type ManagerMeetingSummary,
+} from '../../api/managerMeetings'
+import {
   getMyProfile,
   updateMyProfile,
   type UserProfile,
 } from '../../api/users'
-import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, Select, TextField, Textarea } from '../../components'
+import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, Pagination, Select, TextField, Textarea } from '../../components'
+
+const DRAFT_PAGE_SIZE = 5
 
 /** 개발 환경에서만 샘플 화면을 열 수 있는 `preview=1` 여부를 반환한다. */
 function usePreview() {
@@ -71,13 +80,80 @@ function Stepper({ step, labels = ['기본 정보', '응모 설정', '미리보�
 }
 
 /** 단계형 폼의 임시 저장, 이전 단계, 다음 단계 버튼을 공통 배치한다. */
-function FormActions({ onBack, onSave, nextLabel = '다음 단계', nextDisabled = false, nextLoading = false }: { onBack?: () => void; onSave?: () => void; nextLabel?: string; nextDisabled?: boolean; nextLoading?: boolean }) {
-  return <div className="flex flex-wrap items-center justify-end gap-3">{onSave ? <Button leadingIcon={<FloppyDisk size={18} />} onClick={onSave} variant="secondary">임시 저장</Button> : null}<div className="flex gap-2">{onBack ? <Button disabled={nextLoading} leadingIcon={<ArrowLeft size={18} />} onClick={onBack} variant="secondary">이전 단계</Button> : null}<Button disabled={nextDisabled} loading={nextLoading} trailingIcon={<ArrowRight size={18} />} type="submit">{nextLabel}</Button></div></div>
+function FormActions({ onBack, onSave, saveLabel = '임시 저장', nextLabel = '다음 단계', nextDisabled = false, nextLoading = false }: { onBack?: () => void; onSave?: () => void; saveLabel?: string; nextLabel?: string; nextDisabled?: boolean; nextLoading?: boolean }) {
+  return <div className="flex flex-wrap items-center justify-end gap-3">{onSave ? <Button disabled={nextLoading} leadingIcon={<FloppyDisk size={18} />} onClick={onSave} variant="secondary">{saveLabel}</Button> : null}<div className="flex gap-2">{onBack ? <Button disabled={nextLoading} leadingIcon={<ArrowLeft size={18} />} onClick={onBack} variant="secondary">이전 단계</Button> : null}<Button disabled={nextDisabled} loading={nextLoading} trailingIcon={<ArrowRight size={18} />} type="submit">{nextLabel}</Button></div></div>
 }
 
 /** datetime-local 입력값에 초가 없으면 백엔드 LocalDateTime 형식에 맞게 초를 붙인다. */
 function toApiLocalDateTime(value: string): string {
   return value.length === 16 ? `${value}:00` : value
+}
+
+/** 백엔드 LocalDateTime 값을 datetime-local 입력에서 사용할 분 단위 값으로 바꾼다. */
+function toDateTimeLocalValue(value: string | null): string {
+  return value ? value.replace(' ', 'T').slice(0, 16) : ''
+}
+
+/** 입력된 일정 사이의 선후 관계를 백엔드 검증 규칙과 동일하게 검사한다. */
+function getMeetingScheduleErrors(form: FanMeetingForm): string[] {
+  const errors: string[] = []
+  const scheduledStart = form.scheduledStartAt
+    ? new Date(form.scheduledStartAt)
+    : null
+  const applicationStart = form.application.startAt
+    ? new Date(form.application.startAt)
+    : null
+  const applicationEnd = form.application.endAt
+    ? new Date(form.application.endAt)
+    : null
+  const resultAnnouncement = form.application.resultAnnouncementAt
+    ? new Date(form.application.resultAnnouncementAt)
+    : null
+  const queueOpen = form.operation.queueOpenAt
+    ? new Date(form.operation.queueOpenAt)
+    : null
+
+  if (
+    form.application.enabled &&
+    applicationStart &&
+    applicationEnd &&
+    applicationEnd <= applicationStart
+  ) {
+    errors.push('응모 마감 일시는 응모 시작 일시보다 이후여야 합니다.')
+  }
+
+  if (
+    form.application.enabled &&
+    applicationEnd &&
+    resultAnnouncement &&
+    resultAnnouncement < applicationEnd
+  ) {
+    errors.push('결과 발표 일시는 응모 마감 일시보다 빠를 수 없습니다.')
+  }
+
+  if (
+    form.application.enabled &&
+    applicationEnd &&
+    scheduledStart &&
+    applicationEnd >= scheduledStart
+  ) {
+    errors.push('응모 마감 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+  }
+
+  if (
+    form.application.enabled &&
+    resultAnnouncement &&
+    scheduledStart &&
+    resultAnnouncement >= scheduledStart
+  ) {
+    errors.push('결과 발표 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+  }
+
+  if (queueOpen && scheduledStart && queueOpen >= scheduledStart) {
+    errors.push('대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+  }
+
+  return errors
 }
 
 /** 예정 팬미팅과 대기열 시작 시간의 선후 관계를 검사하고 오류 메시지를 반환한다. */
@@ -91,11 +167,12 @@ function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
     return '팬미팅 시작 일시는 현재 시각보다 1분 이상 이후로 입력해 주세요.'
   }
 
-  if (Number.isNaN(queueOpen.getTime()) || queueOpen >= scheduledStart) {
-    return '대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.'
-  }
-
-  return undefined
+  return (
+    getMeetingScheduleErrors(form)[0] ??
+    (Number.isNaN(queueOpen.getTime())
+      ? '대기열 오픈 일시를 입력해 주세요.'
+      : undefined)
+  )
 }
 
 /** 아직 백엔드 API가 없는 화면에서 샘플 데이터를 실제 데이터처럼 보이지 않게 안내한다. */
@@ -302,6 +379,7 @@ export function ManagerApplicationsPage() {
  * 현재 백엔드 계약상 예정 팬미팅 운영 값도 같은 요청 본문에 포함한다.
  */
 export function ManagerEventCreatePage() {
+  const navigate = useNavigate()
   const session = getAuthSession()
   const isInfluencerAccount = session?.role === 'INFLUENCER' || session?.role === 'SOLO_INFLUENCER'
   const resolvedInfluencerId = isInfluencerAccount ? session?.userId : undefined
@@ -328,22 +406,144 @@ export function ManagerEventCreatePage() {
     },
   })
   const [createdMeetingId, setCreatedMeetingId] = useState<number>()
+  const [createdMeetingStatus, setCreatedMeetingStatus] = useState<
+    'DRAFT' | 'PUBLISHED'
+  >()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string>()
+  const [errorTitle, setErrorTitle] = useState('입력 확인')
+  const [draftDialogOpen, setDraftDialogOpen] = useState(false)
+  const [draftMeetings, setDraftMeetings] = useState<
+    ManagerMeetingSummary[]
+  >([])
+  const [draftPage, setDraftPage] = useState(1)
+  const [draftTotalPages, setDraftTotalPages] = useState(1)
+  const [draftLoading, setDraftLoading] = useState(false)
+  const [draftError, setDraftError] = useState<string>()
+  const scheduleErrors = getMeetingScheduleErrors(form)
+  const applicationEndError = scheduleErrors.find((message) =>
+    message.startsWith('응모 마감'),
+  )
+  const resultAnnouncementError = scheduleErrors.find((message) =>
+    message.startsWith('결과 발표'),
+  )
+  const queueOpenError = scheduleErrors.find((message) =>
+    message.startsWith('대기열 오픈'),
+  )
 
-  /**
-   * 앞 단계에서는 화면만 이동하고, 마지막 단계에서 입력값을 API 형식으로 변환해 등록한다.
-   */
-  async function submit(event: React.FormEvent) {
-    event.preventDefault()
+  async function openDraftDialog() {
+    setDraftDialogOpen(true)
+    setDraftPage(1)
+    await loadDraftMeetings(1)
+  }
 
-    if (step < 2) {
-      setStep(step + 1)
-      return
-    }
+  async function loadDraftMeetings(page: number) {
+    setDraftLoading(true)
+    setDraftError(undefined)
 
     const token = getAuthSession()?.accessToken
     if (!token) {
+      setDraftError('초안을 확인하려면 먼저 로그인해 주세요.')
+      setDraftLoading(false)
+      return
+    }
+
+    try {
+      const result = await fetchOwnedMeetings(
+        {
+          status: 'DRAFT',
+          page: page - 1,
+          size: DRAFT_PAGE_SIZE,
+        },
+        token,
+      )
+      setDraftMeetings(result.content)
+      setDraftPage(result.page + 1)
+      setDraftTotalPages(result.totalPages)
+    } catch (reason) {
+      setDraftError(
+        reason instanceof Error
+          ? reason.message
+          : '초안 목록을 불러오지 못했습니다.',
+      )
+    } finally {
+      setDraftLoading(false)
+    }
+  }
+
+  async function loadDraftDetail(meetingId: string) {
+    const token = getAuthSession()?.accessToken
+    if (!token) {
+      setDraftError('초안을 확인하려면 먼저 로그인해 주세요.')
+      return
+    }
+
+    const numericMeetingId = Number(meetingId)
+    if (!Number.isInteger(numericMeetingId) || numericMeetingId <= 0) {
+      setDraftError('초안 ID가 올바르지 않습니다.')
+      return
+    }
+
+    setDraftLoading(true)
+    setDraftError(undefined)
+    try {
+      const detail = await fetchPublicFanMeetingDetail(
+        numericMeetingId,
+        token,
+      )
+      const { meeting } = detail
+
+      setForm({
+        influencerId: meeting.influencerId,
+        title: meeting.title,
+        description: meeting.description,
+        coverImageUrl: meeting.coverImageUrl,
+        scheduledStartAt: toDateTimeLocalValue(meeting.scheduledStartAt),
+        application: {
+          enabled: meeting.application.enabled,
+          startAt: meeting.application.startAt
+            ? toDateTimeLocalValue(meeting.application.startAt)
+            : null,
+          endAt: meeting.application.endAt
+            ? toDateTimeLocalValue(meeting.application.endAt)
+            : null,
+          resultAnnouncementAt: meeting.application.resultAnnouncementAt
+            ? toDateTimeLocalValue(
+                meeting.application.resultAnnouncementAt,
+              )
+            : null,
+          capacity: meeting.application.capacity,
+        },
+        operation: {
+          queueOpenAt: toDateTimeLocalValue(meeting.operation.queueOpenAt),
+          callDurationSec: meeting.operation.callDurationSec,
+          recordingEnabled: meeting.operation.recordingEnabled,
+          translationEnabled: meeting.operation.translationEnabled,
+          reconnectGraceSec: meeting.operation.reconnectGraceSec,
+          earlyStartMinutes: meeting.operation.earlyStartMinutes,
+          maxRecallCount: meeting.operation.maxRecallCount,
+        },
+      })
+      setCreatedMeetingId(meeting.meetingId)
+      setCreatedMeetingStatus('DRAFT')
+      setStep(0)
+      setError(undefined)
+      setDraftDialogOpen(false)
+    } catch (reason) {
+      setDraftError(
+        reason instanceof Error
+          ? reason.message
+          : '초안 상세 정보를 불러오지 못했습니다.',
+      )
+    } finally {
+      setDraftLoading(false)
+    }
+  }
+
+  async function saveMeeting(publishAfterCreate: boolean) {
+    const token = getAuthSession()?.accessToken
+    if (!token) {
+      setErrorTitle('로그인 필요')
       setError('이벤트를 등록하려면 먼저 로그인해 주세요.')
       return
     }
@@ -374,12 +574,14 @@ export function ManagerEventCreatePage() {
     }
 
     if (!Number.isInteger(payload.influencerId) || payload.influencerId <= 0) {
+      setErrorTitle('입력 확인')
       setError('담당 인플루언서 ID를 입력해 주세요.')
       return
     }
 
     const scheduleError = validateMeetingSchedule(payload)
     if (scheduleError) {
+      setErrorTitle('입력 확인')
       setError(scheduleError)
       return
     }
@@ -387,18 +589,63 @@ export function ManagerEventCreatePage() {
     setSubmitting(true)
     setError(undefined)
     try {
-      const created = await createEvent(payload, token)
-      setCreatedMeetingId(created.meetingId)
+      let meetingId = createdMeetingId
+
+      if (!meetingId) {
+        const created = await createEvent(payload, token)
+        meetingId = created.meetingId
+        setCreatedMeetingId(meetingId)
+        setCreatedMeetingStatus('DRAFT')
+      } else {
+        await updateFanMeeting(meetingId, payload, token)
+        setCreatedMeetingStatus('DRAFT')
+      }
+
+      if (publishAfterCreate) {
+        await publishFanMeeting(meetingId, token)
+        setCreatedMeetingStatus('PUBLISHED')
+        navigate('/manager/events/manage')
+      }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '이벤트 등록에 실패했습니다.')
+      setErrorTitle(
+        publishAfterCreate ? '이벤트 게시 실패' : '초안 저장 실패',
+      )
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : publishAfterCreate
+            ? '이벤트 게시에 실패했습니다.'
+            : '초안 저장에 실패했습니다.',
+      )
     } finally {
       setSubmitting(false)
     }
   }
 
+  /**
+   * 앞 단계에서는 화면만 이동하고, 마지막 단계의 기본 제출은 생성 후 즉시 게시한다.
+   */
+  async function submit(event: React.FormEvent) {
+    event.preventDefault()
+
+    if (step < 2) {
+      setStep(step + 1)
+      return
+    }
+
+    await saveMeeting(true)
+  }
+
   return (
     <div className="grid gap-7 pb-10">
-      <PageHeader title="이벤트 생성" description="팬에게 공개할 홍보·응모 정보와 이후 팬미팅 운영 조건을 등록하세요." backTo="/manager/events" />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageHeader title="이벤트 생성" description="팬에게 공개할 홍보·응모 정보와 이후 팬미팅 운영 조건을 등록하세요." backTo="/manager/events" />
+        {createdMeetingId ? (
+          <Link className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-white px-[var(--control-padding-inline)] text-sm font-semibold" to="/manager/events/manage">
+            이벤트 관리 목록으로 이동 <ArrowRight size={18} />
+          </Link>
+        ) : null}
+      </div>
       <AlertBanner title="현재 백엔드의 이벤트 등록 경로를 사용합니다" variant="info">
         현재 명세에서는 이벤트 등록 요청을 <code>POST /api/v1/fan-meetings</code>로 받습니다.
         화면에서는 실제 업무 의미에 맞게 이벤트로 표시하며, 생성 결과의 <code>meetingId</code>는 서버 참조 ID로 보관합니다.
@@ -474,10 +721,10 @@ export function ManagerEventCreatePage() {
                   />
                   {form.application.enabled ? (
                     <div className="grid gap-5 sm:grid-cols-2">
-                      <TextField label="응모 시작 일시" required type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
-                      <TextField label="응모 종료 일시" required type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
-                      <TextField label="결과 발표 일시" required type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
-                      <TextField label="응모 정원" min={1} required type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
+                      <TextField label="응모 시작 일시" required reserveMessageSpace type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
+                      <TextField error={applicationEndError} label="응모 종료 일시" required reserveMessageSpace type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
+                      <TextField error={resultAnnouncementError} label="결과 발표 일시" required reserveMessageSpace type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
+                      <TextField label="응모 정원" min={1} required reserveMessageSpace type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
                     </div>
                   ) : (
                     <p className="text-sm text-[var(--color-text-secondary)]">응모 없는 이벤트로 등록하면 기간과 정원은 서버 규약에 맞게 비활성 값으로 전송됩니다.</p>
@@ -488,8 +735,8 @@ export function ManagerEventCreatePage() {
                     <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--color-primary-coral)]">영상통화 운영</p>
                     <p className="mt-2 text-sm text-[var(--color-text-secondary)]">당첨자 선정 뒤 진행할 팬미팅의 예정 대기열과 1명당 통화 조건입니다.</p>
                   </div>
-                <TextField label="대기열 오픈 일시" required type="datetime-local" value={form.operation.queueOpenAt} onChange={(event) => setForm({ ...form, operation: { ...form.operation, queueOpenAt: event.target.value } })} />
-                <Select label="1인 통화 시간" options={[{ value: '120', label: '2분' }, { value: '180', label: '3분' }, { value: '300', label: '5분' }]} value={String(form.operation.callDurationSec)} onChange={(event) => setForm({ ...form, operation: { ...form.operation, callDurationSec: Number(event.target.value) } })} />
+                <TextField error={queueOpenError} label="대기열 오픈 일시" required reserveMessageSpace type="datetime-local" value={form.operation.queueOpenAt} onChange={(event) => setForm({ ...form, operation: { ...form.operation, queueOpenAt: event.target.value } })} />
+                <Select label="1인 통화 시간" options={[{ value: '120', label: '2분' }, { value: '180', label: '3분' }, { value: '300', label: '5분' }]} reserveMessageSpace value={String(form.operation.callDurationSec)} onChange={(event) => setForm({ ...form, operation: { ...form.operation, callDurationSec: Number(event.target.value) } })} />
                 <div className="grid gap-3 rounded-xl border border-[var(--color-divider)] p-4 sm:col-span-2">
                   <Checkbox checked={form.operation.recordingEnabled} label="통화 녹화를 사용합니다." onChange={(event) => setForm({ ...form, operation: { ...form.operation, recordingEnabled: event.target.checked } })} />
                   <Checkbox checked={form.operation.translationEnabled} label="실시간 번역을 사용합니다." onChange={(event) => setForm({ ...form, operation: { ...form.operation, translationEnabled: event.target.checked } })} />
@@ -518,22 +765,128 @@ export function ManagerEventCreatePage() {
           </CardContent>
         </Card>
 
-        {error ? <AlertBanner title="등록 실패" variant="error">{error}</AlertBanner> : null}
-        {createdMeetingId ? <AlertBanner title="이벤트가 DRAFT 상태로 생성되었습니다" variant="success">백엔드가 반환한 참조 ID(meetingId)는 {createdMeetingId}입니다.</AlertBanner> : null}
-        <FormActions
-          nextDisabled={Boolean(createdMeetingId)}
-          nextLoading={submitting}
-          onBack={step > 0 && !createdMeetingId ? () => setStep(step - 1) : undefined}
-          nextLabel={step === 2 ? '이벤트 등록' : '다음 단계'}
-        />
+        {error ? <AlertBanner title={errorTitle} variant="error">{error}</AlertBanner> : null}
         {createdMeetingId ? (
-          <div className="flex justify-end">
-            <Link className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-white px-[var(--control-padding-inline)] text-sm font-semibold" to="/manager/events/manage">
-              이벤트 관리 목록으로 이동 <ArrowRight size={18} />
-            </Link>
-          </div>
+          <AlertBanner
+            title={
+              createdMeetingStatus === 'PUBLISHED'
+                ? '이벤트가 공개되었습니다'
+                : '이벤트가 초안으로 저장되었습니다'
+            }
+            variant="success"
+          >
+            팬미팅 ID는 {createdMeetingId}이며 현재 상태는{' '}
+            {createdMeetingStatus ?? 'DRAFT'}입니다.
+          </AlertBanner>
         ) : null}
+        <div
+          className={`flex flex-wrap items-center gap-3 ${
+            step < 2 ? 'justify-between' : 'justify-end'
+          }`}
+        >
+          {step < 2 ? (
+            <Button
+              leadingIcon={<FloppyDisk size={18} />}
+              onClick={() => {
+                void openDraftDialog()
+              }}
+              variant="secondary"
+            >
+              초안 확인
+            </Button>
+          ) : null}
+          <FormActions
+            nextDisabled={
+              createdMeetingStatus === 'PUBLISHED' ||
+              (step === 1 && scheduleErrors.length > 0)
+            }
+            nextLoading={submitting}
+            onBack={step > 0 ? () => setStep(step - 1) : undefined}
+            onSave={
+              step === 2
+                ? () => {
+                    void saveMeeting(false)
+                  }
+                : undefined
+            }
+            saveLabel="초안 저장"
+            nextLabel={
+              step === 2
+                ? createdMeetingStatus === 'DRAFT'
+                  ? '게시하기'
+                  : '바로 게시'
+                : '다음 단계'
+            }
+          />
+        </div>
       </form>
+      <Dialog
+        description="현재 계정으로 저장한 미게시 팬미팅입니다."
+        footer={
+          <Button
+            onClick={() => setDraftDialogOpen(false)}
+            variant="secondary"
+          >
+            닫기
+          </Button>
+        }
+        onOpenChange={setDraftDialogOpen}
+        open={draftDialogOpen}
+        title="저장된 초안"
+      >
+        {draftLoading ? (
+          <p className="py-8 text-center text-sm text-[var(--color-text-secondary)]">
+            초안 목록을 불러오는 중입니다.
+          </p>
+        ) : draftError ? (
+          <AlertBanner title="초안 조회 실패" variant="error">
+            {draftError}
+          </AlertBanner>
+        ) : draftMeetings.length === 0 ? (
+          <p className="py-8 text-center text-sm text-[var(--color-text-secondary)]">
+            저장된 초안이 없습니다.
+          </p>
+        ) : (
+          <div className="grid gap-5">
+            <ul className="divide-y divide-[var(--color-divider)]">
+              {draftMeetings.map((meeting) => (
+                <li
+                  className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
+                  key={meeting.meetingId}
+                >
+                  <div>
+                    <strong className="block">{meeting.title}</strong>
+                    <time className="mt-1 block text-xs text-[var(--color-text-secondary)]">
+                      {meeting.scheduledStartAt}
+                    </time>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={() => {
+                        void loadDraftDetail(meeting.meetingId)
+                      }}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      불러오기
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {draftTotalPages > 1 ? (
+              <Pagination
+                className="border-t border-[var(--color-divider)] pt-5"
+                currentPage={draftPage}
+                onPageChange={(page) => {
+                  void loadDraftMeetings(page)
+                }}
+                totalPages={draftTotalPages}
+              />
+            ) : null}
+          </div>
+        )}
+      </Dialog>
     </div>
   )
 }

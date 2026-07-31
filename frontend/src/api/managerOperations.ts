@@ -68,6 +68,16 @@ export type FanMeetingCreateResponse = FanMeetingCreateRequest & {
   createdAt: string
 }
 
+export type FanMeetingPublishResponse = {
+  meetingId: number
+  status: 'PUBLISHED'
+}
+
+export type FanMeetingUpdateResponse = {
+  meetingId: number
+  status: string
+}
+
 /**
  * 일부 API가 `{ data: ... }` 응답 포맷을 사용하므로 실제 데이터만 꺼낸다.
  * 가공되지 않은 응답은 그대로 반환해 두 응답 형식을 모두 지원한다.
@@ -230,4 +240,99 @@ export async function createEvent(
   }
 
   return value
+}
+
+/** 기존 팬미팅 초안에 현재 생성 폼의 값을 저장한다. */
+export async function updateFanMeeting(
+  meetingId: number,
+  payload: FanMeetingCreateRequest,
+  authToken: string,
+): Promise<FanMeetingUpdateResponse> {
+  if (!Number.isInteger(meetingId) || meetingId <= 0) {
+    throw new TypeError('수정할 팬미팅 ID가 올바르지 않습니다.')
+  }
+
+  assertFanMeetingCreateRequest(payload)
+
+  const requestBody = {
+    influencerId: payload.influencerId,
+    title: payload.title.trim(),
+    description: payload.description?.trim() || null,
+    coverImageUrl: normalizeCoverImageUrl(payload.coverImageUrl),
+    scheduledStartAt: payload.scheduledStartAt,
+    application: payload.application.enabled
+      ? {
+          ...payload.application,
+          enabled: true,
+        }
+      : {
+          enabled: false,
+          startAt: null,
+          endAt: null,
+          resultAnnouncementAt: null,
+          capacity: 0,
+        },
+    operation: {
+      ...payload.operation,
+      reconnectGraceSec: payload.operation.reconnectGraceSec ?? null,
+      earlyStartMinutes: payload.operation.earlyStartMinutes ?? null,
+      maxRecallCount: payload.operation.maxRecallCount ?? null,
+    },
+  }
+
+  const value = unwrap(
+    await apiRequest<unknown>(`/api/v1/fan-meetings/${meetingId}`, {
+      method: 'PATCH',
+      authToken,
+      body: JSON.stringify(requestBody),
+    }),
+  )
+
+  if (typeof value !== 'object' || value === null) {
+    throw new TypeError('팬미팅 수정 응답 형식이 올바르지 않습니다.')
+  }
+
+  const response = value as Record<string, unknown>
+  if (
+    response.meetingId !== meetingId ||
+    typeof response.status !== 'string'
+  ) {
+    throw new TypeError('팬미팅 수정 응답 형식이 올바르지 않습니다.')
+  }
+
+  return {
+    meetingId,
+    status: response.status,
+  }
+}
+
+/** DRAFT 상태로 생성된 팬미팅을 공개 목록에 노출되는 PUBLISHED 상태로 전환한다. */
+export async function publishFanMeeting(
+  meetingId: number,
+  authToken: string,
+): Promise<FanMeetingPublishResponse> {
+  if (!Number.isInteger(meetingId) || meetingId <= 0) {
+    throw new TypeError('게시할 팬미팅 ID가 올바르지 않습니다.')
+  }
+
+  const value = unwrap(
+    await apiRequest<unknown>(`/api/v1/fan-meetings/${meetingId}/publish`, {
+      method: 'POST',
+      authToken,
+    }),
+  )
+
+  if (typeof value !== 'object' || value === null) {
+    throw new TypeError('팬미팅 게시 응답 형식이 올바르지 않습니다.')
+  }
+
+  const response = value as Record<string, unknown>
+  if (response.meetingId !== meetingId || response.status !== 'PUBLISHED') {
+    throw new TypeError('팬미팅 게시 응답 형식이 올바르지 않습니다.')
+  }
+
+  return {
+    meetingId,
+    status: 'PUBLISHED',
+  }
 }
