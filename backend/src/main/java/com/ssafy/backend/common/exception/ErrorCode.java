@@ -87,6 +87,16 @@ public enum ErrorCode {
     SELF_COMMENT_REPORT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인 댓글은 신고할 수 없습니다."),
     COMMENT_REPORT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 신고한 댓글입니다."),
 
+    // 녹화 저장·조회 (REC-001~004)
+    RECORDING_NOT_FOUND(HttpStatus.NOT_FOUND, "녹화를 찾을 수 없습니다."),
+    RECORDING_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 업로드된 녹화가 있습니다."),
+    RECORDING_NOT_AVAILABLE(HttpStatus.CONFLICT, "재생하거나 내려받을 수 없는 녹화 상태입니다."),
+    RECORDING_FORMAT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "WEBM 또는 MP4 녹화 파일만 업로드할 수 있습니다."),
+    RECORDING_FILE_REQUIRED(HttpStatus.BAD_REQUEST, "녹화 파일이 필요합니다."),
+    RECORDING_FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "녹화 파일이 허용 크기를 초과했습니다."),
+    RECORDING_STORAGE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "녹화 파일을 저장하지 못했습니다."),
+    RECORDING_DOWNLOAD_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "녹화 다운로드 토큰이 유효하지 않습니다."),
+
     // AI 요약·모니터링 (AI-001, AI-002, AI-003)
     AI_CALL_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "통화 요약을 찾을 수 없습니다."),
     AI_MODERATION_NOT_FOUND(HttpStatus.NOT_FOUND, "모니터링 감지 건을 찾을 수 없습니다."),

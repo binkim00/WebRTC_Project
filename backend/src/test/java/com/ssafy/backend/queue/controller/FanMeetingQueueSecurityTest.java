@@ -33,6 +33,7 @@ import com.ssafy.backend.queue.dto.QueueEnterResponse;
 import com.ssafy.backend.queue.dto.QueuePositionChangeRequest;
 import com.ssafy.backend.queue.dto.QueuePositionChangeResponse;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
+import com.ssafy.backend.recording.repository.RecordingRepository;
 import com.ssafy.backend.queue.service.QueueChangeRequestService;
 import com.ssafy.backend.queue.service.QueueCommandService;
 import com.ssafy.backend.queue.service.QueuePositionService;
@@ -120,6 +121,9 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private CallSessionRepository callSessionRepository;
+
+    @MockitoBean
+    private RecordingRepository recordingRepository;
 
     @MockitoBean
     private ApplicationRepository applicationRepository;
