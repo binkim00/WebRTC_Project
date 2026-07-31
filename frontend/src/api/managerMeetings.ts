@@ -19,6 +19,7 @@ export type ManagerMeetingPage = {
 
 export type ManagerMeetingQuery = {
   keyword?: string
+  status?: string
   page?: number
   size?: number
 }
@@ -125,12 +126,14 @@ export async function fetchManagerMeetings(
   }
 }
 
-export async function fetchMyMeetings(
+/** 로그인한 매니저 또는 인플루언서가 담당하는 팬미팅을 상태별로 조회한다. */
+export async function fetchOwnedMeetings(
   query: ManagerMeetingQuery,
   authToken: string,
   signal?: AbortSignal,
 ): Promise<ManagerMeetingPage> {
   const search = new URLSearchParams()
+  if (query.status) search.set('status', query.status)
   if (query.keyword?.trim()) search.set('keyword', query.keyword.trim())
   if (query.page !== undefined) search.set('page', String(query.page))
   if (query.size !== undefined) search.set('size', String(query.size))
@@ -154,7 +157,9 @@ export async function fetchMyMeetings(
   }
 
   const content = rawContent.map(parseMeeting)
-  const size = record ? readNumber(record.size, query.size ?? 20) : query.size ?? 20
+  const size = record
+    ? readNumber(record.size, query.size ?? 20)
+    : query.size ?? 20
   const totalElements = record
     ? readNumber(record.totalElements, content.length)
     : content.length
@@ -165,8 +170,17 @@ export async function fetchMyMeetings(
     size,
     totalElements,
     totalPages: record
-      ? Math.max(1, readNumber(record.totalPages, Math.ceil(totalElements / Math.max(size, 1))))
+      ? Math.max(
+          1,
+          readNumber(
+            record.totalPages,
+            Math.ceil(totalElements / Math.max(size, 1)),
+          ),
+        )
       : 1,
     hasNext: record?.hasNext === true,
   }
 }
+
+/** 기존 화면에서 사용하는 내 팬미팅 조회 함수명과의 호환을 유지한다. */
+export const fetchMyMeetings = fetchOwnedMeetings

@@ -1,212 +1,102 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  CalendarBlank,
-  MagnifyingGlass,
-} from '@phosphor-icons/react'
-import { useState, type FormEvent } from 'react'
+import { ArrowLeft, ArrowRight, CalendarBlank } from '@phosphor-icons/react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ApiError } from '../../api/ApiError'
+import { getAuthSession } from '../../api/authSession'
 import {
+  getMyApplications,
+  type ApplicationStatus,
+  type MyApplicationSummaryResponse,
+} from '../../api/applications'
+import {
+  AlertBanner,
   Badge,
-  Button,
   Card,
   CardContent,
   Pagination,
-  Select,
-  TextField,
+  Spinner,
 } from '../../components'
-import localPreviewImage from '../../assets/call-preview-local.jpg'
-import remotePreviewImage from '../../assets/call-preview-remote.jpg'
 
-type ApplicationStatus = 'WON' | 'PENDING' | 'RECRUITING' | 'NOT_SELECTED'
+const PAGE_SIZE = 6
 
-type EventApplication = {
-  applicationId: number
-  eventId: number
-  title: string
-  influencerName: string
-  thumbnailUrl: string
-  meetingAt: string
-  status: ApplicationStatus
-}
+type StatusFilter = 'all' | ApplicationStatus
 
-/*
- * TODO: API 연동 후 처리
- * 1. 검색·필터·페이지 조건으로 응모 이벤트 목록을 조회한다.
- * 2. 로딩·오류·빈 목록 상태를 처리한다.
- * 3. API 페이지 정보로 총 개수와 페이지네이션을 교체한다.
- */
-const eventApplicationsMock: EventApplication[] = [
-  {
-    applicationId: 1,
-    eventId: 1,
-    title: 'Melly와의 봄날 팬미팅',
-    influencerName: 'Melly',
-    thumbnailUrl: remotePreviewImage,
-    meetingAt: '2026.08.02 19:00',
-    status: 'WON',
-  },
-  {
-    applicationId: 2,
-    eventId: 2,
-    title: '서윤의 여름밤 팬미팅',
-    influencerName: '서윤',
-    thumbnailUrl: localPreviewImage,
-    meetingAt: '2026.08.15 20:00',
-    status: 'PENDING',
-  },
-  {
-    applicationId: 3,
-    eventId: 3,
-    title: '민과 다시 만나는 오후',
-    influencerName: '민',
-    thumbnailUrl: remotePreviewImage,
-    meetingAt: '2026.08.17 17:00',
-    status: 'RECRUITING',
-  },
-  {
-    applicationId: 4,
-    eventId: 4,
-    title: '하나와 첫 온라인 팬사인회',
-    influencerName: '하나',
-    thumbnailUrl: localPreviewImage,
-    meetingAt: '2026.07.24 19:30',
-    status: 'NOT_SELECTED',
-  },
+const statusFilterItems: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: '전체' },
+  { value: 'SUBMITTED', label: '발표 전' },
+  { value: 'SELECTED', label: '당첨' },
+  { value: 'NOT_SELECTED', label: '미당첨' },
+  { value: 'WITHDRAWN', label: '응모 취소' },
 ]
 
-const applicationStatusContent = {
-  WON: { label: '당첨', variant: 'success' },
-  PENDING: { label: '발표 전', variant: 'warning' },
-  RECRUITING: { label: '모집 중', variant: 'primary' },
-  NOT_SELECTED: { label: '비당첨', variant: 'neutral' },
-} as const
-
-const applicationStatusOptions = [
-  { label: '전체 상태', value: 'all' },
-  { label: '모집 중', value: 'recruiting' },
-  { label: '발표 전', value: 'pending' },
-  { label: '당첨', value: 'won' },
-  { label: '비당첨', value: 'not-selected' },
-]
-
-const dateOptions = [
-  { label: '전체 날짜', value: 'all' },
-  { label: '이번 주', value: 'this-week' },
-  { label: '이번 달', value: 'this-month' },
-]
-
-const applicationsPerPage = 2
-
-type ApplicationStatusFilter =
-  | 'all'
-  | 'recruiting'
-  | 'pending'
-  | 'won'
-  | 'not-selected'
-type DateFilter = 'all' | 'this-week' | 'this-month'
-
-type ApplicationFilters = {
-  eventKeyword: string
-  influencerKeyword: string
-  status: ApplicationStatusFilter
-  date: DateFilter
+const applicationStatusContent: Record<
+  ApplicationStatus,
+  { label: string; variant: 'success' | 'warning' | 'neutral' | 'primary' }
+> = {
+  SUBMITTED: { label: '발표 전', variant: 'warning' },
+  SELECTED: { label: '당첨', variant: 'success' },
+  NOT_SELECTED: { label: '미당첨', variant: 'neutral' },
+  WITHDRAWN: { label: '응모 취소', variant: 'neutral' },
 }
 
-const initialFilters: ApplicationFilters = {
-  eventKeyword: '',
-  influencerKeyword: '',
-  status: 'all',
-  date: 'all',
-}
-
-const applicationStatusFilterMap = {
-  recruiting: 'RECRUITING',
-  pending: 'PENDING',
-  won: 'WON',
-  'not-selected': 'NOT_SELECTED',
-} as const
-
-function parseMeetingDate(meetingAt: string) {
-  const [date, time] = meetingAt.split(' ')
-  const [year, month, day] = date.split('.').map(Number)
-  const [hour, minute] = time.split(':').map(Number)
-
-  return new Date(year, month - 1, day, hour, minute)
-}
-
-function matchesDateFilter(meetingAt: string, dateFilter: DateFilter) {
-  if (dateFilter === 'all') {
-    return true
-  }
-
-  const now = new Date()
-  const meetingDate = parseMeetingDate(meetingAt)
-
-  if (dateFilter === 'this-month') {
-    return (
-      meetingDate.getFullYear() === now.getFullYear() &&
-      meetingDate.getMonth() === now.getMonth()
-    )
-  }
-
-  const startOfWeek = new Date(now)
-  const daysSinceMonday = (now.getDay() + 6) % 7
-  startOfWeek.setDate(now.getDate() - daysSinceMonday)
-  startOfWeek.setHours(0, 0, 0, 0)
-
-  const startOfNextWeek = new Date(startOfWeek)
-  startOfNextWeek.setDate(startOfWeek.getDate() + 7)
-
-  return meetingDate >= startOfWeek && meetingDate < startOfNextWeek
+function formatDateTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export function FanApplicationsPage() {
-  const [currentPage, setCurrentPage] = useState(1)
-  const [filters, setFilters] = useState<ApplicationFilters>(initialFilters)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [page, setPage] = useState(0)
+  const [applications, setApplications] = useState<MyApplicationSummaryResponse[]>()
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const [error, setError] = useState<string>()
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
+  useEffect(() => {
+    const controller = new AbortController()
+    const session = getAuthSession()
 
-    setFilters({
-      eventKeyword: String(formData.get('eventKeyword') ?? '').trim(),
-      influencerKeyword: String(formData.get('influencerKeyword') ?? '').trim(),
-      status: String(formData.get('status') ?? 'all') as ApplicationStatusFilter,
-      date: String(formData.get('date') ?? 'all') as DateFilter,
-    })
-    setCurrentPage(1)
-  }
+    if (!session || session.role !== 'FAN') {
+      setError('팬 계정으로 로그인한 뒤 응모 내역을 확인해 주세요.')
+      setApplications([])
+      return () => controller.abort()
+    }
 
-  const normalizedEventKeyword = filters.eventKeyword.toLocaleLowerCase()
-  const normalizedInfluencerKeyword = filters.influencerKeyword.toLocaleLowerCase()
-  const filteredApplications = eventApplicationsMock.filter((application) => {
-    const matchesEventKeyword = application.title
-      .toLocaleLowerCase()
-      .includes(normalizedEventKeyword)
-    const matchesInfluencerKeyword = application.influencerName
-      .toLocaleLowerCase()
-      .includes(normalizedInfluencerKeyword)
-    const matchesStatus =
-      filters.status === 'all' ||
-      application.status === applicationStatusFilterMap[filters.status]
-
-    return (
-      matchesEventKeyword &&
-      matchesInfluencerKeyword &&
-      matchesStatus &&
-      matchesDateFilter(application.meetingAt, filters.date)
+    void getMyApplications(
+      {
+        applicationStatus: statusFilter === 'all' ? undefined : statusFilter,
+        page,
+        size: PAGE_SIZE,
+      },
+      session.accessToken,
+      controller.signal,
     )
-  })
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredApplications.length / applicationsPerPage),
-  )
-  const firstApplicationIndex = (currentPage - 1) * applicationsPerPage
-  const paginatedApplications = filteredApplications.slice(
-    firstApplicationIndex,
-    firstApplicationIndex + applicationsPerPage,
-  )
+      .then((result) => {
+        setApplications(result.content)
+        setTotalPages(result.totalPages)
+        setTotalElements(result.totalElements)
+        setError(undefined)
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        setError(
+          reason instanceof ApiError || reason instanceof TypeError
+            ? reason.message
+            : '응모 내역을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        )
+      })
+
+    return () => controller.abort()
+  }, [statusFilter, page])
+
+  const isLoading = applications === undefined && !error
 
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-8">
@@ -233,136 +123,133 @@ export function FanApplicationsPage() {
             </p>
           </div>
           <p className="text-sm font-bold text-[var(--color-text-secondary)]">
-            총 {filteredApplications.length}개
+            총 {totalElements}개
           </p>
         </div>
 
-        <Card className="mt-6">
-          <CardContent>
-            <form
-              className="grid items-end gap-3 md:grid-cols-2 lg:grid-cols-[minmax(220px,2fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto]"
-              onSubmit={handleSubmit}
+        <div aria-label="응모 상태 필터" className="mt-6 flex flex-wrap gap-2" role="group">
+          {statusFilterItems.map((item) => (
+            <button
+              aria-pressed={statusFilter === item.value}
+              className={[
+                'rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
+                statusFilter === item.value
+                  ? 'border-transparent bg-[var(--color-primary-coral)] text-white'
+                  : 'border-[var(--color-border-control)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)]',
+              ].join(' ')}
+              key={item.value}
+              onClick={() => {
+                setStatusFilter(item.value)
+                setPage(0)
+              }}
+              type="button"
             >
-              <TextField
-                endAdornment={
-                  <MagnifyingGlass
-                    aria-hidden
-                    className="mr-3 text-[var(--color-text-tertiary)]"
-                    size={18}
-                  />
-                }
-                label="이벤트"
-                name="eventKeyword"
-                placeholder="이벤트명 입력"
-                type="search"
-              />
-              <TextField
-                endAdornment={
-                  <MagnifyingGlass
-                    aria-hidden
-                    className="mr-3 text-[var(--color-text-tertiary)]"
-                    size={18}
-                  />
-                }
-                label="인플루언서"
-                name="influencerKeyword"
-                placeholder="인플루언서명 입력"
-                type="search"
-              />
-              <Select
-                defaultValue="all"
-                label="응모 상태"
-                name="status"
-                options={applicationStatusOptions}
-              />
-              <Select
-                defaultValue="all"
-                label="팬미팅 날짜"
-                name="date"
-                options={dateOptions}
-              />
-              <Button
-                leadingIcon={<MagnifyingGlass aria-hidden size={18} weight="bold" />}
-                type="submit"
-              >
-                검색
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
-          {paginatedApplications.map((application) => {
-            const statusContent = applicationStatusContent[application.status]
-            const canViewResult = application.status === 'WON'
-
-            return (
-              <Card className="overflow-hidden" key={application.applicationId}>
-                <div className="relative">
-                  <img
-                    alt={`${application.title} 썸네일`}
-                    className="aspect-[16/5.5] w-full object-cover"
-                    src={application.thumbnailUrl}
-                  />
-                  <Badge
-                    className="absolute right-4 top-4"
-                    variant={statusContent.variant}
-                  >
-                    {statusContent.label}
-                  </Badge>
-                </div>
-
-                <CardContent>
-                  <p className="text-xs font-bold text-[var(--color-primary-coral)]">
-                    응모 이벤트
-                  </p>
-                  <h3 className="mt-2 text-xl font-black tracking-[-0.025em]">
-                    {application.title}
-                  </h3>
-                  <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                    인플루언서 {application.influencerName}
-                  </p>
-
-                  <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-[var(--color-divider)] pt-5">
-                    <div>
-                      <p className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-tertiary)]">
-                        <CalendarBlank aria-hidden size={16} />
-                        팬미팅 일정
-                      </p>
-                      <p className="mt-1 text-sm font-bold">{application.meetingAt}</p>
-                    </div>
-                    <Link
-                      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 py-1.5 text-sm font-semibold transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
-                      to={
-                        canViewResult
-                          ? `/fan/events/${application.eventId}/application-result`
-                          : `/fan/events/${application.eventId}`
-                      }
-                    >
-                      {canViewResult ? '결과 확인' : '상세히 보기'}
-                      <ArrowRight aria-hidden size={18} weight="bold" />
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+              {item.label}
+            </button>
+          ))}
         </div>
 
-        {filteredApplications.length > 0 ? (
-          <Pagination
-            className="mt-8"
-            currentPage={currentPage}
-            onPageChange={setCurrentPage}
-            totalPages={totalPages}
-          />
-        ) : (
-          <div className="mt-6 rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
-            <h3 className="font-bold">검색 결과가 없습니다</h3>
-            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-              검색어 또는 필터 조건을 변경해 주세요.
-            </p>
+        {error ? (
+          <AlertBanner className="mt-6" title="응모 내역을 확인할 수 없습니다" variant="error">
+            {error}
+          </AlertBanner>
+        ) : null}
+
+        {isLoading ? (
+          <div className="flex justify-center py-24">
+            <Spinner label="응모 내역을 불러오는 중" />
           </div>
+        ) : (
+          <>
+            <div className="mt-6 grid gap-6 md:grid-cols-2">
+              {(applications ?? []).map((application) => {
+                const statusContent =
+                  applicationStatusContent[application.applicationStatus]
+                const resultDecided = application.resultDecidedAt !== null
+
+                return (
+                  <Card className="overflow-hidden" key={application.applicationId}>
+                    <div className="relative">
+                      {application.coverImageUrl ? (
+                        <img
+                          alt={`${application.meetingTitle} 썸네일`}
+                          className="aspect-[16/5.5] w-full object-cover"
+                          src={application.coverImageUrl}
+                        />
+                      ) : (
+                        <div className="flex aspect-[16/5.5] w-full items-center justify-center bg-[var(--color-divider)] text-sm text-[var(--color-text-secondary)]">
+                          이미지 준비 중
+                        </div>
+                      )}
+                      <Badge
+                        className="absolute right-4 top-4"
+                        variant={statusContent.variant}
+                      >
+                        {statusContent.label}
+                      </Badge>
+                    </div>
+
+                    <CardContent>
+                      <p className="text-xs font-bold text-[var(--color-primary-coral)]">
+                        응모 이벤트
+                      </p>
+                      <h3 className="mt-2 text-xl font-black tracking-[-0.025em]">
+                        {application.meetingTitle}
+                      </h3>
+                      <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                        인플루언서 {application.influencerName}
+                      </p>
+
+                      <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-[var(--color-divider)] pt-5">
+                        <div>
+                          <p className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-tertiary)]">
+                            <CalendarBlank aria-hidden size={16} />
+                            팬미팅 일정
+                          </p>
+                          <p className="mt-1 text-sm font-bold">
+                            {formatDateTime(application.scheduledStartAt)}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Link
+                            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 py-1.5 text-sm font-semibold transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
+                            to={`/fan/events/${application.meetingId}`}
+                          >
+                            상세히 보기
+                          </Link>
+                          {resultDecided ? (
+                            <Link
+                              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
+                              to={`/fan/events/${application.meetingId}/application-result`}
+                            >
+                              결과 확인
+                              <ArrowRight aria-hidden size={18} weight="bold" />
+                            </Link>
+                          ) : null}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+
+            {(applications ?? []).length > 0 ? (
+              <Pagination
+                className="mt-8"
+                currentPage={page + 1}
+                onPageChange={(nextPage) => setPage(nextPage - 1)}
+                totalPages={Math.max(1, totalPages)}
+              />
+            ) : !error ? (
+              <div className="mt-6 rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
+                <h3 className="font-bold">응모 내역이 없습니다</h3>
+                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                  이벤트 목록에서 마음에 드는 팬미팅에 응모해 보세요.
+                </p>
+              </div>
+            ) : null}
+          </>
         )}
       </section>
     </div>
