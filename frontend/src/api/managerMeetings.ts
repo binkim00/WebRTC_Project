@@ -19,6 +19,7 @@ export type ManagerMeetingPage = {
 
 export type ManagerMeetingQuery = {
   keyword?: string
+  status?: string
   page?: number
   size?: number
 }
@@ -122,5 +123,53 @@ export async function fetchManagerMeetings(
     totalElements,
     totalPages,
     hasNext: record?.hasNext === true,
+  }
+}
+
+/** 로그인한 매니저 또는 인플루언서가 담당하는 팬미팅을 상태별로 조회한다. */
+export async function fetchOwnedMeetings(
+  query: ManagerMeetingQuery,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<ManagerMeetingPage> {
+  const search = new URLSearchParams()
+  if (query.status) search.set('status', query.status)
+  if (query.page !== undefined) search.set('page', String(query.page))
+  if (query.size !== undefined) search.set('size', String(query.size))
+
+  const suffix = search.size ? `?${search.toString()}` : ''
+  const value = unwrapData(
+    await apiRequest<unknown>(
+      `/api/v1/users/me/fan-meetings${suffix}`,
+      {
+        authToken,
+        signal,
+      },
+    ),
+  )
+  const record = asRecord(value)
+
+  if (!record || !Array.isArray(record.content)) {
+    throw new TypeError('담당 팬미팅 목록 응답 형식이 올바르지 않습니다.')
+  }
+
+  const rawContent = record.content
+  const content = rawContent.map(parseMeeting)
+  const size = readNumber(record.size, query.size ?? 20)
+  const totalElements = readNumber(record.totalElements, content.length)
+
+  return {
+    content,
+    page: readNumber(record.page, query.page ?? 0),
+    size,
+    totalElements,
+    totalPages: Math.max(
+      1,
+      readNumber(
+        record.totalPages,
+        Math.ceil(totalElements / Math.max(size, 1)),
+      ),
+    ),
+    hasNext: record.hasNext === true,
   }
 }
