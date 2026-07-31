@@ -71,8 +71,6 @@ class SubtitleProcessor:
             translated_lang=transcript.translated_lang,
         )
 
-        subtitle_id = seq 
-
         # 2. 감지 (백그라운드) — detect_fn이 설정된 경우에만
         if self._detect is not None:
             asyncio.create_task(
