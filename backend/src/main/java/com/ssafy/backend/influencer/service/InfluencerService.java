@@ -71,11 +71,11 @@ public class InfluencerService {
      */
     @Transactional(readOnly = true)
     public InfluencerDetailResponse getInfluencer(Long influencerId, AuthenticatedUser principal) {
-        InfluencerProfile profile = influencerProfileRepository
+        InfluencerProfileRepository.InfluencerDetailView view = influencerProfileRepository
                 .findDiscoverableByUserId(influencerId, UserStatus.ACTIVE, DISCOVERABLE_ROLES)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INFLUENCER_NOT_FOUND));
         return InfluencerDetailResponse.of(
-                profile,
+                view,
                 followingRepository.countByFollowedInfluencer_Id(influencerId),
                 isFollowedBy(principal, influencerId),
                 publicMeetings(influencerId)
@@ -130,21 +130,23 @@ public class InfluencerService {
     public PageResponse<InfluencerSummaryResponse> getInfluencers(
             int page, int size, String keyword, AuthenticatedUser principal
     ) {
-        Page<InfluencerProfile> profiles = influencerProfileRepository.findDiscoverable(
-                UserStatus.ACTIVE, DISCOVERABLE_ROLES, normalizeKeyword(keyword), pageRequest(page, size)
-        );
-        List<Long> influencerIds = profiles.getContent().stream()
-                .map(profile -> profile.getUser().getId())
+        Page<InfluencerProfileRepository.InfluencerSummaryView> views =
+                influencerProfileRepository.findDiscoverable(
+                        UserStatus.ACTIVE, DISCOVERABLE_ROLES,
+                        normalizeKeyword(keyword), pageRequest(page, size)
+                );
+        List<Long> influencerIds = views.getContent().stream()
+                .map(InfluencerProfileRepository.InfluencerSummaryView::getInfluencerId)
                 .toList();
 
         // 목록 크기와 무관하게 집계 1회, 팔로우 여부 1회만 조회해 N+1을 피한다.
         Map<Long, Long> followerCounts = followerCounts(influencerIds);
         Set<Long> followedIds = followedInfluencerIds(principal, influencerIds);
 
-        return PageResponse.from(profiles.map(profile -> {
-            Long influencerId = profile.getUser().getId();
+        return PageResponse.from(views.map(view -> {
+            Long influencerId = view.getInfluencerId();
             return InfluencerSummaryResponse.of(
-                    profile,
+                    view,
                     followerCounts.getOrDefault(influencerId, 0L),
                     followedIds.contains(influencerId)
             );

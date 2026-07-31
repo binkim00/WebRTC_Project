@@ -82,7 +82,7 @@ class InfluencerQueryIntegrationTest {
     @Test
     void returnsActiveInfluencersForAnonymousUser() {
         PageResponse<InfluencerSummaryResponse> response =
-                influencerQueryService.getInfluencers(0, 20, null, null);
+                influencerService.getInfluencers(0, 20, null, null);
 
         assertThat(response.content()).extracting(InfluencerSummaryResponse::influencerId)
                 .containsExactly(dancer.getId(), singer.getId());
@@ -101,10 +101,58 @@ class InfluencerQueryIntegrationTest {
         entityManager.flush();
 
         PageResponse<InfluencerSummaryResponse> response =
-                influencerQueryService.getInfluencers(0, 20, null, null);
+                influencerService.getInfluencers(0, 20, null, null);
 
         assertThat(response.content()).extracting(InfluencerSummaryResponse::influencerId)
                 .containsExactly(dancer.getId(), singer.getId());
+    }
+
+    /**
+     * 공개 프로필을 아직 등록하지 않은 인플루언서도 목록에 노출되는지 검증한다.
+     * 노출 여부는 프로필이 아니라 계정 상태·역할로 판단한다.
+     */
+    @Test
+    void includesInfluencerWithoutProfileUsingNickname() {
+        User noProfile = saveUser("discovery-no-profile", UserRole.INFLUENCER, UserStatus.ACTIVE);
+        entityManager.flush();
+
+        PageResponse<InfluencerSummaryResponse> response =
+                influencerService.getInfluencers(0, 20, null, null);
+
+        assertThat(response.content()).extracting(InfluencerSummaryResponse::influencerId)
+                .contains(noProfile.getId());
+        assertThat(response.content())
+                .filteredOn(summary -> summary.influencerId().equals(noProfile.getId()))
+                .singleElement()
+                .satisfies(summary -> {
+                    // 활동명이 없으므로 계정 닉네임으로 대체된다.
+                    assertThat(summary.influencerName()).isEqualTo("discovery-no-profile");
+                    assertThat(summary.introduction()).isNull();
+                });
+    }
+
+    /** 프로필이 없는 인플루언서도 닉네임으로 검색되는지 검증한다. */
+    @Test
+    void findsInfluencerWithoutProfileByNickname() {
+        User noProfile = saveUser("discovery-no-profile", UserRole.INFLUENCER, UserStatus.ACTIVE);
+        entityManager.flush();
+
+        PageResponse<InfluencerSummaryResponse> response =
+                influencerService.getInfluencers(0, 20, "no-profile", null);
+
+        assertThat(response.content()).extracting(InfluencerSummaryResponse::influencerId)
+                .containsExactly(noProfile.getId());
+    }
+
+    /** 인플루언서가 아닌 역할은 프로필 유무와 무관하게 제외되는지 검증한다. */
+    @Test
+    void excludesNonInfluencerRoles() {
+        PageResponse<InfluencerSummaryResponse> response =
+                influencerService.getInfluencers(0, 20, null, null);
+
+        // setUp에서 만든 팬 계정은 목록에 없어야 한다.
+        assertThat(response.content()).extracting(InfluencerSummaryResponse::influencerId)
+                .doesNotContain(fan.getId());
     }
 
     /** 로그인한 팬의 팔로우 여부와 인플루언서별 팔로워 수가 각각 반영되는지 검증한다. */
@@ -117,7 +165,7 @@ class InfluencerQueryIntegrationTest {
         ));
         entityManager.flush();
 
-        PageResponse<InfluencerSummaryResponse> response = influencerQueryService.getInfluencers(
+        PageResponse<InfluencerSummaryResponse> response = influencerService.getInfluencers(
                 0, 20, null, new AuthenticatedUser(fan.getId(), UserRole.FAN)
         );
 
@@ -133,11 +181,11 @@ class InfluencerQueryIntegrationTest {
     @Test
     void filtersByKeyword() {
         PageResponse<InfluencerSummaryResponse> byActivityName =
-                influencerQueryService.getInfluencers(0, 20, "댄서", null);
+                influencerService.getInfluencers(0, 20, "댄서", null);
         PageResponse<InfluencerSummaryResponse> byIntroduction =
-                influencerQueryService.getInfluencers(0, 20, "노래하는", null);
+                influencerService.getInfluencers(0, 20, "노래하는", null);
         PageResponse<InfluencerSummaryResponse> byNickname =
-                influencerQueryService.getInfluencers(0, 20, "discovery-singer", null);
+                influencerService.getInfluencers(0, 20, "discovery-singer", null);
 
         assertThat(byActivityName.content()).extracting(InfluencerSummaryResponse::influencerId)
                 .containsExactly(dancer.getId());
@@ -151,7 +199,7 @@ class InfluencerQueryIntegrationTest {
     @Test
     void returnsEmptyPageWhenKeywordMatchesNothing() {
         PageResponse<InfluencerSummaryResponse> response =
-                influencerQueryService.getInfluencers(0, 20, "존재하지않는검색어", null);
+                influencerService.getInfluencers(0, 20, "존재하지않는검색어", null);
 
         assertThat(response.content()).isEmpty();
         assertThat(response.totalElements()).isZero();
@@ -205,7 +253,7 @@ class InfluencerQueryIntegrationTest {
         statistics.clear();
 
         PageResponse<InfluencerSummaryResponse> response =
-                influencerQueryService.getInfluencers(0, 20, null, principal);
+                influencerService.getInfluencers(0, 20, null, principal);
 
         assertThat(response.content()).hasSize(expectedSize);
         return statistics.getPrepareStatementCount();
@@ -220,7 +268,7 @@ class InfluencerQueryIntegrationTest {
      */
     private boolean catchInvalidRequest(int page, int size) {
         try {
-            influencerQueryService.getInfluencers(page, size, null, null);
+            influencerService.getInfluencers(page, size, null, null);
             return false;
         } catch (com.ssafy.backend.common.exception.BusinessException exception) {
             return exception.getErrorCode()

@@ -25,28 +25,34 @@ public interface InfluencerProfileRepository extends JpaRepository<InfluencerPro
 
     /**
      * 공개 대상 인플루언서를 검색어로 필터링해 최신순으로 조회한다.
-     * 사용자 계정을 함께 가져와 목록 변환 시 추가 조회가 발생하지 않도록 한다.
+     * 노출 여부는 사용자 계정(상태·역할)으로 판단하고 공개 프로필은 부가 정보로 붙인다.
+     * 프로필을 아직 등록하지 않은 인플루언서도 목록에 나와야 하므로 left join을 쓴다.
      *
      * @param status 노출 대상 사용자 상태
      * @param roles 노출 대상 사용자 역할
      * @param keyword 활동명·소개·닉네임에 적용할 검색어이며 null이면 전체 조회
      * @param pageable 페이지 요청
-     * @return 공개 대상 인플루언서 프로필 페이지
+     * @return 공개 대상 인플루언서 요약 페이지
      */
     @Query(value = """
-            select profile from InfluencerProfile profile
-            join fetch profile.user account
+            select account.id as influencerId,
+                   profile.activityName as activityName,
+                   account.nickname as nickname,
+                   account.profileImageUrl as profileImageUrl,
+                   profile.introduction as introduction
+            from User account
+            left join InfluencerProfile profile on profile.user.id = account.id
             where account.status = :status
               and account.role in :roles
               and (:keyword is null
                    or lower(profile.activityName) like lower(concat('%', :keyword, '%'))
                    or lower(profile.introduction) like lower(concat('%', :keyword, '%'))
                    or lower(account.nickname) like lower(concat('%', :keyword, '%')))
-            order by profile.createdAt desc, profile.id desc
+            order by account.createdAt desc, account.id desc
             """,
             countQuery = """
-                    select count(profile) from InfluencerProfile profile
-                    join profile.user account
+                    select count(account) from User account
+                    left join InfluencerProfile profile on profile.user.id = account.id
                     where account.status = :status
                       and account.role in :roles
                       and (:keyword is null
@@ -54,29 +60,36 @@ public interface InfluencerProfileRepository extends JpaRepository<InfluencerPro
                            or lower(profile.introduction) like lower(concat('%', :keyword, '%'))
                            or lower(account.nickname) like lower(concat('%', :keyword, '%')))
                     """)
-    Page<InfluencerProfile> findDiscoverable(@Param("status") UserStatus status,
-                                             @Param("roles") Collection<UserRole> roles,
-                                             @Param("keyword") String keyword,
-                                             Pageable pageable);
+    Page<InfluencerSummaryView> findDiscoverable(@Param("status") UserStatus status,
+                                                 @Param("roles") Collection<UserRole> roles,
+                                                 @Param("keyword") String keyword,
+                                                 Pageable pageable);
 
     /**
-     * 공개 대상 인플루언서 한 명의 프로필을 사용자 계정과 함께 조회한다.
+     * 공개 대상 인플루언서 한 명의 계정과 공개 프로필을 조회한다.
+     * 프로필이 없어도 계정이 공개 대상이면 조회된다.
      *
      * @param influencerId 인플루언서 사용자 식별자
      * @param status 노출 대상 사용자 상태
      * @param roles 노출 대상 사용자 역할
-     * @return 공개 대상이면 프로필, 아니면 empty
+     * @return 공개 대상이면 상세 정보, 아니면 empty
      */
     @Query("""
-            select profile from InfluencerProfile profile
-            join fetch profile.user account
+            select account.id as influencerId,
+                   profile.activityName as activityName,
+                   account.nickname as nickname,
+                   account.profileImageUrl as profileImageUrl,
+                   profile.introduction as introduction,
+                   profile.socialUrl as socialUrl
+            from User account
+            left join InfluencerProfile profile on profile.user.id = account.id
             where account.id = :influencerId
               and account.status = :status
               and account.role in :roles
             """)
-    Optional<InfluencerProfile> findDiscoverableByUserId(@Param("influencerId") Long influencerId,
-                                                         @Param("status") UserStatus status,
-                                                         @Param("roles") Collection<UserRole> roles);
+    Optional<InfluencerDetailView> findDiscoverableByUserId(@Param("influencerId") Long influencerId,
+                                                            @Param("status") UserStatus status,
+                                                            @Param("roles") Collection<UserRole> roles);
 
     /**
      * 여러 인플루언서의 팔로워 수를 한 번의 집계 쿼리로 조회한다.
@@ -164,6 +177,33 @@ public interface InfluencerProfileRepository extends JpaRepository<InfluencerPro
     List<MeetingView> findPastMeetings(@Param("influencerId") Long influencerId,
                                        @Param("statuses") Collection<FanMeetingStatus> statuses,
                                        Pageable pageable);
+
+    /**
+     * 인플루언서 탐색 목록의 조회 결과를 전달한다.
+     * 활동명과 소개는 공개 프로필이 없으면 null이다.
+     */
+    interface InfluencerSummaryView {
+        /** 인플루언서 사용자 식별자를 반환한다. */
+        Long getInfluencerId();
+
+        /** 공개 프로필의 활동명을 반환하며 프로필이 없으면 null이다. */
+        String getActivityName();
+
+        /** 계정 닉네임을 반환한다. 활동명이 없을 때 대체 표시에 사용한다. */
+        String getNickname();
+
+        /** 계정 프로필 이미지 URL을 반환한다. */
+        String getProfileImageUrl();
+
+        /** 공개 프로필의 소개를 반환하며 프로필이 없으면 null이다. */
+        String getIntroduction();
+    }
+
+    /** 인플루언서 상세의 조회 결과를 전달한다. */
+    interface InfluencerDetailView extends InfluencerSummaryView {
+        /** 공개 프로필의 외부 채널 URL을 반환하며 프로필이 없으면 null이다. */
+        String getSocialUrl();
+    }
 
     /** 인플루언서별 팔로워 수 집계 결과를 전달한다. */
     interface FollowerCountView {

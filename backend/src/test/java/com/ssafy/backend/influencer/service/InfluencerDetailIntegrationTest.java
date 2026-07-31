@@ -91,7 +91,7 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.influencerId()).isEqualTo(influencer.getId());
         assertThat(response.influencerName()).isEqualTo("상세 인플루언서");
@@ -107,7 +107,7 @@ class InfluencerDetailIntegrationTest {
         followingRepository.saveAndFlush(Following.follow(fan, influencer));
         entityManager.flush();
 
-        InfluencerDetailResponse response = influencerQueryService.getInfluencer(
+        InfluencerDetailResponse response = influencerService.getInfluencer(
                 influencer.getId(), new AuthenticatedUser(fan.getId(), UserRole.FAN)
         );
 
@@ -131,7 +131,7 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         // 예정은 가까운 순, 종료는 최근 순으로 이어 붙는다.
         assertThat(response.meetings()).extracting(MeetingSummaryResponse::meetingId)
@@ -148,7 +148,7 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.meetings()).singleElement().satisfies(meeting -> {
             assertThat(meeting.meetingId()).isEqualTo(ended.getId());
@@ -166,7 +166,7 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.meetings()).hasSize(10);
         assertThat(response.meetings()).extracting(MeetingSummaryResponse::title)
@@ -182,7 +182,7 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.meetings()).extracting(MeetingSummaryResponse::meetingId)
                 .containsExactly(ready.getId());
@@ -195,7 +195,7 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.meetings()).isEmpty();
     }
@@ -209,7 +209,7 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.meetings()).singleElement().satisfies(item -> {
             assertThat(item.applicationStartAt()).isEqualTo(BASE.minusDays(5));
@@ -224,7 +224,7 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.meetings()).singleElement().satisfies(item -> {
             assertThat(item.applicationStartAt()).isNull();
@@ -242,16 +242,35 @@ class InfluencerDetailIntegrationTest {
         entityManager.flush();
 
         InfluencerDetailResponse response =
-                influencerQueryService.getInfluencer(influencer.getId(), null);
+                influencerService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.meetings()).extracting(MeetingSummaryResponse::meetingId)
                 .containsExactly(mine.getId());
     }
 
+    /**
+     * 공개 프로필이 없는 인플루언서도 상세 조회되는지 검증한다.
+     * 활동명은 계정 닉네임으로 대체되고 프로필 전용 필드는 null이다.
+     */
+    @Test
+    void returnsDetailForInfluencerWithoutProfile() {
+        User noProfile = saveUser("detail-no-profile", UserRole.INFLUENCER, UserStatus.ACTIVE);
+        entityManager.flush();
+
+        InfluencerDetailResponse response =
+                influencerService.getInfluencer(noProfile.getId(), null);
+
+        assertThat(response.influencerId()).isEqualTo(noProfile.getId());
+        assertThat(response.influencerName()).isEqualTo("detail-no-profile");
+        assertThat(response.introduction()).isNull();
+        assertThat(response.socialUrl()).isNull();
+        assertThat(response.meetings()).isEmpty();
+    }
+
     /** 존재하지 않는 인플루언서 조회가 거부되는지 검증한다. */
     @Test
     void rejectsUnknownInfluencer() {
-        assertThatThrownBy(() -> influencerQueryService.getInfluencer(999_999L, null))
+        assertThatThrownBy(() -> influencerService.getInfluencer(999_999L, null))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.INFLUENCER_NOT_FOUND));
@@ -264,7 +283,7 @@ class InfluencerDetailIntegrationTest {
         saveProfile(withdrawn);
         entityManager.flush();
 
-        assertThatThrownBy(() -> influencerQueryService.getInfluencer(withdrawn.getId(), null))
+        assertThatThrownBy(() -> influencerService.getInfluencer(withdrawn.getId(), null))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.INFLUENCER_NOT_FOUND));
@@ -273,7 +292,7 @@ class InfluencerDetailIntegrationTest {
     /** 팬 역할 사용자를 인플루언서로 조회하려는 요청이 거부되는지 검증한다. */
     @Test
     void rejectsFanAsInfluencer() {
-        assertThatThrownBy(() -> influencerQueryService.getInfluencer(fan.getId(), null))
+        assertThatThrownBy(() -> influencerService.getInfluencer(fan.getId(), null))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.INFLUENCER_NOT_FOUND));
