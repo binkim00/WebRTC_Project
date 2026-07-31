@@ -1,5 +1,6 @@
 package com.ssafy.backend;
 
+import com.ssafy.backend.ai.repository.AiCallSummaryRepository;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
@@ -22,6 +23,7 @@ import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
 import com.ssafy.backend.queue.repository.QueueChangeRequestRepository;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
+import com.ssafy.backend.recording.repository.RecordingRepository;
 import com.ssafy.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -70,6 +72,9 @@ class BackendApplicationTests {
     private CallSessionRepository callSessionRepository;
 
     @MockitoBean
+    private RecordingRepository recordingRepository;
+
+    @MockitoBean
     private MeetingApplicationSettingRepository applicationSettingRepository;
 
     @MockitoBean
@@ -98,6 +103,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private InfluencerProfileRepository influencerProfileRepository;
+
+    @MockitoBean
+    private AiCallSummaryRepository aiCallSummaryRepository;
 
     @MockitoBean
     private PostRepository postRepository;

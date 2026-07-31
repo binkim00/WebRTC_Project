@@ -7,6 +7,7 @@ import {
   NotePencil,
   VideoCamera,
 } from '@phosphor-icons/react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   AlertBanner,
   Avatar,
@@ -16,10 +17,13 @@ import {
   CardContent,
   CardHeader,
 } from '../../components'
-import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getAuthSession } from '../../api/auth'
-import { fetchMeetingQueue } from '../../api/fanMeetingParticipants'
+import { getAuthSession } from '../../api/authSession'
+import { ApiError } from '../../api/ApiError'
+import {
+  fetchMeetingQueue,
+  type MeetingQueue,
+} from '../../api/fanMeetingParticipants'
 
 
 /* TODO: API 연동 후 아래 mock 데이터를 서버 응답 데이터로 교체 */
@@ -47,40 +51,48 @@ const meeting = {
   },
 }
 const isDeviceChecked = true
-const meetingStatus = 'in_progress'
 
 export function InfluencerMeetingReadyPage() {
   const navigate = useNavigate()
   const { fanMeetingId } = useParams()
-  const [callSessionId, setCallSessionId] = useState<string>()
-  const [queueError, setQueueError] = useState<string>()
+  const [queue, setQueue] = useState<MeetingQueue>()
+  const [error, setError] = useState<string>()
 
-  useEffect(() => {
+  const loadCurrentCall = useCallback(async (signal?: AbortSignal) => {
     if (!fanMeetingId) return
-    const authToken = getAuthSession()?.accessToken
-    if (!authToken) {
-      setQueueError('로그인 정보가 없습니다. 다시 로그인해 주세요.')
+
+    const session = getAuthSession()
+    if (!session || (session.role !== 'INFLUENCER' && session.role !== 'SOLO_INFLUENCER')) {
+      setError('인플루언서 계정으로 로그인한 뒤 준비실을 이용해 주세요.')
       return
     }
 
-    let active = true
-    const refresh = async () => {
-      try {
-        const queue = await fetchMeetingQueue(fanMeetingId, authToken)
-        if (!active) return
-        setCallSessionId(queue.currentCall?.callSessionId)
-        setQueueError(undefined)
-      } catch (error: unknown) {
-        if (active) setQueueError(error instanceof Error ? error.message : '현재 호출 정보를 조회하지 못했습니다.')
-      }
-    }
-    void refresh()
-    const intervalId = window.setInterval(() => void refresh(), 2000)
-    return () => {
-      active = false
-      window.clearInterval(intervalId)
+    try {
+      setQueue(await fetchMeetingQueue(fanMeetingId, session.accessToken, signal))
+      setError(undefined)
+    } catch (reason) {
+      if (signal?.aborted) return
+      setError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : '현재 통화 정보를 불러오지 못했습니다.',
+      )
     }
   }, [fanMeetingId])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadCurrentCall(controller.signal)
+
+    const timer = window.setInterval(() => {
+      void loadCurrentCall(controller.signal)
+    }, 3_000)
+
+    return () => {
+      controller.abort()
+      window.clearInterval(timer)
+    }
+  }, [loadCurrentCall])
 
   const handleOpenMemo = () => {
     if (!fanMeetingId) { return }
@@ -92,20 +104,26 @@ export function InfluencerMeetingReadyPage() {
   const handleOpenFanList = () => {
     if (!fanMeetingId) { return }
     navigate(
-      `/fan-meetings/${fanMeetingId}/fans`
+      `/influencer/fan-meetings/${fanMeetingId}/fans`
     )
   }
 
   const handleEnterCall = () => {
-    if (!fanMeetingId || !callSessionId) { return }
-    if(!isDeviceChecked || meetingStatus !== 'in_progress') { return }
+    if (!fanMeetingId) { return }
+    if (!isDeviceChecked || !queue?.currentCall) return
     navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/calls/${callSessionId}`
+      `/influencer/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`
     )
   }
 
   return (
     <div className="grid gap-8 pb-8">
+      {error ? (
+        <AlertBanner title="통화 정보를 확인할 수 없습니다" variant="error">
+          {error}
+        </AlertBanner>
+      ) : null}
+
       <header className="grid gap-3">
         <h1 className="text-4xl font-black leading-tight tracking-[-0.04em]">
           팬미팅 진행
@@ -310,18 +328,14 @@ export function InfluencerMeetingReadyPage() {
               운영 일정에 따라 시작 시간이 20:00으로 조정되었습니다.
             </AlertBanner>
 
-            {queueError ? (
-              <AlertBanner title="호출 정보 연결 실패" variant="error">{queueError}</AlertBanner>
-            ) : null}
-
-            <Button
-              className="w-full shadow-[var(--shadow-final-cta)]"
-              disabled={!callSessionId}
-              leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
-              onClick={handleEnterCall}
-              size="lg"
-            >
-              {callSessionId ? '영상 통화 입장' : '팬 호출 대기 중'}
+              <Button
+                className="w-full shadow-[var(--shadow-final-cta)]"
+                disabled={!queue?.currentCall}
+                leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
+                onClick={handleEnterCall}
+                size="lg"
+              >
+              {queue?.currentCall ? '영상 통화 입장' : '팬 호출 대기 중'}
             </Button>
           </div>
         </Card>

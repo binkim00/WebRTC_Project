@@ -7,12 +7,17 @@ import com.ssafy.backend.post.dto.NoticeCreateRequest;
 import com.ssafy.backend.post.dto.NoticeCreateResponse;
 import com.ssafy.backend.post.dto.NoticeDetailResponse;
 import com.ssafy.backend.post.dto.NoticeSummaryResponse;
+import com.ssafy.backend.post.dto.PostDeleteResponse;
+import com.ssafy.backend.post.dto.PostUpdateRequest;
+import com.ssafy.backend.post.dto.PostUpdateResponse;
 import com.ssafy.backend.post.service.PostCommandService;
 import com.ssafy.backend.post.service.PostQueryService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -102,6 +107,46 @@ public class FanMeetingNoticeController {
     ) {
         return ApiResponse.success(
                 postCommandService.createMeetingNotice(meetingId, request, principal)
+        );
+    }
+
+    /**
+     * 작성한 운영자나 서비스 운영자가 팬미팅 공지를 부분 수정한다(POST-004a).
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param noticeId 공지 식별자
+     * @param request 수정할 제목·본문을 담은 요청
+     * @param principal 로그인 사용자 정보
+     * @return 수정된 공지 정보
+     */
+    @PatchMapping("/{noticeId}")
+    public ApiResponse<PostUpdateResponse> updateMeetingNotice(
+            @PathVariable Long meetingId,
+            @PathVariable Long noticeId,
+            @Valid @RequestBody PostUpdateRequest request,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(
+                postCommandService.updateMeetingNotice(meetingId, noticeId, request, principal)
+        );
+    }
+
+    /**
+     * 작성한 운영자나 서비스 운영자가 팬미팅 공지를 삭제한다(POST-005a).
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param noticeId 공지 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 삭제 처리 결과
+     */
+    @DeleteMapping("/{noticeId}")
+    public ApiResponse<PostDeleteResponse> deleteMeetingNotice(
+            @PathVariable Long meetingId,
+            @PathVariable Long noticeId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(
+                postCommandService.deleteMeetingNotice(meetingId, noticeId, principal)
         );
     }
 }

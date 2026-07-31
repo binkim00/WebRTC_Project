@@ -1,31 +1,79 @@
-import { ArrowRightIcon, SignOutIcon } from '@phosphor-icons/react'
-import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { clearAuthSession, getAuthSession } from './api/auth'
+import { ArrowRightIcon, SignOutIcon, UserCircle } from '@phosphor-icons/react'
+import { useEffect } from 'react'
+import { Link, Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  AUTH_EXPIRED_EVENT,
+  getAuthSession,
+  logout,
+  type LoginResponse,
+  type LoginRole,
+} from './api/auth'
 import { TopNavigation } from './components'
+import { getRoleNavigation } from './layouts/roleNavigation'
 import { isVideoCallPath } from './router/routeState'
 
-const defaultNavigationItems = [
+const publicNavigationItems = [
   { label: '로그인', to: '/login' },
-  { label: '팬', to: '/fan/events' },
-  { label: '인플루언서', to: '/influencer/mypage/profile' },
-  { label: '매니저', to: '/manager/events' },
 ] as const
 
-const fanCallNavigationItems = [
-  { label: '이벤트', to: '/fan/events' },
-  { label: '마이페이지', to: '/fan/mypage/profile' },
-] as const
+function canAccessRolePath(pathname: string, role: LoginRole) {
+  if (/^\/fan(?:\/|$)/.test(pathname)) {
+    return role === 'FAN'
+  }
 
-const influencerCallNavigationItems = [
-  { label: '나의 팬미팅', to: '/influencer/fan-meetings' },
-  { label: '내 마이페이지', to: '/influencer/mypage/profile' },
-] as const
+  if (/^\/influencer(?:\/|$)/.test(pathname)) {
+    return role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
+  }
 
-const managerMonitorNavigationItems = [
-  { label: '팬미팅 관리', to: '/manager/fan-meetings' },
-  { label: '홍보 및 응모 관리', to: '/manager/events' },
-  { label: '내 마이페이지', to: '/manager/mypage' },
-] as const
+  if (/^\/manager(?:\/|$)/.test(pathname)) {
+    return role === 'MANAGER' || role === 'SOLO_INFLUENCER'
+  }
+
+  if (/^\/fan-meetings\/[^/]+\/(?:fans|statistics)\/?$/.test(pathname)) {
+    return role === 'MANAGER' || role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
+  }
+
+  return true
+}
+
+function isRolePath(pathname: string) {
+  return (
+    /^\/(?:fan|influencer|manager)(?:\/|$)/.test(pathname) ||
+    /^\/fan-meetings\/[^/]+\/(?:fans|statistics)\/?$/.test(pathname)
+  )
+}
+
+function isPublicEventPath(pathname: string) {
+  return /^\/fan\/events(?:\/[^/]+)?\/?$/.test(pathname)
+}
+
+function roleLabel(role: LoginRole) {
+  if (role === 'FAN') return '팬'
+  if (role === 'INFLUENCER') return '인플루언서'
+  if (role === 'SOLO_INFLUENCER') return '솔로 인플루언서'
+  return '매니저'
+}
+
+function UserProfileSummary({ session }: { session: LoginResponse }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-left">
+      <UserCircle
+        aria-hidden="true"
+        className="text-[var(--color-text-tertiary)]"
+        size={28}
+        weight="duotone"
+      />
+      <span className="grid leading-tight">
+        <strong className="max-w-28 truncate text-sm text-[var(--color-text-primary)]">
+          {session.nickname || '회원'}
+        </strong>
+        <span className="text-xs font-medium text-[var(--color-text-tertiary)]">
+          {roleLabel(session.role)}
+        </span>
+      </span>
+    </span>
+  )
+}
 
 function App() {
   const { pathname } = useLocation()
@@ -36,7 +84,10 @@ function App() {
   const isSignupPage = pathname === '/signup'
   const isAuthPage = isLoginPage || isSignupPage
   const isHomePage = pathname === '/'
-  const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
+  const isEditorialExamplePage = pathname === '/examples/yestalgia-home'
+  const isDeviceCheckPage =
+    /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname) ||
+    /^\/influencer\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
   const authSession = getAuthSession()
   const isAuthenticated = authSession !== null
@@ -47,21 +98,31 @@ function App() {
     searchParams.get('qa') === '1'
   const isPageQaCapture =
     import.meta.env.DEV && !isCallPage && searchParams.get('qa') === '1'
-  const navigationItems = isAuthPage || isHomePage || isDeviceCheckPage
+  const navigationItems = isAuthPage || isDeviceCheckPage
     ? []
-    : pathname.startsWith('/manager')
-      ? managerMonitorNavigationItems
-      : pathname.startsWith('/fan/fan-meetings/')
-    ? fanCallNavigationItems
-    : pathname.startsWith('/influencer/fan-meetings/')
-      ? influencerCallNavigationItems
-      : isAuthenticated
-        ? defaultNavigationItems.filter((item) => item.label !== '로그인')
-        : defaultNavigationItems
+    : authSession
+      ? getRoleNavigation(authSession.role)
+      : isHomePage
+        ? []
+        : publicNavigationItems
 
-  function handleLogout() {
-    clearAuthSession()
+  useEffect(() => {
+    const handleAuthExpired = () => navigate('/login', { replace: true })
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+  }, [navigate])
+
+  async function handleLogout() {
+    await logout().catch(() => undefined)
     navigate('/', { replace: true })
+  }
+
+  if (isRolePath(pathname) && !isPublicEventPath(pathname) && !authSession) {
+    return <Navigate replace to="/login" />
+  }
+
+  if (authSession && !canAccessRolePath(pathname, authSession.role)) {
+    return <Navigate replace to="/403" />
   }
 
   return (
@@ -72,7 +133,7 @@ function App() {
         isPageQaCapture ? 'w-[1758px]' : '',
       ].join(' ')}
     >
-      <TopNavigation
+      {isEditorialExamplePage ? null : <TopNavigation
         ariaLabel="주요 화면"
         centerContent={
           isDeviceCheckPage ? (
@@ -80,7 +141,7 @@ function App() {
               <span>입장 예정 팬미팅</span>
               <span aria-hidden="true" className="h-4 w-px bg-[var(--color-divider)]" />
               <strong className="text-[var(--color-text-primary)]">
-                서윤의 비밀 정원 팬미팅&nbsp;&nbsp; 오늘 19:00
+                선택한 팬미팅 장비 점검
               </strong>
             </p>
           ) : undefined
@@ -88,29 +149,26 @@ function App() {
         actions={
           isHomePage ? (
             <nav aria-label="메인 메뉴" className="flex items-center gap-7 text-sm font-semibold">
-              <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/mypage/fan-meetings">
-                나의 팬미팅
-              </Link>
-              <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
-                이벤트
-              </Link>
-              {isAuthenticated ? (
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-[var(--color-text-primary)]">
-                    {authSession.nickname}님
-                  </span>
+              {authSession ? (
+                <>
+                  <UserProfileSummary session={authSession} />
                   <button
                     className="font-semibold hover:text-[var(--color-primary-coral)]"
-                    onClick={handleLogout}
+                    onClick={() => void handleLogout()}
                     type="button"
                   >
                     로그아웃
                   </button>
-                </div>
+                </>
               ) : (
-                <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
-                  로그인
-                </Link>
+                <>
+                  <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
+                    이벤트
+                  </Link>
+                  <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
+                    로그인
+                  </Link>
+                </>
               )}
               {!isAuthenticated ? (
                 <Link
@@ -148,14 +206,12 @@ function App() {
               이벤트 둘러보기
               <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
             </Link>
-          ) : isAuthenticated ? (
-            <div className="flex items-center gap-3 text-sm">
-              <span className="font-bold text-[var(--color-text-primary)]">
-                {authSession.nickname}님
-              </span>
+          ) : authSession ? (
+            <div className="flex items-center gap-5">
+              <UserProfileSummary session={authSession} />
               <button
-                className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-                onClick={handleLogout}
+                className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                onClick={() => void handleLogout()}
                 type="button"
               >
                 로그아웃
@@ -165,13 +221,15 @@ function App() {
         }
         brand="MELLY"
         items={navigationItems}
-      />
+      />}
       <main
         className={
           isCallPage
             ? 'mx-auto w-full max-w-[1440px] flex-1 px-3 py-5 sm:px-6 lg:px-10 lg:py-6'
             : isHomePage
               ? 'mx-auto w-full max-w-[1480px] flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:pb-16 lg:pt-10'
+            : isEditorialExamplePage
+              ? 'w-full flex-1'
             : isDeviceCheckPage
               ? 'mx-auto w-full max-w-[1360px] flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:py-10'
             : isAuthPage
@@ -181,7 +239,7 @@ function App() {
       >
         <Outlet />
       </main>
-      {isCallPage || isAuthPage || isHomePage || isDeviceCheckPage || isFanListPage ? null : (
+      {isCallPage || isAuthPage || isHomePage || isEditorialExamplePage || isDeviceCheckPage || isFanListPage ? null : (
         <footer className="mt-auto border-t border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-4 py-4 text-center text-sm text-[var(--color-text-secondary)] sm:px-6">
           Notion 화면 라우팅 정의서를 기준으로 구성한 라우팅 학습 화면입니다.
         </footer>

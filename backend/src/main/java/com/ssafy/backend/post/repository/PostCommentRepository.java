@@ -54,6 +54,35 @@ public interface PostCommentRepository extends JpaRepository<PostComment, Long> 
     }
 
     /**
+     * 게시글의 노출 가능한 댓글 수를 센다.
+     *
+     * <p>상세 응답의 {@code commentCount}에 사용한다. 목록 조회에서는 건별로 호출하면
+     * N+1 질의가 되므로 사용하지 않는다.
+     *
+     * @param postId 게시글 식별자
+     * @param hiddenStatus 집계에서 제외할 숨김 상태 값
+     * @return 삭제·숨김되지 않은 댓글 수
+     */
+    @Query("""
+            select count(c) from PostComment c
+            where c.post.id = :postId
+              and c.deletedAt is null
+              and c.status <> :hiddenStatus
+            """)
+    long countVisibleByPost(@Param("postId") Long postId,
+                            @Param("hiddenStatus") String hiddenStatus);
+
+    /**
+     * 숨김 상태 값을 고정해 게시글의 노출 가능한 댓글 수를 센다.
+     *
+     * @param postId 게시글 식별자
+     * @return 삭제·숨김되지 않은 댓글 수
+     */
+    default long countVisibleByPost(Long postId) {
+        return countVisibleByPost(postId, PostComment.STATUS_HIDDEN);
+    }
+
+    /**
      * 신고 처리에 사용할 댓글을 작성자·게시글과 함께 조회한다.
      *
      * <p>삭제·숨김 여부 판단은 서비스가 수행하므로 여기서는 필터를 적용하지 않는다.

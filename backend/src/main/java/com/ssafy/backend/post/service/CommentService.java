@@ -14,7 +14,10 @@ import com.ssafy.backend.post.domain.PostComment;
 import com.ssafy.backend.post.domain.PostType;
 import com.ssafy.backend.post.dto.CommentCreateRequest;
 import com.ssafy.backend.post.dto.CommentCreateResponse;
+import com.ssafy.backend.post.dto.CommentDeleteResponse;
 import com.ssafy.backend.post.dto.CommentSummaryResponse;
+import com.ssafy.backend.post.dto.CommentUpdateRequest;
+import com.ssafy.backend.post.dto.CommentUpdateResponse;
 import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
 import com.ssafy.backend.user.domain.User;
@@ -25,7 +28,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 커뮤니티 게시글 댓글의 목록 조회와 작성을 처리한다. */
+import java.time.Clock;
+import java.time.LocalDateTime;
+
+/** 커뮤니티 게시글 댓글의 목록 조회와 작성·수정·삭제를 처리한다. */
 @Service
 public class CommentService {
 
@@ -43,26 +49,30 @@ public class CommentService {
     private final ParticipantRepository participantRepository;
     private final PostRepository postRepository;
     private final PostCommentRepository postCommentRepository;
+    private final Clock clock;
 
     /**
-     * 댓글 조회·작성에 필요한 사용자 서비스와 조직·참가자·게시글·댓글 저장소를 주입받는다.
+     * 댓글 조회·작성·수정·삭제에 필요한 사용자 서비스와 저장소, 시계를 주입받는다.
      *
      * @param currentUserService 현재 사용자 조회 서비스
      * @param organizationMemberRepository 조직 구성원 저장소
      * @param participantRepository 참가자 저장소
      * @param postRepository 게시글 저장소
      * @param postCommentRepository 댓글 저장소
+     * @param clock 논리 삭제 시각 기준 시계
      */
     public CommentService(CurrentUserService currentUserService,
                           OrganizationMemberRepository organizationMemberRepository,
                           ParticipantRepository participantRepository,
                           PostRepository postRepository,
-                          PostCommentRepository postCommentRepository) {
+                          PostCommentRepository postCommentRepository,
+                          Clock clock) {
         this.currentUserService = currentUserService;
         this.organizationMemberRepository = organizationMemberRepository;
         this.participantRepository = participantRepository;
         this.postRepository = postRepository;
         this.postCommentRepository = postCommentRepository;
+        this.clock = clock;
     }
 
     /**
@@ -112,6 +122,89 @@ public class CommentService {
 
         PostComment comment = PostComment.createComment(post, author, request.content().trim());
         return CommentCreateResponse.from(postCommentRepository.save(comment));
+    }
+
+    /**
+     * 작성자가 자신의 댓글 본문을 수정한다(COMMENT-003a).
+     *
+     * <p>운영자라도 다른 사람의 댓글 내용은 바꿀 수 없으므로 작성자 본인만 허용한다.
+     * 삭제·숨김 댓글은 존재하지 않는 것으로 취급한다.
+     *
+     * @param commentId 댓글 식별자
+     * @param request 새 댓글 본문을 담은 요청
+     * @param principal 로그인 사용자 정보
+     * @return 수정된 댓글 정보
+     * @throws BusinessException 댓글이 없거나 삭제·숨김 상태이거나 작성자가 아닌 경우
+     */
+    @Transactional
+    public CommentUpdateResponse updateComment(Long commentId, CommentUpdateRequest request,
+                                               AuthenticatedUser principal) {
+        User actor = currentUserService.requireActiveUser(principal);
+        PostComment comment = requireVisibleComment(commentId);
+        if (!isAuthor(comment, actor)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        comment.update(request.content().trim());
+        return CommentUpdateResponse.from(comment);
+    }
+
+    /**
+     * 작성자나 해당 팬미팅 소유 운영자가 댓글을 삭제한다(COMMENT-003b).
+     *
+     * <p>실제 행을 지우지 않는다. 작성자 본인이 삭제하면 삭제 시각을 기록하고,
+     * 작성자가 아닌 소유 운영자가 내리면 신고 처리와 같은 숨김 상태로 바꾼다.
+     *
+     * @param commentId 댓글 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 삭제 처리 결과
+     * @throws BusinessException 댓글이 없거나 삭제·숨김 상태이거나 삭제 권한이 없는 경우
+     */
+    @Transactional
+    public CommentDeleteResponse deleteComment(Long commentId, AuthenticatedUser principal) {
+        User actor = currentUserService.requireActiveUser(principal);
+        PostComment comment = requireVisibleComment(commentId);
+
+        if (isAuthor(comment, actor)) {
+            comment.softDelete(LocalDateTime.now(clock));
+            return CommentDeleteResponse.from(comment);
+        }
+        if (!isMeetingOperator(comment.getPost().getMeeting(), actor)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        comment.hide();
+        return CommentDeleteResponse.from(comment);
+    }
+
+    /**
+     * 노출 가능한 댓글을 조회한다.
+     *
+     * <p>삭제·숨김 댓글은 존재하지 않는 것으로 취급하므로 이미 삭제한 댓글을 다시
+     * 수정·삭제하면 {@code COMMENT_NOT_FOUND}가 반환된다.
+     *
+     * @param commentId 댓글 식별자
+     * @return 노출 가능한 댓글
+     * @throws BusinessException 댓글이 없거나 삭제·숨김 상태인 경우
+     */
+    private PostComment requireVisibleComment(Long commentId) {
+        PostComment comment = postCommentRepository.findDetailById(commentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COMMENT_NOT_FOUND));
+        if (!comment.isVisibleToPublic()) {
+            throw new BusinessException(ErrorCode.COMMENT_NOT_FOUND);
+        }
+        return comment;
+    }
+
+    /**
+     * 요청 사용자가 댓글 작성자인지 확인한다.
+     *
+     * @param comment 대상 댓글
+     * @param actor 요청 사용자
+     * @return 작성자 본인이면 true
+     */
+    private boolean isAuthor(PostComment comment, User actor) {
+        return comment.getAuthor().getId().equals(actor.getId());
     }
 
     /**

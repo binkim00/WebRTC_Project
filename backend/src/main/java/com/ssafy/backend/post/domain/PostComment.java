@@ -95,6 +95,53 @@ public class PostComment extends BaseTimeEntity {
     }
 
     /**
+     * 노출 가능한 댓글의 본문을 수정한다.
+     *
+     * <p>삭제·숨김 댓글은 존재하지 않는 것으로 취급해야 하므로 수정을 거부한다.
+     *
+     * @param content 새 댓글 본문
+     * @throws IllegalStateException 이미 삭제되었거나 숨김 상태인 경우
+     */
+    public void update(String content) {
+        if (!isVisibleToPublic()) {
+            throw new IllegalStateException("노출 가능한 댓글만 수정할 수 있습니다.");
+        }
+        this.content = Objects.requireNonNull(content);
+    }
+
+    /**
+     * 작성자 요청으로 댓글을 논리 삭제한다.
+     *
+     * <p>실제 행을 지우지 않고 삭제 시각만 기록해 목록 조회에서 제외한다.
+     *
+     * @param deletedAt 삭제 시각
+     * @throws IllegalStateException 이미 삭제된 경우
+     */
+    public void softDelete(LocalDateTime deletedAt) {
+        if (this.deletedAt != null) {
+            throw new IllegalStateException("이미 삭제된 댓글입니다.");
+        }
+        this.deletedAt = Objects.requireNonNull(deletedAt);
+    }
+
+    /**
+     * 운영자 요청으로 댓글을 숨김 처리한다.
+     *
+     * <p>작성자가 아닌 운영자가 댓글을 내리는 경우이며 신고 처리와 같은 상태 값을 사용한다.
+     *
+     * @throws IllegalStateException 이미 삭제되었거나 이미 숨김 상태인 경우
+     */
+    public void hide() {
+        if (deletedAt != null) {
+            throw new IllegalStateException("이미 삭제된 댓글입니다.");
+        }
+        if (STATUS_HIDDEN.equals(status)) {
+            throw new IllegalStateException("이미 숨김 처리된 댓글입니다.");
+        }
+        this.status = STATUS_HIDDEN;
+    }
+
+    /**
      * 일반 사용자에게 노출할 수 있는 댓글인지 확인한다.
      *
      * @return 삭제되지 않았고 운영자가 숨기지 않았으면 true

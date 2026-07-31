@@ -17,7 +17,10 @@ import com.ssafy.backend.post.domain.PostStatus;
 import com.ssafy.backend.post.domain.PostType;
 import com.ssafy.backend.post.dto.CommentCreateRequest;
 import com.ssafy.backend.post.dto.CommentCreateResponse;
+import com.ssafy.backend.post.dto.CommentDeleteResponse;
 import com.ssafy.backend.post.dto.CommentSummaryResponse;
+import com.ssafy.backend.post.dto.CommentUpdateRequest;
+import com.ssafy.backend.post.dto.CommentUpdateResponse;
 import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
 import com.ssafy.backend.user.domain.PreferredLanguage;
@@ -34,7 +37,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,6 +55,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class CommentServiceTest {
+
+    /** 논리 삭제 시각을 고정해 검증하기 위한 시계다. */
+    private static final Clock CLOCK = Clock.fixed(
+            Instant.parse("2026-07-31T02:00:00Z"), ZoneOffset.UTC);
+
+    /** 고정 시계가 만들어 내는 논리 삭제 시각이다. */
+    private static final LocalDateTime DELETED_AT = LocalDateTime.of(2026, 7, 31, 2, 0);
 
     private static final AuthenticatedUser FAN_PRINCIPAL = new AuthenticatedUser(1L, UserRole.FAN);
     private static final AuthenticatedUser OPERATOR_PRINCIPAL =
@@ -74,7 +87,7 @@ class CommentServiceTest {
         postRepository = mock(PostRepository.class);
         postCommentRepository = mock(PostCommentRepository.class);
         commentService = new CommentService(currentUserService, organizationMemberRepository,
-                participantRepository, postRepository, postCommentRepository);
+                participantRepository, postRepository, postCommentRepository, CLOCK);
     }
 
     /** 확정 참가자인 팬의 댓글이 상위 댓글 없이 공개 상태로 저장되는지 검증한다. */
@@ -513,6 +526,145 @@ class CommentServiceTest {
         });
     }
 
+    /** 작성자의 댓글 수정이 공백을 제거하고 저장되는지 검증한다. */
+    @Test
+    void updatesOwnCommentByAuthor() {
+        User fan = user(1L, UserRole.FAN);
+        PostComment comment = comment(50L, fan, communityPost(meeting()), "원래 댓글");
+        when(currentUserService.requireActiveUser(FAN_PRINCIPAL)).thenReturn(fan);
+        when(postCommentRepository.findDetailById(50L)).thenReturn(Optional.of(comment));
+
+        CommentUpdateResponse response = commentService.updateComment(
+                50L, new CommentUpdateRequest("  바뀐 댓글  "), FAN_PRINCIPAL);
+
+        assertThat(comment.getContent()).isEqualTo("바뀐 댓글");
+        assertThat(response.commentId()).isEqualTo(50L);
+        assertThat(response.postId()).isEqualTo(POST_ID);
+        assertThat(response.content()).isEqualTo("바뀐 댓글");
+    }
+
+    /** 작성자가 아닌 사용자의 댓글 수정이 거부되는지 검증한다. */
+    @Test
+    void rejectsCommentUpdateByNonAuthor() {
+        User fan = user(1L, UserRole.FAN);
+        User operator = user(2L, UserRole.SOLO_INFLUENCER);
+        PostComment comment = comment(50L, fan, communityPost(meeting()), "팬 댓글");
+        when(currentUserService.requireActiveUser(OPERATOR_PRINCIPAL)).thenReturn(operator);
+        when(postCommentRepository.findDetailById(50L)).thenReturn(Optional.of(comment));
+
+        assertThatThrownBy(() -> commentService.updateComment(
+                50L, new CommentUpdateRequest("남의 댓글"), OPERATOR_PRINCIPAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+        assertThat(comment.getContent()).isEqualTo("팬 댓글");
+    }
+
+    /** 삭제·숨김 댓글의 수정이 존재하지 않는 댓글과 같은 오류를 반환하는지 검증한다. */
+    @Test
+    void rejectsUpdateOnRemovedComment() {
+        User fan = user(1L, UserRole.FAN);
+        PostComment deleted = comment(50L, fan, communityPost(meeting()), "삭제된 댓글");
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.of(2026, 7, 30, 9, 0));
+        PostComment hidden = comment(51L, fan, communityPost(meeting()), "숨김 댓글");
+        ReflectionTestUtils.setField(hidden, "status", PostComment.STATUS_HIDDEN);
+        when(currentUserService.requireActiveUser(FAN_PRINCIPAL)).thenReturn(fan);
+        when(postCommentRepository.findDetailById(50L)).thenReturn(Optional.of(deleted));
+        when(postCommentRepository.findDetailById(51L)).thenReturn(Optional.of(hidden));
+
+        assertThatThrownBy(() -> commentService.updateComment(
+                50L, new CommentUpdateRequest("재수정"), FAN_PRINCIPAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.COMMENT_NOT_FOUND);
+        assertThatThrownBy(() -> commentService.updateComment(
+                51L, new CommentUpdateRequest("재수정"), FAN_PRINCIPAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.COMMENT_NOT_FOUND);
+    }
+
+    /** 존재하지 않는 댓글 수정·삭제가 거부되는지 검증한다. */
+    @Test
+    void rejectsMissingComment() {
+        User fan = user(1L, UserRole.FAN);
+        when(currentUserService.requireActiveUser(FAN_PRINCIPAL)).thenReturn(fan);
+        when(postCommentRepository.findDetailById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> commentService.deleteComment(999L, FAN_PRINCIPAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.COMMENT_NOT_FOUND);
+    }
+
+    /** 작성자의 댓글 삭제가 고정 시계 기준 논리 삭제로 처리되는지 검증한다. */
+    @Test
+    void softDeletesOwnCommentByAuthor() {
+        User fan = user(1L, UserRole.FAN);
+        PostComment comment = comment(50L, fan, communityPost(meeting()), "삭제할 댓글");
+        when(currentUserService.requireActiveUser(FAN_PRINCIPAL)).thenReturn(fan);
+        when(postCommentRepository.findDetailById(50L)).thenReturn(Optional.of(comment));
+
+        CommentDeleteResponse response = commentService.deleteComment(50L, FAN_PRINCIPAL);
+
+        assertThat(comment.getDeletedAt()).isEqualTo(DELETED_AT);
+        assertThat(comment.getStatus()).isEqualTo(PostComment.STATUS_ACTIVE);
+        assertThat(response.deletedAt()).isEqualTo(DELETED_AT);
+        assertThat(response.status()).isEqualTo(PostComment.STATUS_ACTIVE);
+    }
+
+    /** 작성자가 아닌 소유 운영자의 댓글 삭제가 숨김 처리로 반영되는지 검증한다. */
+    @Test
+    void hidesCommentWhenOwningOperatorDeletesOthersComment() {
+        User fan = user(1L, UserRole.FAN);
+        User operator = user(2L, UserRole.SOLO_INFLUENCER);
+        PostComment comment = comment(50L, fan, communityPost(meeting()), "신고된 댓글");
+        when(currentUserService.requireActiveUser(OPERATOR_PRINCIPAL)).thenReturn(operator);
+        when(postCommentRepository.findDetailById(50L)).thenReturn(Optional.of(comment));
+
+        CommentDeleteResponse response = commentService.deleteComment(50L, OPERATOR_PRINCIPAL);
+
+        assertThat(comment.getStatus()).isEqualTo(PostComment.STATUS_HIDDEN);
+        assertThat(comment.getDeletedAt()).isNull();
+        assertThat(response.status()).isEqualTo(PostComment.STATUS_HIDDEN);
+        assertThat(response.deletedAt()).isNull();
+    }
+
+    /** 활성 조직 구성원의 댓글 삭제가 숨김 처리로 반영되는지 검증한다. */
+    @Test
+    void hidesCommentWhenActiveOrganizationMemberDeletesComment() {
+        User fan = user(1L, UserRole.FAN);
+        User member = user(7L, UserRole.MANAGER);
+        AuthenticatedUser principal = new AuthenticatedUser(7L, UserRole.MANAGER);
+        PostComment comment = comment(50L, fan, communityPost(organizationMeeting()), "댓글");
+        when(currentUserService.requireActiveUser(principal)).thenReturn(member);
+        when(postCommentRepository.findDetailById(50L)).thenReturn(Optional.of(comment));
+        when(organizationMemberRepository.existsByOrganization_IdAndUser_IdAndStatus(
+                ORGANIZATION_ID, 7L, OrganizationMemberStatus.ACTIVE)).thenReturn(true);
+
+        commentService.deleteComment(50L, principal);
+
+        assertThat(comment.getStatus()).isEqualTo(PostComment.STATUS_HIDDEN);
+    }
+
+    /** 관계없는 사용자의 댓글 삭제가 거부되는지 검증한다. */
+    @Test
+    void rejectsCommentDeleteByUnrelatedUser() {
+        User fan = user(1L, UserRole.FAN);
+        User outsider = user(8L, UserRole.FAN);
+        AuthenticatedUser principal = new AuthenticatedUser(8L, UserRole.FAN);
+        PostComment comment = comment(50L, fan, communityPost(meeting()), "댓글");
+        when(currentUserService.requireActiveUser(principal)).thenReturn(outsider);
+        when(postCommentRepository.findDetailById(50L)).thenReturn(Optional.of(comment));
+
+        assertThatThrownBy(() -> commentService.deleteComment(50L, principal))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+        assertThat(comment.getDeletedAt()).isNull();
+        assertThat(comment.getStatus()).isEqualTo(PostComment.STATUS_ACTIVE);
+    }
+
     /** 테스트에 사용할 활성 사용자를 생성한다. */
     private User user(Long id, UserRole role) {
         User user = User.createActive(
@@ -543,19 +695,23 @@ class CommentServiceTest {
     }
 
     /**
-     * 커뮤니티 게시글 작성 API(POST-003b)가 아직 없으므로 공지를 만든 뒤 유형만 바꿔 사용한다.
+     * 커뮤니티 게시글을 생성한다.
+     *
+     * <p>커뮤니티 게시글은 대상 팬미팅이 필수이므로, 팬미팅이 연결되지 않은 예외 상황을
+     * 재현할 때만 생성 후 연관관계를 비운다.
      *
      * @param meeting 연결할 팬미팅이며 팬미팅이 없는 게시글은 null
      * @return 공개 상태의 커뮤니티 게시글
      */
     private Post communityPost(FanMeeting meeting) {
-        Post post = Post.createNotice(
+        Post post = Post.createCommunity(
                 user(2L, UserRole.SOLO_INFLUENCER),
                 meeting == null ? meeting() : meeting,
-                PostType.MEETING_NOTICE, "커뮤니티 글", "본문"
+                "커뮤니티 글", "본문"
         );
-        ReflectionTestUtils.setField(post, "type", PostType.COMMUNITY);
-        ReflectionTestUtils.setField(post, "meeting", meeting);
+        if (meeting == null) {
+            ReflectionTestUtils.setField(post, "meeting", null);
+        }
         ReflectionTestUtils.setField(post, "id", POST_ID);
         return post;
     }

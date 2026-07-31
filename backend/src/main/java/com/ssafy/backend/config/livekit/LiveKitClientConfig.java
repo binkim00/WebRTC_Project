@@ -1,5 +1,6 @@
 package com.ssafy.backend.config.livekit;
 
+import io.livekit.server.AgentDispatchServiceClient;
 import io.livekit.server.RoomServiceClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -7,6 +8,21 @@ import org.springframework.context.annotation.Configuration;
 /** LiveKit 서버 관리 API 클라이언트를 애플리케이션 빈으로 구성한다. */
 @Configuration
 public class LiveKitClientConfig {
+
+    /**
+     * Room 단위 AI Agent 배치를 관리하는 Dispatch API 클라이언트를 생성한다.
+     *
+     * @param properties LiveKit 서버 접속 및 인증 설정
+     * @return Agent 배치 생성과 조회에 사용하는 Dispatch API 클라이언트
+     */
+    @Bean
+    public AgentDispatchServiceClient agentDispatchServiceClient(LiveKitProperties properties) {
+        return AgentDispatchServiceClient.createClient(
+                toHttpUrl(properties.getUrl()),
+                properties.getApiKey(),
+                properties.getApiSecret()
+        );
+    }
 
     /**
      * WebSocket 접속 URL을 HTTP 관리 API URL로 변환해 Room 클라이언트를 생성한다.

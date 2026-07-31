@@ -8,55 +8,99 @@ type ApiEnvelope<T> = {
 export type QueueEnterResponse = {
   queueEntryId: number
   position: number
-  status: string
+  status: 'WAITING'
   enteredAt: string
+  aheadCount: number
+  estimatedWaitSec: number
 }
+
+export type QueueDisplayStatus = 'WAITING' | 'IN_CALL' | 'COMPLETED'
 
 export type QueueSnapshotResponse = {
   queueEntryId: number
   position: number
   aheadCount: number
   estimatedWaitSec: number
-  displayStatus: string
+  displayStatus: QueueDisplayStatus
   callAttemptCount: number
   calledAt: string | null
   callSessionId: number | null
   canEnterCall: boolean
 }
 
-export type QueueCallResponse = {
-  queueEntryId: number
-  status: string
-  calledAt: string
-  callAttemptCount: number
-  callSessionId: number
-  notificationSent: boolean
+function isQueueEnterResponse(value: unknown): value is QueueEnterResponse {
+  if (typeof value !== 'object' || value === null) return false
+
+  const response = value as Record<string, unknown>
+
+  return (
+    typeof response.queueEntryId === 'number' &&
+    typeof response.position === 'number' &&
+    response.status === 'WAITING' &&
+    typeof response.enteredAt === 'string' &&
+    typeof response.aheadCount === 'number' &&
+    typeof response.estimatedWaitSec === 'number'
+  )
 }
 
-function unwrap<T>(response: ApiEnvelope<T>): T {
+function isQueueDisplayStatus(value: unknown): value is QueueDisplayStatus {
+  return value === 'WAITING' || value === 'IN_CALL' || value === 'COMPLETED'
+}
+
+function isQueueSnapshotResponse(value: unknown): value is QueueSnapshotResponse {
+  if (typeof value !== 'object' || value === null) return false
+
+  const response = value as Record<string, unknown>
+
+  return (
+    typeof response.queueEntryId === 'number' &&
+    typeof response.position === 'number' &&
+    typeof response.aheadCount === 'number' &&
+    typeof response.estimatedWaitSec === 'number' &&
+    isQueueDisplayStatus(response.displayStatus) &&
+    typeof response.callAttemptCount === 'number' &&
+    (typeof response.calledAt === 'string' || response.calledAt === null) &&
+    (typeof response.callSessionId === 'number' || response.callSessionId === null) &&
+    typeof response.canEnterCall === 'boolean'
+  )
+}
+
+export async function enterQueue(
+  meetingId: string | number,
+  authToken: string,
+): Promise<QueueEnterResponse> {
+  const response = await apiRequest<ApiEnvelope<unknown>>(
+    `/api/v1/fan-meetings/${encodeURIComponent(String(meetingId))}/queue/enter`,
+    {
+      method: 'POST',
+      authToken,
+    },
+  )
+
+  if (!response.success || !isQueueEnterResponse(response.data)) {
+    throw new TypeError('대기열 입장 응답 형식이 올바르지 않습니다.')
+  }
+
   return response.data
 }
 
-export async function enterQueue(meetingId: string | number, authToken: string) {
-  const response = await apiRequest<ApiEnvelope<QueueEnterResponse>>(
-    `/api/v1/fan-meetings/${meetingId}/queue/enter`,
-    { method: 'POST', authToken },
+export async function getMyQueue(
+  meetingId: string | number,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<QueueSnapshotResponse> {
+  const response = await apiRequest<ApiEnvelope<unknown>>(
+    `/api/v1/fan-meetings/${encodeURIComponent(String(meetingId))}/queue/me`,
+    {
+      method: 'GET',
+      authToken,
+      signal,
+    },
   )
-  return unwrap(response)
-}
 
-export async function getMyQueue(meetingId: string | number, authToken: string) {
-  const response = await apiRequest<ApiEnvelope<QueueSnapshotResponse>>(
-    `/api/v1/fan-meetings/${meetingId}/queue/me`,
-    { method: 'GET', authToken },
-  )
-  return unwrap(response)
-}
+  if (!response.success || !isQueueSnapshotResponse(response.data)) {
+    throw new TypeError('대기열 상태 응답 형식이 올바르지 않습니다.')
+  }
 
-export async function callQueueEntry(queueEntryId: string | number, authToken: string) {
-  const response = await apiRequest<ApiEnvelope<QueueCallResponse>>(
-    `/api/v1/queue-entries/${queueEntryId}/call`,
-    { method: 'POST', authToken },
-  )
-  return unwrap(response)
+  return response.data
 }

@@ -7,6 +7,7 @@ import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
+import com.ssafy.backend.livekit.service.LiveKitAgentDispatchService;
 import com.ssafy.backend.livekit.support.LiveKitRoomNames;
 import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
@@ -44,6 +45,7 @@ public class QueueCommandService {
     private final QueueRealtimeStore realtimeStore;
     private final QueueQueryService queryService;
     private final QueueInitializationService initializationService;
+    private final LiveKitAgentDispatchService agentDispatchService;
     private final Clock clock;
 
     /**
@@ -57,6 +59,7 @@ public class QueueCommandService {
      * @param realtimeStore Redis 실시간 대기열 저장소
      * @param queryService 대기열 응답 조회 서비스
      * @param initializationService 참가자 기반 대기열 초기화 서비스
+     * @param agentDispatchService 자막 AI Agent 배치 서비스
      * @param clock 상태 변경 시각 기준 시계
      */
     public QueueCommandService(CurrentUserService currentUserService,
@@ -67,6 +70,7 @@ public class QueueCommandService {
                                QueueRealtimeStore realtimeStore,
                                QueueQueryService queryService,
                                QueueInitializationService initializationService,
+                               LiveKitAgentDispatchService agentDispatchService,
                                Clock clock) {
         this.currentUserService = currentUserService;
         this.meetingAccessService = meetingAccessService;
@@ -76,6 +80,7 @@ public class QueueCommandService {
         this.realtimeStore = realtimeStore;
         this.queryService = queryService;
         this.initializationService = initializationService;
+        this.agentDispatchService = agentDispatchService;
         this.clock = clock;
     }
 
@@ -125,7 +130,8 @@ public class QueueCommandService {
      * @param entryId 호출할 대기열 항목 식별자
      * @param principal JWT 인증 사용자 정보
      * @return 영상통화 세션 식별자를 포함한 호출 또는 재호출 결과
-     * @throws BusinessException 매니저 권한, 호출 상태 또는 최대 횟수 검증에 실패한 경우
+     * @throws BusinessException 매니저 권한, 호출 상태 또는 최대 횟수 검증에 실패한 경우이거나
+     *                          자막 Agent 배치에 실패한 경우
      */
     @Transactional
     public QueueCallResponse call(Long entryId, AuthenticatedUser principal) {
@@ -152,6 +158,7 @@ public class QueueCommandService {
         try {
             entry.call(LocalDateTime.now(clock));
             CallSession callSession = createCallSession(meetingId, entry);
+            dispatchSubtitleAgent(meetingId, entry, callSession);
             return toCallResponse(entry, callSession);
         } catch (DataIntegrityViolationException exception) {
             realtimeStore.releaseClaim(meetingId, entryId);
@@ -171,7 +178,8 @@ public class QueueCommandService {
      * @param meetingId 팬미팅 식별자
      * @param entry 재호출할 대기열 항목
      * @return 재호출 결과
-     * @throws BusinessException 현재 호출자가 아니거나 최대 호출 횟수를 초과한 경우
+     * @throws BusinessException 현재 호출자가 아니거나 최대 호출 횟수를 초과한 경우이거나
+     *                          자막 Agent 배치에 실패한 경우
      */
     private QueueCallResponse recallCurrent(Long meetingId, QueueEntry entry) {
         Long currentEntryId = realtimeStore.getCurrentEntryId(meetingId);
@@ -190,7 +198,30 @@ public class QueueCommandService {
         } catch (IllegalStateException exception) {
             throw new BusinessException(ErrorCode.QUEUE_STATE_CONFLICT);
         }
+        dispatchSubtitleAgent(meetingId, entry, callSession);
         return toCallResponse(entry, callSession);
+    }
+
+    /**
+     * 팬미팅 공용 Room에 통화 식별값과 주최자 언어를 담은 자막 Agent를 한 번만 배치한다.
+     *
+     * <p>최초 호출과 재호출이 같은 Room을 공유하므로 이미 배치된 Agent가 있으면
+     * 중복 생성 없이 그대로 재사용한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param entry 호출 또는 재호출된 대기열 항목
+     * @param callSession 해당 팬의 영상통화 세션
+     * @throws BusinessException LiveKit Dispatch 조회 또는 생성에 실패한 경우
+     */
+    private void dispatchSubtitleAgent(
+            Long meetingId, QueueEntry entry, CallSession callSession) {
+        String hostLanguage = toLanguageCode(
+                entry.getMeeting().getInfluencer().getPreferredLanguage());
+        agentDispatchService.ensureDispatched(
+                LiveKitRoomNames.forMeeting(meetingId),
+                callSession.getId(),
+                hostLanguage
+        );
     }
 
     /**
