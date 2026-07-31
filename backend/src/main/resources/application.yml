@@ -28,6 +28,14 @@ spring:
       hibernate:
         format_sql: true
 
+  servlet:
+    multipart:
+      # 녹화 파일 최대 크기는 2GB이며 요청 전체도 같은 한도를 적용한다.
+      max-file-size: ${RECORDING_MAX_FILE_SIZE:2GB}
+      max-request-size: ${RECORDING_MAX_REQUEST_SIZE:2GB}
+      # 2GB 파일을 메모리에 담지 않도록 임계값을 0으로 두어 항상 디스크로 스풀한다.
+      file-size-threshold: 0
+
 livekit:
   url: ${LIVEKIT_URL}
   api-key: ${LIVEKIT_API_KEY}
@@ -44,6 +52,18 @@ app:
 
   organization:
     invitation-ttl-seconds: ${ORGANIZATION_INVITATION_TTL_SECONDS:86400}
+
+  recording:
+    # 녹화 파일을 저장할 서버 디스크 최상위 경로다. Docker에서는 이 경로를 볼륨으로 보존한다.
+    storage-root: ${RECORDING_STORAGE_ROOT:/srv/melly/uploads}
+    # 업로드 완료 후 보관 기간이며 지나면 만료 스케줄러가 파일을 지우고 EXPIRED로 바꾼다.
+    retention-days: ${RECORDING_RETENTION_DAYS:7}
+    # 재생·다운로드용 임시 토큰 유효 시간이다.
+    download-token-ttl-seconds: ${RECORDING_DOWNLOAD_TOKEN_TTL_SECONDS:600}
+    # 만료 대상 조회 주기이며 기본 10분이다.
+    expiration-check-delay-ms: ${RECORDING_EXPIRATION_CHECK_DELAY_MS:600000}
+    # 업로드 파일 최대 바이트이며 multipart 한도와 같은 2GB를 유지한다.
+    max-file-size-bytes: ${RECORDING_MAX_FILE_SIZE_BYTES:2147483648}
 
 jwt:
   secret: ${JWT_SECRET}

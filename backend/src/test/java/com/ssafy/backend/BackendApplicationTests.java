@@ -22,6 +22,7 @@ import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
 import com.ssafy.backend.queue.repository.QueueChangeRequestRepository;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
+import com.ssafy.backend.recording.repository.RecordingRepository;
 import com.ssafy.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -68,6 +69,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private CallSessionRepository callSessionRepository;
+
+    @MockitoBean
+    private RecordingRepository recordingRepository;
 
     @MockitoBean
     private MeetingApplicationSettingRepository applicationSettingRepository;
