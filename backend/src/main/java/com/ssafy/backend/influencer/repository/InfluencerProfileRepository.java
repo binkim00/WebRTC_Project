@@ -1,7 +1,6 @@
 package com.ssafy.backend.influencer.repository;
 
 import com.ssafy.backend.influencer.domain.InfluencerProfile;
-import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.user.domain.UserRole;
 import com.ssafy.backend.user.domain.UserStatus;
@@ -11,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -111,22 +111,59 @@ public interface InfluencerProfileRepository extends JpaRepository<InfluencerPro
                                          @Param("influencerIds") Collection<Long> influencerIds);
 
     /**
-     * 인플루언서 상세에 노출할 공개 팬미팅을 예정 시각 순으로 조회한다.
+     * 인플루언서 상세에 노출할 예정·진행 팬미팅을 시작이 가까운 순서로 조회한다.
      * 팬미팅 저장소는 담당 범위 밖이므로 탐색 전용 조회를 이곳에 둔다.
+     * 응모 기간은 별도 설정 엔티티에 있으므로 left join으로 함께 읽어 추가 조회를 막는다.
      *
      * @param influencerId 인플루언서 사용자 식별자
-     * @param statuses 공개 대상으로 허용하는 팬미팅 상태
-     * @return 삭제되지 않은 공개 대상 팬미팅 목록
+     * @param statuses 예정·진행으로 취급하는 팬미팅 상태
+     * @return 삭제되지 않은 예정·진행 팬미팅 목록
      */
     @Query("""
-            select meeting from FanMeeting meeting
+            select meeting.id as meetingId,
+                   meeting.title as title,
+                   meeting.coverImageUrl as coverImageUrl,
+                   meeting.scheduledStartAt as scheduledStartAt,
+                   meeting.status as status,
+                   setting.applicationOpenAt as applicationStartAt,
+                   setting.applicationCloseAt as applicationEndAt
+            from FanMeeting meeting
+            left join MeetingApplicationSetting setting on setting.meetingId = meeting.id
             where meeting.influencer.id = :influencerId
               and meeting.deletedAt is null
               and meeting.status in :statuses
             order by meeting.scheduledStartAt asc, meeting.id asc
             """)
-    List<FanMeeting> findPublicMeetings(@Param("influencerId") Long influencerId,
-                                        @Param("statuses") Collection<FanMeetingStatus> statuses);
+    List<MeetingView> findUpcomingMeetings(@Param("influencerId") Long influencerId,
+                                           @Param("statuses") Collection<FanMeetingStatus> statuses);
+
+    /**
+     * 인플루언서 상세에 노출할 종료 팬미팅 이력을 최근 종료 순서로 조회한다.
+     * 오래 활동한 인플루언서의 응답이 비대해지지 않도록 호출 측이 건수를 제한한다.
+     *
+     * @param influencerId 인플루언서 사용자 식별자
+     * @param statuses 종료로 취급하는 팬미팅 상태
+     * @param pageable 노출할 최근 이력 건수
+     * @return 삭제되지 않은 종료 팬미팅 목록
+     */
+    @Query("""
+            select meeting.id as meetingId,
+                   meeting.title as title,
+                   meeting.coverImageUrl as coverImageUrl,
+                   meeting.scheduledStartAt as scheduledStartAt,
+                   meeting.status as status,
+                   setting.applicationOpenAt as applicationStartAt,
+                   setting.applicationCloseAt as applicationEndAt
+            from FanMeeting meeting
+            left join MeetingApplicationSetting setting on setting.meetingId = meeting.id
+            where meeting.influencer.id = :influencerId
+              and meeting.deletedAt is null
+              and meeting.status in :statuses
+            order by meeting.scheduledStartAt desc, meeting.id desc
+            """)
+    List<MeetingView> findPastMeetings(@Param("influencerId") Long influencerId,
+                                       @Param("statuses") Collection<FanMeetingStatus> statuses,
+                                       Pageable pageable);
 
     /** 인플루언서별 팔로워 수 집계 결과를 전달한다. */
     interface FollowerCountView {
@@ -135,5 +172,29 @@ public interface InfluencerProfileRepository extends JpaRepository<InfluencerPro
 
         /** 해당 인플루언서의 팔로워 수를 반환한다. */
         long getFollowerCount();
+    }
+
+    /** 인플루언서 상세에 노출할 팬미팅과 응모 기간 조회 결과를 전달한다. */
+    interface MeetingView {
+        /** 팬미팅 식별자를 반환한다. */
+        Long getMeetingId();
+
+        /** 팬미팅 제목을 반환한다. */
+        String getTitle();
+
+        /** 팬미팅 대표 이미지 URL을 반환하며 없으면 null이다. */
+        String getCoverImageUrl();
+
+        /** 팬미팅 예정 시작 시각을 반환한다. */
+        LocalDateTime getScheduledStartAt();
+
+        /** 팬미팅 진행 상태를 반환한다. */
+        FanMeetingStatus getStatus();
+
+        /** 응모 시작 시각을 반환하며 응모 설정이 없으면 null이다. */
+        LocalDateTime getApplicationStartAt();
+
+        /** 응모 마감 시각을 반환하며 응모 설정이 없으면 null이다. */
+        LocalDateTime getApplicationEndAt();
     }
 }

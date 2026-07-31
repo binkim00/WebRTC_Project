@@ -7,6 +7,7 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.influencer.domain.InfluencerProfile;
 import com.ssafy.backend.influencer.dto.InfluencerDetailResponse;
 import com.ssafy.backend.influencer.dto.InfluencerSummaryResponse;
+import com.ssafy.backend.influencer.dto.MeetingSummaryResponse;
 import com.ssafy.backend.influencer.repository.FollowingRepository;
 import com.ssafy.backend.influencer.repository.InfluencerProfileRepository;
 import com.ssafy.backend.meeting.domain.FanMeetingStatus;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** 비로그인 사용자도 접근하는 인플루언서 탐색 목록·상세 조회를 처리한다. */
 @Service
@@ -32,15 +34,18 @@ public class InfluencerQueryService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<UserRole> DISCOVERABLE_ROLES =
             Set.of(UserRole.INFLUENCER, UserRole.SOLO_INFLUENCER);
-    // 초안(DRAFT)·취소(CANCELED)·삭제 팬미팅은 공개하지 않는다.
-    // 종료(ENDED) 이력 노출 여부는 명세 미정이라 현재·예정 팬미팅만 노출한다.
-    private static final Set<FanMeetingStatus> PUBLIC_MEETING_STATUSES = Set.of(
+    // 초안(DRAFT)·취소(CANCELED)·삭제 팬미팅은 어느 구간에도 공개하지 않는다.
+    private static final Set<FanMeetingStatus> UPCOMING_MEETING_STATUSES = Set.of(
             FanMeetingStatus.PUBLISHED,
             FanMeetingStatus.APPLICATION_OPEN,
             FanMeetingStatus.APPLICATION_CLOSED,
             FanMeetingStatus.READY,
             FanMeetingStatus.LIVE
     );
+    // 정상 종료를 뜻하는 상태는 ENDED 하나뿐이며 CANCELED는 취소라 이력에서 제외한다.
+    private static final Set<FanMeetingStatus> PAST_MEETING_STATUSES = Set.of(FanMeetingStatus.ENDED);
+    // 오래 활동한 인플루언서일수록 이력이 무한정 늘어나므로 최근 건수만 노출한다.
+    private static final int PAST_MEETING_LIMIT = 10;
 
     private final InfluencerProfileRepository influencerProfileRepository;
     private final FollowingRepository followingRepository;
@@ -74,8 +79,26 @@ public class InfluencerQueryService {
                 profile,
                 followingRepository.countByFollowedInfluencer_Id(influencerId),
                 isFollowedBy(principal, influencerId),
-                influencerProfileRepository.findPublicMeetings(influencerId, PUBLIC_MEETING_STATUSES)
+                publicMeetings(influencerId)
         );
+    }
+
+    /**
+     * 예정·진행 팬미팅 뒤에 최근 종료 이력을 이어 붙인 단일 목록을 만든다.
+     * 명세가 하나의 meetings 배열을 요구하므로 각 항목의 status로 구간을 구분한다.
+     *
+     * @param influencerId 인플루언서 사용자 식별자
+     * @return 예정·진행은 가까운 순, 종료는 최근 순으로 정렬된 팬미팅 목록
+     */
+    private List<MeetingSummaryResponse> publicMeetings(Long influencerId) {
+        Stream<InfluencerProfileRepository.MeetingView> upcoming = influencerProfileRepository
+                .findUpcomingMeetings(influencerId, UPCOMING_MEETING_STATUSES).stream();
+        Stream<InfluencerProfileRepository.MeetingView> past = influencerProfileRepository
+                .findPastMeetings(influencerId, PAST_MEETING_STATUSES,
+                        PageRequest.of(0, PAST_MEETING_LIMIT)).stream();
+        return Stream.concat(upcoming, past)
+                .map(MeetingSummaryResponse::from)
+                .toList();
     }
 
     /**

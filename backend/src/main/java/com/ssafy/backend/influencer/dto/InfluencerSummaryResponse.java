@@ -6,17 +6,17 @@ import com.ssafy.backend.influencer.domain.InfluencerProfile;
  * 인플루언서 탐색 목록의 요약 항목을 전달한다.
  *
  * @param influencerId 인플루언서 사용자 식별자
- * @param activityName 인플루언서 활동명
+ * @param influencerName 인플루언서 활동명
  * @param profileImageUrl 인플루언서 프로필 이미지 URL
- * @param category 인플루언서 활동 분야
+ * @param introduction 인플루언서 소개
  * @param followerCount 현재 팔로워 수
  * @param isFollowing 조회한 팬의 팔로우 여부이며 비로그인 사용자는 false
  */
 public record InfluencerSummaryResponse(
         Long influencerId,
-        String activityName,
+        String influencerName,
         String profileImageUrl,
-        String category,
+        String introduction,
         long followerCount,
         boolean isFollowing
 ) {
@@ -36,7 +36,7 @@ public record InfluencerSummaryResponse(
                 profile.getUser().getId(),
                 profile.getActivityName(),
                 profile.getUser().getProfileImageUrl(),
-                profile.getCategory(),
+                profile.getIntroduction(),
                 followerCount,
                 following
         );

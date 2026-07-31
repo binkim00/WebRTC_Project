@@ -6,11 +6,14 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.influencer.domain.Following;
 import com.ssafy.backend.influencer.domain.InfluencerProfile;
 import com.ssafy.backend.influencer.dto.InfluencerDetailResponse;
+import com.ssafy.backend.influencer.dto.MeetingSummaryResponse;
 import com.ssafy.backend.influencer.repository.FollowingRepository;
 import com.ssafy.backend.influencer.repository.InfluencerProfileRepository;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.FanMeetingStatus;
+import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
+import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
 import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
@@ -26,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,6 +50,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Transactional
 class InfluencerDetailIntegrationTest {
 
+    private static final LocalDateTime BASE = LocalDateTime.of(2026, 8, 1, 12, 0);
+
     @Autowired
     private InfluencerQueryService influencerQueryService;
 
@@ -60,6 +66,9 @@ class InfluencerDetailIntegrationTest {
 
     @Autowired
     private FanMeetingRepository fanMeetingRepository;
+
+    @Autowired
+    private MeetingApplicationSettingRepository meetingApplicationSettingRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -85,9 +94,8 @@ class InfluencerDetailIntegrationTest {
                 influencerQueryService.getInfluencer(influencer.getId(), null);
 
         assertThat(response.influencerId()).isEqualTo(influencer.getId());
-        assertThat(response.activityName()).isEqualTo("상세 인플루언서");
+        assertThat(response.influencerName()).isEqualTo("상세 인플루언서");
         assertThat(response.introduction()).isEqualTo("상세 소개");
-        assertThat(response.category()).isEqualTo("MUSIC");
         assertThat(response.socialUrl()).isEqualTo("https://social.example.com");
         assertThat(response.followerCount()).isEqualTo(1L);
         assertThat(response.isFollowing()).isFalse();
@@ -106,44 +114,137 @@ class InfluencerDetailIntegrationTest {
         assertThat(response.isFollowing()).isTrue();
     }
 
-    /** 공개 상태 팬미팅만 예정 시각 순으로 노출되는지 검증한다. */
+    /**
+     * 예정·진행 팬미팅 뒤에 종료 이력이 이어지고, 비공개 팬미팅은 어느 구간에도 없는지 검증한다.
+     * 종료 이력 노출 정책이 확정되기 전에는 ENDED 제외를 검증하던 케이스를 이 검증으로 대체했다.
+     */
     @Test
-    void exposesOnlyPublicMeetingsInScheduleOrder() {
-        LocalDateTime base = LocalDateTime.of(2026, 8, 1, 12, 0);
-        FanMeeting live = saveMeeting("진행 중", FanMeetingStatus.LIVE, base.plusDays(1), false);
-        FanMeeting open = saveMeeting("응모 중", FanMeetingStatus.APPLICATION_OPEN, base.plusDays(2), false);
-        saveMeeting("초안", FanMeetingStatus.DRAFT, base.plusDays(3), false);
-        saveMeeting("취소", FanMeetingStatus.CANCELED, base.plusDays(4), false);
-        saveMeeting("종료", FanMeetingStatus.ENDED, base.plusDays(5), false);
-        saveMeeting("삭제", FanMeetingStatus.READY, base.plusDays(6), true);
+    void exposesUpcomingThenPastMeetingsAndHidesPrivateOnes() {
+        FanMeeting live = saveMeeting("진행 중", FanMeetingStatus.LIVE, BASE.plusDays(1), false);
+        FanMeeting open = saveMeeting("응모 중", FanMeetingStatus.APPLICATION_OPEN, BASE.plusDays(2), false);
+        FanMeeting recentlyEnded = saveMeeting("최근 종료", FanMeetingStatus.ENDED, BASE.minusDays(1), false);
+        FanMeeting longAgoEnded = saveMeeting("예전 종료", FanMeetingStatus.ENDED, BASE.minusDays(10), false);
+        saveMeeting("초안", FanMeetingStatus.DRAFT, BASE.plusDays(3), false);
+        saveMeeting("취소", FanMeetingStatus.CANCELED, BASE.plusDays(4), false);
+        saveMeeting("삭제된 예정", FanMeetingStatus.READY, BASE.plusDays(5), true);
+        saveMeeting("삭제된 종료", FanMeetingStatus.ENDED, BASE.minusDays(2), true);
         entityManager.flush();
 
         InfluencerDetailResponse response =
                 influencerQueryService.getInfluencer(influencer.getId(), null);
 
-        assertThat(response.upcomingMeetings())
-                .extracting(InfluencerDetailResponse.UpcomingMeetingResponse::meetingId)
-                .containsExactly(live.getId(), open.getId());
-        assertThat(response.upcomingMeetings())
-                .extracting(InfluencerDetailResponse.UpcomingMeetingResponse::title)
-                .containsExactly("진행 중", "응모 중");
+        // 예정은 가까운 순, 종료는 최근 순으로 이어 붙는다.
+        assertThat(response.meetings()).extracting(MeetingSummaryResponse::meetingId)
+                .containsExactly(live.getId(), open.getId(),
+                        recentlyEnded.getId(), longAgoEnded.getId());
+        assertThat(response.meetings()).extracting(MeetingSummaryResponse::title)
+                .doesNotContain("초안", "취소", "삭제된 예정", "삭제된 종료");
+    }
+
+    /** 종료 팬미팅이 상태와 함께 목록에 포함되는지 검증한다. */
+    @Test
+    void includesEndedMeetingWithStatus() {
+        FanMeeting ended = saveMeeting("종료된 팬미팅", FanMeetingStatus.ENDED, BASE.minusDays(3), false);
+        entityManager.flush();
+
+        InfluencerDetailResponse response =
+                influencerQueryService.getInfluencer(influencer.getId(), null);
+
+        assertThat(response.meetings()).singleElement().satisfies(meeting -> {
+            assertThat(meeting.meetingId()).isEqualTo(ended.getId());
+            assertThat(meeting.status()).isEqualTo(FanMeetingStatus.ENDED);
+            assertThat(meeting.title()).isEqualTo("종료된 팬미팅");
+        });
+    }
+
+    /** 종료 이력이 상한을 넘으면 최근 건만 남는지 검증한다. */
+    @Test
+    void limitsPastMeetingsToMostRecent() {
+        for (int index = 1; index <= 13; index++) {
+            saveMeeting("종료 " + index, FanMeetingStatus.ENDED, BASE.minusDays(index), false);
+        }
+        entityManager.flush();
+
+        InfluencerDetailResponse response =
+                influencerQueryService.getInfluencer(influencer.getId(), null);
+
+        assertThat(response.meetings()).hasSize(10);
+        assertThat(response.meetings()).extracting(MeetingSummaryResponse::title)
+                .containsExactly("종료 1", "종료 2", "종료 3", "종료 4", "종료 5",
+                        "종료 6", "종료 7", "종료 8", "종료 9", "종료 10")
+                .doesNotContain("종료 11", "종료 12", "종료 13");
+    }
+
+    /** 종료 이력이 없으면 예정 팬미팅만 반환되는지 검증한다. */
+    @Test
+    void returnsOnlyUpcomingWhenNoPastMeetingExists() {
+        FanMeeting ready = saveMeeting("예정", FanMeetingStatus.READY, BASE.plusDays(1), false);
+        entityManager.flush();
+
+        InfluencerDetailResponse response =
+                influencerQueryService.getInfluencer(influencer.getId(), null);
+
+        assertThat(response.meetings()).extracting(MeetingSummaryResponse::meetingId)
+                .containsExactly(ready.getId());
+    }
+
+    /** 공개 팬미팅이 하나도 없으면 빈 배열을 반환하는지 검증한다. */
+    @Test
+    void returnsEmptyMeetingsWhenNothingPublic() {
+        saveMeeting("초안", FanMeetingStatus.DRAFT, BASE.plusDays(1), false);
+        entityManager.flush();
+
+        InfluencerDetailResponse response =
+                influencerQueryService.getInfluencer(influencer.getId(), null);
+
+        assertThat(response.meetings()).isEmpty();
+    }
+
+    /** 응모 설정이 있으면 응모 기간이 함께 노출되는지 검증한다. */
+    @Test
+    void exposesApplicationPeriodWhenSettingExists() {
+        FanMeeting meeting = saveMeeting("응모 있는 팬미팅",
+                FanMeetingStatus.APPLICATION_OPEN, BASE.plusDays(1), false);
+        saveApplicationSetting(meeting, BASE.minusDays(5), BASE.minusDays(1));
+        entityManager.flush();
+
+        InfluencerDetailResponse response =
+                influencerQueryService.getInfluencer(influencer.getId(), null);
+
+        assertThat(response.meetings()).singleElement().satisfies(item -> {
+            assertThat(item.applicationStartAt()).isEqualTo(BASE.minusDays(5));
+            assertThat(item.applicationEndAt()).isEqualTo(BASE.minusDays(1));
+        });
+    }
+
+    /** 응모 설정이 없는 팬미팅은 응모 기간이 null로 나가는지 검증한다. */
+    @Test
+    void leavesApplicationPeriodNullWhenSettingMissing() {
+        saveMeeting("응모 없는 팬미팅", FanMeetingStatus.READY, BASE.plusDays(1), false);
+        entityManager.flush();
+
+        InfluencerDetailResponse response =
+                influencerQueryService.getInfluencer(influencer.getId(), null);
+
+        assertThat(response.meetings()).singleElement().satisfies(item -> {
+            assertThat(item.applicationStartAt()).isNull();
+            assertThat(item.applicationEndAt()).isNull();
+        });
     }
 
     /** 다른 인플루언서의 팬미팅이 상세 응답에 섞이지 않는지 검증한다. */
     @Test
     void excludesOtherInfluencersMeetings() {
         User other = saveUser("detail-other", UserRole.INFLUENCER, UserStatus.ACTIVE);
-        FanMeeting mine = saveMeeting("내 팬미팅", FanMeetingStatus.READY,
-                LocalDateTime.of(2026, 8, 2, 12, 0), false);
-        fanMeetingRepository.saveAndFlush(meeting(other, "남의 팬미팅", FanMeetingStatus.READY,
-                LocalDateTime.of(2026, 8, 3, 12, 0), false));
+        FanMeeting mine = saveMeeting("내 팬미팅", FanMeetingStatus.READY, BASE.plusDays(1), false);
+        fanMeetingRepository.saveAndFlush(
+                meeting(other, "남의 팬미팅", FanMeetingStatus.READY, BASE.plusDays(2), false));
         entityManager.flush();
 
         InfluencerDetailResponse response =
                 influencerQueryService.getInfluencer(influencer.getId(), null);
 
-        assertThat(response.upcomingMeetings())
-                .extracting(InfluencerDetailResponse.UpcomingMeetingResponse::meetingId)
+        assertThat(response.meetings()).extracting(MeetingSummaryResponse::meetingId)
                 .containsExactly(mine.getId());
     }
 
@@ -219,5 +320,12 @@ class InfluencerDetailIntegrationTest {
             ReflectionTestUtils.setField(fanMeeting, "deletedAt", LocalDateTime.of(2026, 7, 30, 0, 0));
         }
         return fanMeeting;
+    }
+
+    /** 팬미팅에 응모 기간 설정을 저장한다. */
+    private void saveApplicationSetting(FanMeeting meeting, LocalDateTime openAt, LocalDateTime closeAt) {
+        meetingApplicationSettingRepository.saveAndFlush(MeetingApplicationSetting.create(
+                meeting, true, openAt, closeAt, closeAt.plusDays(1), 10
+        ));
     }
 }

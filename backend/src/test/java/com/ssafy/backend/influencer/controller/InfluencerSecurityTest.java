@@ -72,13 +72,15 @@ class InfluencerSecurityTest {
     void passesPagingParametersToService() throws Exception {
         when(influencerQueryService.getInfluencers(eq(2), eq(5), eq("댄서"), isNull()))
                 .thenReturn(new PageResponse<>(List.of(
-                        new InfluencerSummaryResponse(7L, "댄서 베타", null, "DANCE", 3L, false)
+                        new InfluencerSummaryResponse(7L, "댄서 베타", null, "춤추는 사람", 3L, false)
                 ), 2, 5, 11L, 3, false));
 
         mockMvc.perform(get("/api/v1/influencers")
                         .param("page", "2").param("size", "5").param("keyword", "댄서"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].influencerId").value(7))
+                .andExpect(jsonPath("$.data.content[0].influencerName").value("댄서 베타"))
+                .andExpect(jsonPath("$.data.content[0].introduction").value("춤추는 사람"))
                 .andExpect(jsonPath("$.data.content[0].followerCount").value(3))
                 .andExpect(jsonPath("$.data.page").value(2));
     }
