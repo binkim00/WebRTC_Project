@@ -4,6 +4,7 @@ import {
   Camera,
   CheckCircle,
   ListChecks,
+  Microphone,
   NotePencil,
   VideoCamera,
   WarningCircle,
@@ -17,6 +18,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  MediaDevicePreview,
 } from '../../components'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/authSession'
@@ -29,6 +31,7 @@ import {
   type MeetingDetail,
   type MeetingQueue,
 } from '../../api/fanMeetingParticipants'
+import { useMediaDeviceCheck } from '../../hooks/useMediaDeviceCheck'
 
 type DeviceCheckResult = {
   cameraOk?: boolean
@@ -36,6 +39,10 @@ type DeviceCheckResult = {
   speakerOk?: boolean
   networkOk?: boolean
   checkedAt?: string
+  /** 장비 점검 화면에서 선택한 장치 ID. 준비실에서 같은 장치로 복원할 때 사용한다. */
+  cameraDeviceId?: string
+  microphoneDeviceId?: string
+  speakerDeviceId?: string
 }
 
 /** 장비 점검 페이지가 저장한 결과를 읽는다. 없으면 점검 전으로 간주한다. */
@@ -98,6 +105,27 @@ export function InfluencerMeetingReadyPage() {
   const deviceCheck = readDeviceCheck(fanMeetingId)
   const isDeviceChecked = isDeviceCheckPassed(deviceCheck)
 
+  // 준비실에서도 카메라 미리보기와 마이크 입력 상태를 실시간으로 보여주기 위해 장비 스트림을 연다.
+  const {
+    audioLevel,
+    errorMessage: mediaErrorMessage,
+    start: startMedia,
+    status: mediaStatus,
+    stream,
+  } = useMediaDeviceCheck()
+
+  // 준비실 진입 시 카메라·마이크 권한을 요청하고 미리보기 스트림을 시작한다.
+  useEffect(() => {
+    void startMedia()
+  }, [startMedia])
+
+  /** 현재 스트림에서 카메라 트랙이 정상 동작 중인지 확인한다. */
+  const isCameraLive =
+    stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false
+  /** 현재 스트림에서 마이크 트랙이 정상 동작 중인지 확인한다. */
+  const isMicrophoneLive =
+    stream?.getAudioTracks().some((track) => track.readyState === 'live') ?? false
+
   useEffect(() => {
     if (!fanMeetingId) return
 
@@ -143,6 +171,26 @@ export function InfluencerMeetingReadyPage() {
   }, [fanMeetingId])
 
   useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  /** 대기열 오픈 시각(밀리초). 상세 정보를 아직 불러오지 못했으면 undefined다. */
+  const queueOpenAtMs = useMemo(() => {
+    const raw = meeting?.operation?.queueOpenAt
+    if (!raw) return undefined
+    const time = new Date(raw).getTime()
+    return Number.isNaN(time) ? undefined : time
+  }, [meeting?.operation?.queueOpenAt])
+
+  /** 대기열 오픈 전인지 여부. 오픈 시각 정보가 없으면 기존처럼 바로 폴링한다. */
+  const isBeforeQueueOpen = queueOpenAtMs !== undefined && now < queueOpenAtMs
+
+  // 대기열 정보를 3초마다 폴링한다. 오픈 전에는 백엔드가 QUEUE_NOT_INITIALIZED 오류를
+  // 반환하므로 폴링하지 않고, 오픈 시각이 지나면 자동으로 폴링을 시작한다.
+  useEffect(() => {
+    if (isBeforeQueueOpen) return
+
     const controller = new AbortController()
     void loadCurrentCall(controller.signal)
 
@@ -154,12 +202,7 @@ export function InfluencerMeetingReadyPage() {
       controller.abort()
       window.clearInterval(timer)
     }
-  }, [loadCurrentCall])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000)
-    return () => window.clearInterval(timer)
-  }, [])
+  }, [isBeforeQueueOpen, loadCurrentCall])
 
   const entries = useMemo(() => queue?.entries ?? [], [queue?.entries])
 
@@ -262,7 +305,13 @@ export function InfluencerMeetingReadyPage() {
 
   return (
     <div className="grid gap-8 pb-8">
-      {error ? (
+      {/* 대기열 오픈 전에는 오류 대신 오픈 예정 안내를 표시한다 */}
+      {isBeforeQueueOpen ? (
+        <AlertBanner title="대기열이 아직 열리지 않았습니다" variant="info">
+          {formatScheduledAt(meeting?.operation?.queueOpenAt)} 오픈 예정입니다. 오픈되면
+          자동으로 대기열 정보를 불러옵니다. 그동안 카메라와 마이크 상태를 점검해 주세요.
+        </AlertBanner>
+      ) : error ? (
         <AlertBanner title="통화 정보를 확인할 수 없습니다" variant="error">
           {error}
         </AlertBanner>
@@ -373,22 +422,101 @@ export function InfluencerMeetingReadyPage() {
             </div>
           </CardHeader>
 
-          <div className="relative flex aspect-[4/3] min-h-80 items-center justify-center bg-slate-900 text-slate-200">
-            {/* TODO: 장비 점검에서 획득한 MediaStream을 실제 video 요소에 연결 */}
-            <div className="grid max-w-sm justify-items-center gap-4 px-6 text-center">
-              <Camera aria-hidden size={48} weight="duotone" />
+          {/* 준비실에서 다시 연 카메라 스트림을 실시간 미리보기로 표시한다 */}
+          <div className="relative">
+            <MediaDevicePreview className="rounded-none shadow-none" stream={stream} />
+            {stream ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-6 pt-16">
+                <p className="text-lg font-extrabold text-white">
+                  {meeting?.influencer.influencerName ?? ''}
+                </p>
+                <p className="mt-1 text-sm text-slate-300">카메라 미리보기</p>
+              </div>
+            ) : null}
+          </div>
+
+          {/* 카메라를 열지 못한 경우 원인을 안내한다 */}
+          {mediaErrorMessage ? (
+            <div className="border-t border-[var(--color-divider)] p-5 sm:p-6">
+              <AlertBanner title="카메라를 시작하지 못했습니다" variant="warning">
+                {mediaErrorMessage}
+              </AlertBanner>
+            </div>
+          ) : null}
+
+          {/* 카메라·마이크 연결 상태와 마이크 입력 레벨을 표시한다 */}
+          <div className="grid gap-5 border-t border-[var(--color-divider)] p-5 sm:grid-cols-2 sm:p-6">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-page)] text-[var(--color-text-secondary)]">
+                <Camera aria-hidden size={21} weight="bold" />
+              </span>
               <div>
-                <p className="font-bold">카메라 미리보기</p>
-                <p className="mt-2 text-sm text-slate-400">
-                  장비 점검에서 확인한 카메라 화면이 여기에 표시됩니다.
+                <p className="text-xs font-semibold text-[var(--color-text-tertiary)]">
+                  카메라
+                </p>
+                <p
+                  className={[
+                    'mt-1 text-sm font-extrabold',
+                    isCameraLive
+                      ? 'text-[var(--color-success)]'
+                      : 'text-[var(--color-text-secondary)]',
+                  ].join(' ')}
+                >
+                  {isCameraLive
+                    ? '연결됨'
+                    : mediaStatus === 'requesting'
+                      ? '연결 중'
+                      : '확인 필요'}
                 </p>
               </div>
             </div>
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-6 pt-16">
-              <p className="text-lg font-extrabold text-white">
-                {meeting?.influencer.influencerName ?? ''}
-              </p>
-              <p className="mt-1 text-sm text-slate-300">카메라 미리보기</p>
+
+            <div className="flex items-center gap-3">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-page)] text-[var(--color-text-secondary)]">
+                <Microphone aria-hidden size={21} weight="bold" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-[var(--color-text-tertiary)]">
+                    마이크
+                  </p>
+                  <p
+                    className={[
+                      'text-sm font-extrabold',
+                      isMicrophoneLive
+                        ? 'text-[var(--color-success)]'
+                        : 'text-[var(--color-text-secondary)]',
+                    ].join(' ')}
+                  >
+                    {isMicrophoneLive
+                      ? audioLevel > 0.55
+                        ? '입력 좋음'
+                        : audioLevel > 0.15
+                          ? '입력 보통'
+                          : '입력 대기'
+                      : mediaStatus === 'requesting'
+                        ? '연결 중'
+                        : '확인 필요'}
+                  </p>
+                </div>
+                {/* 마이크 입력 크기를 실시간 막대로 시각화한다 */}
+                <div
+                  aria-label={`마이크 입력 ${Math.round(audioLevel * 100)}%`}
+                  className="mt-2 flex items-end gap-1"
+                >
+                  {Array.from({ length: 16 }, (_, index) => (
+                    <span
+                      aria-hidden
+                      className={
+                        index / 16 < audioLevel
+                          ? 'h-2 flex-1 rounded-sm bg-[var(--color-primary-coral)]'
+                          : 'h-1.5 flex-1 rounded-sm bg-[var(--color-divider)]'
+                      }
+                      key={index}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </Card>

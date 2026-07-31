@@ -54,9 +54,22 @@ function roleLabel(role: LoginRole) {
   return '매니저'
 }
 
+/** 역할별 프로필(마이페이지) 경로를 돌려준다. */
+function profilePathFor(role: LoginRole) {
+  if (role === 'FAN') return '/fan/mypage/profile'
+  if (role === 'INFLUENCER' || role === 'SOLO_INFLUENCER') {
+    return '/influencer/mypage/profile'
+  }
+  return '/manager/mypage'
+}
+
+/** 상단 우측의 로그인 사용자 요약. 클릭하면 역할에 맞는 프로필 페이지로 이동한다. */
 function UserProfileSummary({ session }: { session: LoginResponse }) {
   return (
-    <span className="inline-flex items-center gap-2 text-left">
+    <Link
+      className="inline-flex items-center gap-2 text-left transition-colors hover:text-[var(--color-primary-coral)]"
+      to={profilePathFor(session.role)}
+    >
       <UserCircle
         aria-hidden="true"
         className="text-[var(--color-text-tertiary)]"
@@ -71,7 +84,7 @@ function UserProfileSummary({ session }: { session: LoginResponse }) {
           {roleLabel(session.role)}
         </span>
       </span>
-    </span>
+    </Link>
   )
 }
 

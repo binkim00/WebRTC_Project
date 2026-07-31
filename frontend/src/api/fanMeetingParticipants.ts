@@ -22,6 +22,10 @@ export type MeetingDetail = {
   application?: {
     capacity?: number
   }
+  operation?: {
+    /** 대기열(대기실) 오픈 일시. 준비실에서 대기열 폴링 시작 여부를 판단할 때 사용한다. */
+    queueOpenAt?: string
+  }
 }
 
 export type FanMeetingParticipant = {
@@ -221,6 +225,7 @@ export async function fetchMeetingDetail(
   const record = asRecord(root?.meeting) ?? root
   const influencer = asRecord(root?.influencer) ?? asRecord(record?.influencer)
   const application = asRecord(record?.application)
+  const operation = asRecord(record?.operation)
 
   if (!record || !influencer) {
     throw new TypeError('팬미팅 상세 응답 형식이 올바르지 않습니다.')
@@ -245,6 +250,11 @@ export async function fetchMeetingDetail(
             typeof application.capacity === 'number' && Number.isFinite(application.capacity)
               ? application.capacity
               : undefined,
+        }
+      : undefined,
+    operation: operation
+      ? {
+          queueOpenAt: readOptionalString(operation.queueOpenAt),
         }
       : undefined,
   }

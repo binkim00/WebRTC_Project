@@ -3,7 +3,6 @@ import {
   CalendarBlank,
   ChartBar,
   MagnifyingGlass,
-  Plus,
   UsersThree,
   VideoCamera,
 } from '@phosphor-icons/react'
@@ -124,7 +123,8 @@ export function InfluencerMeetingHistoryPage() {
       ) : null}
 
       <Card className="overflow-hidden">
-        <div className="flex flex-col gap-5 border-b border-[var(--color-divider)] p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
+        {/* 팬미팅명 키워드로 이력을 검색한다 */}
+        <div className="border-b border-[var(--color-divider)] p-5 sm:p-6">
           <form
             className="flex w-full flex-col items-end gap-3 sm:flex-row lg:max-w-2xl"
             onSubmit={handleSearch}
@@ -148,14 +148,6 @@ export function InfluencerMeetingHistoryPage() {
               검색
             </Button>
           </form>
-
-          {/* TODO: 새 팬미팅 생성 화면 연결 */}
-          <Button
-            className="w-full lg:w-auto"
-            leadingIcon={<Plus aria-hidden size={20} weight="bold" />}
-          >
-            새 팬미팅
-          </Button>
         </div>
 
         {loading ? (
