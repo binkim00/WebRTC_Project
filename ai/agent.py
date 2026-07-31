@@ -166,18 +166,26 @@ async def my_agent(ctx: JobContext) -> None:
             call.fan_identity, call.call_session_id,
         )
 
-        # 오디오 태스크 정리
-        if call.fan_audio_task and not call.fan_audio_task.done():
-            call.fan_audio_task.cancel()
-        if call.influencer_audio_task and not call.influencer_audio_task.done():
-            call.influencer_audio_task.cancel()
+        # 오디오 태스크 정리 — cancel 후 완전히 끝날 때까지 대기.
+        # (마지막 자막 insert가 끝나기 전에 요약이 조회되는 경쟁 조건 방지)
+        stt_tasks = [
+            t for t in (call.fan_audio_task, call.influencer_audio_task)
+            if t and not t.done()
+        ]
+        for t in stt_tasks:
+            t.cancel()
+        if stt_tasks:
+            await asyncio.gather(*stt_tasks, return_exceptions=True)
 
         # 어댑터 정리
         if call.fan_adapter:
             await call.fan_adapter.close()
         if call.influencer_adapter:
             await call.influencer_adapter.close()
-            
+
+        # 프로세서 정리 (httpx.AsyncClient close)
+        await call.processor.close()
+
         task = asyncio.create_task(_trigger_summary(call.call_session_id))
         pending_summaries.add(task)
         task.add_done_callback(pending_summaries.discard)
