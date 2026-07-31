@@ -1,7 +1,13 @@
-import { ArrowRightIcon, SignOutIcon } from '@phosphor-icons/react'
+import { ArrowRightIcon, SignOutIcon, UserCircle } from '@phosphor-icons/react'
 import { useEffect } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { AUTH_EXPIRED_EVENT, getAuthSession, logout, type LoginRole } from './api/auth'
+import {
+  AUTH_EXPIRED_EVENT,
+  getAuthSession,
+  logout,
+  type LoginResponse,
+  type LoginRole,
+} from './api/auth'
 import { TopNavigation } from './components'
 import { getRoleNavigation } from './layouts/roleNavigation'
 import { isVideoCallPath } from './router/routeState'
@@ -20,7 +26,7 @@ function canAccessRolePath(pathname: string, role: LoginRole) {
   }
 
   if (/^\/manager(?:\/|$)/.test(pathname)) {
-    return role === 'MANAGER' || role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
+    return role === 'MANAGER' || role === 'SOLO_INFLUENCER'
   }
 
   if (/^\/fan-meetings\/[^/]+\/(?:fans|statistics)\/?$/.test(pathname)) {
@@ -41,6 +47,34 @@ function isPublicEventPath(pathname: string) {
   return /^\/fan\/events(?:\/[^/]+)?\/?$/.test(pathname)
 }
 
+function roleLabel(role: LoginRole) {
+  if (role === 'FAN') return '팬'
+  if (role === 'INFLUENCER') return '인플루언서'
+  if (role === 'SOLO_INFLUENCER') return '솔로 인플루언서'
+  return '매니저'
+}
+
+function UserProfileSummary({ session }: { session: LoginResponse }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-left">
+      <UserCircle
+        aria-hidden="true"
+        className="text-[var(--color-text-tertiary)]"
+        size={28}
+        weight="duotone"
+      />
+      <span className="grid leading-tight">
+        <strong className="max-w-28 truncate text-sm text-[var(--color-text-primary)]">
+          {session.nickname || '회원'}
+        </strong>
+        <span className="text-xs font-medium text-[var(--color-text-tertiary)]">
+          {roleLabel(session.role)}
+        </span>
+      </span>
+    </span>
+  )
+}
+
 function App() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -51,7 +85,9 @@ function App() {
   const isAuthPage = isLoginPage || isSignupPage
   const isHomePage = pathname === '/'
   const isEditorialExamplePage = pathname === '/examples/yestalgia-home'
-  const isDeviceCheckPage = /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
+  const isDeviceCheckPage =
+    /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname) ||
+    /^\/influencer\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
   const authSession = getAuthSession()
   const isAuthenticated = authSession !== null
@@ -105,7 +141,7 @@ function App() {
               <span>입장 예정 팬미팅</span>
               <span aria-hidden="true" className="h-4 w-px bg-[var(--color-divider)]" />
               <strong className="text-[var(--color-text-primary)]">
-                서윤의 비밀 정원 팬미팅&nbsp;&nbsp; 오늘 19:00
+                선택한 팬미팅 장비 점검
               </strong>
             </p>
           ) : undefined
@@ -113,14 +149,17 @@ function App() {
         actions={
           isHomePage ? (
             <nav aria-label="메인 메뉴" className="flex items-center gap-7 text-sm font-semibold">
-              {isAuthenticated ? (
-                <button
-                  className="font-semibold hover:text-[var(--color-primary-coral)]"
-                  onClick={() => void handleLogout()}
-                  type="button"
-                >
-                  로그아웃
-                </button>
+              {authSession ? (
+                <>
+                  <UserProfileSummary session={authSession} />
+                  <button
+                    className="font-semibold hover:text-[var(--color-primary-coral)]"
+                    onClick={() => void handleLogout()}
+                    type="button"
+                  >
+                    로그아웃
+                  </button>
+                </>
               ) : (
                 <>
                   <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
@@ -167,14 +206,17 @@ function App() {
               이벤트 둘러보기
               <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
             </Link>
-          ) : isAuthenticated ? (
-            <button
-              className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-              onClick={() => void handleLogout()}
-              type="button"
-            >
-              로그아웃
-            </button>
+          ) : authSession ? (
+            <div className="flex items-center gap-5">
+              <UserProfileSummary session={authSession} />
+              <button
+                className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                onClick={() => void handleLogout()}
+                type="button"
+              >
+                로그아웃
+              </button>
+            </div>
           ) : undefined
         }
         brand="MELLY"

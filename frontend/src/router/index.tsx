@@ -18,14 +18,14 @@ import {
   RouterErrorPage,
 } from '../pages/errors/ErrorRoutePages'
 import {
-  FanApplicationResultPage,
-  FanApplicationsPage,
-  FanEventDetailPage,
-  FanEventListPage,
   FanMeetingCallPage,
-  FanMeetingWaitingPage,
-  FanProfilePage,
 } from '../pages/fan/FanRoutePages'
+import { FanEventListPage } from '../pages/fan/FanEventListPage'
+import { FanEventDetailPage } from '../pages/fan/FanEventDetailPage'
+import { FanApplicationResultPage } from '../pages/fan/FanApplicationResultPage'
+import { FanProfilePage } from '../pages/fan/FanProfilePage'
+import { FanApplicationsPage } from '../pages/fan/FanApplicationsPage'
+import { FanMeetingWaitingPage } from '../pages/fan/FanMeetingWaitingPage'
 import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
 import { FanMeetingParticipantsPage } from '../pages/common/FanMeetingParticipantsPage'
 import { ManagerFanListPage } from '../pages/manager/ManagerFanListPage'
@@ -34,15 +34,16 @@ import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
 import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
 import {
   InfluencerMeetingCallPage,
-  InfluencerMeetingHistoryPage,
-  InfluencerProfilePage,
 } from '../pages/influencer/InfluencerRoutePages'
 import { InfluencerMeetingReadyPage } from '../pages/influencer/InfluencerMeetingReadyPage'
+import { InfluencerProfilePage } from '../pages/influencer/InfluencerProfilePage'
+import { InfluencerMeetingHistoryPage } from '../pages/influencer/InfluencerMeetingHistoryPage'
 import {
   ManagerApplicationsPage,
-  ManagerEventFormPage,
+  ManagerEventCreatePage,
+  ManagerEventEditPage,
   ManagerEventListPage,
-  ManagerMeetingFormPage,
+  ManagerMeetingSettingsPage,
   ManagerMyPage,
   ManagerNoticesPage,
   ManagerRiskIncidentPage,
@@ -55,6 +56,10 @@ import {
 } from '../pages/manager/ManagerManagementHubPage'
 import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
 
+/**
+ * 브라우저 URL과 페이지 컴포넌트를 연결하는 애플리케이션 최상위 라우터다.
+ * 공통 App 아래에 인증·역할별 Layout을 중첩하고 각 Layout의 Outlet에 자식 화면을 렌더링한다.
+ */
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -87,8 +92,32 @@ export const router = createBrowserRouter([
         Component: FanMeetingCompletePage,
       },
       {
+        path: 'fan/fan-meetings/:fanMeetingId/waiting',
+        Component: FanMeetingWaitingPage,
+      },
+      {
         path: 'fan/mypage/fan-meetings',
         Component: FanMeetingListPage,
+      },
+      {
+        path: 'fan/mypage/profile',
+        Component: FanProfilePage,
+      },
+      {
+        path: 'fan/mypage/applications',
+        Component: FanApplicationsPage,
+      },
+      {
+        path: 'fan/events',
+        Component: FanEventListPage,
+      },
+      {
+        path: 'fan/events/:eventId',
+        Component: FanEventDetailPage,
+      },
+      {
+        path: 'fan/events/:eventId/application-result',
+        Component: FanApplicationResultPage,
       },
       {
         path: 'fan-meetings/:fanMeetingId',
@@ -112,6 +141,14 @@ export const router = createBrowserRouter([
         Component: InfluencerMyMeetingPage,
       },
       {
+        path: 'influencer/mypage/profile',
+        Component: InfluencerProfilePage,
+      },
+      {
+        path: 'influencer/mypage/fan-meetings',
+        Component: InfluencerMeetingHistoryPage,
+      },
+      {
         path: 'rtc/livekit-test',
         Component: LiveKitTestPage,
       },
@@ -122,6 +159,10 @@ export const router = createBrowserRouter([
       {
         path: 'influencer/fan-meetings/:fanMeetingId/fans',
         Component: FanMeetingParticipantsPage,
+      },
+      {
+        path: 'influencer/fan-meetings/:fanMeetingId/device-check',
+        Component: DeviceCheckPage,
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/ready',
@@ -140,36 +181,12 @@ export const router = createBrowserRouter([
             element: <Navigate replace to="events" />,
           },
           {
-            path: 'events',
-            Component: FanEventListPage,
-          },
-          {
-            path: 'events/:eventId',
-            Component: FanEventDetailPage,
-          },
-          {
-            path: 'events/:eventId/application-result',
-            Component: FanApplicationResultPage,
-          },
-          {
-            path: 'fan-meetings/:fanMeetingId/waiting',
-            Component: FanMeetingWaitingPage,
-          },
-          {
             path: 'fan-meetings/:fanMeetingId/call',
             Component: FanMeetingCallPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: FanMeetingCallPage,
-          },
-          {
-            path: 'mypage/profile',
-            Component: FanProfilePage,
-          },
-          {
-            path: 'mypage/applications',
-            Component: FanApplicationsPage,
           },
         ],
       },
@@ -188,14 +205,6 @@ export const router = createBrowserRouter([
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
             Component: InfluencerMeetingCallPage,
-          },
-          {
-            path: 'mypage/fan-meetings',
-            Component: InfluencerMeetingHistoryPage,
-          },
-          {
-            path: 'mypage/profile',
-            Component: InfluencerProfilePage,
           },
         ],
       },
@@ -217,11 +226,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'events/new',
-            element: <ManagerEventFormPage mode="create" />,
+            Component: ManagerEventCreatePage,
           },
           {
             path: 'events/:eventId/edit',
-            element: <ManagerEventFormPage mode="edit" />,
+            Component: ManagerEventEditPage,
           },
           {
             path: 'events/:eventId/applications',
@@ -237,11 +246,12 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/new',
-            element: <ManagerMeetingFormPage mode="create" />,
+            // 예전 팬미팅 생성 주소를 북마크한 사용자를 실제 이벤트 생성 흐름으로 보낸다.
+            element: <Navigate replace to="/manager/events/new" />,
           },
           {
             path: 'fan-meetings/:fanMeetingId/edit',
-            element: <ManagerMeetingFormPage mode="edit" />,
+            Component: ManagerMeetingSettingsPage,
           },
           {
             path: 'fan-meetings/:fanMeetingId/notices',

@@ -16,6 +16,12 @@ const fanNavigation: readonly RoleNavigationItem[] = [
 ]
 
 const influencerNavigation: readonly RoleNavigationItem[] = [
+  { label: '나의 팬미팅', to: '/influencer/fan-meetings' },
+  { label: '내 프로필', to: '/influencer/mypage/profile' },
+  { label: '팬미팅 이력', to: '/influencer/mypage/fan-meetings' },
+]
+
+const soloInfluencerNavigation: readonly RoleNavigationItem[] = [
   { label: '팬미팅 관리', to: '/manager/fan-meetings' },
   { label: '홍보 및 응모 관리', to: '/manager/events' },
   { label: '내 프로필', to: '/influencer/mypage/profile' },
@@ -33,8 +39,9 @@ export function getRoleNavigation(role: LoginRole): readonly RoleNavigationItem[
     case 'FAN':
       return fanNavigation
     case 'INFLUENCER':
-    case 'SOLO_INFLUENCER':
       return influencerNavigation
+    case 'SOLO_INFLUENCER':
+      return soloInfluencerNavigation
     case 'MANAGER':
       return managerNavigation
   }
