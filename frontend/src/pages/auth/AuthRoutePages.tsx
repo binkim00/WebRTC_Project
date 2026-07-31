@@ -8,10 +8,10 @@ import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
+  isSignupRole,
   login,
   saveAuthSession,
   signup,
-  type LoginRole,
   type PreferredLanguage,
   type SignupRequest,
   type SignupRole,
@@ -40,11 +40,8 @@ const roleOptions = [
   { label: '팬', value: 'FAN' },
   { label: '인플루언서', value: 'INFLUENCER' },
   { label: '매니저', value: 'MANAGER' },
+  { label: '솔로 인플루언서', value: 'SOLO_INFLUENCER' },
 ] as const
-
-function isSignupRole(value: string): value is SignupRole {
-  return value === 'FAN' || value === 'INFLUENCER' || value === 'MANAGER'
-}
 
 function isPreferredLanguage(value: string): value is PreferredLanguage {
   return value === 'KOREAN' || value === 'ENGLISH'
@@ -56,18 +53,6 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [submitError, setSubmitError] = useState<string>()
   const [notice, setNotice] = useState<string>()
-
-  function getPostLoginPath(role: LoginRole) {
-    switch (role) {
-      case 'FAN':
-        return '/fan/events'
-      case 'INFLUENCER':
-      case 'SOLO_INFLUENCER':
-        return '/influencer/mypage/profile'
-      case 'MANAGER':
-        return '/manager/events'
-    }
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -84,7 +69,13 @@ export function LoginPage() {
       })
 
       saveAuthSession(response, formData.get('remember') === 'on')
-      navigate(getPostLoginPath(response.role), { replace: true })
+      const landingPath =
+        response.role === 'FAN'
+          ? '/fan/mypage/fan-meetings?status=upcoming'
+          : response.role === 'INFLUENCER'
+            ? '/influencer/fan-meetings'
+            : '/manager/fan-meetings'
+      navigate(landingPath, { replace: true })
     } catch (error: unknown) {
       setSubmitError(
         error instanceof ApiError || error instanceof TypeError

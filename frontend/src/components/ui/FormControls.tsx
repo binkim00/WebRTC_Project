@@ -373,7 +373,7 @@ export function RadioGroup({
         {legend}
         {required ? <span className="ml-1 text-red-600">*</span> : null}
       </legend>
-      <div className={cn(appearance === 'button' ? 'grid gap-2 sm:grid-cols-3' : 'grid gap-3')}>
+      <div className={cn(appearance === 'button' ? 'grid gap-2 sm:grid-cols-2' : 'grid gap-3')}>
         {options.map((option) => {
           const optionId = `${groupId}-${option.value}`
           return (

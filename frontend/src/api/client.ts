@@ -1,8 +1,14 @@
 import { ApiError } from './ApiError'
+import {
+  AUTH_EXPIRED_EVENT,
+  clearAuthSession,
+  getAuthSession,
+  isLoginResponse,
+  replaceAuthSession,
+  type LoginResponse,
+} from './authSession'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-const AUTH_SESSION_KEY = 'melly-auth-session'
-const AUTH_SAVED_AT_KEY = 'melly-auth-saved-at'
 
 type ErrorResponse = {
   code?: string
@@ -14,37 +20,7 @@ export type ApiRequestOptions = RequestInit & {
   authToken?: string
 }
 
-function getStoredAccessToken(): string | undefined {
-  const storage = window.localStorage.getItem(AUTH_SESSION_KEY)
-    ? window.localStorage
-    : window.sessionStorage
-  const serialized = storage.getItem(AUTH_SESSION_KEY)
-
-  if (!serialized) return undefined
-
-  try {
-    const session: unknown = JSON.parse(serialized)
-    if (typeof session !== 'object' || session === null) return undefined
-    const record = session as Record<string, unknown>
-    const accessToken = record.accessToken
-    const expiresIn = record.expiresIn
-    const savedAt = Number(storage.getItem(AUTH_SAVED_AT_KEY))
-    if (
-      typeof expiresIn !== 'number' ||
-      !Number.isFinite(savedAt) ||
-      Date.now() >= savedAt + expiresIn * 1000
-    ) {
-      window.localStorage.removeItem(AUTH_SESSION_KEY)
-      window.sessionStorage.removeItem(AUTH_SESSION_KEY)
-      window.localStorage.removeItem(AUTH_SAVED_AT_KEY)
-      window.sessionStorage.removeItem(AUTH_SAVED_AT_KEY)
-      return undefined
-    }
-    return typeof accessToken === 'string' && accessToken.trim() ? accessToken : undefined
-  } catch {
-    return undefined
-  }
-}
+let refreshPromise: Promise<LoginResponse | null> | null = null
 
 async function readErrorResponse(response: Response): Promise<ErrorResponse> {
   const text = await response.text()
@@ -76,28 +52,72 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
+  return requestWithRefresh<T>(path, options, true)
+}
+
+async function refreshStoredSession(): Promise<LoginResponse | null> {
+  if (refreshPromise) return refreshPromise
+
+  const session = getAuthSession()
+  if (!session) return null
+
+  refreshPromise = fetch(`${API_URL}/api/v1/auth/reissue`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: session.refreshToken }),
+  })
+    .then(async (response) => {
+      if (!response.ok) return null
+
+      const data: unknown = await response.json()
+      if (!isLoginResponse(data)) return null
+
+      replaceAuthSession(data)
+      return data
+    })
+    .catch(() => null)
+    .finally(() => {
+      refreshPromise = null
+    })
+
+  return refreshPromise
+}
+
+async function requestWithRefresh<T>(
+  path: string,
+  options: ApiRequestOptions,
+  allowRefresh: boolean,
+): Promise<T> {
   const { authToken, ...requestOptions } = options
-  const resolvedAuthToken = authToken ?? getStoredAccessToken()
 
   const response = await fetch(`${API_URL}${path}`, {
     ...requestOptions,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(resolvedAuthToken ? { Authorization: `Bearer ${resolvedAuthToken}` } : {}),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...requestOptions.headers,
     },
   })
 
+  if (response.status === 401 && authToken && allowRefresh) {
+    const refreshedSession = await refreshStoredSession()
+
+    if (refreshedSession) {
+      return requestWithRefresh<T>(
+        path,
+        { ...options, authToken: refreshedSession.accessToken },
+        false,
+      )
+    }
+
+    clearAuthSession()
+    window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+  }
+
   if (!response.ok) {
     const error = await readErrorResponse(response)
-    if (response.status === 401 && path !== '/api/v1/auth/login') {
-      window.localStorage.removeItem(AUTH_SESSION_KEY)
-      window.sessionStorage.removeItem(AUTH_SESSION_KEY)
-      window.localStorage.removeItem(AUTH_SAVED_AT_KEY)
-      window.sessionStorage.removeItem(AUTH_SAVED_AT_KEY)
-      window.location.replace('/login')
-    }
 
     throw new ApiError(
       response.status,
@@ -107,5 +127,18 @@ export async function apiRequest<T = unknown>(
     )
   }
 
-  return response.json() as Promise<T>
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const text = await response.text()
+  if (!text) {
+    return undefined as T
+  }
+
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return text as T
+  }
 }

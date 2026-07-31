@@ -10,6 +10,10 @@ import {
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import previewCameraImage from '../../assets/call-preview-remote.jpg'
+import { ApiError } from '../../api/ApiError'
+import { getAuthSession } from '../../api/authSession'
+import { enterQueue } from '../../api/queue'
+import { fetchMeetingDetail } from '../../api/fanMeetingParticipants'
 import {
   AlertBanner,
   Button,
@@ -85,6 +89,9 @@ export function DeviceCheckPage() {
   const [searchParams] = useSearchParams()
   const isVisualPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
   const [isPlayingTestSound, setIsPlayingTestSound] = useState(false)
+  const [isEnteringQueue, setIsEnteringQueue] = useState(false)
+  const [queueError, setQueueError] = useState<string>()
+  const [meetingTitle, setMeetingTitle] = useState<string>()
   const {
     audioLevel,
     cameras,
@@ -108,6 +115,20 @@ export function DeviceCheckPage() {
     }
   }, [isVisualPreview, start])
 
+  useEffect(() => {
+    if (!fanMeetingId?.trim() || isVisualPreview) return
+
+    const controller = new AbortController()
+    const session = getAuthSession()
+    if (!session) return () => controller.abort()
+
+    void fetchMeetingDetail(fanMeetingId, session.accessToken, controller.signal)
+      .then((meeting) => setMeetingTitle(meeting.title))
+      .catch(() => undefined)
+
+    return () => controller.abort()
+  }, [fanMeetingId, isVisualPreview])
+
   if (!fanMeetingId?.trim()) {
     return (
       <InvalidRouteState
@@ -117,6 +138,10 @@ export function DeviceCheckPage() {
     )
   }
 
+  const meetingId = fanMeetingId
+  const session = getAuthSession()
+  const isInfluencer =
+    session?.role === 'INFLUENCER' || session?.role === 'SOLO_INFLUENCER'
   const currentStatus = isVisualPreview ? statusContent.ready : statusContent[status]
   const isRequesting = status === 'requesting'
   const isReady = status === 'ready' || isVisualPreview
@@ -200,10 +225,56 @@ export function DeviceCheckPage() {
     }
   }
 
+  async function handleEnterQueue() {
+    if (isEnteringQueue) return
+
+    if (!session) {
+      setQueueError('팬미팅에 입장하려면 먼저 로그인해 주세요.')
+      return
+    }
+
+    if (session.role === 'INFLUENCER' || session.role === 'SOLO_INFLUENCER') {
+      navigate(`/influencer/fan-meetings/${encodeURIComponent(meetingId)}/ready`)
+      return
+    }
+
+    if (session.role !== 'FAN') {
+      setQueueError('팬 또는 인플루언서 계정으로 로그인해 주세요.')
+      return
+    }
+
+    setIsEnteringQueue(true)
+    setQueueError(undefined)
+
+    try {
+      await enterQueue(meetingId, session.accessToken)
+      navigate(`/fan/fan-meetings/${encodeURIComponent(meetingId)}/waiting`)
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        navigate(`/fan/fan-meetings/${encodeURIComponent(meetingId)}/waiting`)
+        return
+      }
+
+      if (error instanceof ApiError && error.status === 403) {
+        setQueueError('확정 참가자로 등록된 팬만 대기실에 입장할 수 있습니다.')
+      } else {
+        setQueueError(
+          error instanceof ApiError || error instanceof TypeError
+            ? error.message
+            : '대기실에 입장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        )
+      }
+    } finally {
+      setIsEnteringQueue(false)
+    }
+  }
+
   return (
     <div className="grid gap-8">
       <header className="max-w-3xl">
-        <p className="text-sm font-bold text-[var(--color-text-secondary)]">팬미팅 입장 전</p>
+        <p className="text-sm font-bold text-[var(--color-text-secondary)]">
+          {meetingTitle ?? '팬미팅'} 입장 전
+        </p>
         <h1 className="mt-2 text-4xl font-black tracking-[-0.035em] text-[var(--color-text-primary)] sm:text-[42px]">
           장비를 점검해 주세요
         </h1>
@@ -460,17 +531,26 @@ export function DeviceCheckPage() {
             </Button>
           </section>
 
+          {queueError ? (
+            <AlertBanner title="팬미팅 입장 실패" variant="error">
+              {queueError}
+            </AlertBanner>
+          ) : null}
+
           <Button
             className="w-full shadow-[var(--shadow-final-cta)]"
-            disabled={!allReady}
-            onClick={() => navigate(`/fan/fan-meetings/${encodeURIComponent(fanMeetingId)}/waiting`)}
+            disabled={!allReady || isEnteringQueue}
+            loading={isEnteringQueue}
+            onClick={() => void handleEnterQueue()}
             size="lg"
             trailingIcon={<ArrowRightIcon aria-hidden="true" size={20} weight="bold" />}
           >
-            팬미팅 입장하기
+            {isInfluencer ? '팬미팅 준비실로 이동' : '대기실 입장하기'}
           </Button>
           <p className="-mt-2 text-center text-xs text-[var(--color-text-secondary)]">
-            입장 후에도 팬미팅 화면에서 장비를 변경할 수 있어요.
+            {isInfluencer
+              ? '장비 점검을 완료하면 현재 팬을 확인하는 준비실로 이동합니다.'
+              : '장비 점검을 완료하면 대기 화면으로 이동합니다.'}
           </p>
           {!isReady ? (
             <Button loading={isRequesting} onClick={() => void start()} variant="ghost">
