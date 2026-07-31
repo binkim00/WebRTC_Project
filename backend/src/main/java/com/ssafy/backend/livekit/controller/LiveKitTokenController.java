@@ -17,12 +17,20 @@ public class LiveKitTokenController {
 
     private final LiveKitTokenService tokenService;
 
+    /** 테스트용 LiveKit 토큰 생성 서비스를 주입받는다. */
     public LiveKitTokenController(LiveKitTokenService tokenService) {
         this.tokenService = tokenService;
     }
 
+    /**
+     * 검증된 사용자 식별자와 attributes로 테스트 방 입장용 LiveKit 토큰을 발급한다.
+     *
+     * @param request 테스트 참가자와 attributes 정보
+     * @return 테스트 방 입장에 필요한 LiveKit 연결 정보
+     */
     @PostMapping("/test-token")
     public LiveKitTokenResponse createTestToken(@Valid @RequestBody LiveKitTokenRequest request) {
-        return tokenService.createTestToken(request.identity(), request.displayName());
+        return tokenService.createTestToken(
+                request.identity(), request.displayName(), request.attributes());
     }
 }

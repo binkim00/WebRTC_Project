@@ -1,8 +1,26 @@
 port: 7880
 
+log_level: info
+
 rtc:
   tcp_port: 7881
-  port_range_start: 50000
-  port_range_end: 50100
+  # 미디어를 단일 UDP 포트로 다중화한다. 운영(livekit.prod.yaml)과 같은 방식이며
+  # 포트 범위를 쓰는 것보다 컨테이너 포트 매핑이 단순하고 실수가 적다.
+  udp_port: 7882
+  # 로컬에서는 외부 IP 탐색을 하지 않는다.
+  # 대신 브라우저에게 광고할 주소를 docker-compose.local.yml 의 --node-ip 로 지정한다.
+  # 이 값을 지정하지 않으면 컨테이너 내부 IP(예: 172.17.0.2)를 광고해
+  # 호스트 브라우저가 미디어를 받지 못한다.
   use_external_ip: false
 
+# 로컬 개발용 고정 키다. LiveKit 서버 키는 이 파일에서만 관리한다.
+# compose 에서 LIVEKIT_KEYS 환경변수로 덮어쓰면 아래 webhook.api_key 가 참조하는
+# 키가 사라져 "api_key is required to use webhooks" 로 기동에 실패한다.
+# 백엔드 .env 에도 이 키와 시크릿을 그대로 넣어야 발급한 토큰이 수락된다.
+keys:
+  devkey: melly_local_dev_secret_1234567890abcdef
+
+webhook:
+  api_key: devkey
+  urls:
+    - http://host.docker.internal:8080/api/v1/livekit/webhook

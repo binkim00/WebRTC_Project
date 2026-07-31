@@ -6,6 +6,9 @@ translated_text는 항상 None.
 
 import asyncio
 import logging
+import os
+from google.oauth2 import service_account
+from google.cloud import speech_v1 as speech
 from datetime import datetime, timezone
 
 from google.cloud import speech_v1 as speech
@@ -14,18 +17,22 @@ from stt.base import STTAdapter, FinalTranscript
 
 logger = logging.getLogger(__name__)
 
-
+# 한국인 인플 - 한국인 팬 용 오디오->텍스트용 STT
 class GoogleSTTAdapter(STTAdapter):
 
     def __init__(self):
-        self._client = speech.SpeechAsyncClient()
-        self._closed = False
+        credentials = service_account.Credentials.from_service_account_file(
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        self._client = speech.SpeechAsyncClient(credentials=credentials)
+        self._closed = False #종료여부 플래그
 
     async def transcribe(
         self,
-        audio_stream,
-        language: str,
-        on_final: callable,
+        audio_stream, #구독 중인 오디오
+        language: str, #사용하는 언어
+        on_final: callable, #전체 문장이면 call
     ) -> None:
         """
         AudioStream → Google STT streaming API → concluded 시 on_final 콜백.
@@ -36,6 +43,15 @@ class GoogleSTTAdapter(STTAdapter):
             sample_rate_hertz=48000,
             language_code=self._to_google_lang(language),
             enable_automatic_punctuation=True,
+            model="latest_long",       # 긴 대화용 최신 모델
+            use_enhanced=True,         # enhanced 모델 사용
+            #     speech_contexts=[
+            #     speech.SpeechContext(
+            #         phrases=["팬미팅", "사인회", "영통", "인플루언서"],
+            #         boost=10.0,
+            #     )
+            # ],
+            
         )
         streaming_config = speech.StreamingRecognitionConfig(
             config=config,
@@ -51,8 +67,10 @@ class GoogleSTTAdapter(STTAdapter):
             async for audio_event in audio_stream:
                 if self._closed:
                     break
+                #LiveKit 오디오 프레임에서 바이트 데이터를 꺼냄
                 frame = audio_event.frame
                 pcm_data = frame.data.tobytes()
+                #오디오 바이트를 Google STT 요청으로 감싸서 내보냄
                 yield speech.StreamingRecognizeRequest(
                     audio_content=pcm_data
                 )
@@ -68,12 +86,12 @@ class GoogleSTTAdapter(STTAdapter):
                 for result in response.results:
                     if result.is_final:
                         text = result.alternatives[0].transcript
-                        if text.strip():
+                        if text.strip(): #.strip() 공백제거
                             transcript = FinalTranscript(
                                 text=text,
                                 language=language,
                                 spoken_at=datetime.now(timezone.utc),
-                                translated_text=None,
+                                translated_text=None, # 한-한 미팅인 경우 번역 필요 없음
                                 translated_lang=None,
                             )
                             await on_final(transcript)

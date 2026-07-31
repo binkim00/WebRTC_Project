@@ -28,12 +28,14 @@ class SubtitleProcessor:
         *,
         call_session_id: int,
         local_participant: rtc.LocalParticipant,
-        spring_internal_url: str,
-        detect_fn: callable,           # async (text, lang) -> dict | None
+        pool,
+        spring_internal_url: str | None = None,
+        detect_fn: callable | None = None,         # async (text, lang) -> dict | None
         sequence_counters: dict,
     ):
         self.call_session_id = call_session_id
         self.local_participant = local_participant
+        self.pool = pool
         self.spring_url = spring_internal_url
         self._detect = detect_fn
         self._seq = sequence_counters
@@ -43,19 +45,21 @@ class SubtitleProcessor:
         self,
         transcript: FinalTranscript,
         speaker_id: str,
-        speaker_role: str,      # "host" | "fan"
+        speaker_role: str,      # "INFLUENCER" | "FAN"
         target_lang: str,       # 상대방 언어 (push용)
     ) -> None:
         """
         concluded 1건 처리.
         번역은 이미 transcript에 들어있으니 INSERT 한 번으로 끝.
         """
-        # 시퀀스 채번
-        self._seq[speaker_id] = self._seq.get(speaker_id, 0) + 1
-        seq = self._seq[speaker_id]
+        # 시퀀스 채번 — call_session 단위로 화자 구분 없이 1씩 증가
+        # (DB unique key가 (call_session_id, sequence)라 화자별로 나누면 충돌)
+        self._seq["sequence"] = self._seq.get("sequence", 0) + 1
+        seq = self._seq["sequence"]
 
         # 1. ai_subtitle INSERT (원문 + 번역 한 번에)
         subtitle_id = await queries.insert_subtitle(
+            pool=self.pool,
             call_session_id=self.call_session_id,
             sequence=seq,
             speaker_id=speaker_id,
@@ -67,14 +71,15 @@ class SubtitleProcessor:
             translated_lang=transcript.translated_lang,
         )
 
-        # 2. 감지 (백그라운드)
-        asyncio.create_task(
-            self._detect_and_notify(
-                subtitle_id=subtitle_id,
-                text=transcript.text,
-                lang=transcript.language,
+        # 2. 감지 (백그라운드) — detect_fn이 설정된 경우에만
+        if self._detect is not None:
+            asyncio.create_task(
+                self._detect_and_notify(
+                    subtitle_id=subtitle_id,
+                    text=transcript.text,
+                    lang=transcript.language,
+                )
             )
-        )
 
         # 3. Data Channel push
         payload = json.dumps({

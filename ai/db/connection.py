@@ -15,7 +15,7 @@ async def init_pool() -> None:
     _pool = await aiomysql.create_pool(
         host=os.environ["DB_HOST"],
         port=int(os.environ.get("DB_PORT", 3306)),
-        user=os.environ["DB_USER"],
+        user=os.environ["DB_USERNAME"],
         password=os.environ["DB_PASSWORD"],
         db=os.environ["DB_NAME"],
         minsize=1,
