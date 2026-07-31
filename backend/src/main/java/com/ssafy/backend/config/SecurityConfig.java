@@ -169,6 +169,22 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/community/posts/*/comments",
                                 "/api/v1/comments/*/reports").authenticated()
 
+                        // 녹화 재생·다운로드 (REC-003)
+                        // 브라우저 video 태그는 Authorization 헤더를 보낼 수 없어 URL의 서명 토큰으로
+                        // 인가한다. 토큰 검증과 소유자 확인은 RecordingQueryService 가 수행한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/recordings/*/content").permitAll()
+                        // 녹화 업로드·조회 (REC-001, REC-002, REC-004)
+                        // 녹화는 통화에 참여한 팬 본인만 다룰 수 있으므로 FAN 역할로 제한하고
+                        // 통화 참여자 본인 여부는 서비스 계층에서 다시 검증한다.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/call-sessions/*/recordings/upload",
+                                "/api/v1/recordings/*/download-url")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/recordings/*",
+                                "/api/v1/users/me/recordings")
+                                .hasRole("FAN")
+
                         // AI 요약·모니터링 (AI-001, AI-002, AI-003)
                         .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/summary")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER")
