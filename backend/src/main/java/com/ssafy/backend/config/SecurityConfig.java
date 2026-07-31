@@ -188,6 +188,12 @@ public class SecurityConfig {
                                 "/api/v1/users/me/recordings")
                                 .hasRole("FAN")
 
+                        // 인플루언서 탐색 (INF-001, INF-002)
+                        // 공개 API이며, 로그인 팬의 팔로우 여부는 서비스 계층에서 선택적으로 채운다.
+                        // 위쪽 /influencers/me/** 규칙보다 뒤에 두어 기존 권한 규칙을 가리지 않는다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/influencers",
+                                "/api/v1/influencers/*").permitAll()
+
                         // AI 요약·모니터링 (AI-001, AI-002, AI-003)
                         .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/summary")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER")
