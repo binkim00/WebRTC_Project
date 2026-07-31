@@ -30,9 +30,12 @@ spring:
 
   servlet:
     multipart:
-      # 녹화 파일 최대 크기는 2GB이며 요청 전체도 같은 한도를 적용한다.
+      # 녹화 파일 자체의 최대 크기는 2GB다.
       max-file-size: ${RECORDING_MAX_FILE_SIZE:2GB}
-      max-request-size: ${RECORDING_MAX_REQUEST_SIZE:2GB}
+      # 요청 전체 한도는 파일 크기에 multipart 봉투(경계 문자열·파트 헤더)를 더한 값이라
+      # 파일 한도와 같게 두면 정확히 2GB인 파일이 거부된다. 실측 오버헤드는 파트 2개에
+      # 312바이트였고 파일명 길이에 따라 변하므로 1MB 여유를 둔다.
+      max-request-size: ${RECORDING_MAX_REQUEST_SIZE:2049MB}
       # 2GB 파일을 메모리에 담지 않도록 임계값을 0으로 두어 항상 디스크로 스풀한다.
       file-size-threshold: 0
 
