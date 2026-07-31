@@ -60,11 +60,14 @@ public class AuthController {
     /**
      * 유효한 Refresh Token을 새 Access·Refresh Token 쌍으로 교체한다.
      *
+     * <p>경로는 API 명세(AUTH-003)의 {@code POST /api/v1/auth/reissue}를 따른다.
+     * 이전 경로 {@code /api/v1/auth/refresh}는 프론트엔드 연동 전이므로 남겨 두지 않는다.
+     *
      * @param request 현재 Refresh Token을 담은 요청
      * @return 회전된 토큰과 사용자 정보
      */
-    @PostMapping("/refresh")
-    public LoginResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
+    @PostMapping("/reissue")
+    public LoginResponse reissue(@Valid @RequestBody RefreshTokenRequest request) {
         return refreshTokenService.refresh(request);
     }
 

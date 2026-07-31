@@ -127,9 +127,9 @@ export function FanMeetingWaitingPage() {
             <p className="text-5xl font-black text-[var(--color-primary-coral)]">
               {snapshot.position}번
             </p>
-            <p>앞에 {snapshot.peopleAhead}명이 기다리고 있습니다.</p>
+            <p>앞에 {snapshot.aheadCount}명이 기다리고 있습니다.</p>
             <p className="text-sm text-[var(--color-text-secondary)]">
-              상태: {snapshot.status}
+              상태: {snapshot.displayStatus}
             </p>
           </>
         ) : error ? null : (

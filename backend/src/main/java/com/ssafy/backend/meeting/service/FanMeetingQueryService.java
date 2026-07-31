@@ -159,7 +159,7 @@ public class FanMeetingQueryService {
             throw new BusinessException(ErrorCode.FAN_MEETING_NOT_FOUND);
         }
 
-        MeetingApplicationSetting application = requireApplicationSetting(meetingId);
+        MeetingApplicationSetting application = findApplicationSetting(meetingId);
         MeetingOperationSetting operation = requireOperationSetting(meetingId);
         ApplicationStatus applicationStatus = findApplicationStatus(meetingId, viewer);
         Participant participant = findParticipant(meetingId, viewer);
@@ -210,7 +210,7 @@ public class FanMeetingQueryService {
         Long meetingId = meeting.getId();
         return FanMeetingSummaryResponse.of(
                 meeting,
-                requireApplicationSetting(meetingId),
+                findApplicationSetting(meetingId),
                 findApplicationStatus(meetingId, viewer),
                 applicationRepository.countByMeeting_IdAndStatusNot(
                         meetingId, ApplicationStatus.WITHDRAWN
@@ -257,6 +257,7 @@ public class FanMeetingQueryService {
         if (viewer == null || viewer.getRole() != UserRole.FAN
                 || (applicationStatus != null
                 && applicationStatus != ApplicationStatus.WITHDRAWN)
+                || application == null
                 || !application.isEnabled()
                 || meeting.getStatus() != FanMeetingStatus.APPLICATION_OPEN) {
             return false;
@@ -280,10 +281,18 @@ public class FanMeetingQueryService {
         return openAt == null || !LocalDateTime.now(clock).isBefore(openAt);
     }
 
-    /** 응모 설정을 조회하고 없으면 공통 비즈니스 예외를 발생시킨다. */
-    private MeetingApplicationSetting requireApplicationSetting(Long meetingId) {
-        return applicationSettingRepository.findById(meetingId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.APPLICATION_SETTING_NOT_FOUND));
+    /**
+     * 응모 설정을 조회하고 없으면 null을 반환한다.
+     *
+     * <p>조회 API는 응모 설정이 없는 팬미팅을 만나도 실패하지 않아야 한다.
+     * 목록에서 한 건이라도 예외를 던지면 페이지 전체가 실패하기 때문이다.
+     * 응모 설정이 없으면 응모를 사용하지 않는 팬미팅으로 취급한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @return 응모 설정이며 없으면 null
+     */
+    private MeetingApplicationSetting findApplicationSetting(Long meetingId) {
+        return applicationSettingRepository.findById(meetingId).orElse(null);
     }
 
     /** 운영 설정을 조회하고 없으면 공통 비즈니스 예외를 발생시킨다. */

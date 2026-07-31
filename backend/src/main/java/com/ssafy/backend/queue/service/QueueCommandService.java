@@ -91,16 +91,16 @@ public class QueueCommandService {
     public QueueEnterResponse enter(Long meetingId, AuthenticatedUser principal) {
         User user = currentUserService.requireActiveUser(principal);
         initializationService.ensureInitializedForParticipant(meetingId, user.getId());
-        QueueEntry entry = queueEntryRepository
-                .findByMeeting_IdAndParticipant_Fan_Id(meetingId, user.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPANT_NOT_FOUND));
         LocalDateTime now = LocalDateTime.now(clock);
         MeetingOperationSetting setting = operationSettingRepository.findById(meetingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_SETTING_NOT_FOUND));
         if (setting.getWaitingRoomOpenAt() != null && now.isBefore(setting.getWaitingRoomOpenAt())) {
             throw new BusinessException(ErrorCode.WAITING_ROOM_NOT_OPEN);
         }
-        QueueEntry locked = queueEntryRepository.findForUpdate(meetingId, entry.getId())
+        // 초기화는 별도 트랜잭션에서 커밋되므로 이 트랜잭션의 스냅샷 조회로는 보이지 않는다.
+        // 잠금 조회는 최신 커밋 데이터를 읽어 최초 입장에서도 방금 만들어진 항목을 찾는다.
+        QueueEntry locked = queueEntryRepository
+                .findForUpdateByMeetingAndFan(meetingId, user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.QUEUE_ENTRY_NOT_FOUND));
         try {
             locked.enter(now);

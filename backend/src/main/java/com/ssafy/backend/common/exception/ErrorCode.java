@@ -47,6 +47,51 @@ public enum ErrorCode {
     INVALID_LIVEKIT_WEBHOOK(HttpStatus.UNAUTHORIZED, "유효하지 않은 webhook입니다."),
     ORGANIZATION_INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "유효한 조직 초대를 찾을 수 없습니다."),
     ORGANIZATION_MEMBERSHIP_CONFLICT(HttpStatus.CONFLICT, "현재 조직 소속 상태에서는 요청을 처리할 수 없습니다."),
+
+    // 이하 WAVE 1~3 병렬 작업 세션이 사용할 오류 코드를 선반영한다.
+    // ErrorCode 는 공통 파일이라 세션이 동시에 수정하면 충돌이 확정적이므로 여기서 한 번에 등록한다.
+
+    // 참가자·장비 점검 (PART-002, DEV-001)
+    PARTICIPANT_NOT_IN_MEETING(HttpStatus.NOT_FOUND, "해당 팬미팅의 참가자가 아닙니다."),
+    DEVICE_CHECK_NOT_ALLOWED(HttpStatus.FORBIDDEN, "장비 점검 결과를 저장할 권한이 없습니다."),
+
+    // 팬 메모 (MEMO-001, MEMO-002)
+    FAN_MEMO_NOT_FOUND(HttpStatus.NOT_FOUND, "팬 메모를 찾을 수 없습니다."),
+    FAN_MEMO_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 팬의 메모를 조회할 권한이 없습니다."),
+    FAN_MEMO_ALREADY_DELETED(HttpStatus.CONFLICT, "이미 삭제된 팬 메모입니다."),
+    FAN_NOT_FOUND(HttpStatus.NOT_FOUND, "활성 팬 사용자를 찾을 수 없습니다."),
+
+    // 응모 폼 (FORM-001, FORM-002)
+    APPLICATION_FORM_NOT_FOUND(HttpStatus.NOT_FOUND, "응모 폼이 등록되지 않았습니다."),
+    APPLICATION_FORM_NOT_EDITABLE(HttpStatus.CONFLICT, "응모가 시작된 뒤에는 응모 폼을 수정할 수 없습니다."),
+    APPLICATION_QUESTION_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "응모 질문은 최대 10개까지 등록할 수 있습니다."),
+    APPLICATION_QUESTION_ORDER_DUPLICATED(HttpStatus.BAD_REQUEST, "응모 질문 순서가 중복되었습니다."),
+
+    // 당첨자 추첨·결과 공개 (APP-005, APP-006)
+    APPLICATION_DRAW_ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 추첨이 완료되었습니다."),
+    APPLICATION_DRAW_NOT_ALLOWED(HttpStatus.CONFLICT, "현재 상태에서는 추첨할 수 없습니다."),
+    APPLICATION_RESULT_ALREADY_PUBLISHED(HttpStatus.CONFLICT, "이미 응모 결과가 공개되었습니다."),
+
+    // 대기 순서 변경 (QUEUE-005, QREQ-001)
+    QUEUE_POSITION_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "이동할 수 없는 대기 순번입니다."),
+    QUEUE_CHANGE_REQUEST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 순서 변경을 요청했습니다."),
+
+    // 공지·커뮤니티 게시글 (POST-001~003)
+    POST_NOT_FOUND(HttpStatus.NOT_FOUND, "게시글을 찾을 수 없습니다."),
+    POST_WRITE_NOT_ALLOWED(HttpStatus.FORBIDDEN, "게시글을 작성할 권한이 없습니다."),
+    POST_TYPE_MISMATCH(HttpStatus.BAD_REQUEST, "요청 경로와 게시글 유형이 일치하지 않습니다."),
+
+    // 댓글·신고 (COMMENT-001, COMMENT-002, COMMENT-004)
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."),
+    COMMENT_WRITE_NOT_ALLOWED(HttpStatus.FORBIDDEN, "댓글을 작성할 권한이 없습니다."),
+    SELF_COMMENT_REPORT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "본인 댓글은 신고할 수 없습니다."),
+    COMMENT_REPORT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 신고한 댓글입니다."),
+
+    // AI 요약·모니터링 (AI-001, AI-002, AI-003)
+    AI_CALL_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "통화 요약을 찾을 수 없습니다."),
+    AI_MODERATION_NOT_FOUND(HttpStatus.NOT_FOUND, "모니터링 감지 건을 찾을 수 없습니다."),
+    AI_MODERATION_ALREADY_REVIEWED(HttpStatus.CONFLICT, "이미 검토가 완료된 건입니다."),
+
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 
     private final HttpStatus status;

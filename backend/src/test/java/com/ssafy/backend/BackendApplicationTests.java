@@ -1,8 +1,13 @@
 package com.ssafy.backend;
 
+import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
+import com.ssafy.backend.application.repository.ApplicationFormRepository;
+import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
 import com.ssafy.backend.call.repository.CallSessionRepository;
+import com.ssafy.backend.device.repository.DeviceCheckRepository;
+import com.ssafy.backend.influencer.repository.FanMemoRepository;
 import com.ssafy.backend.influencer.repository.FollowingRepository;
 import com.ssafy.backend.influencer.repository.InfluencerProfileRepository;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
@@ -12,6 +17,10 @@ import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.organization.repository.OrganizationRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
+import com.ssafy.backend.post.repository.CommentReportRepository;
+import com.ssafy.backend.post.repository.PostCommentRepository;
+import com.ssafy.backend.post.repository.PostRepository;
+import com.ssafy.backend.queue.repository.QueueChangeRequestRepository;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
 import com.ssafy.backend.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -49,7 +58,13 @@ class BackendApplicationTests {
     private ParticipantRepository participantRepository;
 
     @MockitoBean
+    private DeviceCheckRepository deviceCheckRepository;
+
+    @MockitoBean
     private QueueEntryRepository queueEntryRepository;
+
+    @MockitoBean
+    private QueueChangeRequestRepository queueChangeRequestRepository;
 
     @MockitoBean
     private CallSessionRepository callSessionRepository;
@@ -61,6 +76,15 @@ class BackendApplicationTests {
     private ApplicationRepository applicationRepository;
 
     @MockitoBean
+    private ApplicationFormRepository applicationFormRepository;
+
+    @MockitoBean
+    private ApplicationQuestionRepository applicationQuestionRepository;
+
+    @MockitoBean
+    private ApplicationAnswerRepository applicationAnswerRepository;
+
+    @MockitoBean
     private ApplicationService applicationService;
 
     @MockitoBean
@@ -70,7 +94,19 @@ class BackendApplicationTests {
     private FollowingRepository followingRepository;
 
     @MockitoBean
+    private FanMemoRepository fanMemoRepository;
+
+    @MockitoBean
     private InfluencerProfileRepository influencerProfileRepository;
+
+    @MockitoBean
+    private PostRepository postRepository;
+
+    @MockitoBean
+    private PostCommentRepository postCommentRepository;
+
+    @MockitoBean
+    private CommentReportRepository commentReportRepository;
 
     /**
      * DB 자동 구성 없이도 Spring 애플리케이션 컨텍스트가 정상적으로 시작되는지 확인한다.

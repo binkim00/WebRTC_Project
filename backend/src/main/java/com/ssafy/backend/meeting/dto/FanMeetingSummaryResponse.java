@@ -25,7 +25,7 @@ public record FanMeetingSummaryResponse(
      * 팬미팅 엔티티와 조회자 정보를 목록 응답으로 변환한다.
      *
      * @param meeting 팬미팅 엔티티
-     * @param setting 응모 설정
+     * @param setting 응모 설정이며 응모를 사용하지 않으면 null
      * @param applicationStatus 현재 조회자의 응모 상태
      * @param applicationCount 전체 응모자 수
      * @param participantCount 확정 참가자 수
@@ -38,7 +38,8 @@ public record FanMeetingSummaryResponse(
         return new FanMeetingSummaryResponse(meeting.getId(), meeting.getTitle(),
                 meeting.getCoverImageUrl(), meeting.getInfluencer().getNickname(),
                 meeting.getScheduledStartAt(), meeting.getStatus(),
-                setting.getApplicationOpenAt(), setting.getApplicationCloseAt(),
+                setting == null ? null : setting.getApplicationOpenAt(),
+                setting == null ? null : setting.getApplicationCloseAt(),
                 applicationStatus, applicationCount, participantCount);
     }
 }

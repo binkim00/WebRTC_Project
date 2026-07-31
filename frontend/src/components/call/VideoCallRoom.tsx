@@ -11,6 +11,7 @@ import {
 import { Badge } from '../data-display'
 import { AlertBanner } from '../feedback'
 import { Button } from '../ui/Button'
+import { logCallConnectionDebug } from './connectionDebug'
 import { ConnectedCallRoom } from './ConnectedCallRoom'
 import { PreviewCallRoom } from './PreviewCallRoom'
 import type { VideoCallRoomProps } from './types'
@@ -76,6 +77,20 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     void loadConnectionInfo(abortController.signal)
     return () => abortController.abort()
   }, [loadConnectionInfo, retryCount])
+
+  // 입장 정보 요청 경로와 분리해, 진단 로그가 실패해도 LiveKit 입장을 막지 않도록 한다.
+  useEffect(() => {
+    if (!connectionInfo) {
+      return
+    }
+
+    logCallConnectionDebug({
+      callSessionId: props.callSessionId,
+      liveKitUrl: connectionInfo.liveKitUrl,
+      accessToken: connectionInfo.accessToken,
+      expiresAt: connectionInfo.expiresAt,
+    })
+  }, [connectionInfo, props.callSessionId])
 
   useEffect(() => {
     const callSessionId = props.callSessionId
