@@ -9,8 +9,11 @@ import {
   HomePage,
   MeetingStatisticsPage,
 } from '../pages/common/CommonRoutePages'
+import { CommunityPostDetailPage } from '../pages/common/CommunityPostDetailPage'
 import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
+import { FanMeetingCommunityPage } from '../pages/common/FanMeetingCommunityPage'
 import { LiveKitTestPage } from '../pages/common/LiveKitTestPage'
+import { NotificationsPage } from '../pages/common/NotificationsPage'
 import { YestalgiaHomeExamplePage } from '../pages/common/YestalgiaHomeExamplePage'
 import {
   ForbiddenPage,
@@ -38,6 +41,7 @@ import {
 import { InfluencerMeetingReadyPage } from '../pages/influencer/InfluencerMeetingReadyPage'
 import { InfluencerProfilePage } from '../pages/influencer/InfluencerProfilePage'
 import { InfluencerMeetingHistoryPage } from '../pages/influencer/InfluencerMeetingHistoryPage'
+import { InfluencerOrganizationInvitationPage } from '../pages/influencer/InfluencerOrganizationInvitationPage'
 import {
   ManagerApplicationsPage,
   ManagerEventCreatePage,
@@ -55,6 +59,7 @@ import {
   ManagerMeetingHubPage,
 } from '../pages/manager/ManagerManagementHubPage'
 import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
+import { ManagerOrganizationPage } from '../pages/manager/ManagerOrganizationPage'
 
 /**
  * 브라우저 URL과 페이지 컴포넌트를 연결하는 애플리케이션 최상위 라우터다.
@@ -120,11 +125,23 @@ export const router = createBrowserRouter([
         Component: FanApplicationResultPage,
       },
       {
+        path: 'notifications',
+        Component: NotificationsPage,
+      },
+      {
+        path: 'community/posts/:postId',
+        Component: CommunityPostDetailPage,
+      },
+      {
         path: 'fan-meetings/:fanMeetingId',
         children: [
           {
             path: 'fans',
             Component: FanMeetingParticipantsPage,
+          },
+          {
+            path: 'community',
+            Component: FanMeetingCommunityPage,
           },
           {
             path: 'device-check',
@@ -149,6 +166,10 @@ export const router = createBrowserRouter([
         Component: InfluencerMeetingHistoryPage,
       },
       {
+        path: 'influencer/organization/invitations/:token',
+        Component: InfluencerOrganizationInvitationPage,
+      },
+      {
         path: 'rtc/livekit-test',
         Component: LiveKitTestPage,
       },
@@ -159,6 +180,10 @@ export const router = createBrowserRouter([
       {
         path: 'influencer/fan-meetings/:fanMeetingId/fans',
         Component: FanMeetingParticipantsPage,
+      },
+      {
+        path: 'influencer/fan-meetings/:fanMeetingId/community',
+        Component: FanMeetingCommunityPage,
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/device-check',
@@ -274,8 +299,16 @@ export const router = createBrowserRouter([
             Component: ManagerFanListPage,
           },
           {
+            path: 'fan-meetings/:fanMeetingId/community',
+            Component: FanMeetingCommunityPage,
+          },
+          {
             path: 'mypage',
             Component: ManagerMyPage,
+          },
+          {
+            path: 'organization',
+            Component: ManagerOrganizationPage,
           },
         ],
       },

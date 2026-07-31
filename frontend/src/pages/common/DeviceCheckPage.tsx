@@ -13,6 +13,7 @@ import previewCameraImage from '../../assets/call-preview-remote.jpg'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import { enterQueue } from '../../api/queue'
+import { saveDeviceCheck } from '../../api/deviceChecks'
 import { fetchMeetingDetail } from '../../api/fanMeetingParticipants'
 import {
   AlertBanner,
@@ -91,6 +92,7 @@ export function DeviceCheckPage() {
   const [isPlayingTestSound, setIsPlayingTestSound] = useState(false)
   const [isEnteringQueue, setIsEnteringQueue] = useState(false)
   const [queueError, setQueueError] = useState<string>()
+  const [deviceCheckWarning, setDeviceCheckWarning] = useState<string>()
   const [meetingTitle, setMeetingTitle] = useState<string>()
   const {
     audioLevel,
@@ -245,6 +247,43 @@ export function DeviceCheckPage() {
 
     setIsEnteringQueue(true)
     setQueueError(undefined)
+    setDeviceCheckWarning(undefined)
+
+    // 장비 점검 결과를 기록한다. 서버 저장에 실패해도 입장은 막지 않는다.
+    const speakerOk = speakerOptions.length > 0 ? true : null
+    const checkRecord = {
+      cameraOk: Boolean(videoTrackReady),
+      microphoneOk: Boolean(audioTrackReady),
+      speakerOk,
+      networkOk: networkReady,
+      checkedAt: new Date().toISOString(),
+    }
+
+    try {
+      window.sessionStorage.setItem(
+        `melly-device-check:${meetingId}`,
+        JSON.stringify(checkRecord),
+      )
+    } catch {
+      // sessionStorage 저장 실패는 입장 흐름에 영향을 주지 않는다.
+    }
+
+    try {
+      await saveDeviceCheck(
+        meetingId,
+        {
+          cameraOk: checkRecord.cameraOk,
+          microphoneOk: checkRecord.microphoneOk,
+          ...(speakerOk === null ? {} : { speakerOk }),
+          networkOk: checkRecord.networkOk,
+        },
+        session.accessToken,
+      )
+    } catch {
+      setDeviceCheckWarning(
+        '장비 점검 결과를 서버에 저장하지 못했습니다. 입장은 계속 진행됩니다.',
+      )
+    }
 
     try {
       await enterQueue(meetingId, session.accessToken)
@@ -530,6 +569,12 @@ export function DeviceCheckPage() {
               테스트 음원 재생
             </Button>
           </section>
+
+          {deviceCheckWarning ? (
+            <AlertBanner title="장비 점검 저장 안내" variant="warning">
+              {deviceCheckWarning}
+            </AlertBanner>
+          ) : null}
 
           {queueError ? (
             <AlertBanner title="팬미팅 입장 실패" variant="error">

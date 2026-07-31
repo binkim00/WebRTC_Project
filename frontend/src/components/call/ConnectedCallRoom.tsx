@@ -11,9 +11,11 @@ import {
 import { UserCircleIcon } from '@phosphor-icons/react'
 import { ConnectionState, Track } from 'livekit-client'
 import { useEffect, useState } from 'react'
+
 import { useNavigate } from 'react-router-dom'
 import { forceEndCallSession, type CallSessionStatusResponse } from '../../api/callSessions'
 import { getAuthSession } from '../../api/auth'
+import { useCallRecording } from '../../hooks/useCallRecording'
 import { AlertBanner } from '../feedback'
 import { CallStage } from './CallStage'
 import { EndCallDialog } from './EndCallDialog'
@@ -37,6 +39,7 @@ export function ConnectedCallRoom({
   const connectionState = useConnectionState()
   const participants = useParticipants()
   const cameraTracks = useTracks([Track.Source.Camera])
+  const microphoneTracks = useTracks([Track.Source.Microphone])
   const transcriptions = useTranscriptions()
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant()
   const [endDialogOpen, setEndDialogOpen] = useState(false)
@@ -52,11 +55,24 @@ export function ConnectedCallRoom({
   const remoteParticipant = remoteParticipants[0]
   const remoteCameraTrack = cameraTracks.find((track) => !track.participant.isLocal)
   const localCameraTrack = cameraTracks.find((track) => track.participant.isLocal)
+  const remoteMicrophoneTrack = microphoneTracks.find((track) => !track.participant.isLocal)
+  const localMicrophoneTrack = microphoneTracks.find((track) => track.participant.isLocal)
   const latestTranscription = transcriptions.at(-1)
   const remoteName =
     remoteParticipant?.name ||
     remoteParticipant?.identity ||
     participantLabel.replace(/\s*영상$/, '')
+
+  // 팬 역할만 통화 녹화를 수행한다. (백엔드 업로드 권한도 FAN 전용)
+  const [authSession] = useState(() => getAuthSession())
+  const { stopAndUpload } = useCallRecording({
+    enabled: authSession?.role === 'FAN' && isConnected,
+    callSessionId,
+    authToken: authSession?.accessToken,
+    remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
+    remoteAudioTrack: remoteMicrophoneTrack?.publication?.track?.mediaStreamTrack,
+    localAudioTrack: localMicrophoneTrack?.publication?.track?.mediaStreamTrack,
+  })
 
   async function toggleCamera() {
     setMediaAction('camera')
@@ -85,6 +101,9 @@ export function ConnectedCallRoom({
   }
 
   async function leaveRoom() {
+    // 녹화 중이라면 종료·업로드를 먼저 시도한다. 실패해도 통화 종료를 막지 않는다.
+    await stopAndUpload()
+
     if (forceEndOnLeave && callSessionId) {
       try {
         await forceEndCallSession(callSessionId, { reason: '영상통화 종료' }, {
@@ -104,8 +123,10 @@ export function ConnectedCallRoom({
       return
     }
 
-    void room.disconnect().finally(() => navigate(endTo, { replace: true }))
-  }, [endTo, navigate, room, sessionStatus.status])
+    void stopAndUpload()
+      .then(() => room.disconnect())
+      .finally(() => navigate(endTo, { replace: true }))
+  }, [endTo, navigate, room, sessionStatus.status, stopAndUpload])
 
   let connectionLabel = '연결 중'
 

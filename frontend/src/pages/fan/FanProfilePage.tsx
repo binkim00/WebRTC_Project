@@ -5,21 +5,35 @@ import {
   Ticket,
   VideoCamera,
 } from '@phosphor-icons/react'
+import type { FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button, Card, CardContent } from '../../components'
-import profileImage from '../../assets/call-preview-remote.jpg'
+import { ApiError } from '../../api/ApiError'
+import { getAuthSession } from '../../api/authSession'
+import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
+import {
+  AlertBanner,
+  Button,
+  Card,
+  CardContent,
+  Select,
+  Spinner,
+  TextField,
+} from '../../components'
+import fallbackProfileImage from '../../assets/call-preview-remote.jpg'
 
-/*
- * TODO: API 연동 후 처리
- * 1. 로그인 사용자의 프로필 정보를 조회한다.
- * 2. 회원정보 수정·비밀번호 변경 화면을 연결한다.
- * 3. 회원탈퇴 확인 및 처리 흐름을 연결한다.
- */
-const fanProfileMock = {
-  nickname: '별빛소다',
-  name: '김하린',
-  email: 'harin.kim@example.com',
-  profileImageUrl: profileImage,
+const preferredLanguageOptions = [
+  { label: '한국어', value: 'ko' },
+  { label: 'English', value: 'en' },
+  { label: '日本語', value: 'ja' },
+  { label: '中文', value: 'zh' },
+]
+
+const preferredLanguageLabels: Record<string, string> = {
+  ko: '한국어',
+  en: 'English',
+  ja: '日本語',
+  zh: '中文',
 }
 
 const activityItems = [
@@ -38,6 +52,93 @@ const activityItems = [
 ] as const
 
 export function FanProfilePage() {
+  const [profile, setProfile] = useState<UserProfile>()
+  const [loadError, setLoadError] = useState<string>()
+  const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string>()
+  const [saveNotice, setSaveNotice] = useState<string>()
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const session = getAuthSession()
+
+    if (!session) {
+      setLoadError('프로필을 확인하려면 먼저 로그인해 주세요.')
+      return () => controller.abort()
+    }
+
+    void getMyProfile(session.accessToken, controller.signal)
+      .then((result) => {
+        setProfile(result)
+        setLoadError(undefined)
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        setLoadError(
+          reason instanceof ApiError || reason instanceof TypeError
+            ? reason.message
+            : '프로필 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        )
+      })
+
+    return () => controller.abort()
+  }, [])
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (isSaving) return
+
+    const session = getAuthSession()
+    if (!session) {
+      setSaveError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
+    const nickname = String(formData.get('nickname') ?? '').trim()
+    const preferredLanguage = String(formData.get('preferredLanguage') ?? 'ko')
+
+    if (!nickname) {
+      setSaveError('닉네임을 입력해 주세요.')
+      return
+    }
+
+    setIsSaving(true)
+    setSaveError(undefined)
+    setSaveNotice(undefined)
+
+    try {
+      const updated = await updateMyProfile(
+        { nickname, preferredLanguage },
+        session.accessToken,
+      )
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              nickname: updated.nickname,
+              preferredLanguage: updated.preferredLanguage,
+              profileImageUrl: updated.profileImageUrl,
+              email: updated.email,
+            }
+          : current,
+      )
+      setIsEditing(false)
+      setSaveNotice('회원정보가 수정되었습니다.')
+    } catch (reason) {
+      setSaveError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : '회원정보 수정에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+      )
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const isLoading = profile === undefined && !loadError
+
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-7">
       <header>
@@ -47,56 +148,139 @@ export function FanProfilePage() {
         </p>
       </header>
 
-      <Card>
-        <CardContent className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
-            <img
-              alt={`${fanProfileMock.nickname} 프로필`}
-              className="size-24 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
-              src={fanProfileMock.profileImageUrl}
-            />
+      {loadError ? (
+        <AlertBanner title="프로필을 확인할 수 없습니다" variant="error">
+          {loadError}
+        </AlertBanner>
+      ) : null}
+      {saveNotice ? (
+        <AlertBanner title="수정 완료" variant="success">
+          {saveNotice}
+        </AlertBanner>
+      ) : null}
 
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
-                프로필
-              </p>
-              <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
-                {fanProfileMock.nickname}
-              </h2>
-              <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-                <div className="flex gap-3">
-                  <dt className="font-semibold text-[var(--color-text-tertiary)]">이름</dt>
-                  <dd className="font-bold">{fanProfileMock.name}</dd>
-                </div>
-                <div className="flex min-w-0 gap-3">
-                  <dt className="font-semibold text-[var(--color-text-tertiary)]">
-                    이메일
-                  </dt>
-                  <dd className="truncate font-bold">{fanProfileMock.email}</dd>
-                </div>
-              </dl>
+      {isLoading ? (
+        <div className="flex justify-center py-16">
+          <Spinner label="프로필을 불러오는 중" />
+        </div>
+      ) : profile ? (
+        <Card>
+          <CardContent className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
+              <img
+                alt={`${profile.nickname} 프로필`}
+                className="size-24 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
+                src={profile.profileImageUrl ?? fallbackProfileImage}
+              />
+
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
+                  프로필
+                </p>
+
+                {isEditing ? (
+                  <form className="mt-3 grid max-w-md gap-4" onSubmit={(event) => void handleSave(event)}>
+                    <TextField
+                      defaultValue={profile.nickname}
+                      label="닉네임"
+                      name="nickname"
+                      required
+                    />
+                    <Select
+                      defaultValue={profile.preferredLanguage}
+                      label="선호 언어"
+                      name="preferredLanguage"
+                      options={preferredLanguageOptions}
+                    />
+                    {saveError ? (
+                      <AlertBanner title="수정 실패" variant="error">
+                        {saveError}
+                      </AlertBanner>
+                    ) : null}
+                    <div className="flex gap-3">
+                      <Button loading={isSaving} size="sm" type="submit">
+                        저장
+                      </Button>
+                      <Button
+                        disabled={isSaving}
+                        onClick={() => {
+                          setIsEditing(false)
+                          setSaveError(undefined)
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="secondary"
+                      >
+                        취소
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <h2 className="mt-1 text-2xl font-black tracking-[-0.035em]">
+                      {profile.nickname}
+                    </h2>
+                    <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+                      <div className="flex gap-3">
+                        <dt className="font-semibold text-[var(--color-text-tertiary)]">
+                          아이디
+                        </dt>
+                        <dd className="font-bold">{profile.loginId}</dd>
+                      </div>
+                      <div className="flex min-w-0 gap-3">
+                        <dt className="font-semibold text-[var(--color-text-tertiary)]">
+                          이메일
+                        </dt>
+                        <dd className="truncate font-bold">{profile.email}</dd>
+                      </div>
+                      <div className="flex gap-3">
+                        <dt className="font-semibold text-[var(--color-text-tertiary)]">
+                          선호 언어
+                        </dt>
+                        <dd className="font-bold">
+                          {preferredLanguageLabels[profile.preferredLanguage] ??
+                            profile.preferredLanguage}
+                        </dd>
+                      </div>
+                      <div className="flex gap-3">
+                        <dt className="font-semibold text-[var(--color-text-tertiary)]">
+                          회원번호
+                        </dt>
+                        <dd className="font-bold">{profile.userId}</dd>
+                      </div>
+                    </dl>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="flex shrink-0 flex-wrap gap-3">
-            {/* TODO: 회원정보 수정 화면 연결 */}
-            <Button
-              leadingIcon={<PencilSimple aria-hidden size={17} weight="bold" />}
-              size="sm"
-            >
-              회원정보 수정
-            </Button>
-            {/* TODO: 비밀번호 변경 화면 연결 */}
-            <Button
-              leadingIcon={<Key aria-hidden size={17} weight="bold" />}
-              size="sm"
-              variant="secondary"
-            >
-              비밀번호 변경
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            {!isEditing ? (
+              <div className="flex shrink-0 flex-wrap gap-3">
+                <Button
+                  leadingIcon={<PencilSimple aria-hidden size={17} weight="bold" />}
+                  onClick={() => {
+                    setIsEditing(true)
+                    setSaveNotice(undefined)
+                  }}
+                  size="sm"
+                >
+                  회원정보 수정
+                </Button>
+                {/* TODO: 비밀번호 변경 API가 아직 백엔드에 없어 비활성화 상태로 둡니다. */}
+                <Button
+                  disabled
+                  leadingIcon={<Key aria-hidden size={17} weight="bold" />}
+                  size="sm"
+                  title="비밀번호 변경 기능은 준비 중입니다."
+                  variant="secondary"
+                >
+                  비밀번호 변경
+                </Button>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardContent>
@@ -138,9 +322,11 @@ export function FanProfilePage() {
       </Card>
 
       <div className="flex justify-end">
-        {/* TODO: 회원탈퇴 확인 Dialog 연결 */}
+        {/* TODO: 회원 탈퇴 API가 아직 백엔드에 없어 비활성화 상태로 둡니다. */}
         <button
-          className="text-sm text-[var(--color-text-secondary)] underline underline-offset-4 hover:text-[var(--color-error)]"
+          className="cursor-not-allowed text-sm text-[var(--color-text-tertiary)] underline underline-offset-4"
+          disabled
+          title="회원탈퇴 기능은 준비 중입니다."
           type="button"
         >
           회원탈퇴

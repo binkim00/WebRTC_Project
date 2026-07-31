@@ -8,6 +8,11 @@ import {
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
+import {
+  getApplicationForm,
+  submitApplication,
+  type ApplicationFormResponse,
+} from '../../api/applications'
 import { getAuthSession } from '../../api/authSession'
 import {
   fetchPublicFanMeetingDetail,
@@ -22,6 +27,8 @@ import {
   CardContent,
   Checkbox,
   Spinner,
+  TextField,
+  Textarea,
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
@@ -101,6 +108,26 @@ export function FanEventDetailPage() {
     recording: false,
     participation: false,
   })
+  const [applicationForm, setApplicationForm] = useState<ApplicationFormResponse>()
+  const [answers, setAnswers] = useState<Record<number, string>>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string>()
+  const [submitMessage, setSubmitMessage] = useState<string>()
+
+  useEffect(() => {
+    if (!validMeetingId) return
+
+    const controller = new AbortController()
+
+    // 응모 폼은 공개 조회이므로 상세와 별개로 불러온다. 폼이 없으면(404) 질문 없이 동의만 받는다.
+    void getApplicationForm(meetingId, controller.signal)
+      .then(setApplicationForm)
+      .catch(() => {
+        if (!controller.signal.aborted) setApplicationForm(undefined)
+      })
+
+    return () => controller.abort()
+  }, [meetingId, validMeetingId])
 
   useEffect(() => {
     if (!validMeetingId) return
@@ -134,6 +161,70 @@ export function FanEventDetailPage() {
 
   function handleAgreementChange(id: AgreementId, checked: boolean) {
     setAgreements((current) => ({ ...current, [id]: checked }))
+  }
+
+  /** 상세를 다시 불러와 viewer 응모 상태를 최신으로 맞춘다. */
+  async function reloadDetail() {
+    const authToken = getAuthSession()?.accessToken
+    try {
+      setDetail(await fetchPublicFanMeetingDetail(meetingId, authToken))
+    } catch {
+      // 갱신 실패는 치명적이지 않으므로 화면 상태를 유지한다.
+    }
+  }
+
+  async function handleSubmitApplication() {
+    const token = getAuthSession()?.accessToken
+    if (!token) {
+      setSubmitError('응모하려면 먼저 로그인해 주세요.')
+      return
+    }
+
+    const questions = applicationForm?.questions ?? []
+    const missingRequired = questions.filter(
+      (question) => question.required && !(answers[question.questionId] ?? '').trim(),
+    )
+    if (missingRequired.length > 0) {
+      setSubmitError(`필수 질문에 답변해 주세요: ${missingRequired.map((question) => question.questionText).join(', ')}`)
+      return
+    }
+
+    setSubmitting(true)
+    setSubmitError(undefined)
+    setSubmitMessage(undefined)
+    try {
+      await submitApplication(
+        meetingId,
+        {
+          personalInformationConsent: agreements.privacy,
+          answers: questions
+            .map((question) => ({
+              questionId: question.questionId,
+              value: (answers[question.questionId] ?? '').trim(),
+            }))
+            .filter((answer) => answer.value),
+        },
+        token,
+      )
+      setSubmitMessage('응모가 완료되었습니다. 결과 발표를 기다려 주세요.')
+      await reloadDetail()
+    } catch (reason) {
+      if (reason instanceof ApiError) {
+        setSubmitError(
+          reason.status === 401
+            ? '로그인이 만료되었습니다. 다시 로그인해 주세요.'
+            : reason.status === 403
+              ? '팬 계정으로 로그인해야 응모할 수 있습니다.'
+              : reason.status === 409
+                ? '이미 응모한 팬미팅입니다.'
+                : reason.message,
+        )
+      } else {
+        setSubmitError('응모 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (!validMeetingId) {
@@ -318,6 +409,36 @@ export function FanEventDetailPage() {
                 아래 필수 항목을 모두 확인해 주세요.
               </p>
 
+              {applicationForm && applicationForm.questions.length > 0 ? (
+                <div className="grid gap-4">
+                  {applicationForm.formDescription ? (
+                    <p className="text-sm leading-6 text-[var(--color-text-secondary)]">{applicationForm.formDescription}</p>
+                  ) : null}
+                  {[...applicationForm.questions]
+                    .sort((a, b) => a.displayOrder - b.displayOrder)
+                    .map((question) =>
+                      question.questionType === 'LONG_TEXT' ? (
+                        <Textarea
+                          disabled={!viewer.canApply}
+                          key={question.questionId}
+                          label={`${question.questionText}${question.required ? ' (필수)' : ''}`}
+                          rows={4}
+                          value={answers[question.questionId] ?? ''}
+                          onChange={(event) => setAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))}
+                        />
+                      ) : (
+                        <TextField
+                          disabled={!viewer.canApply}
+                          key={question.questionId}
+                          label={`${question.questionText}${question.required ? ' (필수)' : ''}`}
+                          value={answers[question.questionId] ?? ''}
+                          onChange={(event) => setAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))}
+                        />
+                      ),
+                    )}
+                </div>
+              ) : null}
+
               <div className="grid gap-3">
                 {agreementItems.map((item) => (
                   <div
@@ -340,11 +461,19 @@ export function FanEventDetailPage() {
                 모든 항목에 동의해야 응모할 수 있어요.
               </p>
 
-              {/* TODO: 응모 생성 API 확정 후 현재 동의 상태와 meetingId를 전달한다. */}
+              {submitError ? (
+                <AlertBanner title="응모 실패" variant="error">{submitError}</AlertBanner>
+              ) : null}
+              {submitMessage ? (
+                <AlertBanner title="응모 완료" variant="success">{submitMessage}</AlertBanner>
+              ) : null}
+
               <Button
                 className="w-full"
-                disabled={!canSubmitApplication}
+                disabled={!canSubmitApplication || submitting}
+                loading={submitting}
                 size="lg"
+                onClick={() => void handleSubmitApplication()}
               >
                 {getApplyButtonLabel(detail)}
               </Button>

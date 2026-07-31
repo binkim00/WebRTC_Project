@@ -88,7 +88,6 @@ function App() {
   const isDeviceCheckPage =
     /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname) ||
     /^\/influencer\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
-  const isFanListPage = /^\/influencer\/fan-meetings\/[^/]+\/fans$/.test(pathname)
   const authSession = getAuthSession()
   const isAuthenticated = authSession !== null
   const isQaCapture =
@@ -239,11 +238,6 @@ function App() {
       >
         <Outlet />
       </main>
-      {isCallPage || isAuthPage || isHomePage || isEditorialExamplePage || isDeviceCheckPage || isFanListPage ? null : (
-        <footer className="mt-auto border-t border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-4 py-4 text-center text-sm text-[var(--color-text-secondary)] sm:px-6">
-          Notion 화면 라우팅 정의서를 기준으로 구성한 라우팅 학습 화면입니다.
-        </footer>
-      )}
     </div>
   )
 }

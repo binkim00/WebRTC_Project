@@ -1,34 +1,95 @@
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import { getAuthSession } from '../../api/auth'
+import {
+    getMyRecordings,
+    issueRecordingDownloadUrl,
+    type RecordingSummaryResponse,
+} from '../../api/recordings'
 import { AlertBanner, Button, Card, CardContent } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
-type RecordingStatus = 'processing' | 'ready'
-type FanMeetingCompleteData = {
-    meetingTitle: string
-    endedAt: string
-    endedAtLabel: string
-    recordingStatus: RecordingStatus
-}
-const mockMeetingData: FanMeetingCompleteData = {
-    meetingTitle: 'Melly와의 봄날 팬미팅',
-    endedAt: '2026-08-02T19:00:00+09:00',
-    endedAtLabel: '2026.08.02 19:00',
-    recordingStatus: 'ready',
+const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+
+function formatDateTime(iso: string): string {
+    const date = new Date(iso)
+
+    if (Number.isNaN(date.getTime())) {
+        return iso
+    }
+
+    const pad = (value: number) => String(value).padStart(2, '0')
+
+    return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 export function FanMeetingCompletePage() {
     const { fanMeetingId } = useParams()
-    // API가 없으므로 테스트를 위한 일반 상수
-    const {
-        meetingTitle,
-        endedAt,
-        endedAtLabel,
-        recordingStatus
-    } = mockMeetingData
+    const location = useLocation()
+    const routeState = location.state as { meetingTitle?: string } | null
+    const [session] = useState(() => getAuthSession())
+    const [recording, setRecording] = useState<RecordingSummaryResponse | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [loadError, setLoadError] = useState<string>()
+    const [downloading, setDownloading] = useState(false)
+    const [downloadError, setDownloadError] = useState<string>()
 
-    const isRecordingReady = recordingStatus === 'ready'
-    const recordingTitle = isRecordingReady ? '녹화 영상 저장이 완료되었습니다' : '녹화 영상을 저장하고 있습니다'
-    const recordingDescription = isRecordingReady ? '아래에서 녹화 영상을 확인하고 다운로드할 수 있어요.' : '잠시만 기다려 주세요. 저장이 완료되면 이 화면에 표시됩니다.'
+    useEffect(() => {
+        if (!fanMeetingId?.trim() || !session) {
+            setLoading(false)
+            return
+        }
+
+        const abortController = new AbortController()
+        setLoading(true)
+        setLoadError(undefined)
+
+        getMyRecordings({ page: 0, size: 20 }, session.accessToken, abortController.signal)
+            .then((pageData) => {
+                const meetingId = Number(fanMeetingId)
+                const matched = pageData.content.find((item) => item.meetingId === meetingId)
+                setRecording(matched ?? null)
+            })
+            .catch((error: unknown) => {
+                if (error instanceof DOMException && error.name === 'AbortError') {
+                    return
+                }
+
+                setLoadError(
+                    error instanceof Error ? error.message : '녹화 정보를 불러오지 못했습니다.',
+                )
+            })
+            .finally(() => {
+                if (!abortController.signal.aborted) {
+                    setLoading(false)
+                }
+            })
+
+        return () => abortController.abort()
+    }, [fanMeetingId, session])
+
+    async function handleDownload() {
+        if (!recording || !session) {
+            return
+        }
+
+        setDownloading(true)
+        setDownloadError(undefined)
+
+        try {
+            const { downloadUrl } = await issueRecordingDownloadUrl(
+                recording.recordingId,
+                session.accessToken,
+            )
+            window.open(`${API_URL}${downloadUrl}`, '_blank', 'noopener')
+        } catch (error: unknown) {
+            setDownloadError(
+                error instanceof Error ? error.message : '다운로드 링크 발급에 실패했습니다.',
+            )
+        } finally {
+            setDownloading(false)
+        }
+    }
 
     if (!fanMeetingId?.trim()) {
         return (
@@ -37,6 +98,34 @@ export function FanMeetingCompletePage() {
                 title="필수 URL 파라미터가 없습니다."
             />
         )
+    }
+
+    const isRecordingReady = Boolean(recording?.playable)
+    const meetingTitle = recording?.meetingTitle ?? routeState?.meetingTitle ?? '팬미팅'
+    const endedAt = recording?.completedAt
+
+    let recordingTitle = '녹화 영상이 없습니다'
+    let recordingDescription = '이번 팬미팅의 녹화 영상이 저장되지 않았습니다.'
+    let recordingVariant: 'success' | 'info' | 'error' = 'info'
+
+    if (!session) {
+        recordingTitle = '로그인이 필요합니다'
+        recordingDescription = '녹화 영상 정보를 확인하려면 로그인해 주세요.'
+        recordingVariant = 'error'
+    } else if (loading) {
+        recordingTitle = '녹화 정보를 확인하고 있습니다'
+        recordingDescription = '잠시만 기다려 주세요.'
+    } else if (loadError) {
+        recordingTitle = '녹화 정보를 불러오지 못했습니다'
+        recordingDescription = loadError
+        recordingVariant = 'error'
+    } else if (isRecordingReady) {
+        recordingTitle = '녹화 영상 저장이 완료되었습니다'
+        recordingDescription = '아래에서 녹화 영상을 확인하고 다운로드할 수 있어요.'
+        recordingVariant = 'success'
+    } else if (recording) {
+        recordingTitle = '녹화 영상을 저장하고 있습니다'
+        recordingDescription = '잠시만 기다려 주세요. 저장이 완료되면 이 화면에 표시됩니다.'
     }
 
     return (
@@ -63,12 +152,12 @@ export function FanMeetingCompletePage() {
                     >
                         <AlertBanner
                             title={recordingTitle}
-                            variant={isRecordingReady ? 'success' : 'info'}
+                            variant={recordingVariant}
                         >
                             {recordingDescription}
                         </AlertBanner>
                     </section>
-                    {isRecordingReady && (
+                    {isRecordingReady && recording && (
                         <section className="mt-8 grid gap-6 lg:grid-cols-2">
                             <Card className="p-6">
                                 <div className="min-w-0">
@@ -80,11 +169,13 @@ export function FanMeetingCompletePage() {
                                             {meetingTitle}
                                         </strong>
 
-                                        <time className="text-sm text-[var(--color-text-secondary)]"
-                                            dateTime={endedAt}
-                                        >
-                                            {endedAtLabel}
-                                        </time>
+                                        {endedAt ? (
+                                            <time className="text-sm text-[var(--color-text-secondary)]"
+                                                dateTime={endedAt}
+                                            >
+                                                {formatDateTime(endedAt)}
+                                            </time>
+                                        ) : null}
                                     </div>
                                 </div>
                             </Card>
@@ -95,13 +186,25 @@ export function FanMeetingCompletePage() {
                                         다운로드 유의사항
                                     </h2>
                                     <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">
-                                        영상은 마이페이지의 팬미팅 히스토리에서 5일 동안 유지됩니다.
+                                        영상은 마이페이지의 팬미팅 히스토리에서{' '}
+                                        {formatDateTime(recording.availableUntil)}까지 유지됩니다.
                                         기간 안에 필요한 영상을 다운로드해 주세요.
                                     </p>
                                 </div>
 
+                                {downloadError ? (
+                                    <AlertBanner title="다운로드에 실패했습니다" variant="error">
+                                        {downloadError}
+                                    </AlertBanner>
+                                ) : null}
+
                                 <div className="mt-auto grid gap-3">
-                                    <Button className="w-full" size="lg">
+                                    <Button
+                                        className="w-full"
+                                        loading={downloading}
+                                        onClick={() => void handleDownload()}
+                                        size="lg"
+                                    >
                                         녹화 영상 다운로드
                                     </Button>
                                     <Link
