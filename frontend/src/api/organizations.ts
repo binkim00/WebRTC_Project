@@ -106,6 +106,15 @@ export async function createOrganization(request: OrganizationCreateRequest, aut
   return unwrap(response, isOrganization)
 }
 
+/**
+ * 가입된 인플루언서를 초대 수락 절차 없이 조직 구성원으로 바로 연결합니다.
+ * 이미 다른 활성 조직에 소속된 사용자는 백엔드가 400으로 거절합니다.
+ */
+export async function addOrganizationMember(organizationId: number, userId: number, authToken: string, signal?: AbortSignal): Promise<OrganizationMember> {
+  const response = await apiRequest<unknown>(`/api/v1/organizations/${organizationId}/members`, { method: 'POST', authToken, signal, body: JSON.stringify({ userId }) })
+  return unwrap(response, isOrganizationMember)
+}
+
 /** 매니저가 인플루언서에게 전달할 일회성 초대 토큰을 발급합니다. */
 export async function createOrganizationInvitation(organizationId: number, influencerId: number, authToken: string, signal?: AbortSignal): Promise<OrganizationInvitation> {
   const response = await apiRequest<unknown>(`/api/v1/organizations/${organizationId}/invitations`, { method: 'POST', authToken, signal, body: JSON.stringify({ influencerId }) })

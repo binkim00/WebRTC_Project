@@ -13,6 +13,7 @@ import { getAuthSession } from '../../api/authSession'
 import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
 import {
   AlertBanner,
+  Avatar,
   Button,
   Card,
   CardContent,
@@ -20,20 +21,16 @@ import {
   Spinner,
   TextField,
 } from '../../components'
-import fallbackProfileImage from '../../assets/call-preview-remote.jpg'
 
+// 백엔드 PreferredLanguage Enum(KOREAN, ENGLISH)과 동일한 값만 사용한다.
 const preferredLanguageOptions = [
-  { label: '한국어', value: 'ko' },
-  { label: 'English', value: 'en' },
-  { label: '日本語', value: 'ja' },
-  { label: '中文', value: 'zh' },
+  { label: '한국어', value: 'KOREAN' },
+  { label: 'English', value: 'ENGLISH' },
 ]
 
 const preferredLanguageLabels: Record<string, string> = {
-  ko: '한국어',
-  en: 'English',
-  ja: '日本語',
-  zh: '中文',
+  KOREAN: '한국어',
+  ENGLISH: 'English',
 }
 
 const activityItems = [
@@ -97,7 +94,7 @@ export function FanProfilePage() {
 
     const formData = new FormData(event.currentTarget)
     const nickname = String(formData.get('nickname') ?? '').trim()
-    const preferredLanguage = String(formData.get('preferredLanguage') ?? 'ko')
+    const preferredLanguage = String(formData.get('preferredLanguage') ?? 'KOREAN')
 
     if (!nickname) {
       setSaveError('닉네임을 입력해 주세요.')
@@ -167,11 +164,20 @@ export function FanProfilePage() {
         <Card>
           <CardContent className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
-              <img
-                alt={`${profile.nickname} 프로필`}
-                className="size-24 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
-                src={profile.profileImageUrl ?? fallbackProfileImage}
-              />
+              {/* 등록된 프로필 이미지가 없으면 닉네임 기반 아바타를 표시한다 */}
+              {profile.profileImageUrl ? (
+                <img
+                  alt={`${profile.nickname} 프로필`}
+                  className="size-24 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
+                  src={profile.profileImageUrl}
+                />
+              ) : (
+                <Avatar
+                  className="size-24 shrink-0 rounded-[var(--radius-panel)]"
+                  name={profile.nickname}
+                  size="lg"
+                />
+              )}
 
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[var(--color-text-secondary)]">

@@ -1,46 +1,46 @@
-import {
-  ArrowRight,
-  CalendarBlank,
-  CheckCircle,
-  Clock,
-  ListChecks,
-  NotePencil,
-  VideoCamera,
-} from '@phosphor-icons/react'
+import { CalendarBlank, VideoCamera } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import {
-  AlertBanner,
-  Avatar,
-  Badge,
-  Button,
-  Card,
-  LinearProgress,
-} from '../../components'
+import { useNavigate } from 'react-router-dom'
+import { AlertBanner, Badge, Button, Card } from '../../components'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import { fetchMyMeetings, type ManagerMeetingSummary } from '../../api/managerMeetings'
 
-const previewMeeting = {
-  id: '1',
-  title: 'MELLY DAY 팬미팅',
-  date: '2026년 7월 26일',
-  startTime: '오늘 19:00 시작',
-  completedSessionCount: 7,
-  totalSessionCount: 20,
-  currentFan: {
-    name: '김유진',
-    participationCount: 2,
-    hasMemo: true,
-  },
-  currentOrder: 8,
+/** 팬미팅 시작 일시가 오늘(로컬 기준)인지 확인한다. */
+function isScheduledToday(value: string): boolean {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return false
+
+  const today = new Date()
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  )
 }
 
+/** 팬미팅 시작 일시를 "2026. 07. 31. 19:00" 형태로 표시한다. */
+function formatScheduledAt(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+/** 인플루언서가 오늘 진행할 팬미팅을 확인하고 장비 점검으로 이동하는 페이지다. */
 export function InfluencerMyMeetingPage() {
   const navigate = useNavigate()
   const [meetingSummary, setMeetingSummary] = useState<ManagerMeetingSummary>()
   const [error, setError] = useState<string>()
 
+  // 내 팬미팅 목록에서 오늘 진행할 팬미팅을 찾는다. 진행 중(LIVE)인 팬미팅이 있으면 우선한다.
   useEffect(() => {
     const controller = new AbortController()
     const session = getAuthSession()
@@ -54,10 +54,15 @@ export function InfluencerMyMeetingPage() {
       .then((result) => {
         const activeMeeting =
           result.content.find((item) => item.status === 'LIVE') ??
-          result.content.find((item) => item.status !== 'COMPLETED')
+          result.content.find(
+            (item) =>
+              item.status !== 'ENDED' &&
+              item.status !== 'CANCELED' &&
+              isScheduledToday(item.scheduledStartAt),
+          )
 
         setMeetingSummary(activeMeeting)
-        setError(activeMeeting ? undefined : '현재 입장할 수 있는 팬미팅이 없습니다.')
+        setError(activeMeeting ? undefined : '오늘 진행할 팬미팅이 없습니다.')
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
@@ -71,18 +76,11 @@ export function InfluencerMyMeetingPage() {
     return () => controller.abort()
   }, [])
 
-  const meeting = meetingSummary
-    ? {
-        ...previewMeeting,
-        id: meetingSummary.meetingId,
-        title: meetingSummary.title,
-        date: new Date(meetingSummary.scheduledStartAt).toLocaleDateString('ko-KR'),
-        startTime: new Date(meetingSummary.scheduledStartAt).toLocaleString('ko-KR'),
-      }
-    : previewMeeting
-  const progress = Math.round(
-    (meeting.completedSessionCount / meeting.totalSessionCount) * 100,
-  )
+  /** 오늘의 팬미팅 장비 점검 화면으로 이동한다. */
+  function handleOpenDeviceCheck() {
+    if (!meetingSummary) return
+    navigate(`/influencer/fan-meetings/${meetingSummary.meetingId}/device-check`)
+  }
 
   return (
     <div className="grid gap-12 pb-8">
@@ -97,197 +95,51 @@ export function InfluencerMyMeetingPage() {
           나의 팬미팅
         </h1>
         <p className="text-[var(--color-text-secondary)]">
-          오늘 진행할 팬미팅과 현재 순서를 확인하세요.
+          오늘 진행할 팬미팅을 확인하고 장비 점검 후 입장하세요.
         </p>
       </header>
 
+      {/* 오늘의 팬미팅: 팬미팅명과 시작 일시, 장비 점검 이동 버튼만 표시한다 */}
       <section aria-labelledby="today-meeting-title" className="grid gap-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2
-            className="text-2xl font-extrabold tracking-[-0.025em]"
-            id="today-meeting-title"
-          >
-            오늘의 팬미팅
-          </h2>
-          <time
-            className="text-sm font-semibold text-[var(--color-text-tertiary)]"
-            dateTime="2026-07-26"
-          >
-            {meeting.date}
-          </time>
-        </div>
+        <h2
+          className="text-2xl font-extrabold tracking-[-0.025em]"
+          id="today-meeting-title"
+        >
+          오늘의 팬미팅
+        </h2>
 
         <Card className="overflow-hidden">
-          <div className="grid lg:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.8fr)]">
-            <div className="grid content-center gap-5 p-6 lg:border-r lg:border-[var(--color-divider)] lg:p-8">
-              <Badge className="w-fit" variant="success">
-                오늘 진행
+          <div className="grid gap-8 p-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center lg:p-8">
+            <div className="grid gap-5">
+              <Badge
+                className="w-fit"
+                variant={meetingSummary?.status === 'LIVE' ? 'primary' : 'success'}
+              >
+                {meetingSummary?.status === 'LIVE' ? '진행 중' : '오늘 진행'}
               </Badge>
               <h3 className="text-3xl font-black tracking-[-0.04em]">
-                {meeting.title}
+                {meetingSummary?.title ?? '오늘 진행할 팬미팅이 없습니다'}
               </h3>
               <p className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)]">
                 <CalendarBlank aria-hidden size={20} weight="bold" />
-                {meeting.startTime}
+                {meetingSummary
+                  ? formatScheduledAt(meetingSummary.scheduledStartAt)
+                  : '일정 없음'}
               </p>
             </div>
 
-            <div className="grid gap-8 border-t border-[var(--color-divider)] p-6 sm:grid-cols-[minmax(0,1fr)_180px] lg:border-t-0 lg:p-8">
-              <div className="grid content-center gap-5">
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                      완료 세션
-                    </p>
-                    <p className="mt-2 text-3xl font-black">
-                      {meeting.completedSessionCount}
-                      <span className="ml-1 text-base text-[var(--color-text-tertiary)]">
-                        /{meeting.totalSessionCount}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                      진행률
-                    </p>
-                    <p className="mt-2 text-3xl font-black">{progress}%</p>
-                  </div>
-                </div>
-                <LinearProgress
-                  className="[&>div:first-child]:sr-only"
-                  label="팬미팅 진행률"
-                  showValue={false}
-                  value={progress}
-                />
-              </div>
-
-              <div className="flex items-center gap-3 border-t border-[var(--color-divider)] pt-6 sm:border-l sm:border-t-0 sm:pl-8 sm:pt-0">
-                <Clock
-                  aria-hidden
-                  className="text-[var(--color-primary-coral)]"
-                  size={28}
-                  weight="bold"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                    현재 상태
-                  </p>
-                  <p className="mt-1 text-xl font-extrabold">진행 중</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid border-t border-[var(--color-divider)] lg:grid-cols-[minmax(0,1fr)_380px]">
-            <div className="grid gap-5 p-6 lg:border-r lg:border-[var(--color-divider)]">
-              <div className="flex items-start justify-between gap-6">
-                <div>
-                  <p className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                    현재 팬
-                  </p>
-                  <p className="mt-2 text-2xl font-black">
-                    {meeting.currentFan.name}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                    현재 순번
-                  </p>
-                  <p className="mt-2 text-xl font-black text-[var(--color-primary-coral)]">
-                    {meeting.currentOrder}번째
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-end justify-between gap-6">
-                <div className="flex flex-wrap items-center gap-6">
-                  <Avatar
-                    className="size-16 rounded-[var(--radius-panel)]"
-                    name={meeting.currentFan.name}
-                    size="lg"
-                  />
-                  <dl className="flex flex-wrap gap-8">
-                    <div>
-                      <dt className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                        참여 횟수
-                      </dt>
-                      <dd className="mt-1 text-lg font-extrabold">
-                        {meeting.currentFan.participationCount}회
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                        최근 메모
-                      </dt>
-                      <dd className="mt-1 flex items-center gap-1.5 text-lg font-extrabold">
-                        <NotePencil aria-hidden size={20} weight="bold" />
-                        {meeting.currentFan.hasMemo ? '있음' : '없음'}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-
-                <Button
-                  className="w-fit"
-                  leadingIcon={<ListChecks aria-hidden size={20} weight="bold" />}
-                  onClick={() =>
-                    navigate(`/influencer/fan-meetings/${meeting.id}/fans`)
-                  }
-                  trailingIcon={<ArrowRight aria-hidden size={18} weight="bold" />}
-                  variant="secondary"
-                >
-                  팬 리스트 확인하기
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid content-center gap-5 border-t border-[var(--color-divider)] bg-[var(--color-surface-page)] p-6 lg:border-t-0">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex size-10 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-success-soft)] text-[var(--color-success)]">
-                  <CheckCircle aria-hidden size={23} weight="fill" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                    장비 상태
-                  </p>
-                  <p className="mt-1 font-extrabold">점검 완료</p>
-                </div>
-              </div>
-              <div className="border-t border-[var(--color-divider)] pt-5">
-                <Button
-                  className="w-full shadow-[var(--shadow-final-cta)]"
-                  disabled={!meetingSummary}
-                  leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
-                  onClick={() =>
-                    navigate(`/influencer/fan-meetings/${meeting.id}/device-check`)
-                  }
-                  size="lg"
-                >
-                  장비 점검 후 입장
-                </Button>
-              </div>
-            </div>
+            <Button
+              className="w-full shadow-[var(--shadow-final-cta)] sm:w-auto"
+              disabled={!meetingSummary}
+              leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
+              onClick={handleOpenDeviceCheck}
+              size="lg"
+            >
+              장비 점검 후 입장
+            </Button>
           </div>
         </Card>
       </section>
-
-      <Link
-        className="flex w-full items-center justify-between gap-6 border-y border-[var(--color-divider)] px-2 py-5 text-left transition-colors hover:bg-[var(--color-surface-panel)] motion-reduce:transition-none"
-        to="/influencer/mypage/fan-meetings"
-      >
-        <span>
-          <span className="block font-extrabold">나의 팬미팅 이력</span>
-          <span className="mt-1 block text-sm text-[var(--color-text-secondary)]">
-            이전 팬미팅과 참여 기록을 확인하세요.
-          </span>
-        </span>
-        <ArrowRight
-          aria-hidden
-          className="shrink-0 text-[var(--color-text-secondary)]"
-          size={24}
-          weight="bold"
-        />
-      </Link>
     </div>
   )
 }

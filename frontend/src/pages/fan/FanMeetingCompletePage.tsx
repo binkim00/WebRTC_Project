@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import {
+    buildRecordingContentUrl,
     getMyRecordings,
+    getRecordingDetail,
     issueRecordingDownloadUrl,
+    type RecordingDetailResponse,
     type RecordingSummaryResponse,
 } from '../../api/recordings'
 import { AlertBanner, Button, Card, CardContent } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
-
-const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 function formatDateTime(iso: string): string {
     const date = new Date(iso)
@@ -23,12 +24,40 @@ function formatDateTime(iso: string): string {
     return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/** 바이트 크기를 사람이 읽기 쉬운 단위로 바꾼다. */
+function formatFileSize(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '-'
+    const units = ['B', 'KB', 'MB', 'GB']
+    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+    return `${(bytes / 1024 ** exponent).toFixed(exponent === 0 ? 0 : 1)}${units[exponent]}`
+}
+
+/** 초 단위 재생 시간을 분:초 형식으로 바꾼다. */
+function formatDuration(seconds: number | null): string {
+    if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return '-'
+    const minutes = Math.floor(seconds / 60)
+    return `${minutes}분 ${String(Math.floor(seconds % 60)).padStart(2, '0')}초`
+}
+
+/**
+ * 서명 URL에서 재생 토큰만 뽑아낸다.
+ *
+ * 백엔드가 주는 downloadUrl은 토큰이 붙은 상대 경로라서, 재생용과 다운로드용 URL을
+ * 각각 만들려면 토큰만 따로 필요하다.
+ */
+function extractContentToken(downloadUrl: string): string | null {
+    const query = downloadUrl.slice(downloadUrl.indexOf('?') + 1)
+    return new URLSearchParams(query).get('token')
+}
+
 export function FanMeetingCompletePage() {
     const { fanMeetingId } = useParams()
     const location = useLocation()
     const routeState = location.state as { meetingTitle?: string } | null
     const [session] = useState(() => getAuthSession())
     const [recording, setRecording] = useState<RecordingSummaryResponse | null>(null)
+    const [detail, setDetail] = useState<RecordingDetailResponse>()
+    const [contentToken, setContentToken] = useState<string>()
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState<string>()
     const [downloading, setDownloading] = useState(false)
@@ -45,10 +74,31 @@ export function FanMeetingCompletePage() {
         setLoadError(undefined)
 
         getMyRecordings({ page: 0, size: 20 }, session.accessToken, abortController.signal)
-            .then((pageData) => {
+            .then(async (pageData) => {
                 const meetingId = Number(fanMeetingId)
                 const matched = pageData.content.find((item) => item.meetingId === meetingId)
                 setRecording(matched ?? null)
+                if (!matched) return
+
+                // 목록 요약만으로는 재생 가능 여부가 최신이 아닐 수 있어 상세로 한 번 더 확인한다.
+                const loaded = await getRecordingDetail(
+                    matched.recordingId,
+                    session.accessToken,
+                    abortController.signal,
+                )
+                if (abortController.signal.aborted) return
+                setDetail(loaded)
+
+                // 재생과 다운로드에 같은 서명 토큰을 쓰므로 준비되면 미리 한 번만 발급한다.
+                if (loaded.playable) {
+                    const { downloadUrl } = await issueRecordingDownloadUrl(
+                        matched.recordingId,
+                        session.accessToken,
+                        abortController.signal,
+                    )
+                    if (abortController.signal.aborted) return
+                    setContentToken(extractContentToken(downloadUrl) ?? undefined)
+                }
             })
             .catch((error: unknown) => {
                 if (error instanceof DOMException && error.name === 'AbortError') {
@@ -77,11 +127,19 @@ export function FanMeetingCompletePage() {
         setDownloadError(undefined)
 
         try {
+            // 재생용으로 받아 둔 토큰이 있어도 다운로드 시점에 새로 발급해 만료를 피한다.
             const { downloadUrl } = await issueRecordingDownloadUrl(
                 recording.recordingId,
                 session.accessToken,
             )
-            window.open(`${API_URL}${downloadUrl}`, '_blank', 'noopener')
+            const token = extractContentToken(downloadUrl)
+            window.open(
+                token
+                    ? buildRecordingContentUrl(recording.recordingId, token, true)
+                    : downloadUrl,
+                '_blank',
+                'noopener',
+            )
         } catch (error: unknown) {
             setDownloadError(
                 error instanceof Error ? error.message : '다운로드 링크 발급에 실패했습니다.',
@@ -100,7 +158,12 @@ export function FanMeetingCompletePage() {
         )
     }
 
-    const isRecordingReady = Boolean(recording?.playable)
+    // 상세를 받았으면 상세의 playable을 우선하고, 아직이면 목록 요약값을 쓴다.
+    const isRecordingReady = Boolean(detail?.playable ?? recording?.playable)
+    const playbackUrl =
+        recording && contentToken
+            ? buildRecordingContentUrl(recording.recordingId, contentToken)
+            : undefined
     const meetingTitle = recording?.meetingTitle ?? routeState?.meetingTitle ?? '팬미팅'
     const endedAt = recording?.completedAt
 
@@ -161,9 +224,21 @@ export function FanMeetingCompletePage() {
                         <section className="mt-8 grid gap-6 lg:grid-cols-2">
                             <Card className="p-6">
                                 <div className="min-w-0">
-                                    <div className="flex aspect-video items-center justify-center rounded-[var(--radius-panel)] bg-[var(--color-divider)] text-[var(--color-text-secondary)]">
-                                        녹화 영상 미리보기
-                                    </div>
+                                    {playbackUrl ? (
+                                        <video
+                                            className="aspect-video w-full rounded-[var(--radius-panel)] bg-black"
+                                            controls
+                                            controlsList="nodownload"
+                                            preload="metadata"
+                                            src={playbackUrl}
+                                        >
+                                            브라우저가 영상 재생을 지원하지 않습니다. 아래 다운로드 버튼을 이용해 주세요.
+                                        </video>
+                                    ) : (
+                                        <div className="flex aspect-video items-center justify-center rounded-[var(--radius-panel)] bg-[var(--color-divider)] text-[var(--color-text-secondary)]">
+                                            재생 링크를 준비하고 있습니다
+                                        </div>
+                                    )}
                                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <strong className="text-[var(--color-text-primary)]">
                                             {meetingTitle}
@@ -177,6 +252,22 @@ export function FanMeetingCompletePage() {
                                             </time>
                                         ) : null}
                                     </div>
+                                    {detail ? (
+                                        <dl className="mt-4 grid gap-2 border-t border-[var(--color-divider)] pt-4 text-sm">
+                                            <div className="flex justify-between">
+                                                <dt className="text-[var(--color-text-secondary)]">재생 시간</dt>
+                                                <dd className="font-semibold">{formatDuration(detail.durationSec)}</dd>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <dt className="text-[var(--color-text-secondary)]">파일 크기</dt>
+                                                <dd className="font-semibold">{formatFileSize(detail.fileSizeBytes)}</dd>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <dt className="text-[var(--color-text-secondary)]">파일명</dt>
+                                                <dd className="min-w-0 truncate pl-4 font-semibold">{detail.fileName}</dd>
+                                            </div>
+                                        </dl>
+                                    ) : null}
                                 </div>
                             </Card>
 

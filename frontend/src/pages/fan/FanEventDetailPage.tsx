@@ -11,6 +11,7 @@ import { ApiError } from '../../api/ApiError'
 import {
   getApplicationForm,
   submitApplication,
+  withdrawApplication,
   type ApplicationFormResponse,
 } from '../../api/applications'
 import { getAuthSession } from '../../api/authSession'
@@ -93,12 +94,29 @@ function getApplyButtonLabel(detail: PublicFanMeetingDetail): string {
   if (detail.viewer.applicationStatus === 'NOT_SELECTED') return '미당첨'
   if (!detail.meeting.application.enabled) return '응모 없음'
   if (!detail.viewer.canApply) return '응모 기간이 아닙니다'
+  if (detail.viewer.applicationStatus === 'WITHDRAWN') return '다시 응모하기'
   return '응모하기'
 }
 
+/**
+ * 응모를 취소할 수 있는 상태인지 확인한다.
+ *
+ * 백엔드는 응모 접수 중이고 응모 기간 안일 때만 취소를 허용하므로 같은 조건으로 버튼을 노출한다.
+ */
+function canWithdrawApplication(detail: PublicFanMeetingDetail): boolean {
+  if (detail.viewer.applicationStatus !== 'SUBMITTED') return false
+  if (detail.meeting.status !== 'APPLICATION_OPEN') return false
+
+  const { startAt, endAt } = detail.meeting.application
+  if (!startAt || !endAt) return false
+
+  const now = Date.now()
+  return now >= new Date(startAt).getTime() && now < new Date(endAt).getTime()
+}
+
 export function FanEventDetailPage() {
-  const { eventId } = useParams()
-  const meetingId = Number(eventId)
+  // 팬 화면 경로는 '이벤트'라고 부르지만 실제 식별자는 팬미팅 ID다.
+  const meetingId = Number(useParams().meetingId)
   const validMeetingId = Number.isInteger(meetingId) && meetingId > 0
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
   const [loading, setLoading] = useState(validMeetingId)
@@ -227,6 +245,41 @@ export function FanEventDetailPage() {
     }
   }
 
+  /** 접수된 응모를 취소한다. 취소 후에도 응모 기간 안이면 다시 응모할 수 있다. */
+  async function handleWithdrawApplication() {
+    const token = getAuthSession()?.accessToken
+    if (!token) {
+      setSubmitError('응모를 취소하려면 먼저 로그인해 주세요.')
+      return
+    }
+    if (!window.confirm('응모를 취소할까요? 응모 기간 안에는 다시 응모할 수 있어요.')) return
+
+    setSubmitting(true)
+    setSubmitError(undefined)
+    setSubmitMessage(undefined)
+    try {
+      await withdrawApplication(meetingId, token)
+      setAnswers({})
+      setAgreements({ privacy: false, recording: false, participation: false })
+      setSubmitMessage('응모를 취소했습니다.')
+      await reloadDetail()
+    } catch (reason) {
+      if (reason instanceof ApiError) {
+        setSubmitError(
+          reason.status === 401
+            ? '로그인이 만료되었습니다. 다시 로그인해 주세요.'
+            : reason.status === 409
+              ? '지금은 응모를 취소할 수 있는 기간이 아닙니다.'
+              : reason.message,
+        )
+      } else {
+        setSubmitError('응모 취소 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   if (!validMeetingId) {
     return (
       <InvalidRouteState
@@ -255,7 +308,8 @@ export function FanEventDetailPage() {
   const { meeting, influencer, viewer } = detail
   const allAgreed = agreementItems.every((item) => agreements[item.id])
   const canSubmitApplication = viewer.canApply && allAgreed
-  const descriptionParagraphs = meeting.description
+  const canWithdraw = canWithdrawApplication(detail)
+  const descriptionParagraphs = (meeting.description ?? '')
     .split(/\r?\n/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean)
@@ -462,10 +516,10 @@ export function FanEventDetailPage() {
               </p>
 
               {submitError ? (
-                <AlertBanner title="응모 실패" variant="error">{submitError}</AlertBanner>
+                <AlertBanner title="요청 실패" variant="error">{submitError}</AlertBanner>
               ) : null}
               {submitMessage ? (
-                <AlertBanner title="응모 완료" variant="success">{submitMessage}</AlertBanner>
+                <AlertBanner title="처리 완료" variant="success">{submitMessage}</AlertBanner>
               ) : null}
 
               <Button
@@ -477,6 +531,17 @@ export function FanEventDetailPage() {
               >
                 {getApplyButtonLabel(detail)}
               </Button>
+
+              {canWithdraw ? (
+                <Button
+                  className="w-full"
+                  disabled={submitting}
+                  onClick={() => void handleWithdrawApplication()}
+                  variant="secondary"
+                >
+                  응모 취소
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
         </aside>
