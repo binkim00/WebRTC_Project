@@ -6,6 +6,14 @@ export type ManagerMeetingSummary = {
   influencerName: string
   scheduledStartAt: string
   status?: string
+  /** 응모 시작 일시이며 응모를 사용하지 않으면 null이다. */
+  applicationStartAt: string | null
+  /** 응모 마감 일시이며 응모를 사용하지 않으면 null이다. */
+  applicationEndAt: string | null
+  /** 지금까지 접수된 응모 수다. */
+  applicationCount: number
+  /** 추첨으로 확정된 참가자 수다. */
+  participantCount: number
 }
 
 export type ManagerMeetingPage = {
@@ -45,6 +53,11 @@ function readNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+/** 값이 문자열일 때만 그대로 쓰고 나머지는 null로 정규화한다. */
+function readNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
 function parseMeeting(value: unknown): ManagerMeetingSummary {
   const record = asRecord(value)
   const influencer = asRecord(record?.influencer)
@@ -65,6 +78,10 @@ function parseMeeting(value: unknown): ManagerMeetingSummary {
       typeof record.status === 'string' && record.status.trim()
         ? record.status
         : undefined,
+    applicationStartAt: readNullableString(record.applicationStartAt),
+    applicationEndAt: readNullableString(record.applicationEndAt),
+    applicationCount: readNumber(record.applicationCount, 0),
+    participantCount: readNumber(record.participantCount, 0),
   }
 }
 

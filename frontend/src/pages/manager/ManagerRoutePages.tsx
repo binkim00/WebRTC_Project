@@ -1,12 +1,9 @@
 import {
   ArrowLeft,
   ArrowRight,
-  CaretDown,
-  CaretUp,
   Check,
   FloppyDisk,
   Key,
-  Megaphone,
   PencilSimple,
   Plus,
   Trash,
@@ -14,27 +11,14 @@ import {
 } from '@phosphor-icons/react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ApiError } from '../../api/ApiError'
-import {
-  drawApplicationWinners,
-  getApplicants,
-  getApplicationForm,
-  getApplicationStatistics,
-  publishApplicationResults,
-  saveApplicationForm,
-  type ApplicantListResponse,
-  type ApplicationStatisticsResponse,
-  type ApplicationStatus,
-} from '../../api/applications'
+
+import { saveApplicationForm } from '../../api/applications'
 import { getAuthSession, replaceAuthSession } from '../../api/authSession'
 import { forceEndCallSession } from '../../api/callSessions'
 import type { PageResponse } from '../../api/envelope'
-import { fetchMeetingDetail } from '../../api/fanMeetingParticipants'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import {
-  fetchMyMeetings,
   fetchOwnedMeetings,
-  type ManagerMeetingPage,
   type ManagerMeetingSummary,
 } from '../../api/managerMeetings'
 import {
@@ -44,14 +28,8 @@ import {
   type FanMeetingForm,
 } from '../../api/managerOperations'
 import {
-  cancelFanMeeting,
-  deleteFanMeetingDraft,
-  endFanMeeting,
   getFanMeetingStatistics,
-  patchFanMeeting,
-  startFanMeeting,
   type FanMeetingStatisticsResponse,
-  type FanMeetingUpdateRequest,
 } from '../../api/meetingManagement'
 import {
   createMeetingNotice,
@@ -69,41 +47,15 @@ import {
 } from '../../api/users'
 import { getMyOrganization, type OrganizationMember } from '../../api/organizations'
 import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, Pagination, Select, Spinner, TextField, Textarea } from '../../components'
+import {
+  formatDateTime,
+  getScheduleErrors,
+  toApiLocalDateTime,
+  toDateTimeLocalValue,
+  toErrorMessage,
+} from './meetingLifecycle'
 
 const DRAFT_PAGE_SIZE = 5
-
-/** 팬미팅(이벤트) 상태 코드를 화면용 한국어 라벨로 바꾼다. */
-const meetingStatusLabels: Record<string, string> = {
-  DRAFT: '초안',
-  PUBLISHED: '발행됨',
-  APPLICATION_OPEN: '응모 접수 중',
-  APPLICATION_CLOSED: '응모 마감',
-  READY: '진행 준비',
-  LIVE: '진행 중',
-  ENDED: '종료',
-  CANCELED: '취소됨',
-}
-
-/** 팬미팅 상태에 맞는 배지 색상을 고른다. */
-function meetingStatusBadge(status?: string): 'primary' | 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'LIVE') return 'primary'
-  if (status === 'PUBLISHED' || status === 'APPLICATION_OPEN' || status === 'READY') return 'success'
-  if (status === 'APPLICATION_CLOSED' || status === 'DRAFT') return 'warning'
-  if (status === 'CANCELED') return 'danger'
-  return 'neutral'
-}
-
-/** 오류 원인에서 사용자에게 보여줄 메시지를 뽑는다. */
-function toErrorMessage(cause: unknown, fallback: string): string {
-  return cause instanceof Error ? cause.message : fallback
-}
-
-/** LocalDateTime 문자열을 읽기 쉬운 한국어 일시로 표시한다. */
-function formatDateTime(value?: string | null): string {
-  if (!value) return '-'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR')
-}
 
 /** 매니저 페이지의 제목, 설명, 선택적 뒤로가기 링크를 같은 형태로 표시한다. */
 function PageHeader({ eyebrow, title, description, backTo }: { eyebrow?: string; title: string; description: string; backTo?: string }) {
@@ -117,11 +69,11 @@ function PageHeader({ eyebrow, title, description, backTo }: { eyebrow?: string;
   )
 }
 
-/** 3단계 입력 폼에서 현재 단계와 완료 단계를 시각적으로 표시한다. */
+/** 단계형 입력 폼에서 현재 단계와 완료 단계를 시각적으로 표시한다. */
 function Stepper({ step, labels = ['기본 정보', '응모 설정', '미리보기'] }: { step: number; labels?: string[] }) {
-  return <ol className="mx-auto grid w-full max-w-4xl grid-cols-3 gap-0 px-5 py-8 sm:px-12 sm:py-10">
+  return <ol className="mx-auto grid w-full max-w-4xl gap-0 px-5 py-8 sm:px-12 sm:py-10" style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))` }}>
     {labels.map((label, index) => <li className="relative text-center" key={label}>
-      {index < 2 ? <span className={`absolute left-1/2 right-[-50%] top-8 h-px ${index < step ? 'bg-gradient-to-r from-[var(--color-primary-coral)] to-[var(--color-success)]' : 'bg-[var(--color-divider)]'}`} /> : null}
+      {index < labels.length - 1 ? <span className={`absolute left-1/2 right-[-50%] top-8 h-px ${index < step ? 'bg-gradient-to-r from-[var(--color-primary-coral)] to-[var(--color-success)]' : 'bg-[var(--color-divider)]'}`} /> : null}
       <span className="relative z-10 mx-auto block size-16">
         {index <= step ? (
           <span
@@ -147,76 +99,16 @@ function FormActions({ onBack, onSave, saveLabel = '임시 저장', nextLabel = 
   return <div className="flex flex-wrap items-center justify-end gap-3">{onSave ? <Button disabled={nextLoading} leadingIcon={<FloppyDisk size={18} />} onClick={onSave} variant="secondary">{saveLabel}</Button> : null}<div className="flex gap-2">{onBack ? <Button disabled={nextLoading} leadingIcon={<ArrowLeft size={18} />} onClick={onBack} variant="secondary">이전 단계</Button> : null}<Button disabled={nextDisabled} loading={nextLoading} trailingIcon={<ArrowRight size={18} />} type="submit">{nextLabel}</Button></div></div>
 }
 
-/** datetime-local 입력값에 초가 없으면 백엔드 LocalDateTime 형식에 맞게 초를 붙인다. */
-function toApiLocalDateTime(value: string): string {
-  return value.length === 16 ? `${value}:00` : value
-}
-
-/** 백엔드 LocalDateTime 값을 datetime-local 입력에서 사용할 분 단위 값으로 바꾼다. */
-function toDateTimeLocalValue(value: string | null): string {
-  return value ? value.replace(' ', 'T').slice(0, 16) : ''
-}
-
-/** 입력된 일정 사이의 선후 관계를 백엔드 검증 규칙과 동일하게 검사한다. */
-function getMeetingScheduleErrors(form: FanMeetingForm): string[] {
-  const errors: string[] = []
-  const scheduledStart = form.scheduledStartAt
-    ? new Date(form.scheduledStartAt)
-    : null
-  const applicationStart = form.application.startAt
-    ? new Date(form.application.startAt)
-    : null
-  const applicationEnd = form.application.endAt
-    ? new Date(form.application.endAt)
-    : null
-  const resultAnnouncement = form.application.resultAnnouncementAt
-    ? new Date(form.application.resultAnnouncementAt)
-    : null
-  const queueOpen = form.operation.queueOpenAt
-    ? new Date(form.operation.queueOpenAt)
-    : null
-
-  if (
-    form.application.enabled &&
-    applicationStart &&
-    applicationEnd &&
-    applicationEnd <= applicationStart
-  ) {
-    errors.push('응모 마감 일시는 응모 시작 일시보다 이후여야 합니다.')
+/** 생성 폼 값을 공통 일정 검증 입력 형태로 바꾼다. */
+function toScheduleInput(form: FanMeetingForm) {
+  return {
+    scheduledStartAt: form.scheduledStartAt,
+    applicationEnabled: form.application.enabled,
+    applicationStartAt: form.application.startAt,
+    applicationEndAt: form.application.endAt,
+    resultAnnouncementAt: form.application.resultAnnouncementAt,
+    queueOpenAt: form.operation.queueOpenAt,
   }
-
-  if (
-    form.application.enabled &&
-    applicationEnd &&
-    resultAnnouncement &&
-    resultAnnouncement < applicationEnd
-  ) {
-    errors.push('결과 발표 일시는 응모 마감 일시보다 빠를 수 없습니다.')
-  }
-
-  if (
-    form.application.enabled &&
-    applicationEnd &&
-    scheduledStart &&
-    applicationEnd >= scheduledStart
-  ) {
-    errors.push('응모 마감 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
-  }
-
-  if (
-    form.application.enabled &&
-    resultAnnouncement &&
-    scheduledStart &&
-    resultAnnouncement >= scheduledStart
-  ) {
-    errors.push('결과 발표 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
-  }
-
-  if (queueOpen && scheduledStart && queueOpen >= scheduledStart) {
-    errors.push('대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
-  }
-
-  return errors
 }
 
 /** 예정 팬미팅과 대기열 시작 시간의 선후 관계를 검사하고 오류 메시지를 반환한다. */
@@ -231,724 +123,41 @@ function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
   }
 
   return (
-    getMeetingScheduleErrors(form)[0] ??
+    getScheduleErrors(toScheduleInput(form))[0] ??
     (Number.isNaN(queueOpen.getTime())
       ? '대기열 오픈 일시를 입력해 주세요.'
       : undefined)
   )
 }
 
-/** 등록된 홍보·응모 이벤트를 검색하고 상태별 발행·취소·삭제를 수행하는 실제 API 목록 페이지다. */
-export function ManagerEventListPage() {
-  const [keyword, setKeyword] = useState('')
-  const [appliedKeyword, setAppliedKeyword] = useState('')
-  const [page, setPage] = useState(0)
-  const [data, setData] = useState<ManagerMeetingPage>()
-  const [loading, setLoading] = useState(true)
-  const [busyId, setBusyId] = useState<string>()
-  const [error, setError] = useState<string>()
-  const [message, setMessage] = useState<string>()
-  const navigate = useNavigate()
-
-  const load = useCallback(async () => {
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError('이벤트 목록을 조회하려면 먼저 로그인해 주세요.')
-      setLoading(false)
-      return
-    }
-
-    setLoading(true)
-    try {
-      setData(await fetchMyMeetings({ keyword: appliedKeyword || undefined, page, size: 10 }, token))
-      setError(undefined)
-    } catch (cause) {
-      setError(toErrorMessage(cause, '이벤트 목록을 불러오지 못했습니다.'))
-    } finally {
-      setLoading(false)
-    }
-  }, [appliedKeyword, page])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  /** 상태 전환·삭제 액션을 확인 후 실행하고 목록을 다시 읽는다. */
-  async function runAction(meetingId: string, action: 'publish' | 'cancel' | 'delete') {
-    const confirmText =
-      action === 'publish'
-        ? '이 이벤트를 발행할까요? 발행하면 팬에게 공개됩니다.'
-        : action === 'cancel'
-          ? '이 이벤트를 취소할까요? 취소하면 되돌릴 수 없습니다.'
-          : '이 초안 이벤트를 삭제할까요? 삭제하면 되돌릴 수 없습니다.'
-    if (!window.confirm(confirmText)) return
-
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError('작업을 수행하려면 먼저 로그인해 주세요.')
-      return
-    }
-
-    setBusyId(meetingId)
-    setError(undefined)
-    setMessage(undefined)
-    try {
-      if (action === 'publish') {
-        await publishFanMeeting(Number(meetingId), token)
-        setMessage('이벤트를 발행했습니다.')
-      } else if (action === 'cancel') {
-        await cancelFanMeeting(meetingId, token)
-        setMessage('이벤트를 취소했습니다.')
-      } else {
-        await deleteFanMeetingDraft(meetingId, token)
-        setMessage('초안 이벤트를 삭제했습니다.')
-      }
-      await load()
-    } catch (cause) {
-      setError(toErrorMessage(cause, '이벤트 상태를 변경하지 못했습니다.'))
-    } finally {
-      setBusyId(undefined)
-    }
-  }
-
-  return (
-    <div className="grid gap-7 pb-10">
-      <PageHeader title="이벤트 관리" description="작성한 이벤트와 응모 설정을 확인하고 관리하세요." />
-      {error ? <AlertBanner title="이벤트 관리 요청 실패" variant="error">{error}</AlertBanner> : null}
-      {message ? <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 완료" variant="success">{message}</AlertBanner> : null}
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--color-divider)] p-6">
-          <form
-            className="flex min-w-0 flex-1 flex-wrap items-end gap-2"
-            onSubmit={(event) => {
-              event.preventDefault()
-              setPage(0)
-              setAppliedKeyword(keyword.trim())
-            }}
-          >
-            <TextField containerClassName="min-w-[260px] flex-1" label="이벤트명 검색" onChange={(e) => setKeyword(e.target.value)} placeholder="이벤트명을 입력하세요" value={keyword} />
-            <Button type="submit" variant="secondary">검색</Button>
-          </form>
-          <Button leadingIcon={<Plus size={19} />} onClick={() => navigate('/manager/events/new')}>새 이벤트</Button>
-        </div>
-        {loading ? (
-          <div className="flex min-h-[240px] items-center justify-center"><Spinner label="이벤트 목록을 불러오는 중" /></div>
-        ) : !data || data.content.length === 0 ? (
-          <div className="p-10 text-center text-[var(--color-text-secondary)]">등록된 이벤트가 없습니다.</div>
-        ) : (
-          <>
-            <div className="hidden grid-cols-[1.5fr_.7fr_.9fr_.5fr_1fr] gap-4 bg-[var(--color-surface-page)] px-6 py-4 text-xs font-bold text-[var(--color-text-secondary)] sm:grid">
-              <span>이벤트명</span><span>인플루언서</span><span>예정 일시</span><span>상태</span><span>관리</span>
-            </div>
-            <div className="divide-y divide-[var(--color-divider)]">
-              {data.content.map((event) => {
-                const status = event.status
-                const busy = busyId === event.meetingId
-                const cancellable = status === 'PUBLISHED' || status === 'APPLICATION_OPEN' || status === 'APPLICATION_CLOSED'
-                return (
-                  <div className="grid gap-3 px-6 py-5 sm:grid-cols-[1.5fr_.7fr_.9fr_.5fr_1fr] sm:items-center" key={event.meetingId}>
-                    <div className="flex items-center gap-3">
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-surface-page)]"><Megaphone size={19} /></span>
-                      <strong className="min-w-0 break-keep">{event.title}</strong>
-                    </div>
-                    <span className="text-sm text-[var(--color-text-secondary)]">{event.influencerName}</span>
-                    <time className="text-sm text-[var(--color-text-secondary)]">{formatDateTime(event.scheduledStartAt)}</time>
-                    <span><Badge variant={meetingStatusBadge(status)}>{status ? meetingStatusLabels[status] ?? status : '상태 미확인'}</Badge></span>
-                    <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
-                      <Link className="text-[var(--color-primary-coral)]" to={`/manager/events/${event.meetingId}/applications`}>응모자 관리</Link>
-                      <Link className="text-[var(--color-primary-coral)]" to={`/manager/events/${event.meetingId}/edit`}>수정</Link>
-                      {status === 'DRAFT' ? (
-                        <>
-                          <Button disabled={busy} onClick={() => void runAction(event.meetingId, 'publish')} size="sm">발행</Button>
-                          <Button disabled={busy} leadingIcon={<Trash size={15} />} onClick={() => void runAction(event.meetingId, 'delete')} size="sm" variant="danger">삭제</Button>
-                        </>
-                      ) : null}
-                      {cancellable ? (
-                        <Button disabled={busy} onClick={() => void runAction(event.meetingId, 'cancel')} size="sm" variant="danger">취소</Button>
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {data.totalPages > 1 ? (
-              <Pagination className="border-t border-[var(--color-divider)] py-4" currentPage={page + 1} onPageChange={(next) => setPage(next - 1)} totalPages={data.totalPages} />
-            ) : null}
-          </>
-        )}
-      </Card>
-    </div>
-  )
-}
-
-/** 응모 폼 편집기에서 사용하는 로컬 질문 상태다. */
-type EditableFormQuestion = {
+/** 생성 마법사에서 편집하는 응모 질문 하나의 상태다. */
+type DraftFormQuestion = {
   key: number
-  questionId?: number
   questionText: string
   questionType: 'SHORT_TEXT' | 'LONG_TEXT'
   required: boolean
 }
 
-/** 이벤트 기본 정보를 PATCH로 수정하고 응모 폼 질문을 관리하는 실제 API 페이지다. */
-export function ManagerEventEditPage() {
-  const eventId = useParams<{ eventId: string }>().eventId ?? ''
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string>()
-  const [status, setStatus] = useState<string>()
-  const [initial, setInitial] = useState({ title: '', description: '', scheduledStartAt: '', capacity: 0 })
-  const [form, setForm] = useState({ title: '', description: '', scheduledStartAt: '', capacity: 0 })
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string>()
-  const [message, setMessage] = useState<string>()
+/** 백엔드가 허용하는 응모 질문 최대 개수다. */
+const MAX_DRAFT_QUESTIONS = 10
 
-  // 응모 폼 관리 상태
-  const [formDescription, setFormDescription] = useState('')
-  const [questions, setQuestions] = useState<EditableFormQuestion[]>([])
-  const [formLoaded, setFormLoaded] = useState(false)
-  const [formSaving, setFormSaving] = useState(false)
-  const [formError, setFormError] = useState<string>()
-  const [formMessage, setFormMessage] = useState<string>()
-  const nextKey = useRef(1)
-
-  useEffect(() => {
-    if (!eventId) {
-      setLoadError('이벤트 식별자가 없습니다.')
-      setLoading(false)
-      return
-    }
-
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setLoadError('이벤트 정보를 조회하려면 먼저 로그인해 주세요.')
-      setLoading(false)
-      return
-    }
-
-    const controller = new AbortController()
-
-    fetchMeetingDetail(eventId, token, controller.signal)
-      .then((detail) => {
-        const values = {
-          title: detail.title,
-          description: '',
-          scheduledStartAt: detail.scheduledStartAt?.slice(0, 16) ?? '',
-          capacity: detail.application?.capacity ?? 0,
-        }
-        setInitial(values)
-        setForm(values)
-        setStatus(detail.status)
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) setLoadError(toErrorMessage(cause, '이벤트 정보를 불러오지 못했습니다.'))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-
-    getApplicationForm(eventId, controller.signal)
-      .then((response) => {
-        setFormDescription(response.formDescription ?? '')
-        setQuestions(response.questions
-          .slice()
-          .sort((a, b) => a.displayOrder - b.displayOrder)
-          .map((question) => ({
-            key: nextKey.current++,
-            questionId: question.questionId,
-            questionText: question.questionText,
-            questionType: question.questionType === 'LONG_TEXT' ? 'LONG_TEXT' : 'SHORT_TEXT',
-            required: question.required,
-          })))
-        setFormLoaded(true)
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return
-        // 아직 폼이 없는 이벤트면 빈 편집기로 시작한다.
-        if (cause instanceof ApiError && cause.status === 404) {
-          setFormLoaded(true)
-          return
-        }
-        setFormError(toErrorMessage(cause, '응모 폼을 불러오지 못했습니다.'))
-      })
-
-    return () => controller.abort()
-  }, [eventId])
-
-  /** 처음 불러온 값과 달라진 필드만 PATCH 본문에 담아 저장한다. */
-  async function saveBasic(event: FormEvent) {
-    event.preventDefault()
-
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError('저장하려면 먼저 로그인해 주세요.')
-      return
-    }
-
-    const patch: FanMeetingUpdateRequest = {}
-    if (form.title.trim() && form.title !== initial.title) patch.title = form.title.trim()
-    if (form.description !== initial.description) patch.description = form.description
-    if (form.scheduledStartAt && form.scheduledStartAt !== initial.scheduledStartAt) {
-      patch.scheduledStartAt = toApiLocalDateTime(form.scheduledStartAt)
-    }
-    if (form.capacity !== initial.capacity && form.capacity > 0) {
-      patch.application = { capacity: form.capacity }
-    }
-
-    if (Object.keys(patch).length === 0) {
-      setMessage('변경된 항목이 없습니다.')
-      return
-    }
-
-    setSaving(true)
-    setError(undefined)
-    setMessage(undefined)
-    try {
-      const updated = await patchFanMeeting(eventId, patch, token)
-      const values = {
-        title: updated.title,
-        description: updated.description ?? '',
-        scheduledStartAt: updated.scheduledStartAt?.slice(0, 16) ?? '',
-        capacity: updated.application.capacity,
-      }
-      setInitial(values)
-      setForm(values)
-      setStatus(updated.status)
-      setMessage('이벤트 정보를 저장했습니다.')
-    } catch (cause) {
-      setError(toErrorMessage(cause, '이벤트 정보를 저장하지 못했습니다.'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  /** 질문 순서를 위나 아래로 한 칸 옮긴다. */
-  function moveQuestion(index: number, direction: -1 | 1) {
-    setQuestions((items) => {
-      const target = index + direction
-      if (target < 0 || target >= items.length) return items
-      const next = items.slice()
-      const [picked] = next.splice(index, 1)
-      next.splice(target, 0, picked)
-      return next
-    })
-  }
-
-  function updateQuestion(key: number, patch: Partial<EditableFormQuestion>) {
-    setQuestions((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)))
-  }
-
-  /** 응모 폼 전체(설명 + 질문 목록)를 서버에 교체 저장한다. */
-  async function saveForm(event: FormEvent) {
-    event.preventDefault()
-
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setFormError('응모 폼을 저장하려면 먼저 로그인해 주세요.')
-      return
-    }
-
-    if (questions.some((question) => !question.questionText.trim())) {
-      setFormError('모든 질문 내용을 입력해 주세요.')
-      return
-    }
-
-    setFormSaving(true)
-    setFormError(undefined)
-    setFormMessage(undefined)
-    try {
-      const saved = await saveApplicationForm(eventId, {
-        formDescription: formDescription.trim() || null,
-        questions: questions.map((question, index) => ({
-          questionId: question.questionId ?? null,
-          questionText: question.questionText.trim(),
-          questionType: question.questionType,
-          required: question.required,
-          displayOrder: index + 1,
-        })),
-      }, token)
-      setFormDescription(saved.formDescription ?? '')
-      setQuestions(saved.questions
-        .slice()
-        .sort((a, b) => a.displayOrder - b.displayOrder)
-        .map((question) => ({
-          key: nextKey.current++,
-          questionId: question.questionId,
-          questionText: question.questionText,
-          questionType: question.questionType === 'LONG_TEXT' ? 'LONG_TEXT' : 'SHORT_TEXT',
-          required: question.required,
-        })))
-      setFormMessage('응모 폼을 저장했습니다.')
-    } catch (cause) {
-      setFormError(toErrorMessage(cause, '응모 폼을 저장하지 못했습니다.'))
-    } finally {
-      setFormSaving(false)
-    }
-  }
-
-  if (loading) {
-    return <div className="flex min-h-[420px] items-center justify-center"><Spinner label="이벤트 정보를 불러오는 중" /></div>
-  }
-
-  return (
-    <div className="grid gap-7 pb-10">
-      <PageHeader
-        eyebrow="PROMOTION & APPLICATION"
-        title="홍보·응모 이벤트 수정"
-        description="이벤트 기본 정보를 수정하고 팬 응모 폼 질문을 관리하세요."
-        backTo="/manager/events/manage"
-      />
-      {loadError ? <AlertBanner title="이벤트 조회 실패" variant="error">{loadError}</AlertBanner> : null}
-      {!loadError ? (
-        <>
-          <div className="flex items-center gap-3">
-            <Badge variant={meetingStatusBadge(status)}>{status ? meetingStatusLabels[status] ?? status : '상태 미확인'}</Badge>
-            <span className="text-sm text-[var(--color-text-secondary)]">이벤트 #{eventId}</span>
-          </div>
-
-          <form className="grid gap-5" onSubmit={saveBasic}>
-            <Card>
-              <CardHeader>
-                <Badge variant="primary">기본 정보</Badge>
-                <CardTitle as="h2" className="mt-3">이벤트 기본 정보 수정</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 sm:grid-cols-2">
-                <TextField containerClassName="sm:col-span-2" label="이벤트 제목" maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-                <TextField label="예정 팬미팅 일시" type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
-                <TextField label="응모 정원" min={1} type="number" value={form.capacity} onChange={(event) => setForm({ ...form, capacity: Number(event.target.value) })} />
-                <Textarea
-                  containerClassName="sm:col-span-2"
-                  helperText="상세 조회 API가 기존 소개 내용을 제공하지 않아 비어 있습니다. 입력한 경우에만 새 내용으로 수정됩니다."
-                  label="이벤트 상세 소개"
-                  rows={6}
-                  value={form.description}
-                  onChange={(event) => setForm({ ...form, description: event.target.value })}
-                  placeholder="팬에게 보여 줄 이벤트와 응모 안내를 입력해 주세요."
-                />
-              </CardContent>
-            </Card>
-            {error ? <AlertBanner title="저장 실패" variant="error">{error}</AlertBanner> : null}
-            {message ? <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 결과" variant="success">{message}</AlertBanner> : null}
-            <div className="flex justify-end">
-              <Button leadingIcon={<FloppyDisk size={18} />} loading={saving} type="submit">변경 내용 저장</Button>
-            </div>
-          </form>
-
-          <form className="grid gap-5" onSubmit={saveForm}>
-            <Card>
-              <CardHeader>
-                <Badge variant="primary">응모 폼 관리</Badge>
-                <CardTitle as="h2" className="mt-3">팬 응모 질문 구성</CardTitle>
-                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">저장 시 질문 목록 전체가 교체되며, 목록에서 제거한 기존 질문은 삭제됩니다.</p>
-              </CardHeader>
-              <CardContent className="grid gap-5">
-                {!formLoaded && !formError ? <p className="text-sm text-[var(--color-text-secondary)]">응모 폼을 불러오는 중입니다.</p> : null}
-                <Textarea label="응모 폼 안내 문구" rows={3} value={formDescription} onChange={(event) => setFormDescription(event.target.value)} placeholder="응모자에게 보여 줄 안내 문구를 입력해 주세요." />
-                {questions.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-[var(--color-divider)] p-5 text-center text-sm text-[var(--color-text-secondary)]">등록된 질문이 없습니다. 질문을 추가해 주세요.</p>
-                ) : (
-                  <div className="grid gap-4">
-                    {questions.map((question, index) => (
-                      <div className="grid gap-4 rounded-2xl border border-[var(--color-divider)] p-5" key={question.key}>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <Badge variant="neutral">질문 {index + 1}</Badge>
-                          <div className="flex gap-2">
-                            <Button aria-label="위로 이동" disabled={index === 0} onClick={() => moveQuestion(index, -1)} size="sm" type="button" variant="secondary"><CaretUp size={15} /></Button>
-                            <Button aria-label="아래로 이동" disabled={index === questions.length - 1} onClick={() => moveQuestion(index, 1)} size="sm" type="button" variant="secondary"><CaretDown size={15} /></Button>
-                            <Button leadingIcon={<Trash size={15} />} onClick={() => setQuestions((items) => items.filter((item) => item.key !== question.key))} size="sm" type="button" variant="danger">삭제</Button>
-                          </div>
-                        </div>
-                        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
-                          <TextField label="질문 내용" required value={question.questionText} onChange={(event) => updateQuestion(question.key, { questionText: event.target.value })} placeholder="예: 이번 팬미팅에서 가장 나누고 싶은 이야기는 무엇인가요?" />
-                          <Select
-                            label="답변 형식"
-                            onChange={(event) => updateQuestion(question.key, { questionType: event.target.value === 'LONG_TEXT' ? 'LONG_TEXT' : 'SHORT_TEXT' })}
-                            options={[
-                              { value: 'SHORT_TEXT', label: '단답형' },
-                              { value: 'LONG_TEXT', label: '장문형' },
-                            ]}
-                            value={question.questionType}
-                          />
-                        </div>
-                        <Checkbox checked={question.required} label="필수 응답 질문입니다." onChange={(event) => updateQuestion(question.key, { required: event.target.checked })} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div>
-                  <Button
-                    leadingIcon={<Plus size={17} />}
-                    onClick={() => setQuestions((items) => [...items, { key: nextKey.current++, questionText: '', questionType: 'SHORT_TEXT', required: true }])}
-                    type="button"
-                    variant="secondary"
-                  >
-                    질문 추가
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-            {formError ? <AlertBanner title="응모 폼 처리 실패" variant="error">{formError}</AlertBanner> : null}
-            {formMessage ? <AlertBanner onDismiss={() => setFormMessage(undefined)} title="처리 결과" variant="success">{formMessage}</AlertBanner> : null}
-            <div className="flex justify-end">
-              <Button disabled={!formLoaded} leadingIcon={<FloppyDisk size={18} />} loading={formSaving} type="submit">응모 폼 저장</Button>
-            </div>
-          </form>
-        </>
-      ) : null}
-    </div>
-  )
-}
-
-/** 응모 상태 코드를 화면용 라벨과 배지 색상으로 바꾼다. */
-const applicationStatusLabels: Record<ApplicationStatus, string> = {
-  SUBMITTED: '응모 완료',
-  WITHDRAWN: '응모 철회',
-  SELECTED: '당첨',
-  NOT_SELECTED: '미당첨',
-}
-
-function applicationStatusBadge(status: ApplicationStatus): 'primary' | 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'SELECTED') return 'success'
-  if (status === 'NOT_SELECTED') return 'danger'
-  if (status === 'WITHDRAWN') return 'neutral'
-  return 'primary'
-}
-
-/** 응모자 목록·답변을 조회하고 추첨과 결과 발표를 수행하는 실제 API 페이지다. */
-export function ManagerApplicationsPage() {
-  const eventId = useParams<{ eventId: string }>().eventId ?? ''
-  const [meetingTitle, setMeetingTitle] = useState<string>()
-  const [stats, setStats] = useState<ApplicationStatisticsResponse>()
-  const [list, setList] = useState<ApplicantListResponse>()
-  const [statusFilter, setStatusFilter] = useState('')
-  const [keyword, setKeyword] = useState('')
-  const [appliedKeyword, setAppliedKeyword] = useState('')
-  const [page, setPage] = useState(0)
-  const [expandedId, setExpandedId] = useState<number>()
-  const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string>()
-  const [message, setMessage] = useState<string>()
-
-  const loadStats = useCallback(async () => {
-    const token = getAuthSession()?.accessToken
-    if (!token || !eventId) return
-    try {
-      setStats(await getApplicationStatistics(eventId, token))
-    } catch (cause) {
-      setError(toErrorMessage(cause, '응모 통계를 불러오지 못했습니다.'))
-    }
-  }, [eventId])
-
-  const loadApplicants = useCallback(async () => {
-    const token = getAuthSession()?.accessToken
-    if (!eventId) {
-      setError('이벤트 식별자가 없습니다.')
-      setLoading(false)
-      return
-    }
-    if (!token) {
-      setError('응모자 목록을 조회하려면 먼저 로그인해 주세요.')
-      setLoading(false)
-      return
-    }
-
-    setLoading(true)
-    try {
-      setList(await getApplicants(eventId, {
-        applicationStatus: statusFilter ? (statusFilter as ApplicationStatus) : undefined,
-        keyword: appliedKeyword || undefined,
-        page,
-        size: 10,
-      }, token))
-      setError(undefined)
-    } catch (cause) {
-      setError(toErrorMessage(cause, '응모자 목록을 불러오지 못했습니다.'))
-    } finally {
-      setLoading(false)
-    }
-  }, [appliedKeyword, eventId, page, statusFilter])
-
-  useEffect(() => {
-    void loadApplicants()
-  }, [loadApplicants])
-
-  useEffect(() => {
-    void loadStats()
-
-    const token = getAuthSession()?.accessToken
-    if (!token || !eventId) return
-    const controller = new AbortController()
-    fetchMeetingDetail(eventId, token, controller.signal)
-      .then((detail) => setMeetingTitle(detail.title))
-      .catch(() => {
-        // 제목 조회 실패는 응모 관리 기능을 막지 않는다.
-      })
-    return () => controller.abort()
-  }, [eventId, loadStats])
-
-  /** 응모자 전체에서 당첨자를 추첨한다. */
-  async function draw() {
-    if (!window.confirm('응모자 중에서 당첨자를 추첨할까요? 추첨 후에는 다시 실행할 수 없습니다.')) return
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError('추첨하려면 먼저 로그인해 주세요.')
-      return
-    }
-
-    setBusy(true)
-    setError(undefined)
-    setMessage(undefined)
-    try {
-      const result = await drawApplicationWinners(eventId, token)
-      setMessage(`추첨을 완료했습니다. 당첨 ${result.selectedCount}명 · 미당첨 ${result.notSelectedCount}명 · 참가자 ${result.participantCount}명`)
-      await Promise.all([loadStats(), loadApplicants()])
-    } catch (cause) {
-      setError(toErrorMessage(cause, '추첨에 실패했습니다.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  /** 추첨 결과를 팬에게 발표(알림 발송)한다. */
-  async function publishResults() {
-    if (!window.confirm('응모 결과를 발표할까요? 발표하면 모든 응모자에게 알림이 전송됩니다.')) return
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError('결과를 발표하려면 먼저 로그인해 주세요.')
-      return
-    }
-
-    setBusy(true)
-    setError(undefined)
-    setMessage(undefined)
-    try {
-      const result = await publishApplicationResults(eventId, token)
-      setMessage(`응모 결과를 발표했습니다. 알림 ${result.notificationCount}건을 전송했습니다.`)
-      await Promise.all([loadStats(), loadApplicants()])
-    } catch (cause) {
-      setError(toErrorMessage(cause, '결과 발표에 실패했습니다.'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="grid gap-7 pb-10">
-      <PageHeader title="응모 관리" description="응모자의 답변을 확인하고 추첨과 결과 발표를 진행하세요." backTo="/manager/events/manage" />
-      {error ? <AlertBanner title="응모 관리 요청 실패" variant="error">{error}</AlertBanner> : null}
-      {message ? <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 완료" variant="success">{message}</AlertBanner> : null}
-
-      <Card className="p-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs text-[var(--color-text-secondary)]">이벤트명</p>
-            <h2 className="mt-1 text-xl font-black">{meetingTitle ?? `이벤트 #${eventId}`}</h2>
-          </div>
-          <div className="flex flex-wrap gap-8 text-right">
-            <div><p className="text-xs text-[var(--color-text-secondary)]">전체 응모</p><strong className="text-2xl">{stats?.totalApplications ?? '-'}명</strong></div>
-            <div><p className="text-xs text-[var(--color-text-secondary)]">응모 완료</p><strong className="text-2xl">{stats?.submittedCount ?? '-'}명</strong></div>
-            <div><p className="text-xs text-[var(--color-text-secondary)]">당첨</p><strong className="text-2xl text-[var(--color-primary-coral)]">{stats?.selectedCount ?? '-'}명</strong></div>
-            <div><p className="text-xs text-[var(--color-text-secondary)]">미당첨</p><strong className="text-2xl">{stats?.notSelectedCount ?? '-'}명</strong></div>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--color-divider)] p-6">
-          <form
-            className="flex min-w-0 flex-1 flex-wrap items-end gap-2"
-            onSubmit={(event) => {
-              event.preventDefault()
-              setPage(0)
-              setAppliedKeyword(keyword.trim())
-            }}
-          >
-            <Select
-              containerClassName="w-40"
-              label="응모 상태"
-              onChange={(event) => {
-                setPage(0)
-                setStatusFilter(event.target.value)
-              }}
-              options={[
-                { value: '', label: '전체' },
-                { value: 'SUBMITTED', label: '응모 완료' },
-                { value: 'SELECTED', label: '당첨' },
-                { value: 'NOT_SELECTED', label: '미당첨' },
-                { value: 'WITHDRAWN', label: '응모 철회' },
-              ]}
-              value={statusFilter}
-            />
-            <TextField containerClassName="min-w-[220px] flex-1" label="닉네임 검색" onChange={(event) => setKeyword(event.target.value)} placeholder="닉네임을 입력하세요" value={keyword} />
-            <Button type="submit" variant="secondary">검색</Button>
-          </form>
-          <div className="flex gap-2">
-            <Button disabled={busy} onClick={() => void draw()}>추첨하기</Button>
-            <Button disabled={busy} onClick={() => void publishResults()} variant="outline">결과 발표</Button>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex min-h-[240px] items-center justify-center"><Spinner label="응모자 목록을 불러오는 중" /></div>
-        ) : !list || list.content.length === 0 ? (
-          <div className="p-10 text-center text-[var(--color-text-secondary)]">조건에 맞는 응모자가 없습니다.</div>
-        ) : (
-          <>
-            <div className="divide-y divide-[var(--color-divider)]">
-              {list.content.map((applicant) => {
-                const expanded = expandedId === applicant.applicationId
-                return (
-                  <div key={applicant.applicationId}>
-                    <button
-                      className={`grid w-full gap-3 p-5 text-left transition hover:bg-[var(--color-surface-page)] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center ${expanded ? 'bg-[var(--color-primary-coral-soft)]' : ''}`}
-                      onClick={() => setExpandedId(expanded ? undefined : applicant.applicationId)}
-                      type="button"
-                    >
-                      {applicant.profileImageUrl ? (
-                        <img alt="" className="size-10 rounded-full object-cover" src={applicant.profileImageUrl} />
-                      ) : (
-                        <span className="flex size-10 items-center justify-center rounded-full bg-[var(--color-primary-coral-soft)] font-bold text-[var(--color-primary-coral)]">{applicant.nickname.slice(0, 1)}</span>
-                      )}
-                      <div className="min-w-0">
-                        <strong>{applicant.nickname}</strong>
-                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">응모일 {formatDateTime(applicant.submittedAt)}</p>
-                      </div>
-                      <Badge variant={applicationStatusBadge(applicant.applicationStatus)}>{applicationStatusLabels[applicant.applicationStatus]}</Badge>
-                      <span className="text-[var(--color-text-tertiary)]">{expanded ? <CaretUp size={17} /> : <CaretDown size={17} />}</span>
-                    </button>
-                    {expanded ? (
-                      <div className="grid gap-4 border-t border-dashed border-[var(--color-divider)] bg-[var(--color-surface-page)] p-5">
-                        {applicant.answers.length === 0 ? (
-                          <p className="text-sm text-[var(--color-text-secondary)]">제출된 답변이 없습니다.</p>
-                        ) : (
-                          applicant.answers.map((answer) => (
-                            <div key={answer.questionId}>
-                              <p className="text-xs font-bold text-[var(--color-text-secondary)]">{answer.questionText}</p>
-                              <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{answer.answerText}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-            {list.totalPages > 1 ? (
-              <Pagination className="border-t border-[var(--color-divider)] py-4" currentPage={page + 1} onPageChange={(next) => setPage(next - 1)} totalPages={list.totalPages} />
-            ) : null}
-          </>
-        )}
-      </Card>
-    </div>
-  )
-}
+/** 생성 마법사의 단계 라벨과 각 단계의 제목이다. */
+const STEP_LABELS = ['기본 정보', '응모·운영 설정', '응모 폼', '최종 확인']
+const STEP_TITLES = [
+  '팬미팅 기본 정보',
+  '응모 조건과 영상통화 운영 설정',
+  '팬이 작성할 응모 폼',
+  '등록 내용 최종 확인',
+]
+const LAST_STEP = STEP_LABELS.length - 1
 
 /**
- * 홍보·응모 이벤트를 생성하는 실제 API 연결 페이지다.
- * 현재 백엔드 계약상 예정 팬미팅 운영 값도 같은 요청 본문에 포함한다.
+ * 팬미팅 한 건을 처음부터 끝까지 한 번에 등록하는 생성 마법사다.
+ *
+ * 백엔드에는 홍보·응모용 객체와 팬미팅 객체가 따로 없으므로 화면도 하나로 두고,
+ * 기본 정보 → 응모·운영 설정 → 응모 폼 → 최종 확인 순서로 값을 모아 저장한다.
  */
-export function ManagerEventCreatePage() {
+export function ManagerMeetingCreatePage() {
   const navigate = useNavigate()
   const session = getAuthSession()
   const isInfluencerAccount = session?.role === 'INFLUENCER' || session?.role === 'SOLO_INFLUENCER'
@@ -1005,7 +214,11 @@ export function ManagerEventCreatePage() {
   const [draftTotalPages, setDraftTotalPages] = useState(1)
   const [draftLoading, setDraftLoading] = useState(false)
   const [draftError, setDraftError] = useState<string>()
-  const scheduleErrors = getMeetingScheduleErrors(form)
+  // 응모 폼은 팬미팅 생성 응답의 meetingId가 나온 뒤에야 저장할 수 있어 마법사 안에 상태로 들고 있는다.
+  const [questions, setQuestions] = useState<DraftFormQuestion[]>([])
+  const [formDescription, setFormDescription] = useState('')
+  const nextQuestionKey = useRef(1)
+  const scheduleErrors = getScheduleErrors(toScheduleInput(form))
   const applicationEndError = scheduleErrors.find((message) =>
     message.startsWith('응모 마감'),
   )
@@ -1125,11 +338,22 @@ export function ManagerEventCreatePage() {
     }
   }
 
+  /**
+   * 팬미팅을 생성하거나 기존 초안을 갱신하고, 이어서 응모 폼까지 저장한다.
+   *
+   * 응모 폼은 별도 엔드포인트(`PUT /application-form`)라서 팬미팅 저장 뒤에 한 번 더 호출한다.
+   */
   async function saveMeeting(publishAfterCreate: boolean) {
     const token = getAuthSession()?.accessToken
     if (!token) {
       setErrorTitle('로그인 필요')
-      setError('이벤트를 등록하려면 먼저 로그인해 주세요.')
+      setError('팬미팅을 등록하려면 먼저 로그인해 주세요.')
+      return
+    }
+
+    if (form.application.enabled && questions.some((question) => !question.questionText.trim())) {
+      setErrorTitle('입력 확인')
+      setError('응모 질문 내용을 모두 입력하거나 빈 질문을 삭제해 주세요.')
       return
     }
 
@@ -1186,20 +410,38 @@ export function ManagerEventCreatePage() {
         setCreatedMeetingStatus('DRAFT')
       }
 
+      // 응모를 사용할 때만 폼을 저장한다. 질문이 없어도 안내 문구는 남길 수 있다.
+      if (form.application.enabled) {
+        await saveApplicationForm(
+          meetingId,
+          {
+            formDescription: formDescription.trim() || null,
+            questions: questions.map((question, index) => ({
+              questionId: null,
+              questionText: question.questionText.trim(),
+              questionType: question.questionType,
+              required: question.required,
+              displayOrder: index + 1,
+            })),
+          },
+          token,
+        )
+      }
+
       if (publishAfterCreate) {
         await publishFanMeeting(meetingId, token)
         setCreatedMeetingStatus('PUBLISHED')
-        navigate('/manager/events/manage')
+        navigate(`/manager/fan-meetings/${meetingId}`)
       }
     } catch (reason) {
       setErrorTitle(
-        publishAfterCreate ? '이벤트 게시 실패' : '초안 저장 실패',
+        publishAfterCreate ? '팬미팅 발행 실패' : '초안 저장 실패',
       )
       setError(
         reason instanceof Error
           ? reason.message
           : publishAfterCreate
-            ? '이벤트 게시에 실패했습니다.'
+            ? '팬미팅 발행에 실패했습니다.'
             : '초안 저장에 실패했습니다.',
       )
     } finally {
@@ -1208,12 +450,12 @@ export function ManagerEventCreatePage() {
   }
 
   /**
-   * 앞 단계에서는 화면만 이동하고, 마지막 단계의 기본 제출은 생성 후 즉시 게시한다.
+   * 앞 단계에서는 화면만 이동하고, 마지막 단계의 기본 제출은 저장 후 즉시 발행한다.
    */
   async function submit(event: React.FormEvent) {
     event.preventDefault()
 
-    if (step < 2) {
+    if (step < LAST_STEP) {
       setStep(step + 1)
       return
     }
@@ -1224,30 +466,33 @@ export function ManagerEventCreatePage() {
   return (
     <div className="grid gap-7 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeader title="이벤트 생성" description="팬에게 공개할 홍보·응모 정보와 이후 팬미팅 운영 조건을 등록하세요." backTo="/manager/events" />
+        <PageHeader
+          backTo="/manager/fan-meetings"
+          description="홍보 정보와 응모 조건, 그리고 이후 영상통화 운영 조건까지 한 번에 등록합니다."
+          title="팬미팅 만들기"
+        />
         {createdMeetingId ? (
-          <Link className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-white px-[var(--control-padding-inline)] text-sm font-semibold" to="/manager/events/manage">
-            이벤트 관리 목록으로 이동 <ArrowRight size={18} />
+          <Link className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-white px-[var(--control-padding-inline)] text-sm font-semibold" to={`/manager/fan-meetings/${createdMeetingId}`}>
+            생성한 팬미팅 관리로 이동 <ArrowRight size={18} />
           </Link>
         ) : null}
       </div>
-      <AlertBanner title="현재 백엔드의 이벤트 등록 경로를 사용합니다" variant="info">
-        현재 명세에서는 이벤트 등록 요청을 <code>POST /api/v1/fan-meetings</code>로 받습니다.
-        화면에서는 실제 업무 의미에 맞게 이벤트로 표시하며, 생성 결과의 <code>meetingId</code>는 서버 참조 ID로 보관합니다.
+      <AlertBanner title="홍보·응모와 팬미팅은 같은 한 건입니다" variant="info">
+        여기에서 만든 팬미팅이 곧 팬에게 보이는 홍보·응모 페이지입니다.
+        발행 → 응모 접수 → 당첨자 추첨 → 결과 발표 → 진행 순서로 상태가 바뀌며,
+        추첨을 실행하면 당첨자가 참가자와 대기열로 자동 등록되므로 별도의 팬미팅을 다시 만들 필요가 없습니다.
       </AlertBanner>
-      <Stepper step={step} labels={['홍보 정보', '응모·운영 설정', '최종 확인']} />
+      <Stepper labels={STEP_LABELS} step={step} />
       <form className="grid gap-5" onSubmit={submit}>
         <Card>
           <CardHeader>
             <Badge variant="primary">STEP {step + 1}</Badge>
-            <CardTitle as="h2" className="mt-3">
-              {step === 0 ? '이벤트 홍보 정보' : step === 1 ? '응모와 이후 팬미팅 운영 설정' : '이벤트 정보 최종 확인'}
-            </CardTitle>
+            <CardTitle as="h2" className="mt-3">{STEP_TITLES[step]}</CardTitle>
           </CardHeader>
           <CardContent>
             {step === 0 ? (
               <div className="grid gap-5 sm:grid-cols-2">
-                <TextField label="이벤트명" maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText="팬에게 공개되는 홍보·응모 페이지의 제목입니다." />
+                <TextField label="팬미팅명" maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText="팬에게 공개되는 홍보·응모 페이지의 제목입니다." />
                 <TextField label="예정 팬미팅 일시" required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
                 <div className="sm:col-span-2 rounded-2xl border border-[var(--color-divider)] bg-[var(--color-surface-page)] p-5">
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--color-primary-coral)]">담당 인플루언서</p>
@@ -1315,7 +560,10 @@ export function ManagerEventCreatePage() {
                       <TextField label="응모 정원" min={1} required reserveMessageSpace type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
                     </div>
                   ) : (
-                    <p className="text-sm text-[var(--color-text-secondary)]">응모 없는 이벤트로 등록하면 기간과 정원은 서버 규약에 맞게 비활성 값으로 전송됩니다.</p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">
+                      응모를 사용하지 않으면 기간과 정원은 서버 규약에 맞게 비활성 값으로 전송됩니다.
+                      생성 이후에는 응모 사용 여부를 바꿀 수 없으니 신중히 선택해 주세요.
+                    </p>
                   )}
                 </section>
                 <section className="grid gap-5 sm:grid-cols-2">
@@ -1334,16 +582,132 @@ export function ManagerEventCreatePage() {
             ) : null}
 
             {step === 2 ? (
+              <div className="grid gap-5">
+                {form.application.enabled ? (
+                  <>
+                    <p className="text-sm text-[var(--color-text-secondary)]">
+                      팬이 응모할 때 작성할 질문입니다. 답변 형식은 백엔드가 허용하는 주관식 두 가지만 사용할 수 있으며,
+                      응모가 시작된 뒤에는 수정할 수 없습니다.
+                    </p>
+                    <Textarea
+                      label="응모 폼 안내 문구"
+                      onChange={(event) => setFormDescription(event.target.value)}
+                      placeholder="응모자에게 보여 줄 안내 문구를 입력해 주세요."
+                      rows={3}
+                      value={formDescription}
+                    />
+                    {questions.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-[var(--color-divider)] p-5 text-center text-sm text-[var(--color-text-secondary)]">
+                        등록된 질문이 없습니다. 질문 없이 동의만 받고 응모를 받을 수도 있습니다.
+                      </p>
+                    ) : (
+                      <div className="grid gap-4">
+                        {questions.map((question, index) => (
+                          <div className="grid gap-4 rounded-2xl border border-[var(--color-divider)] p-5" key={question.key}>
+                            <div className="flex items-center justify-between gap-3">
+                              <Badge variant="neutral">질문 {index + 1}</Badge>
+                              <Button
+                                leadingIcon={<Trash size={15} />}
+                                onClick={() => setQuestions((items) => items.filter((item) => item.key !== question.key))}
+                                size="sm"
+                                type="button"
+                                variant="danger"
+                              >
+                                삭제
+                              </Button>
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+                              <TextField
+                                label="질문 내용"
+                                onChange={(event) =>
+                                  setQuestions((items) =>
+                                    items.map((item) =>
+                                      item.key === question.key ? { ...item, questionText: event.target.value } : item,
+                                    ),
+                                  )
+                                }
+                                placeholder="예: 이번 팬미팅에서 가장 나누고 싶은 이야기는 무엇인가요?"
+                                value={question.questionText}
+                              />
+                              <Select
+                                label="답변 형식"
+                                onChange={(event) =>
+                                  setQuestions((items) =>
+                                    items.map((item) =>
+                                      item.key === question.key
+                                        ? {
+                                            ...item,
+                                            questionType:
+                                              event.target.value === 'LONG_TEXT' ? 'LONG_TEXT' : 'SHORT_TEXT',
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                                options={[
+                                  { value: 'SHORT_TEXT', label: '단답형' },
+                                  { value: 'LONG_TEXT', label: '장문형' },
+                                ]}
+                                value={question.questionType}
+                              />
+                            </div>
+                            <Checkbox
+                              checked={question.required}
+                              label="필수 응답 질문입니다."
+                              onChange={(event) =>
+                                setQuestions((items) =>
+                                  items.map((item) =>
+                                    item.key === question.key ? { ...item, required: event.target.checked } : item,
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div>
+                      <Button
+                        disabled={questions.length >= MAX_DRAFT_QUESTIONS}
+                        leadingIcon={<Plus size={17} />}
+                        onClick={() =>
+                          setQuestions((items) => [
+                            ...items,
+                            {
+                              key: nextQuestionKey.current++,
+                              questionText: '',
+                              questionType: 'SHORT_TEXT',
+                              required: true,
+                            },
+                          ])
+                        }
+                        type="button"
+                        variant="secondary"
+                      >
+                        질문 추가 ({questions.length}/{MAX_DRAFT_QUESTIONS})
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    응모를 사용하지 않는 팬미팅이라 응모 폼을 만들지 않습니다. 다음 단계로 넘어가 주세요.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
+            {step === 3 ? (
               <div className="grid gap-5 sm:grid-cols-[1fr_.9fr]">
                 <div className="rounded-xl bg-[var(--color-surface-page)] p-6">
-                  <p className="text-sm font-bold text-[var(--color-primary-coral)]">홍보·응모 이벤트</p>
+                  <p className="text-sm font-bold text-[var(--color-primary-coral)]">홍보·응모 페이지 미리보기</p>
                   <h3 className="mt-3 text-2xl font-black">{form.title}</h3>
-                  <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{form.description?.trim() || '등록된 이벤트 소개가 없습니다.'}</p>
+                  <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{form.description?.trim() || '등록된 소개가 없습니다.'}</p>
                 </div>
                 <dl className="grid gap-3 text-sm">
                   <div className="flex justify-between border-b py-3"><dt>인플루언서</dt><dd className="font-bold">{isInfluencerAccount ? `${influencerNickname} (#${resolvedInfluencerId})` : `사용자 #${form.influencerId || '-'}`}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>예정 팬미팅</dt><dd className="font-bold">{form.scheduledStartAt}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>응모</dt><dd className="font-bold">{form.application.enabled ? `${form.application.capacity}명 모집` : '사용 안 함'}</dd></div>
+                  <div className="flex justify-between border-b py-3"><dt>응모 질문</dt><dd className="font-bold">{form.application.enabled ? `${questions.length}개` : '-'}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>대기열 오픈</dt><dd className="font-bold">{form.operation.queueOpenAt}</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>통화 시간</dt><dd className="font-bold">{form.operation.callDurationSec}초</dd></div>
                   <div className="flex justify-between border-b py-3"><dt>녹화 / 번역</dt><dd className="font-bold">{form.operation.recordingEnabled ? '녹화 사용' : '녹화 미사용'} · {form.operation.translationEnabled ? '번역 사용' : '번역 미사용'}</dd></div>
@@ -1358,8 +722,8 @@ export function ManagerEventCreatePage() {
           <AlertBanner
             title={
               createdMeetingStatus === 'PUBLISHED'
-                ? '이벤트가 공개되었습니다'
-                : '이벤트가 초안으로 저장되었습니다'
+                ? '팬미팅을 발행했습니다'
+                : '팬미팅을 초안으로 저장했습니다'
             }
             variant="success"
           >
@@ -1369,10 +733,10 @@ export function ManagerEventCreatePage() {
         ) : null}
         <div
           className={`flex flex-wrap items-center gap-3 ${
-            step < 2 ? 'justify-between' : 'justify-end'
+            step < LAST_STEP ? 'justify-between' : 'justify-end'
           }`}
         >
-          {step < 2 ? (
+          {step < LAST_STEP ? (
             <Button
               leadingIcon={<FloppyDisk size={18} />}
               onClick={() => {
@@ -1391,7 +755,7 @@ export function ManagerEventCreatePage() {
             nextLoading={submitting}
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
             onSave={
-              step === 2
+              step === LAST_STEP
                 ? () => {
                     void saveMeeting(false)
                   }
@@ -1399,10 +763,10 @@ export function ManagerEventCreatePage() {
             }
             saveLabel="초안 저장"
             nextLabel={
-              step === 2
+              step === LAST_STEP
                 ? createdMeetingStatus === 'DRAFT'
-                  ? '게시하기'
-                  : '바로 게시'
+                  ? '발행하기'
+                  : '저장 후 발행'
                 : '다음 단계'
             }
           />
@@ -1475,262 +839,6 @@ export function ManagerEventCreatePage() {
           </div>
         )}
       </Dialog>
-    </div>
-  )
-}
-
-/** 팬미팅 설정 폼에서 다루는 필드 이름 목록이다. */
-type MeetingSettingsField =
-  | 'title'
-  | 'scheduledStartAt'
-  | 'queueOpenAt'
-  | 'callDurationSec'
-  | 'recordingEnabled'
-  | 'translationEnabled'
-  | 'reconnectGraceSec'
-  | 'earlyStartMinutes'
-  | 'maxRecallCount'
-
-/** 팬미팅 기본·운영 설정을 PATCH로 저장하고 상태 전환을 수행하는 실제 API 페이지다. */
-export function ManagerMeetingSettingsPage() {
-  const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string>()
-  const [status, setStatus] = useState<string>()
-  const [form, setForm] = useState({
-    title: '',
-    scheduledStartAt: '',
-    queueOpenAt: '',
-    callDurationSec: 180,
-    recordingEnabled: true,
-    translationEnabled: false,
-    reconnectGraceSec: 60,
-    earlyStartMinutes: 10,
-    maxRecallCount: 1,
-  })
-  const [dirty, setDirty] = useState<Set<MeetingSettingsField>>(new Set())
-  const [saving, setSaving] = useState(false)
-  const [transitionBusy, setTransitionBusy] = useState(false)
-  const [error, setError] = useState<string>()
-  const [message, setMessage] = useState<string>()
-
-  useEffect(() => {
-    if (!meetingId) {
-      setLoadError('팬미팅 식별자가 없습니다.')
-      setLoading(false)
-      return
-    }
-
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setLoadError('팬미팅 설정을 조회하려면 먼저 로그인해 주세요.')
-      setLoading(false)
-      return
-    }
-
-    const controller = new AbortController()
-    fetchMeetingDetail(meetingId, token, controller.signal)
-      .then((detail) => {
-        setStatus(detail.status)
-        setForm((current) => ({
-          ...current,
-          title: detail.title,
-          scheduledStartAt: detail.scheduledStartAt?.slice(0, 16) ?? '',
-        }))
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) setLoadError(toErrorMessage(cause, '팬미팅 정보를 불러오지 못했습니다.'))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-
-    return () => controller.abort()
-  }, [meetingId])
-
-  /** 필드 값을 바꾸고 변경 목록에 기록한다. 변경한 필드만 PATCH에 담는다. */
-  function setField<K extends MeetingSettingsField>(field: K, value: (typeof form)[K]) {
-    setForm((current) => ({ ...current, [field]: value }))
-    setDirty((current) => new Set(current).add(field))
-  }
-
-  /** 저장 결과 응답으로 폼과 상태를 실제 서버 값으로 동기화한다. */
-  function applyResponse(updated: Awaited<ReturnType<typeof patchFanMeeting>>) {
-    setStatus(updated.status)
-    setForm({
-      title: updated.title,
-      scheduledStartAt: updated.scheduledStartAt?.slice(0, 16) ?? '',
-      queueOpenAt: updated.operation.queueOpenAt?.slice(0, 16) ?? '',
-      callDurationSec: updated.operation.callDurationSec,
-      recordingEnabled: updated.operation.recordingEnabled,
-      translationEnabled: updated.operation.translationEnabled,
-      reconnectGraceSec: updated.operation.reconnectGraceSec,
-      earlyStartMinutes: updated.operation.earlyStartMinutes,
-      maxRecallCount: updated.operation.maxRecallCount,
-    })
-    setDirty(new Set())
-  }
-
-  async function save(event: FormEvent) {
-    event.preventDefault()
-
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError('설정을 저장하려면 먼저 로그인해 주세요.')
-      return
-    }
-
-    if (dirty.size === 0) {
-      setMessage('변경한 항목이 없습니다.')
-      return
-    }
-
-    const patch: FanMeetingUpdateRequest = {}
-    if (dirty.has('title') && form.title.trim()) patch.title = form.title.trim()
-    if (dirty.has('scheduledStartAt') && form.scheduledStartAt) patch.scheduledStartAt = toApiLocalDateTime(form.scheduledStartAt)
-
-    const operation: FanMeetingUpdateRequest['operation'] = {}
-    if (dirty.has('queueOpenAt') && form.queueOpenAt) operation.queueOpenAt = toApiLocalDateTime(form.queueOpenAt)
-    if (dirty.has('callDurationSec')) operation.callDurationSec = form.callDurationSec
-    if (dirty.has('recordingEnabled')) operation.recordingEnabled = form.recordingEnabled
-    if (dirty.has('translationEnabled')) operation.translationEnabled = form.translationEnabled
-    if (dirty.has('reconnectGraceSec')) operation.reconnectGraceSec = form.reconnectGraceSec
-    if (dirty.has('earlyStartMinutes')) operation.earlyStartMinutes = form.earlyStartMinutes
-    if (dirty.has('maxRecallCount')) operation.maxRecallCount = form.maxRecallCount
-    if (Object.keys(operation).length > 0) patch.operation = operation
-
-    if (Object.keys(patch).length === 0) {
-      setMessage('저장할 유효한 변경 항목이 없습니다.')
-      return
-    }
-
-    setSaving(true)
-    setError(undefined)
-    setMessage(undefined)
-    try {
-      applyResponse(await patchFanMeeting(meetingId, patch, token))
-      setMessage('팬미팅 설정을 저장했습니다.')
-    } catch (cause) {
-      setError(toErrorMessage(cause, '팬미팅 설정을 저장하지 못했습니다.'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  /** 발행·취소·시작·종료 상태 전환을 확인 후 실행한다. */
-  async function runTransition(action: 'publish' | 'cancel' | 'start' | 'end') {
-    const labels = { publish: '발행', cancel: '취소', start: '시작', end: '종료' } as const
-    if (!window.confirm(`팬미팅을 ${labels[action]}할까요?`)) return
-
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError('상태를 변경하려면 먼저 로그인해 주세요.')
-      return
-    }
-
-    setTransitionBusy(true)
-    setError(undefined)
-    setMessage(undefined)
-    try {
-      if (action === 'publish') {
-        const published = await publishFanMeeting(Number(meetingId), token)
-        setStatus(published.status)
-        setMessage(`팬미팅 상태가 '${meetingStatusLabels[published.status] ?? published.status}'(으)로 변경되었습니다.`)
-      } else {
-        const runner = action === 'cancel'
-          ? cancelFanMeeting
-          : action === 'start'
-            ? startFanMeeting
-            : endFanMeeting
-        const updated = await runner(meetingId, token)
-        applyResponse(updated)
-        setMessage(`팬미팅 상태가 '${meetingStatusLabels[updated.status] ?? updated.status}'(으)로 변경되었습니다.`)
-      }
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : toErrorMessage(cause, '팬미팅 상태를 변경하지 못했습니다.'))
-    } finally {
-      setTransitionBusy(false)
-    }
-  }
-
-  const canPublish = !status || status === 'DRAFT'
-  const canCancel = !status || ['PUBLISHED', 'APPLICATION_OPEN', 'APPLICATION_CLOSED', 'READY'].includes(status)
-  const canStart = !status || ['READY', 'APPLICATION_CLOSED', 'PUBLISHED'].includes(status)
-  const canEnd = !status || status === 'LIVE'
-
-  if (loading) {
-    return <div className="flex min-h-[420px] items-center justify-center"><Spinner label="팬미팅 설정을 불러오는 중" /></div>
-  }
-
-  return (
-    <div className="grid gap-7 pb-10">
-      <PageHeader
-        title="팬미팅 설정"
-        description="팬미팅 일정과 운영 설정을 수정하고 진행 상태를 전환하세요."
-        backTo="/manager/fan-meetings/manage"
-      />
-      {loadError ? <AlertBanner title="팬미팅 조회 실패" variant="error">{loadError}</AlertBanner> : null}
-      {!loadError ? (
-        <>
-          <Card className="p-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Badge variant={meetingStatusBadge(status)}>{status ? meetingStatusLabels[status] ?? status : '상태 미확인'}</Badge>
-                <strong className="text-lg">{form.title || `팬미팅 #${meetingId}`}</strong>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {canPublish ? <Button disabled={transitionBusy} onClick={() => void runTransition('publish')} size="sm">발행</Button> : null}
-                {canStart ? <Button disabled={transitionBusy} onClick={() => void runTransition('start')} size="sm" variant="outline">시작</Button> : null}
-                {canEnd ? <Button disabled={transitionBusy} onClick={() => void runTransition('end')} size="sm" variant="secondary">종료</Button> : null}
-                {canCancel ? <Button disabled={transitionBusy} onClick={() => void runTransition('cancel')} size="sm" variant="danger">취소</Button> : null}
-              </div>
-            </div>
-            <p className="mt-3 text-xs text-[var(--color-text-secondary)]">허용되지 않는 상태 전환은 서버에서 거부되며 오류 메시지로 안내됩니다.</p>
-          </Card>
-
-          {error ? <AlertBanner title="요청 실패" variant="error">{error}</AlertBanner> : null}
-          {message ? <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 결과" variant="success">{message}</AlertBanner> : null}
-
-          <form className="grid gap-5" onSubmit={save}>
-            <Card>
-              <CardHeader>
-                <Badge variant="primary">기본 정보</Badge>
-                <CardTitle as="h2" className="mt-3">일정과 제목</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 sm:grid-cols-2">
-                <TextField containerClassName="sm:col-span-2" label="팬미팅 제목" maxLength={200} value={form.title} onChange={(event) => setField('title', event.target.value)} />
-                <TextField label="팬미팅 시작 일시" type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setField('scheduledStartAt', event.target.value)} />
-                <TextField label="대기열 오픈 일시" type="datetime-local" value={form.queueOpenAt} onChange={(event) => setField('queueOpenAt', event.target.value)} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <Badge variant="primary">운영 설정</Badge>
-                <CardTitle as="h2" className="mt-3">영상통화 운영 조건</CardTitle>
-                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">현재 저장된 운영 값은 조회 API가 제공하지 않아 표시값은 기본값입니다. 직접 변경한 항목만 서버에 저장됩니다.</p>
-              </CardHeader>
-              <CardContent className="grid gap-5 sm:grid-cols-2">
-                <Select
-                  label="1인 통화 시간"
-                  onChange={(event) => setField('callDurationSec', Number(event.target.value))}
-                  options={[{ value: '120', label: '2분' }, { value: '180', label: '3분' }, { value: '300', label: '5분' }]}
-                  value={String(form.callDurationSec)}
-                />
-                <TextField label="재접속 허용 시간(초)" min={0} type="number" value={form.reconnectGraceSec} onChange={(event) => setField('reconnectGraceSec', Number(event.target.value))} />
-                <TextField label="조기 시작 허용(분)" min={0} type="number" value={form.earlyStartMinutes} onChange={(event) => setField('earlyStartMinutes', Number(event.target.value))} />
-                <TextField label="최대 재호출 횟수" min={0} type="number" value={form.maxRecallCount} onChange={(event) => setField('maxRecallCount', Number(event.target.value))} />
-                <div className="grid gap-3 rounded-xl border border-[var(--color-divider)] p-4 sm:col-span-2">
-                  <Checkbox checked={form.recordingEnabled} label="통화 녹화를 사용합니다." onChange={(event) => setField('recordingEnabled', event.target.checked)} />
-                  <Checkbox checked={form.translationEnabled} label="실시간 번역을 사용합니다." onChange={(event) => setField('translationEnabled', event.target.checked)} />
-                </div>
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button leadingIcon={<FloppyDisk size={18} />} loading={saving} type="submit">설정 저장</Button>
-            </div>
-          </form>
-        </>
-      ) : null}
     </div>
   )
 }
@@ -2176,7 +1284,7 @@ export function ManagerMyPage() {
             </div>
             <Link
               className="font-bold text-[var(--color-primary-coral)]"
-              to="/manager/fan-meetings/manage"
+              to="/manager/fan-meetings"
             >
               이력 확인 <ArrowRight className="inline" size={17} />
             </Link>

@@ -97,8 +97,8 @@ function getApplyButtonLabel(detail: PublicFanMeetingDetail): string {
 }
 
 export function FanEventDetailPage() {
-  const { eventId } = useParams()
-  const meetingId = Number(eventId)
+  // 팬 화면 경로는 '이벤트'라고 부르지만 실제 식별자는 팬미팅 ID다.
+  const meetingId = Number(useParams().meetingId)
   const validMeetingId = Number.isInteger(meetingId) && meetingId > 0
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
   const [loading, setLoading] = useState(validMeetingId)
@@ -255,7 +255,7 @@ export function FanEventDetailPage() {
   const { meeting, influencer, viewer } = detail
   const allAgreed = agreementItems.every((item) => agreements[item.id])
   const canSubmitApplication = viewer.canApply && allAgreed
-  const descriptionParagraphs = meeting.description
+  const descriptionParagraphs = (meeting.description ?? '')
     .split(/\r?\n/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean)

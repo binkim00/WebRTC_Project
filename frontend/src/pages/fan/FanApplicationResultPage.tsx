@@ -32,12 +32,12 @@ function formatDateTime(value: string | null | undefined): string {
 }
 
 export function FanApplicationResultPage() {
-  const { eventId } = useParams()
+  const { meetingId } = useParams()
   const [application, setApplication] = useState<MyApplicationResponse | null>()
   const [error, setError] = useState<string>()
 
   useEffect(() => {
-    if (!eventId?.trim()) return
+    if (!meetingId?.trim()) return
 
     const controller = new AbortController()
     const session = getAuthSession()
@@ -47,7 +47,7 @@ export function FanApplicationResultPage() {
       return () => controller.abort()
     }
 
-    void getMyApplication(eventId, session.accessToken, controller.signal)
+    void getMyApplication(meetingId, session.accessToken, controller.signal)
       .then((result) => {
         setApplication(result)
         setError(undefined)
@@ -62,12 +62,12 @@ export function FanApplicationResultPage() {
       })
 
     return () => controller.abort()
-  }, [eventId])
+  }, [meetingId])
 
-  if (!eventId?.trim()) {
+  if (!meetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 eventId 값이 없습니다. 응모한 이벤트 목록에서 다시 선택해 주세요."
+        message="URL에 필요한 팬미팅 ID가 없습니다. 응모한 이벤트 목록에서 다시 선택해 주세요."
         title="필수 URL 파라미터가 없습니다"
       />
     )
@@ -102,7 +102,7 @@ export function FanApplicationResultPage() {
         </p>
         <Link
           className="mt-6 inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-6 py-2 text-sm font-semibold transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
-          to={`/fan/events/${eventId}`}
+          to={`/fan/events/${meetingId}`}
         >
           이벤트 상세로 이동
           <ArrowRight aria-hidden size={18} weight="bold" />
