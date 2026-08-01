@@ -1,7 +1,35 @@
 import { apiRequest } from './client'
+import {
+  clearAuthSession,
+  getAuthSession,
+  isLoginResponse,
+  type LoginResponse,
+} from './authSession'
 
-export type SignupRole = 'FAN' | 'INFLUENCER' | 'MANAGER'
+export {
+  AUTH_EXPIRED_EVENT,
+  clearAuthSession,
+  getAuthSession,
+  saveAuthSession,
+  type LoginResponse,
+  type LoginRole,
+} from './authSession'
+
+export type SignupRole =
+  | 'FAN'
+  | 'INFLUENCER'
+  | 'MANAGER'
+  | 'SOLO_INFLUENCER'
 export type PreferredLanguage = 'KOREAN' | 'ENGLISH'
+
+export function isSignupRole(value: unknown): value is SignupRole {
+  return (
+    value === 'FAN' ||
+    value === 'INFLUENCER' ||
+    value === 'MANAGER' ||
+    value === 'SOLO_INFLUENCER'
+  )
+}
 
 export type SignupRequest = {
   loginId: string
@@ -15,36 +43,14 @@ export type SignupRequest = {
 }
 
 export type SignupResponse = {
-  userId: string | number
-  role: string
+  userId: number
+  role: SignupRole
   createdAt: string
 }
-
-export type LoginRole = SignupRole | 'SOLO_INFLUENCER'
 
 export type LoginRequest = {
   loginId: string
   password: string
-}
-
-export type LoginResponse = {
-  accessToken: string
-  refreshToken: string
-  expiresIn: number
-  userId: string | number
-  role: LoginRole
-  nickname: string
-}
-
-const AUTH_SESSION_KEY = 'melly-auth-session'
-
-function isLoginRole(value: unknown): value is LoginRole {
-  return (
-    value === 'FAN' ||
-    value === 'INFLUENCER' ||
-    value === 'MANAGER' ||
-    value === 'SOLO_INFLUENCER'
-  )
 }
 
 function isSignupResponse(value: unknown): value is SignupResponse {
@@ -55,32 +61,11 @@ function isSignupResponse(value: unknown): value is SignupResponse {
   const response = value as Record<string, unknown>
 
   return (
-    (typeof response.userId === 'string' || typeof response.userId === 'number') &&
-    typeof response.role === 'string' &&
-    response.role.trim().length > 0 &&
+    typeof response.userId === 'number' &&
+    Number.isFinite(response.userId) &&
+    isSignupRole(response.role) &&
     typeof response.createdAt === 'string' &&
     response.createdAt.trim().length > 0
-  )
-}
-
-function isLoginResponse(value: unknown): value is LoginResponse {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  const response = value as Record<string, unknown>
-
-  return (
-    typeof response.accessToken === 'string' &&
-    response.accessToken.trim().length > 0 &&
-    typeof response.refreshToken === 'string' &&
-    response.refreshToken.trim().length > 0 &&
-    typeof response.expiresIn === 'number' &&
-    Number.isFinite(response.expiresIn) &&
-    response.expiresIn > 0 &&
-    (typeof response.userId === 'string' || typeof response.userId === 'number') &&
-    isLoginRole(response.role) &&
-    typeof response.nickname === 'string'
   )
 }
 
@@ -101,14 +86,6 @@ export async function login(
   return data
 }
 
-export function saveAuthSession(response: LoginResponse, remember: boolean) {
-  const selectedStorage = remember ? window.localStorage : window.sessionStorage
-  const unusedStorage = remember ? window.sessionStorage : window.localStorage
-
-  unusedStorage.removeItem(AUTH_SESSION_KEY)
-  selectedStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(response))
-}
-
 export async function signup(
   request: SignupRequest,
   signal?: AbortSignal,
@@ -124,4 +101,23 @@ export async function signup(
   }
 
   return data
+}
+
+export async function logout(signal?: AbortSignal): Promise<void> {
+  const authToken = getAuthSession()?.accessToken
+
+  if (!authToken) {
+    clearAuthSession()
+    return
+  }
+
+  try {
+    await apiRequest<void>('/api/v1/auth/logout', {
+      method: 'POST',
+      authToken,
+      signal,
+    })
+  } finally {
+    clearAuthSession()
+  }
 }

@@ -1,12 +1,18 @@
+import { VideoCameraSlashIcon } from '@phosphor-icons/react'
 import { useEffect, useRef } from 'react'
 import { cn } from '../ui/cn'
 
 export type MediaDevicePreviewProps = {
   stream: MediaStream | null
+  previewImage?: string
   className?: string
 }
 
-export function MediaDevicePreview({ stream, className }: MediaDevicePreviewProps) {
+export function MediaDevicePreview({
+  stream,
+  previewImage,
+  className,
+}: MediaDevicePreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -33,16 +39,17 @@ export function MediaDevicePreview({ stream, className }: MediaDevicePreviewProp
       <video
         aria-label="카메라 미리보기"
         autoPlay
-        className={cn('size-full object-cover', !stream && 'invisible')}
+        className={cn('size-full object-cover', !stream && 'hidden')}
         muted
         playsInline
         ref={videoRef}
       />
-      {!stream ? (
+      {!stream && previewImage ? (
+        <img alt="카메라 미리보기 샘플" className="size-full object-cover" src={previewImage} />
+      ) : null}
+      {!stream && !previewImage ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-slate-300">
-          <span aria-hidden="true" className="text-4xl">
-            ◉
-          </span>
+          <VideoCameraSlashIcon aria-hidden="true" size={38} weight="light" />
           <p className="text-sm">장비 확인을 시작하면 카메라 화면이 여기에 표시됩니다.</p>
         </div>
       ) : null}

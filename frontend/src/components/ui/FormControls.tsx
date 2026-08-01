@@ -19,6 +19,7 @@ type FieldFrameProps = {
   helperText?: string
   children: ReactNode
   className?: string
+  reserveMessageSpace?: boolean
 }
 
 function FieldFrame({
@@ -29,6 +30,7 @@ function FieldFrame({
   helperText,
   children,
   className,
+  reserveMessageSpace,
 }: FieldFrameProps) {
   return (
     <div className={cn('grid gap-[var(--space-field-gap)] text-left', className)}>
@@ -38,13 +40,15 @@ function FieldFrame({
       </label>
       {children}
       {error ? (
-        <p className="text-sm text-[var(--color-error)]" id={`${id}-error`}>
+        <p className="min-h-4 text-xs text-[var(--color-error)]" id={`${id}-error`}>
           {error}
         </p>
       ) : helperText ? (
         <p className="text-sm text-[var(--color-text-secondary)]" id={`${id}-help`}>
           {helperText}
         </p>
+      ) : reserveMessageSpace ? (
+        <span aria-hidden className="block min-h-4" />
       ) : null}
     </div>
   )
@@ -68,6 +72,7 @@ export type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>
   helperText?: string
   containerClassName?: string
   endAdornment?: ReactNode
+  reserveMessageSpace?: boolean
 }
 
 export function TextField({
@@ -77,6 +82,7 @@ export function TextField({
   helperText,
   containerClassName,
   endAdornment,
+  reserveMessageSpace,
   className,
   required,
   'aria-describedby': ariaDescribedBy,
@@ -94,6 +100,7 @@ export function TextField({
       id={id}
       label={label}
       required={required}
+      reserveMessageSpace={reserveMessageSpace}
     >
       <div className="relative">
         <input
@@ -210,6 +217,7 @@ export type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
   error?: string
   helperText?: string
   containerClassName?: string
+  reserveMessageSpace?: boolean
 }
 
 export function Select({
@@ -220,6 +228,7 @@ export function Select({
   error,
   helperText,
   containerClassName,
+  reserveMessageSpace,
   className,
   required,
   'aria-describedby': ariaDescribedBy,
@@ -237,6 +246,7 @@ export function Select({
       id={id}
       label={label}
       required={required}
+      reserveMessageSpace={reserveMessageSpace}
     >
       <select
         aria-describedby={cn(ariaDescribedBy, descriptionId) || undefined}
@@ -373,7 +383,7 @@ export function RadioGroup({
         {legend}
         {required ? <span className="ml-1 text-red-600">*</span> : null}
       </legend>
-      <div className={cn(appearance === 'button' ? 'grid gap-2 sm:grid-cols-3' : 'grid gap-3')}>
+      <div className={cn(appearance === 'button' ? 'grid gap-2 sm:grid-cols-2' : 'grid gap-3')}>
         {options.map((option) => {
           const optionId = `${groupId}-${option.value}`
           return (

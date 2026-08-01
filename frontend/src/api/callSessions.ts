@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { getAuthSession } from './auth'
 
 export type CallSessionRequestOptions = {
   authToken?: string
@@ -9,19 +10,19 @@ export type LiveKitAccessTokenResponse = {
   liveKitUrl: string
   accessToken: string
   expiresAt: string
-  reconnectAllowedUntil?: string
+  reconnectAllowedUntil: string | null
 }
 
 export type CallSessionStatusResponse = {
-  callSessionId: string
+  callSessionId: number
   status: string
-  startedAt?: string
-  endsAt?: string
-  endedAt?: string
+  startedAt: string | null
+  endsAt: string | null
+  endedAt: string | null
   serverNow: string
   remainingSec: number
-  reconnectAllowedUntil?: string
-  endReason?: string
+  reconnectAllowedUntil: string | null
+  endReason: string | null
 }
 
 export type ForceEndCallSessionRequest = {
@@ -29,7 +30,7 @@ export type ForceEndCallSessionRequest = {
 }
 
 export type ForceEndCallSessionResponse = {
-  callSessionId: string
+  callSessionId: number
   status: 'ENDED'
   endedAt: string
   endReason: 'FORCED'
@@ -43,8 +44,8 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || isNonEmptyString(value)
+function isOptionalString(value: unknown): value is string | null | undefined {
+  return value == null || isNonEmptyString(value)
 }
 
 function requireCallSessionId(callSessionId: string): string {
@@ -66,7 +67,10 @@ function isLiveKitAccessTokenResponse(
 
   return (
     isNonEmptyString(value.liveKitUrl) &&
-    value.liveKitUrl.startsWith('wss://') &&
+    (value.liveKitUrl.startsWith('wss://') ||
+      (import.meta.env.DEV &&
+        (value.liveKitUrl.startsWith('ws://localhost') ||
+          value.liveKitUrl.startsWith('ws://127.0.0.1')))) &&
     isNonEmptyString(value.accessToken) &&
     isNonEmptyString(value.expiresAt) &&
     isOptionalString(value.reconnectAllowedUntil)
@@ -81,7 +85,8 @@ function isCallSessionStatusResponse(
   }
 
   return (
-    isNonEmptyString(value.callSessionId) &&
+    typeof value.callSessionId === 'number' &&
+    Number.isFinite(value.callSessionId) &&
     isNonEmptyString(value.status) &&
     isOptionalString(value.startedAt) &&
     isOptionalString(value.endsAt) &&
@@ -103,11 +108,24 @@ function isForceEndCallSessionResponse(
   }
 
   return (
-    isNonEmptyString(value.callSessionId) &&
+    typeof value.callSessionId === 'number' &&
+    Number.isFinite(value.callSessionId) &&
     value.status === 'ENDED' &&
     isNonEmptyString(value.endedAt) &&
     value.endReason === 'FORCED'
   )
+}
+
+function unwrapApiResponse(value: unknown): unknown {
+  if (!isRecord(value) || typeof value.success !== 'boolean' || !('data' in value)) {
+    return value
+  }
+
+  return value.data
+}
+
+function getRequestAuthToken(options: CallSessionRequestOptions): string | undefined {
+  return options.authToken ?? getAuthSession()?.accessToken
 }
 
 export async function issueLiveKitAccessToken(
@@ -115,15 +133,16 @@ export async function issueLiveKitAccessToken(
   options: CallSessionRequestOptions = {},
 ): Promise<LiveKitAccessTokenResponse> {
   const encodedId = requireCallSessionId(callSessionId)
-  const data = await apiRequest<unknown>(
+  const response = await apiRequest<unknown>(
     `/api/v1/call-sessions/${encodedId}/access-token`,
     {
       method: 'POST',
-      authToken: options.authToken,
+      authToken: getRequestAuthToken(options),
       signal: options.signal,
     },
   )
 
+  const data = unwrapApiResponse(response)
   if (!isLiveKitAccessTokenResponse(data)) {
     throw new TypeError('LiveKit 입장 토큰 응답 형식이 올바르지 않습니다.')
   }
@@ -136,15 +155,16 @@ export async function getCallSessionStatus(
   options: CallSessionRequestOptions = {},
 ): Promise<CallSessionStatusResponse> {
   const encodedId = requireCallSessionId(callSessionId)
-  const data = await apiRequest<unknown>(
+  const response = await apiRequest<unknown>(
     `/api/v1/call-sessions/${encodedId}`,
     {
       method: 'GET',
-      authToken: options.authToken,
+      authToken: getRequestAuthToken(options),
       signal: options.signal,
     },
   )
 
+  const data = unwrapApiResponse(response)
   if (!isCallSessionStatusResponse(data)) {
     throw new TypeError('통화 상태 응답 형식이 올바르지 않습니다.')
   }
@@ -164,16 +184,17 @@ export async function forceEndCallSession(
     throw new TypeError('강제 종료 사유는 비어 있을 수 없습니다.')
   }
 
-  const data = await apiRequest<unknown>(
+  const response = await apiRequest<unknown>(
     `/api/v1/call-sessions/${encodedId}/force-end`,
     {
       method: 'POST',
-      authToken: options.authToken,
+      authToken: getRequestAuthToken(options),
       signal: options.signal,
       body: JSON.stringify({ reason }),
     },
   )
 
+  const data = unwrapApiResponse(response)
   if (!isForceEndCallSessionResponse(data)) {
     throw new TypeError('통화 강제 종료 응답 형식이 올바르지 않습니다.')
   }
