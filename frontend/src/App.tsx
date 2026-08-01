@@ -13,6 +13,7 @@ import { getRoleNavigation } from './layouts/roleNavigation'
 import { isVideoCallPath } from './router/routeState'
 
 const publicNavigationItems = [
+  { label: '공지사항', to: '/service-notices' },
   { label: '로그인', to: '/login' },
 ] as const
 

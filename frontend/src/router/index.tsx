@@ -14,6 +14,10 @@ import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
 import { FanMeetingCommunityPage } from '../pages/common/FanMeetingCommunityPage'
 import { LiveKitTestPage } from '../pages/common/LiveKitTestPage'
 import { NotificationsPage } from '../pages/common/NotificationsPage'
+import {
+  ServiceNoticeDetailPage,
+  ServiceNoticesPage,
+} from '../pages/common/ServiceNoticesPage'
 import { YestalgiaHomeExamplePage } from '../pages/common/YestalgiaHomeExamplePage'
 import {
   ForbiddenPage,
@@ -125,6 +129,15 @@ export const router = createBrowserRouter([
       {
         path: 'notifications',
         Component: NotificationsPage,
+      },
+      // 서비스 공지는 로그인 없이도 볼 수 있는 공개 화면이다.
+      {
+        path: 'service-notices',
+        Component: ServiceNoticesPage,
+      },
+      {
+        path: 'service-notices/:noticeId',
+        Component: ServiceNoticeDetailPage,
       },
       {
         path: 'community/posts/:postId',

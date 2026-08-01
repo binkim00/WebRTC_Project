@@ -14,12 +14,14 @@ const fanNavigation: readonly RoleNavigationItem[] = [
     to: '/fan/mypage/fan-meetings?status=upcoming',
   },
   { label: '알림', to: '/notifications' },
+  { label: '공지사항', to: '/service-notices' },
 ]
 
 const influencerNavigation: readonly RoleNavigationItem[] = [
   { label: '나의 팬미팅', to: '/influencer/fan-meetings' },
   { label: '팬미팅 이력', to: '/influencer/mypage/fan-meetings' },
   { label: '알림', to: '/notifications' },
+  { label: '공지사항', to: '/service-notices' },
 ]
 
 // 솔로 인플루언서는 팬미팅을 직접 운영하면서 진행도 하므로,
@@ -30,12 +32,14 @@ const soloInfluencerNavigation: readonly RoleNavigationItem[] = [
   { label: '팬미팅 관리', to: '/manager/fan-meetings' },
   { label: '팬미팅 이력', to: '/influencer/mypage/fan-meetings' },
   { label: '알림', to: '/notifications' },
+  { label: '공지사항', to: '/service-notices' },
 ]
 
 const managerNavigation: readonly RoleNavigationItem[] = [
   { label: '팬미팅 관리', to: '/manager/fan-meetings' },
   { label: '조직 관리', to: '/manager/organization' },
   { label: '알림', to: '/notifications' },
+  { label: '공지사항', to: '/service-notices' },
 ]
 
 export function getRoleNavigation(role: LoginRole): readonly RoleNavigationItem[] {

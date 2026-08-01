@@ -1,0 +1,201 @@
+import { ArrowLeft, ArrowRight, PushPin } from '@phosphor-icons/react'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import type { PageResponse } from '../../api/envelope'
+import {
+  getServiceNotice,
+  getServiceNotices,
+  type NoticeDetailResponse,
+  type NoticeSummaryResponse,
+} from '../../api/notices'
+import {
+  AlertBanner,
+  Badge,
+  Card,
+  EmptyState,
+  Pagination,
+  Spinner,
+} from '../../components'
+
+/** LocalDateTime 문자열을 읽기 쉬운 한국어 일시로 표시한다. */
+function formatDateTime(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR')
+}
+
+/** 오류 원인에서 사용자에게 보여 줄 메시지를 뽑는다. */
+function toErrorMessage(cause: unknown, fallback: string): string {
+  return cause instanceof Error ? cause.message : fallback
+}
+
+/**
+ * 운영팀이 등록한 서비스 전체 공지를 목록으로 보여 준다.
+ *
+ * 로그인 없이도 볼 수 있는 공개 화면이라 인증 토큰 없이 조회한다.
+ */
+export function ServiceNoticesPage() {
+  const [data, setData] = useState<PageResponse<NoticeSummaryResponse>>()
+  const [page, setPage] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>()
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    setLoading(true)
+    getServiceNotices({ page, size: 10 }, controller.signal)
+      .then((result) => {
+        setData(result)
+        setError(undefined)
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return
+        setError(toErrorMessage(cause, '공지사항을 불러오지 못했습니다.'))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [page])
+
+  return (
+    <div className="grid gap-7 pb-10">
+      <header>
+        <p className="text-sm font-black tracking-[0.12em] text-[var(--color-primary-coral)]">NOTICE</p>
+        <h1 className="mt-2 text-4xl font-black tracking-[-0.05em]">공지사항</h1>
+        <p className="mt-3 text-[var(--color-text-secondary)]">
+          서비스 이용에 필요한 안내와 변경 사항을 확인하세요.
+        </p>
+      </header>
+
+      {error ? (
+        <AlertBanner title="공지사항을 표시할 수 없습니다" variant="error">
+          {error}
+        </AlertBanner>
+      ) : null}
+
+      <Card className="overflow-hidden">
+        {loading ? (
+          <div className="flex min-h-80 items-center justify-center">
+            <Spinner label="공지사항을 불러오는 중" />
+          </div>
+        ) : !data || data.content.length === 0 ? (
+          <EmptyState description="등록된 공지사항이 없습니다." title="공지사항이 없습니다" />
+        ) : (
+          <>
+            <ul className="divide-y divide-[var(--color-divider)]">
+              {data.content.map((notice) => (
+                <li key={notice.noticeId}>
+                  <Link
+                    className="flex flex-wrap items-center justify-between gap-3 px-6 py-5 transition-colors hover:bg-[var(--color-surface-page)]"
+                    to={`/service-notices/${notice.noticeId}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        {notice.pinned ? (
+                          <Badge variant="primary">
+                            <PushPin aria-hidden="true" size={13} weight="fill" /> 고정
+                          </Badge>
+                        ) : null}
+                        <strong className="min-w-0 break-keep">{notice.title}</strong>
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                        {notice.authorNickname} · {formatDateTime(notice.createdAt)}
+                      </p>
+                    </div>
+                    <ArrowRight aria-hidden="true" className="text-[var(--color-text-tertiary)]" size={18} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {data.totalPages > 1 ? (
+              <Pagination
+                className="border-t border-[var(--color-divider)] py-4"
+                currentPage={page + 1}
+                onPageChange={(next) => setPage(next - 1)}
+                totalPages={data.totalPages}
+              />
+            ) : null}
+          </>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+/** 서비스 공지 한 건의 제목과 본문을 보여 준다. */
+export function ServiceNoticeDetailPage() {
+  const noticeId = useParams<{ noticeId: string }>().noticeId ?? ''
+  const [notice, setNotice] = useState<NoticeDetailResponse>()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>()
+
+  useEffect(() => {
+    if (!noticeId) {
+      setError('공지 식별자가 없습니다.')
+      setLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+
+    setLoading(true)
+    getServiceNotice(noticeId, controller.signal)
+      .then((result) => {
+        setNotice(result)
+        setError(undefined)
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return
+        setError(toErrorMessage(cause, '공지사항을 불러오지 못했습니다.'))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [noticeId])
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Spinner label="공지사항을 불러오는 중" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid gap-6 pb-10">
+      <Link
+        className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]"
+        to="/service-notices"
+      >
+        <ArrowLeft size={17} /> 공지사항 목록으로
+      </Link>
+
+      {error || !notice ? (
+        <AlertBanner title="공지사항을 표시할 수 없습니다" variant="error">
+          {error ?? '해당 공지를 찾을 수 없습니다.'}
+        </AlertBanner>
+      ) : (
+        <Card className="p-6 sm:p-9">
+          <div className="flex flex-wrap items-center gap-2">
+            {notice.pinned ? (
+              <Badge variant="primary">
+                <PushPin aria-hidden="true" size={13} weight="fill" /> 고정
+              </Badge>
+            ) : null}
+            <h1 className="text-2xl font-black tracking-[-0.04em]">{notice.title}</h1>
+          </div>
+          <p className="mt-3 text-sm text-[var(--color-text-tertiary)]">
+            {notice.authorNickname} · {formatDateTime(notice.createdAt)}
+          </p>
+          <div className="mt-7 whitespace-pre-wrap border-t border-[var(--color-divider)] pt-7 leading-7">
+            {notice.content}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
