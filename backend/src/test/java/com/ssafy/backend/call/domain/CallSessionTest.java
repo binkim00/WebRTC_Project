@@ -80,4 +80,31 @@ class CallSessionTest {
                 LocalDateTime.of(2026, 7, 28, 11, 0), CallEndReason.FORCED, mock(User.class)))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    /** 노쇼로 연결되지 못한 세션을 FAILED 상태와 연결 실패 사유로 마무리하는지 검증한다. */
+    @Test
+    void failsConnectingCallWhenParticipantIsNoShow() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "ko");
+        LocalDateTime failedAt = LocalDateTime.of(2026, 7, 28, 11, 0);
+
+        callSession.failConnecting(failedAt);
+
+        assertThat(callSession.getStatus()).isEqualTo(CallSessionStatus.FAILED);
+        assertThat(callSession.getEndedAt()).isEqualTo(failedAt);
+        assertThat(callSession.getEndReason()).isEqualTo(CallEndReason.CONNECTION_FAILED);
+        assertThat(callSession.getEndedBy()).isNull();
+    }
+
+    /** 이미 시작된 영상통화에는 연결 대기 실패 전이를 적용하지 않는지 검증한다. */
+    @Test
+    void rejectsFailingActiveCallAsConnecting() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "ko");
+        callSession.activate(LocalDateTime.of(2026, 7, 28, 11, 0), 60);
+
+        assertThatThrownBy(() -> callSession.failConnecting(
+                LocalDateTime.of(2026, 7, 28, 11, 1)))
+                .isInstanceOf(IllegalStateException.class);
+    }
 }

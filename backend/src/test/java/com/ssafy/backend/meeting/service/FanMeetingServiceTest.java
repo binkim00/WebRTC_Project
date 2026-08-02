@@ -46,6 +46,7 @@ class FanMeetingServiceTest {
     private OrganizationMemberRepository organizationMemberRepository;
     private FanMeetingService fanMeetingService;
 
+    /** 팬미팅 생성 서비스와 저장소 mock을 각 테스트 전에 구성한다. */
     @BeforeEach
     void setUp() {
         fanMeetingRepository = mock(FanMeetingRepository.class);
@@ -64,6 +65,7 @@ class FanMeetingServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
+    /** 매니저가 같은 조직의 인플루언서를 지정해 기본 운영 정책의 팬미팅을 생성하는지 검증한다. */
     @Test
     void managerCreatesDraftMeetingForInfluencerInSameOrganization() {
         User manager = user(10L, UserRole.MANAGER);
@@ -93,6 +95,9 @@ class FanMeetingServiceTest {
         assertThat(response.influencerId()).isEqualTo(20L);
         assertThat(response.application().enabled()).isTrue();
         assertThat(response.operation().translationEnabled()).isTrue();
+        assertThat(response.operation().reconnectGraceSec()).isEqualTo(60);
+        assertThat(response.operation().earlyStartMinutes()).isEqualTo(30);
+        assertThat(response.operation().maxRecallCount()).isEqualTo(1);
 
         ArgumentCaptor<MeetingApplicationSetting> applicationCaptor =
                 ArgumentCaptor.forClass(MeetingApplicationSetting.class);
@@ -104,8 +109,12 @@ class FanMeetingServiceTest {
         verify(operationSettingRepository).save(operationCaptor.capture());
         assertThat(operationCaptor.getValue().getCallDurationSec()).isEqualTo(120);
         assertThat(operationCaptor.getValue().isTranslationEnabled()).isTrue();
+        assertThat(operationCaptor.getValue().getReconnectGraceSec()).isEqualTo(60);
+        assertThat(operationCaptor.getValue().getEarlyStartMinutes()).isEqualTo(30);
+        assertThat(operationCaptor.getValue().getMaxRecallCount()).isEqualTo(1);
     }
 
+    /** 솔로 인플루언서가 조직과 매니저 없이 본인의 팬미팅을 생성하는지 검증한다. */
     @Test
     void soloInfluencerCreatesMeetingForSelfWithoutOrganizationOrManager() {
         User solo = user(30L, UserRole.SOLO_INFLUENCER);
@@ -123,6 +132,38 @@ class FanMeetingServiceTest {
         verifyNoInteractions(organizationMemberRepository);
     }
 
+    /** 생성 요청에서 선택한 재접속·조기 시작·재호출 정책을 그대로 저장하고 응답하는지 검증한다. */
+    @Test
+    void createsMeetingWithSelectedOperationPolicies() {
+        User solo = user(30L, UserRole.SOLO_INFLUENCER);
+        when(userRepository.findById(30L)).thenReturn(Optional.of(solo));
+        FanMeetingCreateRequest base = validRequest(30L);
+        FanMeetingCreateRequest request = new FanMeetingCreateRequest(
+                base.influencerId(), base.title(), base.description(), base.coverImageUrl(),
+                base.scheduledStartAt(), base.application(),
+                new FanMeetingCreateRequest.OperationSettingRequest(
+                        base.operation().queueOpenAt(), base.operation().callDurationSec(),
+                        base.operation().recordingEnabled(), base.operation().translationEnabled(),
+                        90, 15, 2
+                )
+        );
+
+        FanMeetingCreateResponse response = fanMeetingService.create(
+                new AuthenticatedUser(30L, UserRole.SOLO_INFLUENCER), request
+        );
+
+        assertThat(response.operation().reconnectGraceSec()).isEqualTo(90);
+        assertThat(response.operation().earlyStartMinutes()).isEqualTo(15);
+        assertThat(response.operation().maxRecallCount()).isEqualTo(2);
+        ArgumentCaptor<MeetingOperationSetting> captor =
+                ArgumentCaptor.forClass(MeetingOperationSetting.class);
+        verify(operationSettingRepository).save(captor.capture());
+        assertThat(captor.getValue().getReconnectGraceSec()).isEqualTo(90);
+        assertThat(captor.getValue().getEarlyStartMinutes()).isEqualTo(15);
+        assertThat(captor.getValue().getMaxRecallCount()).isEqualTo(2);
+    }
+
+    /** 팬 역할 사용자의 팬미팅 생성을 저장 전에 거부하는지 검증한다. */
     @Test
     void rejectsFanRoleBeforeSavingMeeting() {
         User fan = user(40L, UserRole.FAN);
@@ -136,6 +177,7 @@ class FanMeetingServiceTest {
         verify(fanMeetingRepository, never()).save(any());
     }
 
+    /** 매니저가 소속 조직 밖의 인플루언서를 지정하면 생성을 거부하는지 검증한다. */
     @Test
     void rejectsManagerWhenInfluencerIsOutsideManagersOrganizations() {
         User manager = user(10L, UserRole.MANAGER);
@@ -159,6 +201,7 @@ class FanMeetingServiceTest {
         verify(fanMeetingRepository, never()).save(any());
     }
 
+    /** 응모 종료가 팬미팅 시작보다 늦은 잘못된 일정을 거부하는지 검증한다. */
     @Test
     void rejectsInvalidApplicationScheduleBeforeSaving() {
         User solo = user(30L, UserRole.SOLO_INFLUENCER);
@@ -181,7 +224,10 @@ class FanMeetingServiceTest {
                         meetingStart.minusMinutes(30),
                         120,
                         true,
-                        true
+                        true,
+                        null,
+                        null,
+                        null
                 )
         );
 
@@ -193,6 +239,13 @@ class FanMeetingServiceTest {
         verify(fanMeetingRepository, never()).save(any());
     }
 
+    /**
+     * 활성 상태의 테스트 사용자를 생성한다.
+     *
+     * @param id 사용자 식별자
+     * @param role 사용자 역할
+     * @return 테스트 사용자 mock
+     */
     private User user(Long id, UserRole role) {
         User user = mock(User.class);
         when(user.getId()).thenReturn(id);
@@ -201,6 +254,12 @@ class FanMeetingServiceTest {
         return user;
     }
 
+    /**
+     * 서버 기본 운영 정책을 사용하는 유효한 생성 요청을 만든다.
+     *
+     * @param influencerId 인플루언서 식별자
+     * @return 유효한 팬미팅 생성 요청
+     */
     private FanMeetingCreateRequest validRequest(Long influencerId) {
         LocalDateTime meetingStart = LocalDateTime.of(2030, 8, 10, 15, 0);
         return new FanMeetingCreateRequest(
@@ -220,7 +279,10 @@ class FanMeetingServiceTest {
                         meetingStart.minusMinutes(30),
                         120,
                         true,
-                        true
+                        true,
+                        null,
+                        null,
+                        null
                 )
         );
     }

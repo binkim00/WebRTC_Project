@@ -13,6 +13,8 @@ import openai
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
+from db import queries
+
 # 1. LangSmith 관련 패키지 가져오기
 from langsmith import traceable
 from langsmith.wrappers import wrap_anthropic, wrap_openai
@@ -39,37 +41,37 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", GMS_API_KEY)
 MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """당신은 인플루언서의 팬미팅 보조 AI입니다.
-인플루언서와 팬의 대화 자막을 분석하여 인플루언서가 팬을 기억하는 데 도움이 되는 메모 초안을 작성합니다."""
+    인플루언서와 팬의 대화 자막을 분석하여 인플루언서가 팬을 기억하는 데 도움이 되는 메모 초안을 작성합니다."""
 
 USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 자막입니다.
 
-[대화 내용]
-{subtitles}
+    [대화 내용]
+    {subtitles}
 
-다음 기준으로 팬에 대한 메모 초안을 작성해주세요:
-- 팬의 근황, 성취, 특별한 사건 (졸업, 수상, 취업 등)
-- 팬의 관심사, 좋아하는 것
-- 팬이 인플루언서에게 바라는 것, 다음에 하고 싶은 것
-- 인플루언서가 기억하면 좋을 특이사항
+    다음 기준으로 팬에 대한 메모 초안을 작성해주세요:
+    - 팬의 근황, 성취, 특별한 사건 (졸업, 수상, 취업 등)
+    - 팬의 관심사, 좋아하는 것
+    - 팬이 인플루언서에게 바라는 것, 다음에 하고 싶은 것
+    - 인플루언서가 기억하면 좋을 특이사항
 
-반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:
-{{
-  "summary": "2~4문장의 메모 초안",
-  "keywords": ["핵심키워드1", "핵심키워드2"]
-}}
+    반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:
+    {{
+    "summary": "2~4문장의 메모 초안",
+    "keywords": ["핵심키워드1", "핵심키워드2"]
+    }}
 
-대화 내용이 너무 짧거나 특별한 내용이 없으면:
-{{
-  "summary": "특별한 내용 없음",
-  "keywords": []
-}}"""
+    대화 내용이 너무 짧거나 특별한 내용이 없으면:
+    {{
+    "summary": "특별한 내용 없음",
+    "keywords": []
+    }}"""
 
 
 #추후 db호출 구조에 따라 수정
 def _format_subtitles(subtitles: list[dict]) -> str:
     lines = []
     for s in subtitles:
-        role = "인플루언서" if s.get("speaker_role") == "host" else "팬"
+        role = "인플루언서" if s.get("speaker_role") == "INFLUENCER" else "팬"
         text = s.get("original_text", "").strip()
         if text:
             lines.append(f"{role}: {text}")
@@ -343,6 +345,7 @@ async def generate_summary(subtitles: list[dict], model: str = MODEL) -> dict | 
 # 3. 전체 프로세스를 묶어줄 최상위 함수에도 @traceable을 적용할 수 있습니다.
 @traceable(name="Generate and Save Summary Pipeline")
 async def generate_and_save_summary(
+    pool,                          # 추가 — DB 저장하려면 필요
     call_session_id: int,
     subtitles: list[dict],
 ) -> None:
@@ -362,3 +365,12 @@ async def generate_and_save_summary(
         summary,
         keywords,
     )
+
+    # 추가 — 실제 DB 저장
+    await queries.insert_call_summary(
+        pool=pool,
+        call_session_id=call_session_id,
+        summary=summary,
+        keywords=keywords,
+    )
+    logger.info("요약 저장 완료 call_session_id=%s", call_session_id)

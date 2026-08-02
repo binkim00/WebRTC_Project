@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -31,9 +30,8 @@ public class LiveKitWebhookService {
     private static final String PARTICIPANT_CONNECTION_ABORTED = "participant_connection_aborted";
     private static final String ROLE_ATTRIBUTE = "role";
     private static final String CALL_SESSION_ID_ATTRIBUTE = "call_session_id";
-    private static final String FAN_ROLE = "fan";
-    private static final String HOST_ROLE = "host";
-    private static final Duration RECONNECT_GRACE_PERIOD = Duration.ofSeconds(60);
+    private static final String FAN_ROLE = "FAN";
+    private static final String HOST_ROLE = "INFLUENCER";
 
     private final CallSessionRepository callSessionRepository;
     private final MeetingOperationSettingRepository operationSettingRepository;
@@ -200,7 +198,7 @@ public class LiveKitWebhookService {
     }
 
     /**
-     * 활성 통화의 연결 종료 역할과 60초 재접속 허용 시각을 기록한다.
+     * 활성 통화의 연결 종료 역할과 팬미팅별 재접속 허용 시각을 기록한다.
      *
      * @param callSession 연결이 끊긴 활성 통화 세션
      * @param role 연결이 끊긴 참가자 역할
@@ -209,8 +207,11 @@ public class LiveKitWebhookService {
         if (callSession.getStatus() != CallSessionStatus.ACTIVE) {
             return;
         }
-        callSession.openReconnectWindow(
-                LocalDateTime.now(clock).plus(RECONNECT_GRACE_PERIOD));
+        Long meetingId = callSession.getQueueEntry().getMeeting().getId();
+        MeetingOperationSetting setting = operationSettingRepository.findById(meetingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_SETTING_NOT_FOUND));
+        callSession.openReconnectWindow(LocalDateTime.now(clock)
+                .plusSeconds(setting.getReconnectGraceSec()));
         realtimeStore.markDisconnectRole(callSession.getId(), role);
     }
 

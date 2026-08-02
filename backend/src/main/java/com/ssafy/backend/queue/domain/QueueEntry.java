@@ -29,7 +29,6 @@ import java.time.LocalDateTime;
 @Table(name = "queue_entries")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class QueueEntry extends BaseTimeEntity {
-    private static final int MAX_RECALL_COUNT = 1;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -88,10 +87,15 @@ public class QueueEntry extends BaseTimeEntity {
         this.calledAt = calledAt;
     }
 
-    /** 호출 중인 참가자의 재호출 횟수와 호출 시각을 갱신한다. */
-    public void recall(LocalDateTime calledAt) {
+    /**
+     * 호출 중인 참가자의 재호출 횟수와 호출 시각을 팬미팅별 허용 횟수 안에서 갱신한다.
+     *
+     * @param calledAt 재호출 시각
+     * @param maxRecallCount 팬미팅에 설정된 최대 재호출 횟수
+     */
+    public void recall(LocalDateTime calledAt, int maxRecallCount) {
         requireStatus(QueueEntryStatus.CALLED);
-        if (recallCount >= MAX_RECALL_COUNT) {
+        if (maxRecallCount < 0 || recallCount >= maxRecallCount) {
             throw new IllegalStateException("재호출 가능 횟수를 초과했습니다.");
         }
         this.recallCount++;
@@ -132,6 +136,16 @@ public class QueueEntry extends BaseTimeEntity {
             throw new IllegalStateException("완료할 수 없는 대기열 상태입니다.");
         }
         this.status = QueueEntryStatus.DONE;
+    }
+
+    /** 팬미팅 종료 또는 운영자 조치로 미완료 대기열 항목을 제거 상태로 전환한다. */
+    public void remove() {
+        if (status == QueueEntryStatus.REMOVED
+                || status == QueueEntryStatus.DONE
+                || status == QueueEntryStatus.NO_SHOW) {
+            return;
+        }
+        this.status = QueueEntryStatus.REMOVED;
     }
 
     /** 대기 전 또는 대기 중인 참가자의 순서를 변경한다. */

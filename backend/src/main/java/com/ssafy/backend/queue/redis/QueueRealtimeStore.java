@@ -9,12 +9,15 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /** Redis에서 자주 변경되는 대기 순서와 호출 상태를 원자적으로 관리한다. */
 @Component
 public class QueueRealtimeStore {
     private static final long ACTIVE_CALL = -2L;
     private static final long STATE_CONFLICT = -3L;
+    private static final long REORDER_NOT_INITIALIZED = -1L;
+    private static final long REORDER_ENTRY_MISSING = -2L;
     private static final Duration WEBHOOK_EVENT_TTL = Duration.ofDays(1);
     private static final Duration LIVEKIT_PRESENCE_TTL = Duration.ofHours(6);
     private static final Duration LIVEKIT_DISCONNECT_TTL = Duration.ofMinutes(2);
@@ -53,6 +56,26 @@ public class QueueRealtimeStore {
               return 1
             end
             return 0
+            """, Long.class);
+
+    private static final DefaultRedisScript<Long> REORDER_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then return -1 end
+            local targetStatus = redis.call('HGET', KEYS[3], ARGV[1])
+            if targetStatus ~= 'NOT_ENTERED' and targetStatus ~= 'WAITING' then return -3 end
+            for i = 2, #ARGV, 2 do
+              if not redis.call('ZSCORE', KEYS[2], ARGV[i]) then return -2 end
+            end
+            for i = 2, #ARGV, 2 do
+              redis.call('ZADD', KEYS[2], ARGV[i + 1], ARGV[i])
+            end
+            return (#ARGV - 1) / 2
+            """, Long.class);
+
+    private static final DefaultRedisScript<Long> RESTORE_POSITIONS_SCRIPT = new DefaultRedisScript<>("""
+            for i = 1, #ARGV, 2 do
+              redis.call('ZADD', KEYS[1], ARGV[i + 1], ARGV[i])
+            end
+            return #ARGV / 2
             """, Long.class);
 
     private static final DefaultRedisScript<Long> COUNT_AHEAD_SCRIPT = new DefaultRedisScript<>("""
@@ -134,6 +157,64 @@ public class QueueRealtimeStore {
     public void updatePosition(Long meetingId, Long entryId, int position) {
         redisTemplate.opsForZSet().add(
                 QueueRedisKeys.order(meetingId), entryId.toString(), position);
+    }
+
+    /**
+     * 이동 대상의 상태를 확인한 뒤 여러 참가자의 순번을 하나의 Lua 스크립트로 재정렬한다.
+     *
+     * <p>대기열 초기화 여부, 이동 대상 상태, 모든 참가자의 Sorted Set 등록 여부를 먼저 검사하고
+     * 검사를 모두 통과한 경우에만 순번을 반영하므로 일부만 반영되는 상태가 생기지 않는다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param targetEntryId 이동 대상 대기열 항목 식별자
+     * @param positions 대기열 항목 식별자별 새 순번
+     * @return Redis 재정렬 결과
+     */
+    public QueueReorderResult reorder(Long meetingId, Long targetEntryId, Map<Long, Integer> positions) {
+        List<String> arguments = new ArrayList<>();
+        arguments.add(targetEntryId.toString());
+        positions.forEach((entryId, position) -> {
+            arguments.add(entryId.toString());
+            arguments.add(position.toString());
+        });
+        Long result = redisTemplate.execute(
+                REORDER_SCRIPT,
+                List.of(QueueRedisKeys.initialized(meetingId), QueueRedisKeys.order(meetingId),
+                        QueueRedisKeys.status(meetingId)),
+                arguments.toArray()
+        );
+        if (result == null) {
+            return QueueReorderResult.STATE_CONFLICT;
+        }
+        if (result == REORDER_NOT_INITIALIZED) {
+            return QueueReorderResult.NOT_INITIALIZED;
+        }
+        if (result == REORDER_ENTRY_MISSING) {
+            return QueueReorderResult.ENTRY_MISSING;
+        }
+        if (result == STATE_CONFLICT) {
+            return QueueReorderResult.STATE_CONFLICT;
+        }
+        return QueueReorderResult.REORDERED;
+    }
+
+    /**
+     * 순번 재정렬 이후 DB 반영이 실패하면 이전 순번을 원자적으로 되돌린다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param positions 대기열 항목 식별자별 이전 순번
+     */
+    public void restorePositions(Long meetingId, Map<Long, Integer> positions) {
+        List<String> arguments = new ArrayList<>();
+        positions.forEach((entryId, position) -> {
+            arguments.add(entryId.toString());
+            arguments.add(position.toString());
+        });
+        redisTemplate.execute(
+                RESTORE_POSITIONS_SCRIPT,
+                List.of(QueueRedisKeys.order(meetingId)),
+                arguments.toArray()
+        );
     }
 
     /** Redis에 저장된 참가자 상태를 조회한다. */
@@ -297,5 +378,21 @@ public class QueueRealtimeStore {
      */
     public void clearDisconnectRole(Long callSessionId) {
         redisTemplate.delete(QueueRedisKeys.liveKitDisconnectRole(callSessionId));
+    }
+
+    /**
+     * 팬미팅 종료 후 대기열과 LiveKit 호스트 접속 상태를 모두 제거한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param roomId LiveKit Room 식별자
+     */
+    public void clearMeeting(Long meetingId, String roomId) {
+        redisTemplate.delete(List.of(
+                QueueRedisKeys.initialized(meetingId),
+                QueueRedisKeys.order(meetingId),
+                QueueRedisKeys.status(meetingId),
+                QueueRedisKeys.current(meetingId),
+                QueueRedisKeys.liveKitHostPresence(roomId)
+        ));
     }
 }

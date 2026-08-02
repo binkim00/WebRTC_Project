@@ -18,6 +18,7 @@ import { getAuthSession } from '../../api/auth'
 import { useCallRecording } from '../../hooks/useCallRecording'
 import { AlertBanner } from '../feedback'
 import { CallStage } from './CallStage'
+import { logCallConnectionState } from './connectionDebug'
 import { EndCallDialog } from './EndCallDialog'
 import type { MediaAction, VideoCallRoomProps } from './types'
 import { useRemainingTime } from './useRemainingTime'
@@ -52,6 +53,10 @@ export function ConnectedCallRoom({
     connectionState === ConnectionState.SignalReconnecting
   const remainingTime = useRemainingTime(sessionStatus)
   const remoteParticipants = participants.filter((participant) => !participant.isLocal)
+  // 배열은 렌더링마다 새로 만들어지므로 useEffect 의존성으로는 직렬화한 문자열을 사용한다.
+  const remoteIdentityKey = JSON.stringify(
+    remoteParticipants.map((participant) => participant.identity),
+  )
   const remoteParticipant = remoteParticipants[0]
   const remoteCameraTrack = cameraTracks.find((track) => !track.participant.isLocal)
   const localCameraTrack = cameraTracks.find((track) => track.participant.isLocal)
@@ -117,6 +122,15 @@ export function ConnectedCallRoom({
     await room.disconnect()
     navigate(endTo)
   }
+
+  // 상태나 참가자 구성이 바뀔 때만 기록해, 렌더링마다 로그가 쌓이지 않게 한다.
+  useEffect(() => {
+    logCallConnectionState({
+      callSessionId,
+      connectionState,
+      remoteIdentities: JSON.parse(remoteIdentityKey) as string[],
+    })
+  }, [callSessionId, connectionState, remoteIdentityKey])
 
   useEffect(() => {
     if (sessionStatus.status !== 'ENDED') {

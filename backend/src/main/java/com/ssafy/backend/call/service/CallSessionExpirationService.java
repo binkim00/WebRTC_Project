@@ -15,8 +15,8 @@ import java.time.LocalDateTime;
 @Service
 public class CallSessionExpirationService {
 
-    private static final String FAN_ROLE = "fan";
-    private static final String HOST_ROLE = "host";
+    private static final String FAN_ROLE = "FAN";
+    private static final String HOST_ROLE = "INFLUENCER";
 
     private final CallSessionRepository callSessionRepository;
     private final CallSessionFinalizer finalizer;

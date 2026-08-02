@@ -45,6 +45,20 @@ public interface CallSessionRepository extends JpaRepository<CallSession, Long> 
     Optional<CallSession> findByQueueEntry_Id(Long queueEntryId);
 
     /**
+     * 노쇼 처리와 LiveKit 입장 이벤트가 동시에 상태를 바꾸지 못하도록 세션을 잠금 조회한다.
+     *
+     * @param queueEntryId 노쇼 대상 대기열 항목 식별자
+     * @return 쓰기 잠금으로 조회된 영상통화 세션
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select callSession
+            from CallSession callSession
+            where callSession.queueEntry.id = :queueEntryId
+            """)
+    Optional<CallSession> findByQueueEntryIdForUpdate(@Param("queueEntryId") Long queueEntryId);
+
+    /**
      * LiveKit webhook 상태 전환에 필요한 세션을 쓰기 잠금과 함께 조회한다.
      *
      * @param callSessionId 통화 세션 식별자
@@ -113,5 +127,39 @@ public interface CallSessionRepository extends JpaRepository<CallSession, Long> 
      * @return 지정 상태의 세션이 하나라도 있으면 true
      */
     boolean existsByQueueEntry_Meeting_IdAndStatusIn(
+            Long meetingId, Collection<CallSessionStatus> statuses);
+
+    /**
+     * 팬미팅 결과 통계 집계에 사용할 지정 상태의 영상통화 세션 수를 반환한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param status 집계할 영상통화 세션 상태
+     * @return 해당 상태의 영상통화 세션 수
+     */
+    long countByQueueEntry_Meeting_IdAndStatus(Long meetingId, CallSessionStatus status);
+
+    /**
+     * 통화 시간 집계에 사용할 지정 상태의 영상통화 세션을 조회한다.
+     *
+     * <p>통화 시간은 {@code startedAt}과 {@code endedAt}의 차이로 계산하므로 DB 함수 대신
+     * 두 시각을 읽어와 애플리케이션에서 합산한다. 팬미팅 한 건의 세션 수는 참가자 수 이하다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param status 조회할 영상통화 세션 상태
+     * @return 해당 상태의 영상통화 세션 목록
+     */
+    List<CallSession> findByQueueEntry_Meeting_IdAndStatus(
+            Long meetingId, CallSessionStatus status);
+
+    /**
+     * 팬미팅 종료 시 아직 연결 중이거나 활성 상태인 영상통화 세션을 잠금 조회한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param statuses 조회할 영상통화 상태 목록
+     * @return 종료 처리가 필요한 영상통화 세션 목록
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"queueEntry", "queueEntry.meeting"})
+    List<CallSession> findByQueueEntry_Meeting_IdAndStatusIn(
             Long meetingId, Collection<CallSessionStatus> statuses);
 }

@@ -61,4 +61,53 @@ public class OrganizationMember extends BaseTimeEntity {
 
     @Column(name = "left_at")
     private LocalDateTime leftAt;
+
+    /** 조직 소속 정보를 생성한다. */
+    private OrganizationMember(Organization organization, User user,
+                               OrganizationMemberType memberType, LocalDateTime joinedAt) {
+        this.organization = organization;
+        this.user = user;
+        this.memberType = memberType;
+        this.status = OrganizationMemberStatus.ACTIVE;
+        this.joinedAt = joinedAt;
+        this.leftAt = null;
+    }
+
+    /**
+     * 사용자를 조직의 활성 구성원으로 등록한다.
+     *
+     * @param organization 소속 조직
+     * @param user 소속 사용자
+     * @param memberType 조직 내 역할
+     * @param joinedAt 가입 시각
+     * @return 생성된 활성 조직 소속
+     */
+    public static OrganizationMember join(Organization organization, User user,
+                                          OrganizationMemberType memberType,
+                                          LocalDateTime joinedAt) {
+        return new OrganizationMember(organization, user, memberType, joinedAt);
+    }
+
+    /**
+     * 종료된 조직 소속을 다시 활성화한다.
+     *
+     * @param memberType 다시 부여할 조직 내 역할
+     * @param joinedAt 재가입 시각
+     */
+    public void reactivate(OrganizationMemberType memberType, LocalDateTime joinedAt) {
+        this.memberType = memberType;
+        this.status = OrganizationMemberStatus.ACTIVE;
+        this.joinedAt = joinedAt;
+        this.leftAt = null;
+    }
+
+    /**
+     * 조직 소속을 삭제하지 않고 비활성 상태로 종료한다.
+     *
+     * @param leftAt 소속 종료 시각
+     */
+    public void deactivate(LocalDateTime leftAt) {
+        this.status = OrganizationMemberStatus.INACTIVE;
+        this.leftAt = leftAt;
+    }
 }

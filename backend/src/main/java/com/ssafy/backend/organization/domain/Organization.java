@@ -48,4 +48,38 @@ public class Organization extends BaseTimeEntity {
 
     @Column(name = "status", nullable = false, length = 30)
     private String status;
+
+    /** 조직 생성에 필요한 기본 정보를 초기화한다. */
+    private Organization(String name, String businessNumber, String representativeName,
+                         String contactEmail, String contactPhone, String logoUrl,
+                         String description) {
+        this.name = name;
+        this.businessNumber = businessNumber;
+        this.representativeName = representativeName;
+        this.contactEmail = contactEmail;
+        this.contactPhone = contactPhone;
+        this.logoUrl = logoUrl;
+        this.description = description;
+        this.status = "ACTIVE";
+    }
+
+    /**
+     * 활성 상태의 조직을 생성한다.
+     *
+     * @param name 조직명
+     * @param businessNumber 사업자등록번호
+     * @param representativeName 대표자명
+     * @param contactEmail 연락 이메일
+     * @param contactPhone 연락 전화번호
+     * @param logoUrl 로고 이미지 URL
+     * @param description 조직 설명
+     * @return 생성된 활성 조직
+     */
+    public static Organization createActive(String name, String businessNumber,
+                                            String representativeName, String contactEmail,
+                                            String contactPhone, String logoUrl,
+                                            String description) {
+        return new Organization(name, businessNumber, representativeName, contactEmail,
+                contactPhone, logoUrl, description);
+    }
 }

@@ -3,6 +3,7 @@ package com.ssafy.backend.meeting.repository;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,7 +13,8 @@ import java.util.Optional;
 /**
  * 팬미팅 영속성 처리를 담당한다.
  */
-public interface FanMeetingRepository extends JpaRepository<FanMeeting, Long> {
+public interface FanMeetingRepository extends JpaRepository<FanMeeting, Long>,
+        JpaSpecificationExecutor<FanMeeting> {
 
     /**
      * 대기열 초기화를 직렬화하기 위해 팬미팅 행을 비관적 쓰기 잠금으로 조회한다.

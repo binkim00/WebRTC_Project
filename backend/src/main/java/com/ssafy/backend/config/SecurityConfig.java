@@ -67,23 +67,131 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login",
-                                "/api/v1/auth/refresh").permitAll()
+                                "/api/v1/auth/reissue").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                         // 테스트 토큰 컨트롤러는 설정으로 활성화된 환경에서만 등록된다.
                         .requestMatchers(HttpMethod.GET, "/livekit-test.html").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/test-token").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/webhook").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/influencers/*/follow")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/influencers/*/follow")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/me/followings")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/influencers/me/followers")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/organizations/*/members")
+                                .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings",
+                                "/api/v1/fan-meetings/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/queue/enter")
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue/me")
                                 .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue")
+                                .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/call")
                                 .hasRole("MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings").authenticated()
-                        // 보호 대상 API가 확정될 때까지 기존 접근 정책을 유지한다.
-                        .requestMatchers("/api/v1/fan-meetings/*/queue/operations/**")
+                        // --- 이하 WAVE 1~3 신규 엔드포인트 권한 선반영 ---
+                        // 병렬 작업 세션이 이 파일을 동시에 수정하면 충돌이 확정적이므로 규칙만 미리 등록한다.
+                        // 아직 컨트롤러가 없는 경로는 인증·권한 통과 후 404가 되며 기능에 영향을 주지 않는다.
+                        // 팬미팅 단위 소유권은 MeetingAccessService 로 서비스 계층에서 다시 검증한다.
+
+                        // 참가자 조회 (PART-001, PART-002)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/participants",
+                                "/api/v1/fan-meetings/*/participants/*")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
+                        // 장비 점검 결과 저장 (DEV-001)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/device-checks")
+                                .hasAnyRole("FAN", "INFLUENCER", "SOLO_INFLUENCER")
+                        // 팬 메모 (MEMO-001, MEMO-002)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/influencers/me/fans/*/memos")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER", "MANAGER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/influencers/me/fans/*/memos")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
+                        // 팬 메모 수정·삭제 (MEMO-003)
+                        // 작성자 본인 여부는 FanMemoService 에서 다시 검증한다.
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/fan-memos/*")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/fan-memos/*")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
+
+                        // 응모 폼 (FORM-001, FORM-002)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/application-form")
+                                .permitAll()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/fan-meetings/*/application-form")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        // 응모 조회·통계 (APP-002, APP-003, APP-004, APP-007)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/applications/me")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/me/applications")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/applications/statistics")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/applications")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        // 추첨·결과 공개 (APP-005, APP-006)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/applications/draw",
+                                "/api/v1/fan-meetings/*/applications/results/publish")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+
+                        // 대기 순서 변경 (QUEUE-005, QREQ-001~003)
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/queue-entries/*/position")
+                                .hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/change-requests")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue-change-requests")
+                                .hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/queue-change-requests/*")
+                                .hasRole("MANAGER")
+
+                        // 팬미팅 결과 통계 (STAT-001)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/statistics")
+                                .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
+
+                        // 공지·커뮤니티 조회 (POST-001, POST-002, COMMENT-001)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/service-notices",
+                                "/api/v1/service-notices/*",
+                                "/api/v1/fan-meetings/*/notices",
+                                "/api/v1/fan-meetings/*/notices/*",
+                                "/api/v1/fan-meetings/*/community/posts",
+                                "/api/v1/community/posts/*",
+                                "/api/v1/community/posts/*/comments").permitAll()
+                        // 공지·커뮤니티 작성 (POST-003)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/notices",
+                                "/api/v1/fan-meetings/*/community/posts")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        // 댓글 작성·신고 (COMMENT-002, COMMENT-004)
+                        // 참가 Participant 자격은 서비스 계층에서 검증하므로 여기서는 인증만 요구한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/community/posts/*/comments",
+                                "/api/v1/comments/*/reports").authenticated()
+
+                        // 녹화 재생·다운로드 (REC-003)
+                        // 브라우저 video 태그는 Authorization 헤더를 보낼 수 없어 URL의 서명 토큰으로
+                        // 인가한다. 토큰 검증과 소유자 확인은 RecordingQueryService 가 수행한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/recordings/*/content").permitAll()
+                        // 녹화 업로드·조회 (REC-001, REC-002, REC-004)
+                        // 녹화는 통화에 참여한 팬 본인만 다룰 수 있으므로 FAN 역할로 제한하고
+                        // 통화 참여자 본인 여부는 서비스 계층에서 다시 검증한다.
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/call-sessions/*/recordings/upload",
+                                "/api/v1/recordings/*/download-url")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/recordings/*",
+                                "/api/v1/users/me/recordings")
+                                .hasRole("FAN")
+
+                        // AI 요약·모니터링 (AI-001, AI-002, AI-003)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/summary")
+                                .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/moderations")
+                                .hasAnyRole("MANAGER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/moderations/*/review")
+                                .hasAnyRole("MANAGER", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)

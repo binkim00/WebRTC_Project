@@ -25,6 +25,10 @@ import java.util.Objects;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class MeetingOperationSetting extends BaseTimeEntity {
 
+    public static final int DEFAULT_RECONNECT_GRACE_SEC = 60;
+    public static final int DEFAULT_EARLY_START_MINUTES = 30;
+    public static final int DEFAULT_MAX_RECALL_COUNT = 1;
+
     @Id
     @Column(name = "meeting_id", nullable = false)
     private Long meetingId;
@@ -46,26 +50,85 @@ public class MeetingOperationSetting extends BaseTimeEntity {
     @Column(name = "translation_enabled", nullable = false)
     private boolean translationEnabled;
 
+    @Column(name = "reconnect_grace_sec", nullable = false,
+            columnDefinition = "INT DEFAULT 60")
+    private Integer reconnectGraceSec;
+
+    @Column(name = "early_start_minutes", nullable = false,
+            columnDefinition = "INT DEFAULT 30")
+    private Integer earlyStartMinutes;
+
+    @Column(name = "max_recall_count", nullable = false,
+            columnDefinition = "INT DEFAULT 1")
+    private Integer maxRecallCount;
+
+    /** 개별 영상통화 운영 설정 값을 초기화한다. */
     private MeetingOperationSetting(FanMeeting meeting,
                                     LocalDateTime waitingRoomOpenAt,
                                     int callDurationSec,
                                     boolean recordingEnabled,
-                                    boolean translationEnabled) {
+                                    boolean translationEnabled,
+                                    int reconnectGraceSec,
+                                    int earlyStartMinutes,
+                                    int maxRecallCount) {
         this.meeting = Objects.requireNonNull(meeting);
         this.waitingRoomOpenAt = waitingRoomOpenAt;
         this.callDurationSec = callDurationSec;
         this.recordingEnabled = recordingEnabled;
         this.translationEnabled = translationEnabled;
+        this.reconnectGraceSec = reconnectGraceSec;
+        this.earlyStartMinutes = earlyStartMinutes;
+        this.maxRecallCount = maxRecallCount;
     }
 
+    /**
+     * 팬미팅 운영 설정을 생성한다.
+     *
+     * @param meeting 대상 팬미팅
+     * @param waitingRoomOpenAt 대기실 개방 시각
+     * @param callDurationSec 참가자당 영상통화 제한 시간
+     * @param recordingEnabled 녹화 사용 여부
+     * @param translationEnabled 번역 사용 여부
+     * @param reconnectGraceSec 재접속 유예시간(초)
+     * @param earlyStartMinutes 예정 시각 전 조기 시작 허용시간(분)
+     * @param maxRecallCount 최초 호출 이후 최대 재호출 횟수
+     * @return 생성된 운영 설정
+     */
     public static MeetingOperationSetting create(FanMeeting meeting,
                                                  LocalDateTime waitingRoomOpenAt,
                                                  int callDurationSec,
                                                  boolean recordingEnabled,
-                                                 boolean translationEnabled) {
+                                                 boolean translationEnabled,
+                                                 int reconnectGraceSec,
+                                                 int earlyStartMinutes,
+                                                 int maxRecallCount) {
         return new MeetingOperationSetting(
                 meeting, waitingRoomOpenAt, callDurationSec,
-                recordingEnabled, translationEnabled
+                recordingEnabled, translationEnabled, reconnectGraceSec,
+                earlyStartMinutes, maxRecallCount
         );
+    }
+
+    /**
+     * 공개 전 팬미팅의 운영 설정을 변경한다.
+     *
+     * @param waitingRoomOpenAt 대기실 개방 시각
+     * @param callDurationSec 참가자당 영상통화 제한 시간
+     * @param recordingEnabled 녹화 사용 여부
+     * @param translationEnabled 번역 사용 여부
+     * @param reconnectGraceSec 재접속 유예시간(초)
+     * @param earlyStartMinutes 예정 시각 전 조기 시작 허용시간(분)
+     * @param maxRecallCount 최초 호출 이후 최대 재호출 횟수
+     */
+    public void update(LocalDateTime waitingRoomOpenAt, int callDurationSec,
+                       boolean recordingEnabled, boolean translationEnabled,
+                       int reconnectGraceSec, int earlyStartMinutes, int maxRecallCount) {
+        this.waitingRoomOpenAt = waitingRoomOpenAt;
+        this.callDurationSec = callDurationSec;
+        this.recordingEnabled = recordingEnabled;
+        this.translationEnabled = translationEnabled;
+        this.reconnectGraceSec = reconnectGraceSec;
+        this.earlyStartMinutes = earlyStartMinutes;
+        this.maxRecallCount = maxRecallCount;
     }
 }

@@ -3,6 +3,7 @@ package com.ssafy.backend.queue.controller;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.queue.dto.QueueEnterResponse;
+import com.ssafy.backend.queue.dto.QueueManagementResponse;
 import com.ssafy.backend.queue.dto.QueueSnapshotResponse;
 import com.ssafy.backend.queue.service.QueueCommandService;
 import com.ssafy.backend.queue.service.QueueQueryService;
@@ -62,5 +63,20 @@ public class FanMeetingQueueController {
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
         return ApiResponse.success(queryService.getMySnapshot(meetingId, principal));
+    }
+
+    /**
+     * 팬미팅 운영자가 현재 통화와 전체 대기열을 조회합니다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal JWT 인증 사용자 정보
+     * @return 공통 성공 형식으로 감싼 운영자용 대기열 정보
+     */
+    @GetMapping
+    public ApiResponse<QueueManagementResponse> getManagementQueue(
+            @PathVariable Long meetingId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(queryService.getManagementQueue(meetingId, principal));
     }
 }

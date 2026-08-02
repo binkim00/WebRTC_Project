@@ -49,6 +49,7 @@ public class MeetingApplicationSetting extends BaseTimeEntity {
     @Column(name = "capacity", nullable = false)
     private Integer capacity;
 
+    /** 응모 설정 값을 초기화한다. */
     private MeetingApplicationSetting(FanMeeting meeting,
                                       boolean enabled,
                                       LocalDateTime applicationOpenAt,
@@ -63,6 +64,17 @@ public class MeetingApplicationSetting extends BaseTimeEntity {
         this.capacity = capacity;
     }
 
+    /**
+     * 팬미팅 응모 설정을 생성한다.
+     *
+     * @param meeting 대상 팬미팅
+     * @param enabled 응모 기능 사용 여부
+     * @param applicationOpenAt 응모 시작 시각
+     * @param applicationCloseAt 응모 종료 시각
+     * @param resultAnnouncementAt 결과 발표 시각
+     * @param capacity 모집 인원
+     * @return 생성된 응모 설정
+     */
     public static MeetingApplicationSetting create(FanMeeting meeting,
                                                    boolean enabled,
                                                    LocalDateTime applicationOpenAt,
@@ -73,5 +85,24 @@ public class MeetingApplicationSetting extends BaseTimeEntity {
                 meeting, enabled, applicationOpenAt, applicationCloseAt,
                 resultAnnouncementAt, capacity
         );
+    }
+
+    /**
+     * 공개 전 팬미팅의 응모 설정을 변경한다.
+     *
+     * @param enabled 응모 기능 사용 여부
+     * @param applicationOpenAt 응모 시작 시각
+     * @param applicationCloseAt 응모 종료 시각
+     * @param resultAnnouncementAt 결과 발표 시각
+     * @param capacity 모집 인원
+     */
+    public void update(boolean enabled, LocalDateTime applicationOpenAt,
+                       LocalDateTime applicationCloseAt, LocalDateTime resultAnnouncementAt,
+                       int capacity) {
+        this.enabled = enabled;
+        this.applicationOpenAt = applicationOpenAt;
+        this.applicationCloseAt = applicationCloseAt;
+        this.resultAnnouncementAt = resultAnnouncementAt;
+        this.capacity = capacity;
     }
 }
