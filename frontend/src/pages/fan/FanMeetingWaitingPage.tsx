@@ -62,7 +62,8 @@ export function FanMeetingWaitingPage() {
   const navigate = useNavigate()
   const [meetingInfo, setMeetingInfo] = useState<MeetingDetail>()
   const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshotResponse>()
-  const [error, setError] = useState<string>()
+  const [meetingError, setMeetingError] = useState<string>()
+  const [queueError, setQueueError] = useState<string>()
   const [changeDialogOpen, setChangeDialogOpen] = useState(false)
   const [changeReason, setChangeReason] = useState('')
   const [isRequestingChange, setIsRequestingChange] = useState(false)
@@ -74,31 +75,57 @@ export function FanMeetingWaitingPage() {
     [fanMeetingId],
   )
 
-  const loadWaitingState = useCallback(async (signal?: AbortSignal) => {
+  const loadMeetingInfo = useCallback(async (signal?: AbortSignal) => {
     if (!fanMeetingId) return
 
     const session = getAuthSession()
     if (!session || session.role !== 'FAN') {
-      setError('팬 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
+      setMeetingError('팬 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
       return
     }
 
     try {
-      const [nextMeetingInfo, nextQueueSnapshot] = await Promise.all([
-        fetchMeetingDetail(fanMeetingId, session.accessToken, signal),
-        getMyQueue(fanMeetingId, session.accessToken, signal),
-      ])
-
+      const nextMeetingInfo = await fetchMeetingDetail(
+        fanMeetingId,
+        session.accessToken,
+        signal,
+      )
       setMeetingInfo(nextMeetingInfo)
+      setMeetingError(undefined)
+    } catch (reason) {
+      if (signal?.aborted) return
+      setMeetingError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : '팬미팅 정보를 불러오지 못했습니다.',
+      )
+    }
+  }, [fanMeetingId])
+
+  const loadQueueState = useCallback(async (signal?: AbortSignal) => {
+    if (!fanMeetingId) return
+
+    const session = getAuthSession()
+    if (!session || session.role !== 'FAN') {
+      setQueueError('팬 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
+      return
+    }
+
+    try {
+      const nextQueueSnapshot = await getMyQueue(
+        fanMeetingId,
+        session.accessToken,
+        signal,
+      )
       setQueueSnapshot(nextQueueSnapshot)
-      setError(undefined)
+      setQueueError(undefined)
 
       if (nextQueueSnapshot.displayStatus === 'COMPLETED') {
         navigate(`/fan/fan-meetings/${fanMeetingId}/complete`, { replace: true })
       }
     } catch (reason) {
       if (signal?.aborted) return
-      setError(
+      setQueueError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
           : '대기열 상태를 불러오지 못했습니다.',
@@ -108,17 +135,24 @@ export function FanMeetingWaitingPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    void loadWaitingState(controller.signal)
+    void loadMeetingInfo(controller.signal)
+
+    return () => controller.abort()
+  }, [loadMeetingInfo])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadQueueState(controller.signal)
 
     const timer = window.setInterval(() => {
-      void loadWaitingState(controller.signal)
+      void loadQueueState(controller.signal)
     }, 3_000)
 
     return () => {
       controller.abort()
       window.clearInterval(timer)
     }
-  }, [loadWaitingState])
+  }, [loadQueueState])
 
   if (!fanMeetingId) {
     return null
@@ -133,6 +167,7 @@ export function FanMeetingWaitingPage() {
     ? deviceCheck.cameraOk && deviceCheck.microphoneOk
     : undefined
   const trimmedChangeReason = changeReason.trim()
+  const error = meetingError ?? queueError
 
   async function handleChangeRequestSubmit() {
     if (isRequestingChange || !queueSnapshot) return
