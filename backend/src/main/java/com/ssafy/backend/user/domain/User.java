@@ -16,6 +16,11 @@ import java.time.LocalDateTime;
 @Table(name = "users")
 public class User extends BaseTimeEntity {
 
+    private static final String WITHDRAWN_PREFIX = "withdrawn_";
+    private static final String WITHDRAWN_EMAIL_DOMAIN = "@withdrawn.invalid";
+    private static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
+    private static final String WITHDRAWN_PASSWORD = "WITHDRAWN";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id", nullable = false)
@@ -111,6 +116,29 @@ public class User extends BaseTimeEntity {
         if (preferredLanguage != null) {
             this.preferredLanguage = preferredLanguage;
         }
+    }
+
+    /**
+     * 계정을 탈퇴 상태로 전환하고 개인정보를 비식별화한다.
+     * 연관 이력을 보존해야 하므로 행을 삭제하지 않고 식별 가능한 값만 지운다.
+     *
+     * @param withdrawnAt 탈퇴 처리 시각
+     */
+    public void withdraw(LocalDateTime withdrawnAt) {
+        if (this.status == UserStatus.WITHDRAWN) {
+            throw new IllegalStateException("이미 탈퇴한 계정입니다.");
+        }
+        this.status = UserStatus.WITHDRAWN;
+        this.withdrawnAt = withdrawnAt;
+        // loginId·email에 UNIQUE 제약이 있어 임의 문자열을 쓰면 재탈퇴나 동시 처리에서 충돌한다.
+        // 식별자 기반의 결정적 값으로 바꿔 충돌을 원천 차단한다.
+        this.loginId = WITHDRAWN_PREFIX + this.id;
+        // .invalid는 RFC 2606 예약 TLD라 실제 메일이 발송될 수 없다.
+        this.email = WITHDRAWN_PREFIX + this.id + WITHDRAWN_EMAIL_DOMAIN;
+        this.nickname = WITHDRAWN_NICKNAME;
+        // BCrypt 형식이 아니므로 어떤 비밀번호로도 매칭되지 않는다.
+        this.password = WITHDRAWN_PASSWORD;
+        this.profileImageUrl = null;
     }
 
     /** 데이터베이스가 생성한 사용자 식별자를 반환한다. */

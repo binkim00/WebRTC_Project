@@ -17,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -53,6 +54,17 @@ class UserSecurityTest {
         mockMvc.perform(patch("/api/v1/users/me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(userProfileService);
+    }
+
+    /** 미인증 사용자의 회원탈퇴 요청이 HTTP 401로 거부되는지 검증한다. */
+    @Test
+    void rejectsUnauthenticatedWithdrawRequest() throws Exception {
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"test1234\"}"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(userProfileService);
