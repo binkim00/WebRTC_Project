@@ -1,47 +1,71 @@
 import {
   ArrowsClockwise,
-  Bell,
   CheckCircle,
   Clock,
-  Eye,
-  Microphone,
   MonitorPlay,
-  SquaresFour,
-  UserCircle,
-  VideoCamera,
+  PhoneCall,
+  UserMinus,
   Warning,
-  WifiHigh,
-  Wrench,
 } from '@phosphor-icons/react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/auth'
 import {
+  callQueueEntry,
   fetchMeetingQueue,
-  type FanMeetingParticipant,
-  type MeetingDetail,
+  markQueueEntryNoShow,
   type MeetingQueue,
+  type QueueEntry,
+  type QueueStatus,
 } from '../../api/fanMeetingParticipants'
-import { callQueueEntry } from '../../api/queue'
-import remotePreviewImage from '../../assets/call-preview-remote.jpg'
-import localPreviewImage from '../../assets/call-preview-local.jpg'
 import { AlertBanner, Badge, Button, Card, Spinner } from '../../components'
 
-const previewImages = [remotePreviewImage, localPreviewImage, remotePreviewImage, localPreviewImage]
+const previewQueue: MeetingQueue = {
+  currentCall: {
+    callSessionId: '7001',
+    participantId: 'p-1',
+    nickname: '별하늘',
+    startedAt: '2026-07-29T19:30:00',
+    endsAt: '2026-07-29T19:32:00',
+  },
+  entries: [
+    { queueEntryId: 'q-1', participantId: 'p-1', fanId: 'f-1', nickname: '별하늘', position: 1, status: 'IN_CALL', callAttemptCount: 1 },
+    { queueEntryId: 'q-2', participantId: 'p-2', fanId: 'f-2', nickname: '몽글이', position: 2, status: 'CALLED', callAttemptCount: 1 },
+    { queueEntryId: 'q-3', participantId: 'p-3', fanId: 'f-3', nickname: '바람처럼', position: 3, status: 'WAITING', callAttemptCount: 0 },
+    { queueEntryId: 'q-4', participantId: 'p-4', fanId: 'f-4', nickname: '소다빛', position: 4, status: 'COMPLETED', callAttemptCount: 1 },
+  ],
+}
+
+const statusLabels: Record<QueueStatus, string> = {
+  WAITING: '대기',
+  CALLED: '호출됨',
+  IN_CALL: '통화 중',
+  COMPLETED: '완료',
+  NO_SHOW: '노쇼',
+  SKIPPED: '건너뜀',
+  REMOVED: '제외',
+}
+
+function statusBadge(status: QueueStatus): 'primary' | 'success' | 'warning' | 'danger' | 'neutral' {
+  if (status === 'IN_CALL') return 'primary'
+  if (status === 'COMPLETED') return 'success'
+  if (status === 'CALLED') return 'warning'
+  if (status === 'NO_SHOW' || status === 'REMOVED') return 'danger'
+  return 'neutral'
+}
 
 export function ManagerMeetingMonitorPage() {
   const { fanMeetingId } = useParams<{ fanMeetingId: string }>()
   const [searchParams] = useSearchParams()
   const isPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
-  const [meeting, setMeeting] = useState<MeetingDetail | null>(null)
-  const [participants, setParticipants] = useState<FanMeetingParticipant[]>([])
   const [queue, setQueue] = useState<MeetingQueue>({ entries: [] })
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [callingEntryId, setCallingEntryId] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [busyEntryId, setBusyEntryId] = useState<string>()
+  const [error, setError] = useState<string>()
 
-  useEffect(() => {
+  const loadQueue = useCallback(async (showSpinner = false) => {
     if (!fanMeetingId) {
       setError('팬미팅 식별자가 없습니다.')
       setLoading(false)
@@ -49,30 +73,7 @@ export function ManagerMeetingMonitorPage() {
     }
 
     if (isPreview) {
-      setMeeting({
-        meetingId: fanMeetingId,
-        title: 'MELLY DAY 팬미팅',
-        status: 'IN_PROGRESS',
-        influencer: { influencerId: 'melly', influencerName: 'Melly' },
-        application: { capacity: 30 },
-      })
-      setParticipants([
-        { participantId: 'p-1', fanId: 'f-1', nickname: '별하늘', callOrder: 1, participantStatus: 'ACTIVE', queueStatus: 'IN_CALL', cameraOk: true, microphoneOk: true, profileImageUrl: previewImages[0] },
-        { participantId: 'p-2', fanId: 'f-2', nickname: '몽글이', callOrder: 2, participantStatus: 'ACTIVE', queueStatus: 'IN_CALL', cameraOk: true, microphoneOk: true, profileImageUrl: previewImages[1] },
-        { participantId: 'p-3', fanId: 'f-3', nickname: '바람처럼', callOrder: 3, participantStatus: 'ACTIVE', queueStatus: 'WAITING', cameraOk: true, microphoneOk: false, profileImageUrl: previewImages[2] },
-        { participantId: 'p-4', fanId: 'f-4', nickname: '소다빛', callOrder: 4, participantStatus: 'ACTIVE', queueStatus: 'CALLED', cameraOk: false, microphoneOk: true, profileImageUrl: previewImages[3] },
-      ])
-      setQueue({
-        entries: ['푸른달', '별사탕', '햇살가득', '노을빛', '우주여행', '소프트민트', '디어멜리'].map((nickname, index) => ({
-          queueEntryId: `q-${index + 1}`,
-          participantId: `p-${index + 1}`,
-          fanId: `f-${index + 1}`,
-          nickname,
-          position: index + 1,
-          status: index === 5 ? 'CALLED' : 'WAITING',
-          callAttemptCount: 0,
-        })),
-      })
+      setQueue(previewQueue)
       setLoading(false)
       return
     }
@@ -84,141 +85,158 @@ export function ManagerMeetingMonitorPage() {
       return
     }
 
-    const controller = new AbortController()
-    const refresh = () => fetchMeetingQueue(fanMeetingId, token, controller.signal)
-      .then((queueData) => {
-        setMeeting({
-          meetingId: fanMeetingId,
-          title: `팬미팅 #${fanMeetingId}`,
-          status: 'IN_PROGRESS',
-          influencer: { influencerId: 'current', influencerName: '인플루언서' },
-          application: { capacity: Math.max(queueData.entries.length, 1) },
-        })
-        setParticipants(queueData.entries.slice(0, 4).map((entry) => ({
-          participantId: entry.participantId,
-          fanId: entry.fanId,
-          nickname: entry.nickname,
-          profileImageUrl: entry.profileImageUrl,
-          callOrder: entry.position,
-          participantStatus: 'ACTIVE',
-          queueStatus: entry.status,
-        })))
-        setQueue(queueData)
-        setError(null)
-      })
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return
-        setError(reason instanceof ApiError ? reason.message : '모니터링 데이터를 불러오지 못했습니다.')
-      })
-      .finally(() => setLoading(false))
-
-    setLoading(true)
-    void refresh()
-    const intervalId = window.setInterval(() => void refresh(), 5000)
-
-    return () => {
-      controller.abort()
-      window.clearInterval(intervalId)
+    if (showSpinner) setRefreshing(true)
+    try {
+      setQueue(await fetchMeetingQueue(fanMeetingId, token))
+      setError(undefined)
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : '대기열 정보를 불러오지 못했습니다.')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
   }, [fanMeetingId, isPreview])
 
-  async function handleCall(queueEntryId: string) {
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError('로그인 정보가 없습니다. 다시 로그인해 주세요.')
+  useEffect(() => {
+    void loadQueue()
+    if (isPreview) return
+
+    const timer = window.setInterval(() => {
+      void loadQueue()
+    }, 5_000)
+
+    return () => window.clearInterval(timer)
+  }, [isPreview, loadQueue])
+
+  async function runQueueAction(entry: QueueEntry, action: 'CALL' | 'NO_SHOW') {
+    if (isPreview) {
+      setQueue((current) => ({
+        ...current,
+        entries: current.entries.map((item) => item.queueEntryId === entry.queueEntryId
+          ? { ...item, status: action === 'CALL' ? 'CALLED' : 'NO_SHOW' }
+          : item),
+      }))
       return
     }
-    setCallingEntryId(queueEntryId)
+
+    const token = getAuthSession()?.accessToken
+    if (!token) {
+      setError('대기열을 운영하려면 다시 로그인해 주세요.')
+      return
+    }
+
+    setBusyEntryId(entry.queueEntryId)
+    setError(undefined)
     try {
-      await callQueueEntry(queueEntryId, token)
-      if (fanMeetingId) setQueue(await fetchMeetingQueue(fanMeetingId, token))
-      setError(null)
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : '팬을 호출하지 못했습니다.')
+      if (action === 'CALL') {
+        await callQueueEntry(entry.queueEntryId, token)
+      } else {
+        await markQueueEntryNoShow(entry.queueEntryId, token)
+      }
+      await loadQueue()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '대기열 상태 변경에 실패했습니다.')
     } finally {
-      setCallingEntryId(null)
+      setBusyEntryId(undefined)
     }
   }
 
-  const inCallCount = useMemo(() => participants.filter((item) => item.queueStatus === 'IN_CALL').length, [participants])
-  const completedCount = useMemo(() => queue.entries.filter((item) => item.status === 'COMPLETED').length, [queue.entries])
-  const waitingCount = queue.entries.filter((item) => item.status === 'WAITING').length
-  const deviceCheckCount = participants.filter((item) => item.cameraOk === false || item.microphoneOk === false).length
-  const capacity = meeting?.application?.capacity ?? Math.max(queue.entries.length, 1)
-  const progress = Math.min(100, ((completedCount + inCallCount) / capacity) * 100)
+  const counts = useMemo(() => ({
+    waiting: queue.entries.filter((entry) => entry.status === 'WAITING').length,
+    called: queue.entries.filter((entry) => entry.status === 'CALLED').length,
+    completed: queue.entries.filter((entry) => entry.status === 'COMPLETED').length,
+    noShow: queue.entries.filter((entry) => entry.status === 'NO_SHOW').length,
+  }), [queue.entries])
 
-  if (loading) return <div className="flex min-h-[420px] items-center justify-center"><Spinner label="모니터링 정보를 불러오는 중" /></div>
-  if (error || !meeting) return <AlertBanner title="모니터링 화면을 표시할 수 없습니다" variant="error">{error ?? '팬미팅 정보를 찾을 수 없습니다.'}</AlertBanner>
+  if (loading) {
+    return <div className="flex min-h-[420px] items-center justify-center"><Spinner label="대기열 정보를 불러오는 중" /></div>
+  }
 
   return (
-    <div className="grid min-w-0 max-w-full gap-5 overflow-x-hidden pb-10">
+    <div className="grid min-w-0 gap-5 pb-10">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-[var(--color-primary-coral)]">팬미팅 관리</p>
-          <h1 className="mt-2 text-4xl font-black tracking-[-0.05em]">영상 모니터링</h1>
+          <p className="text-sm font-semibold text-[var(--color-primary-coral)]">팬미팅 #{fanMeetingId}</p>
+          <h1 className="mt-2 text-4xl font-black tracking-[-0.05em]">실시간 대기열 운영</h1>
         </div>
-        <div className="flex max-w-full flex-wrap items-center justify-end gap-2 text-sm text-[var(--color-text-secondary)] sm:gap-3">
-          <Button variant="secondary" leadingIcon={<SquaresFour size={18} weight="bold" />}>화면 레이아웃</Button>
-          <Button variant="ghost" leadingIcon={<ArrowsClockwise size={18} weight="bold" />}>새로고침</Button>
-          <span className="inline-flex items-center gap-2 border-l border-[var(--color-divider)] pl-3"><span className="size-2 rounded-full bg-emerald-500" />자동 갱신: 5초</span>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--color-text-secondary)]">
+          <Button disabled={refreshing} onClick={() => void loadQueue(true)} variant="ghost" leadingIcon={<ArrowsClockwise size={18} weight="bold" />}>
+            {refreshing ? '갱신 중…' : '새로고침'}
+          </Button>
+          <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-500" />자동 갱신: 5초</span>
         </div>
       </header>
 
-      <div className="grid min-w-0 gap-5 min-[1400px]:grid-cols-[minmax(0,1.75fr)_minmax(390px,0.95fr)]">
-        <Card className="min-w-0 overflow-hidden p-3 sm:p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {participants.map((participant) => <ParticipantTile key={participant.participantId} participant={participant} />)}
-          </div>
-        </Card>
+      {isPreview ? <AlertBanner title="개발 미리보기" variant="warning">대기열 상태 변경은 현재 화면에만 반영됩니다.</AlertBanner> : null}
+      {error ? <AlertBanner title="대기열 작업을 완료할 수 없습니다" variant="error">{error}</AlertBanner> : null}
 
-        <Card className="grid min-w-0 content-start gap-5 p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]">현재 팬미팅</p><h2 className="mt-2 text-2xl font-black">{meeting.title}</h2></div><Bell className="text-[var(--color-primary-coral)]" size={23} weight="fill" /></div>
-          <div className="border-y border-[var(--color-divider)] py-4"><div className="flex items-center justify-between text-sm"><span className="font-semibold">세션 진행 상황</span><span className="text-[var(--color-text-secondary)]">진행 시간 01:32:45</span></div><div className="mt-3 flex items-center gap-3"><div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[var(--color-primary-coral)]" style={{ width: `${progress}%` }} /></div><strong className="text-sm text-[var(--color-primary-coral)]">{completedCount + inCallCount} / {capacity}명</strong></div></div>
-          <div><h3 className="font-extrabold">대기열 요약</h3><div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4 min-[1400px]:grid-cols-2"><SummaryTile icon={<Clock size={18} />} label="대기 인원" value={waitingCount} /><SummaryTile icon={<MonitorPlay size={18} />} label="통화 중" value={inCallCount} accent /><SummaryTile icon={<Wrench size={18} />} label="장비 확인" value={deviceCheckCount} /><SummaryTile icon={<CheckCircle size={18} />} label="완료" value={completedCount} /></div></div>
-          <div><div className="flex items-center justify-between"><h3 className="font-extrabold">알림</h3><button className="text-xs font-bold text-[var(--color-text-secondary)]" type="button">모두 읽음 처리</button></div><div className="mt-3 grid gap-2"><AlertRow icon={<Warning size={20} weight="fill" />} title="위험 감지" detail="실시간 위험 감지 API 연결 후 표시됩니다." tone="danger" /><AlertRow icon={<WifiHigh size={20} weight="bold" />} title="연결 상태" detail="참가자 네트워크 상태를 확인하세요." tone="warning" /><AlertRow icon={<Wrench size={20} weight="bold" />} title="장비 확인 대기" detail={`${deviceCheckCount}명의 장비 확인이 필요합니다.`} tone="info" /></div></div>
-          <div className="grid grid-cols-2 gap-3"><Button variant="secondary" leadingIcon={<Eye size={18} weight="bold" />}>참가자 상세 보기</Button><Link className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] border border-transparent bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] text-sm font-semibold text-white hover:bg-[var(--color-primary-coral-hover)]" to={`/manager/fan-meetings/${encodeURIComponent(fanMeetingId ?? 'demo-meeting')}/monitor/risk`}><Warning size={18} weight="bold" />위험 상황 검토</Link></div>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard icon={<Clock size={20} />} label="대기" value={counts.waiting} />
+        <SummaryCard icon={<PhoneCall size={20} />} label="호출됨" value={counts.called} />
+        <SummaryCard icon={<CheckCircle size={20} />} label="완료" value={counts.completed} />
+        <SummaryCard icon={<UserMinus size={20} />} label="노쇼" value={counts.noShow} />
       </div>
 
-      <Card className="p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-extrabold">대기열 <span className="font-normal text-[var(--color-text-secondary)]">(참가 순서)</span></h2>
-          <span className="text-sm text-[var(--color-text-secondary)]">총 {waitingCount}명 대기 중</span>
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-text-tertiary)]">CURRENT CALL</p>
+            {queue.currentCall ? (
+              <>
+                <h2 className="mt-2 text-2xl font-black">{queue.currentCall.nickname}</h2>
+                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">통화 세션 #{queue.currentCall.callSessionId}</p>
+              </>
+            ) : (
+              <h2 className="mt-2 text-2xl font-black">현재 진행 중인 통화가 없습니다</h2>
+            )}
+          </div>
+          {queue.currentCall ? (
+            <Link className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-danger)] px-[var(--control-padding-inline)] text-sm font-semibold text-white" to={`/manager/fan-meetings/${encodeURIComponent(fanMeetingId ?? '')}/monitor/risk?callSessionId=${encodeURIComponent(queue.currentCall.callSessionId)}`}>
+              <Warning size={18} weight="bold" />통화 강제 종료
+            </Link>
+          ) : null}
         </div>
-        <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
-          {queue.entries.map((entry) => (
-            <div className="min-w-[180px] rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-page)] p-3" key={entry.queueEntryId}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex size-7 items-center justify-center rounded-full bg-slate-100 text-xs font-black">{entry.position}</span>
-                <Badge variant={entry.status === 'IN_CALL' ? 'primary' : entry.status === 'COMPLETED' ? 'success' : 'neutral'}>
-                  {entry.status === 'IN_CALL' ? '통화 중' : entry.status === 'CALLED' ? '호출됨' : entry.status === 'COMPLETED' ? '완료' : '대기'}
-                </Badge>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-[var(--color-divider)] p-5">
+          <h2 className="text-lg font-extrabold">대기열</h2>
+          <span className="text-sm text-[var(--color-text-secondary)]">총 {queue.entries.length}명</span>
+        </div>
+        {queue.entries.length === 0 ? (
+          <div className="p-8 text-center text-[var(--color-text-secondary)]">현재 대기열에 참가자가 없습니다.</div>
+        ) : (
+          <div className="divide-y divide-[var(--color-divider)]">
+            {queue.entries.map((entry) => (
+              <div className="grid gap-4 p-5 sm:grid-cols-[60px_minmax(0,1fr)_110px_auto] sm:items-center" key={entry.queueEntryId}>
+                <span className="flex size-10 items-center justify-center rounded-full bg-[var(--color-surface-page)] font-black">{entry.position}</span>
+                <div>
+                  <strong>{entry.nickname}</strong>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">호출 시도 {entry.callAttemptCount}회</p>
+                </div>
+                <Badge variant={statusBadge(entry.status)}>{statusLabels[entry.status]}</Badge>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {entry.status === 'WAITING' ? (
+                    <Button disabled={busyEntryId === entry.queueEntryId} onClick={() => void runQueueAction(entry, 'CALL')} size="sm" leadingIcon={<MonitorPlay size={16} />}>호출</Button>
+                  ) : null}
+                  {entry.status === 'CALLED' ? (
+                    <Button disabled={busyEntryId === entry.queueEntryId} onClick={() => void runQueueAction(entry, 'NO_SHOW')} size="sm" variant="danger" leadingIcon={<UserMinus size={16} />}>노쇼 처리</Button>
+                  ) : null}
+                </div>
               </div>
-              <p className="mt-3 truncate font-bold">{entry.nickname}</p>
-              {entry.status === 'WAITING' || entry.status === 'CALLED' ? (
-                <Button
-                  className="mt-3 w-full"
-                  disabled={callingEntryId === entry.queueEntryId}
-                  onClick={() => void handleCall(entry.queueEntryId)}
-                  size="sm"
-                >
-                  {entry.status === 'CALLED' ? '재호출' : '호출'}
-                </Button>
-              ) : null}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   )
 }
 
-function ParticipantTile({ participant }: { participant: FanMeetingParticipant }) {
-  const inCall = participant.queueStatus === 'IN_CALL'
-  const deviceReady = participant.cameraOk !== false && participant.microphoneOk !== false
-  return <div className="relative aspect-video overflow-hidden rounded-[var(--radius-control)] bg-slate-800">{participant.profileImageUrl ? <img alt={`${participant.nickname} 영상`} className="size-full object-cover" src={participant.profileImageUrl} /> : <div className="flex size-full items-center justify-center text-6xl font-black text-white/25"><UserCircle size={76} weight="thin" /></div>}<div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/10" /><span className={`absolute left-4 top-4 rounded-lg px-3 py-1.5 text-sm font-bold ${inCall ? 'bg-[var(--color-primary-coral)] text-white' : 'bg-slate-500/80 text-white'}`}>{inCall ? '통화 중' : participant.queueStatus === 'WAITING' ? '대기' : '장비 확인'}</span><div className="absolute right-4 top-4 flex items-center gap-1 text-emerald-300"><span className="sr-only">장비 상태</span><WifiHigh size={23} weight="bold" /></div><div className="absolute inset-x-4 bottom-4 flex items-end justify-between text-white"><div><p className="text-xl font-black">{participant.nickname}</p><p className="mt-1 text-xs text-white/75">{inCall ? '팬미팅 참가자' : '다음 순서 참가자'}</p></div><div className="flex items-center gap-2"><span className={`rounded-lg border border-white/30 bg-black/30 p-2 ${participant.microphoneOk === false ? 'text-red-300' : ''}`}><Microphone size={20} weight="bold" /></span><span className={`rounded-lg border border-white/30 bg-black/30 p-2 ${participant.cameraOk === false ? 'text-red-300' : ''}`}><VideoCamera size={20} weight="bold" /></span><span className={`absolute right-0 top-[-28px] size-2 rounded-full ${deviceReady ? 'bg-emerald-400' : 'bg-amber-400'}`} /></div></div></div>
+function SummaryCard({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">{icon}{label}</div>
+      <p className="mt-3 text-3xl font-black">{value}<span className="ml-1 text-sm font-semibold">명</span></p>
+    </Card>
+  )
 }
-
-function SummaryTile({ icon, label, value, accent = false }: { icon: ReactNode; label: string; value: number; accent?: boolean }) { return <div className={`grid min-h-24 min-w-0 grid-rows-[2rem_1fr] rounded-lg border p-3 ${accent ? 'border-red-200 bg-red-50' : 'border-[var(--color-border-control)]'}`}><div className="flex min-w-0 items-start gap-1.5 text-xs leading-4 text-[var(--color-text-secondary)]"><span className="mt-px shrink-0">{icon}</span><span className="break-keep">{label}</span></div><p className={`self-end text-xl font-black leading-none ${accent ? 'text-[var(--color-primary-coral)]' : ''}`}>{value}<span className="ml-0.5 text-xs font-semibold">명</span></p></div> }
-
-function AlertRow({ icon, title, detail, tone }: { icon: ReactNode; title: string; detail: string; tone: 'danger' | 'warning' | 'info' }) { const styles = { danger: 'border-red-200 bg-red-50 text-red-600', warning: 'border-amber-200 bg-amber-50 text-amber-600', info: 'border-blue-200 bg-blue-50 text-blue-600' }[tone]; return <div className={`flex items-start gap-3 rounded-lg border p-3 ${styles}`}><span>{icon}</span><div className="min-w-0"><p className="font-bold">{title}</p><p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">{detail}</p></div></div> }

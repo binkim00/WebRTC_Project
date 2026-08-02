@@ -9,15 +9,16 @@ import {
 } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ApiError } from '../../api/ApiError'
-import { getAuthSession } from '../../api/auth'
 import {
-  fetchManagerMeetings,
+  fetchMyMeetings,
   type ManagerMeetingPage,
   type ManagerMeetingSummary,
 } from '../../api/managerMeetings'
+import { ApiError } from '../../api/ApiError'
+import { getAuthSession } from '../../api/authSession'
 import { AlertBanner, Button, Card, EmptyState, Pagination, Spinner } from '../../components'
 
+/** 목록 API가 준비되기 전 레이아웃 검증에만 사용하는 개발 미리보기 데이터다. */
 const previewMeetings: ManagerMeetingSummary[] = [
   { meetingId: 'meeting-1', title: 'MELLY DAY 팬미팅', influencerName: 'Melly', scheduledStartAt: '2026-07-28T20:00:00', status: 'SCHEDULED' },
   { meetingId: 'meeting-2', title: '서윤의 여름밤 팬미팅', influencerName: '서윤', scheduledStartAt: '2026-08-15T20:00:00', status: 'SCHEDULED' },
@@ -26,6 +27,7 @@ const previewMeetings: ManagerMeetingSummary[] = [
   { meetingId: 'meeting-5', title: '첫 만남 온라인 팬사인회', influencerName: 'Hana', scheduledStartAt: '2026-09-19T20:00:00', status: 'SCHEDULED' },
 ]
 
+/** 서버 데이터가 없을 때도 페이지 컴포넌트가 동일한 구조를 사용하도록 하는 빈 페이지 값이다. */
 const emptyPage: ManagerMeetingPage = {
   content: [],
   page: 0,
@@ -35,6 +37,7 @@ const emptyPage: ManagerMeetingPage = {
   hasNext: false,
 }
 
+/** ISO 날짜 문자열을 팬미팅 목록에서 읽기 쉬운 `YYYY.MM.DD HH:mm` 형식으로 바꾼다. */
 function formatMeetingDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -48,6 +51,7 @@ function formatMeetingDate(value: string): string {
   return `${year}.${month}.${day} ${hour}:${minute}`
 }
 
+/** 팬미팅을 검색하고 참가자·설정 관리 화면으로 연결하는 목록 페이지다. */
 export function ManagerMeetingListPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -60,6 +64,8 @@ export function ManagerMeetingListPage() {
   const [error, setError] = useState<string>()
 
   useEffect(() => {
+    const controller = new AbortController()
+
     if (isPreview) {
       const normalizedKeyword = keyword.trim().toLocaleLowerCase()
       const filteredMeetings = normalizedKeyword
@@ -79,42 +85,42 @@ export function ManagerMeetingListPage() {
       })
       setError(undefined)
       setLoading(false)
-      return
+      return () => controller.abort()
     }
 
-    const authToken = getAuthSession()?.accessToken
-    if (!authToken) {
-      setError('매니저 계정으로 로그인한 후 팬미팅 목록을 확인할 수 있습니다.')
+    const session = getAuthSession()
+    if (!session || (session.role !== 'MANAGER' && session.role !== 'SOLO_INFLUENCER')) {
+      setError('팬미팅을 운영할 수 있는 계정으로 로그인해 주세요.')
       setLoading(false)
-      return
+      return () => controller.abort()
     }
 
-    const controller = new AbortController()
     setLoading(true)
-    fetchManagerMeetings(
+    void fetchMyMeetings(
       { keyword, page: page - 1, size: 5 },
-      authToken,
+      session.accessToken,
       controller.signal,
     )
-      .then((response) => {
-        setMeetingPage(response)
+      .then((result) => {
+        setMeetingPage(result)
         setError(undefined)
       })
       .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        if (controller.signal.aborted) return
         setError(
-          reason instanceof ApiError
+          reason instanceof ApiError || reason instanceof TypeError
             ? reason.message
-            : reason instanceof Error
-              ? reason.message
-              : '팬미팅 목록을 불러오지 못했습니다.',
+            : '팬미팅 목록을 불러오지 못했습니다.',
         )
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
 
     return () => controller.abort()
   }, [isPreview, keyword, page])
 
+  /** 검색 폼 제출 시 첫 페이지로 돌아가고 입력 키워드를 실제 검색 조건으로 적용한다. */
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPage(1)
@@ -153,9 +159,9 @@ export function ManagerMeetingListPage() {
           <Button
             className="min-h-12 self-start px-6 lg:self-auto"
             leadingIcon={<Plus size={20} weight="bold" />}
-            onClick={() => navigate('/manager/fan-meetings/new')}
+            onClick={() => navigate('/manager/events/new')}
           >
-            새 팬미팅
+            새 이벤트
           </Button>
         </div>
 
@@ -174,7 +180,7 @@ export function ManagerMeetingListPage() {
           </div>
         ) : meetingPage.content.length === 0 ? (
           <EmptyState
-            action={<Button onClick={() => navigate('/manager/fan-meetings/new')}>새 팬미팅 만들기</Button>}
+            action={<Button onClick={() => navigate('/manager/events/new')}>새 이벤트 만들기</Button>}
             description="검색 조건에 맞는 팬미팅이 없습니다."
             title="팬미팅을 찾을 수 없습니다"
           />
@@ -206,6 +212,7 @@ export function ManagerMeetingListPage() {
   )
 }
 
+/** 팬미팅 한 건의 기본 정보와 참가자·설정 화면 링크를 한 행으로 표시한다. */
 function MeetingRow({ meeting }: { meeting: ManagerMeetingSummary }) {
   return (
     <article className="grid gap-5 px-5 py-5 transition-colors hover:bg-[var(--color-surface-page)] sm:px-7 lg:grid-cols-[minmax(260px,1.35fr)_minmax(140px,.7fr)_minmax(190px,.9fr)_minmax(175px,.8fr)_minmax(120px,.55fr)] lg:items-center lg:gap-4">
@@ -236,14 +243,23 @@ function MeetingRow({ meeting }: { meeting: ManagerMeetingSummary }) {
         확정 팬리스트
         <ArrowRight aria-hidden="true" size={17} />
       </Link>
-      <Link
-        className="inline-flex min-h-10 items-center gap-2 font-bold hover:text-[var(--color-primary-coral)]"
-        to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}/monitor`}
-      >
-        <Gear aria-hidden="true" size={20} weight="bold" />
-        모니터링
-        <ArrowRight aria-hidden="true" size={17} />
-      </Link>
+      <div className="grid gap-2">
+        <Link
+          className="inline-flex min-h-10 items-center gap-2 font-bold text-[var(--color-primary-coral)]"
+          to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}/monitor`}
+        >
+          <VideoCamera aria-hidden="true" size={20} weight="fill" />
+          운영
+          <ArrowRight aria-hidden="true" size={17} />
+        </Link>
+        <Link
+          className="inline-flex min-h-10 items-center gap-2 text-sm font-bold hover:text-[var(--color-primary-coral)]"
+          to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}/edit`}
+        >
+          <Gear aria-hidden="true" size={18} weight="bold" />
+          설정
+        </Link>
+      </div>
     </article>
   )
 }

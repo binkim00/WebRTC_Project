@@ -1,6 +1,13 @@
 import { apiRequest } from './client'
 
-export type QueueStatus = 'WAITING' | 'CALLED' | 'IN_CALL' | 'COMPLETED' | 'NO_SHOW'
+export type QueueStatus =
+  | 'WAITING'
+  | 'CALLED'
+  | 'IN_CALL'
+  | 'COMPLETED'
+  | 'NO_SHOW'
+  | 'SKIPPED'
+  | 'REMOVED'
 
 export type MeetingDetail = {
   meetingId: string
@@ -55,10 +62,29 @@ export type MeetingQueue = {
     callSessionId: string
     participantId: string
     nickname: string
-    startedAt?: string
-    endsAt?: string
+    startedAt: string | null
+    endsAt: string | null
   }
   entries: QueueEntry[]
+}
+
+export type QueueCallResponse = {
+  queueEntryId: string
+  status: 'CALLED'
+  calledAt: string
+  callAttemptCount: number
+  callSessionId: string
+  notificationSent: boolean
+}
+
+export type QueueNoShowResponse = {
+  queueEntryId: string
+  participantId: string
+  position: number
+  status: 'NO_SHOW'
+  callAttemptCount: number
+  calledAt: string
+  noShowAt: string
 }
 
 export type FanMemo = {
@@ -118,7 +144,9 @@ function isQueueStatus(value: unknown): value is QueueStatus {
     value === 'CALLED' ||
     value === 'IN_CALL' ||
     value === 'COMPLETED' ||
-    value === 'NO_SHOW'
+    value === 'NO_SHOW' ||
+    value === 'SKIPPED' ||
+    value === 'REMOVED'
   )
 }
 
@@ -189,8 +217,9 @@ export async function fetchMeetingDetail(
       signal,
     }),
   )
-  const record = asRecord(data)
-  const influencer = asRecord(record?.influencer)
+  const root = asRecord(data)
+  const record = asRecord(root?.meeting) ?? root
+  const influencer = asRecord(root?.influencer) ?? asRecord(record?.influencer)
   const application = asRecord(record?.application)
 
   if (!record || !influencer) {
@@ -204,7 +233,10 @@ export async function fetchMeetingDetail(
     scheduledStartAt: readOptionalString(record.scheduledStartAt),
     influencer: {
       influencerId: readString(influencer.influencerId, 'influencerId'),
-      influencerName: readString(influencer.influencerName, 'influencerName'),
+      influencerName: readString(
+        influencer.influencerName ?? influencer.name,
+        'influencerName',
+      ),
       profileImageUrl: readOptionalString(influencer.profileImageUrl),
     },
     application: application
@@ -295,11 +327,70 @@ export async function fetchMeetingQueue(
           callSessionId: readString(currentCall.callSessionId, 'callSessionId'),
           participantId: readString(currentCall.participantId, 'participantId'),
           nickname: readString(currentCall.nickname, 'nickname'),
-          startedAt: readOptionalString(currentCall.startedAt),
-          endsAt: readOptionalString(currentCall.endsAt),
+          startedAt: readOptionalString(currentCall.startedAt) ?? null,
+          endsAt: readOptionalString(currentCall.endsAt) ?? null,
         }
       : undefined,
     entries: record.entries.map(parseQueueEntry),
+  }
+}
+
+export async function callQueueEntry(
+  queueEntryId: string,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<QueueCallResponse> {
+  const data = unwrapData(
+    await apiRequest<unknown>(
+      `/api/v1/queue-entries/${encodeURIComponent(queueEntryId)}/call`,
+      { method: 'POST', authToken, signal },
+    ),
+  )
+  const record = asRecord(data)
+
+  if (
+    !record ||
+    record.status !== 'CALLED' ||
+    typeof record.notificationSent !== 'boolean'
+  ) {
+    throw new TypeError('팬 호출 응답 형식이 올바르지 않습니다.')
+  }
+
+  return {
+    queueEntryId: readString(record.queueEntryId, 'queueEntryId'),
+    status: 'CALLED',
+    calledAt: readString(record.calledAt, 'calledAt'),
+    callAttemptCount: readNumber(record.callAttemptCount),
+    callSessionId: readString(record.callSessionId, 'callSessionId'),
+    notificationSent: record.notificationSent,
+  }
+}
+
+export async function markQueueEntryNoShow(
+  queueEntryId: string,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<QueueNoShowResponse> {
+  const data = unwrapData(
+    await apiRequest<unknown>(
+      `/api/v1/queue-entries/${encodeURIComponent(queueEntryId)}/no-show`,
+      { method: 'POST', authToken, signal },
+    ),
+  )
+  const record = asRecord(data)
+
+  if (!record || record.status !== 'NO_SHOW') {
+    throw new TypeError('노쇼 처리 응답 형식이 올바르지 않습니다.')
+  }
+
+  return {
+    queueEntryId: readString(record.queueEntryId, 'queueEntryId'),
+    participantId: readString(record.participantId, 'participantId'),
+    position: readNumber(record.position),
+    status: 'NO_SHOW',
+    callAttemptCount: readNumber(record.callAttemptCount),
+    calledAt: readString(record.calledAt, 'calledAt'),
+    noShowAt: readString(record.noShowAt, 'noShowAt'),
   }
 }
 

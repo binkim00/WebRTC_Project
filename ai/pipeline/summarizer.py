@@ -2,6 +2,7 @@
 통화 종료 후 자막 데이터를 기반으로 요약 및 키워드를 생성.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -342,6 +343,12 @@ async def generate_summary(subtitles: list[dict], model: str = MODEL) -> dict | 
         return None
 
 
+# 생성 실패 시 재시도 횟수. 명세의 "최대 3회 자동 재시도"에 해당한다.
+MAX_SUMMARY_ATTEMPTS = 3
+# 재시도 사이 대기 시간(초). 모델 일시 오류가 곧바로 반복되지 않게 간격을 둔다.
+RETRY_DELAY_SECONDS = 2
+
+
 # 3. 전체 프로세스를 묶어줄 최상위 함수에도 @traceable을 적용할 수 있습니다.
 @traceable(name="Generate and Save Summary Pipeline")
 async def generate_and_save_summary(
@@ -351,9 +358,19 @@ async def generate_and_save_summary(
 ) -> None:
     logger.info("요약 생성 시작 call_session_id=%s", call_session_id)
 
-    result = await generate_summary(subtitles)
+    # 백엔드가 "생성 중"과 "실패"를 구분할 수 있도록 생성 전에 상태를 먼저 남긴다.
+    await queries.start_call_summary(pool, call_session_id)
+
+    try:
+        result = await _generate_with_retry(call_session_id, subtitles)
+    except Exception:
+        logger.exception("요약 생성 중 예외 call_session_id=%s", call_session_id)
+        await queries.fail_call_summary(pool, call_session_id, "GENERATION_ERROR")
+        return
+
     if result is None:
         logger.warning("요약 생성 실패 또는 내용 없음 call_session_id=%s", call_session_id)
+        await queries.fail_call_summary(pool, call_session_id, "GENERATION_FAILED")
         return
 
     summary = result.get("summary", "")
@@ -366,11 +383,39 @@ async def generate_and_save_summary(
         keywords,
     )
 
-    # 추가 — 실제 DB 저장
-    await queries.insert_call_summary(
+    await queries.complete_call_summary(
         pool=pool,
         call_session_id=call_session_id,
         summary=summary,
         keywords=keywords,
     )
+    logger.info("요약 저장 완료 call_session_id=%s", call_session_id)
+
+
+async def _generate_with_retry(
+    call_session_id: int,
+    subtitles: list[dict],
+) -> dict | None:
+    """
+    요약 생성만 재시도한다. 중간 실패마다 DB를 FAILED로 바꾸지 않기 위해
+    모든 시도가 끝난 뒤에야 호출 측이 상태를 확정한다.
+    """
+    for attempt in range(1, MAX_SUMMARY_ATTEMPTS + 1):
+        result = await generate_summary(subtitles)
+        if result is not None:
+            if attempt > 1:
+                logger.info(
+                    "요약 생성 재시도 성공 call_session_id=%s attempt=%s",
+                    call_session_id, attempt,
+                )
+            return result
+
+        if attempt < MAX_SUMMARY_ATTEMPTS:
+            logger.warning(
+                "요약 생성 실패 — 재시도 call_session_id=%s attempt=%s/%s",
+                call_session_id, attempt, MAX_SUMMARY_ATTEMPTS,
+            )
+            await asyncio.sleep(RETRY_DELAY_SECONDS)
+
+    return None
     logger.info("요약 저장 완료 call_session_id=%s", call_session_id)
