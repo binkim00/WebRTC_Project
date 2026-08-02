@@ -24,6 +24,14 @@ public interface InfluencerProfileRepository extends JpaRepository<InfluencerPro
     List<InfluencerProfile> findAllByUser_IdIn(Collection<Long> userIds);
 
     /**
+     * 사용자의 공개 프로필 행을 삭제한다.
+     * 회원탈퇴 시 활동명·소개를 남기지 않기 위해 사용하며, 호출 측 트랜잭션 안에서만 실행한다.
+     *
+     * @param userId 프로필을 삭제할 사용자 식별자
+     */
+    void deleteByUser_Id(Long userId);
+
+    /**
      * 공개 대상 인플루언서를 검색어로 필터링해 최신순으로 조회한다.
      * 노출 여부는 사용자 계정(상태·역할)으로 판단하고 공개 프로필은 부가 정보로 붙인다.
      * 프로필을 아직 등록하지 않은 인플루언서도 목록에 나와야 하므로 left join을 쓴다.

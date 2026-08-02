@@ -1,6 +1,8 @@
 package com.ssafy.backend.user.repository;
 
 import com.ssafy.backend.user.domain.User;
+import com.ssafy.backend.user.domain.UserRole;
+import com.ssafy.backend.user.domain.UserStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -31,6 +33,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return 일치하는 사용자가 있으면 해당 사용자를 담은 Optional
      */
     Optional<User> findByLoginId(String loginId);
+
+    /**
+     * 지정한 역할과 상태를 함께 만족하는 회원 수를 조회한다.
+     *
+     * @param role 집계할 역할
+     * @param status 집계할 계정 상태
+     * @return 조건을 만족하는 회원 수
+     */
+    long countByRoleAndStatus(UserRole role, UserStatus status);
 
     /**
      * 조직 소속 변경이 끝날 때까지 사용자 행에 쓰기 잠금을 걸어 조회한다.

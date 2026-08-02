@@ -102,6 +102,14 @@ public enum ErrorCode {
     AI_MODERATION_NOT_FOUND(HttpStatus.NOT_FOUND, "모니터링 감지 건을 찾을 수 없습니다."),
     AI_MODERATION_ALREADY_REVIEWED(HttpStatus.CONFLICT, "이미 검토가 완료된 건입니다."),
 
+    // 회원탈퇴 (USER-003)
+    // 이미 인증된 요청의 본인 재확인 실패이므로 401이 아니라 400을 쓴다.
+    // 401을 주면 프론트가 토큰 재발급이나 자동 로그아웃 흐름으로 오해한다.
+    USER_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "비밀번호가 일치하지 않습니다."),
+    USER_ALREADY_WITHDRAWN(HttpStatus.CONFLICT, "이미 탈퇴한 계정입니다."),
+    USER_WITHDRAW_MEETING_IN_PROGRESS(HttpStatus.CONFLICT, "진행 중이거나 예정된 팬미팅이 있어 탈퇴할 수 없습니다."),
+    LAST_ADMIN_WITHDRAW_NOT_ALLOWED(HttpStatus.CONFLICT, "마지막 관리자 계정은 탈퇴할 수 없습니다."),
+
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 
     private final HttpStatus status;

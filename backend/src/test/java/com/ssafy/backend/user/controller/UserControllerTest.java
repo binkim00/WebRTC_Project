@@ -7,6 +7,7 @@ import com.ssafy.backend.user.domain.UserRole;
 import com.ssafy.backend.user.dto.MyProfileResponse;
 import com.ssafy.backend.user.dto.MyProfileUpdateRequest;
 import com.ssafy.backend.user.dto.MyProfileUpdateResponse;
+import com.ssafy.backend.user.dto.UserWithdrawResponse;
 import com.ssafy.backend.user.service.UserProfileService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,6 +99,38 @@ class UserControllerTest {
         mockMvc.perform(patch("/api/v1/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nickname":"   ","profileImageUrl":"file:///profile.png"}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(userProfileService);
+    }
+
+    /** 회원탈퇴가 Bearer 접두사를 제거한 Access Token과 함께 위임되고 탈퇴 시각을 응답하는지 검증한다. */
+    @Test
+    void withdrawsWithBearerTokenStripped() throws Exception {
+        when(userProfileService.withdraw(any(), eq("access-token"), eq(PRINCIPAL)))
+                .thenReturn(new UserWithdrawResponse(LocalDateTime.of(2026, 8, 2, 15, 30), true));
+
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .header("Authorization", "Bearer access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"password":"test1234"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.withdrawnAt").value("2026-08-02T15:30:00"))
+                .andExpect(jsonPath("$.data.success").value(true));
+    }
+
+    /** 비밀번호를 비운 탈퇴 요청을 컨트롤러 검증에서 거부하는지 검증한다. */
+    @Test
+    void rejectsWithdrawalWithoutPassword() throws Exception {
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .header("Authorization", "Bearer access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"password":"   "}
                                 """))
                 .andExpect(status().isBadRequest());
 
