@@ -167,7 +167,7 @@ export function FanEventDetailPage() {
         setError(
           reason instanceof ApiError
             ? reason.message
-            : '팬미팅 상세 정보를 불러오지 못했습니다.',
+            : '이벤트 상세 정보를 불러오지 못했습니다.',
         )
       })
       .finally(() => {
@@ -234,7 +234,7 @@ export function FanEventDetailPage() {
             : reason.status === 403
               ? '팬 계정으로 로그인해야 응모할 수 있습니다.'
               : reason.status === 409
-                ? '이미 응모한 팬미팅입니다.'
+                ? '이미 응모한 이벤트입니다.'
                 : reason.message,
         )
       } else {
@@ -283,8 +283,8 @@ export function FanEventDetailPage() {
   if (!validMeetingId) {
     return (
       <InvalidRouteState
-        message="올바른 팬미팅을 선택해 주세요."
-        title="팬미팅 정보가 없습니다"
+        message="올바른 이벤트를 선택해 주세요."
+        title="이벤트 정보가 없습니다"
       />
     )
   }
@@ -292,15 +292,15 @@ export function FanEventDetailPage() {
   if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
-        <Spinner label="팬미팅 상세 정보를 불러오는 중" size="lg" />
+        <Spinner label="이벤트 상세 정보를 불러오는 중" size="lg" />
       </div>
     )
   }
 
   if (error || !detail) {
     return (
-      <AlertBanner title="팬미팅 정보를 표시할 수 없습니다" variant="error">
-        {error ?? '해당 팬미팅을 찾을 수 없습니다.'}
+      <AlertBanner title="이벤트 정보를 표시할 수 없습니다" variant="error">
+        {error ?? '해당 이벤트를 찾을 수 없습니다.'}
       </AlertBanner>
     )
   }
