@@ -4,7 +4,7 @@ import com.ssafy.backend.post.domain.Attachment;
 import com.ssafy.backend.post.support.AttachmentUrls;
 
 /**
- * 공지 상세의 첨부파일 한 건을 전달한다.
+ * 업로드된 공지 첨부파일 정보를 전달한다(ATTACH-001).
  *
  * @param attachmentId 첨부파일 식별자
  * @param originalFileName 업로드 당시 원본 파일명
@@ -12,7 +12,7 @@ import com.ssafy.backend.post.support.AttachmentUrls;
  * @param contentType 파일 MIME type
  * @param fileSize 파일 크기(byte)
  */
-public record NoticeAttachmentResponse(
+public record AttachmentUploadResponse(
         Long attachmentId,
         String originalFileName,
         String fileUrl,
@@ -21,13 +21,13 @@ public record NoticeAttachmentResponse(
 ) {
 
     /**
-     * 공지에 연결된 첨부파일 엔티티를 상세 응답 항목으로 변환한다.
+     * 저장된 첨부파일 엔티티를 업로드 응답으로 변환한다.
      *
-     * @param attachment 공지에 연결된 첨부파일
-     * @return 공지 상세 첨부파일 항목
+     * @param attachment 저장된 첨부파일
+     * @return 업로드 응답
      */
-    public static NoticeAttachmentResponse from(Attachment attachment) {
-        return new NoticeAttachmentResponse(
+    public static AttachmentUploadResponse from(Attachment attachment) {
+        return new AttachmentUploadResponse(
                 attachment.getId(),
                 attachment.getOriginalFileName(),
                 AttachmentUrls.contentUrl(attachment.getId()),

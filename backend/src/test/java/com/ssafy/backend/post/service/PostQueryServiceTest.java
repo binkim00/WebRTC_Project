@@ -15,6 +15,7 @@ import com.ssafy.backend.post.dto.CommunityPostDetailResponse;
 import com.ssafy.backend.post.dto.CommunityPostSummaryResponse;
 import com.ssafy.backend.post.dto.NoticeDetailResponse;
 import com.ssafy.backend.post.dto.NoticeSummaryResponse;
+import com.ssafy.backend.post.repository.AttachmentRepository;
 import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
 import com.ssafy.backend.user.domain.PreferredLanguage;
@@ -54,6 +55,7 @@ class PostQueryServiceTest {
     private OrganizationMemberRepository organizationMemberRepository;
     private PostRepository postRepository;
     private PostCommentRepository postCommentRepository;
+    private AttachmentRepository attachmentRepository;
     private PostQueryService queryService;
 
     /** 각 테스트마다 mock 협력 객체로 공지·커뮤니티 조회 서비스를 새로 구성한다. */
@@ -64,9 +66,10 @@ class PostQueryServiceTest {
         organizationMemberRepository = mock(OrganizationMemberRepository.class);
         postRepository = mock(PostRepository.class);
         postCommentRepository = mock(PostCommentRepository.class);
+        attachmentRepository = mock(AttachmentRepository.class);
         queryService = new PostQueryService(
                 currentUserService, meetingAccessService, organizationMemberRepository,
-                postRepository, postCommentRepository
+                postRepository, postCommentRepository, attachmentRepository
         );
     }
 

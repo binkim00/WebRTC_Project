@@ -73,7 +73,7 @@ class FanMeetingNoticeControllerTest {
         PostCommandService commandService = mock(PostCommandService.class);
         FanMeetingNoticeController controller =
                 new FanMeetingNoticeController(queryService, commandService);
-        NoticeCreateRequest request = new NoticeCreateRequest("공지 제목", "공지 본문");
+        NoticeCreateRequest request = new NoticeCreateRequest("공지 제목", "공지 본문", null);
         NoticeCreateResponse expected = new NoticeCreateResponse(
                 NOTICE_ID, MEETING_ID, "공지 제목", LocalDateTime.of(2026, 7, 30, 10, 0)
         );

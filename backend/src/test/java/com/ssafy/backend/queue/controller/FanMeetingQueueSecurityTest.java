@@ -20,6 +20,7 @@ import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.organization.repository.OrganizationRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
+import com.ssafy.backend.post.repository.AttachmentRepository;
 import com.ssafy.backend.post.repository.CommentReportRepository;
 import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
@@ -161,6 +162,9 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private CommentReportRepository commentReportRepository;
+
+    @MockitoBean
+    private AttachmentRepository attachmentRepository;
 
     @MockitoBean
     private AiCallSummaryRepository aiCallSummaryRepository;

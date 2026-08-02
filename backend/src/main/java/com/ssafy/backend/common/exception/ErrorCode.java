@@ -81,6 +81,17 @@ public enum ErrorCode {
     POST_WRITE_NOT_ALLOWED(HttpStatus.FORBIDDEN, "게시글을 작성할 권한이 없습니다."),
     POST_TYPE_MISMATCH(HttpStatus.BAD_REQUEST, "요청 경로와 게시글 유형이 일치하지 않습니다."),
 
+    // 공지 첨부파일 (ATTACH-001)
+    ATTACHMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "첨부파일을 찾을 수 없습니다."),
+    ATTACHMENT_FILE_REQUIRED(HttpStatus.BAD_REQUEST, "첨부할 파일이 필요합니다."),
+    ATTACHMENT_FORMAT_NOT_ALLOWED(HttpStatus.BAD_REQUEST,
+            "JPG, JPEG, PNG, WEBP, PDF 파일만 첨부할 수 있습니다."),
+    ATTACHMENT_FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "첨부파일이 허용 크기를 초과했습니다."),
+    ATTACHMENT_STORAGE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "첨부파일을 저장하지 못했습니다."),
+    ATTACHMENT_ALREADY_ATTACHED(HttpStatus.CONFLICT, "이미 다른 게시글에 연결된 첨부파일입니다."),
+    ATTACHMENT_DUPLICATED(HttpStatus.BAD_REQUEST, "같은 첨부파일을 중복해서 연결할 수 없습니다."),
+    POST_ATTACHMENT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "이 게시글 유형에는 첨부파일을 연결할 수 없습니다."),
+
     // 댓글·신고 (COMMENT-001, COMMENT-002, COMMENT-004)
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."),
     COMMENT_WRITE_NOT_ALLOWED(HttpStatus.FORBIDDEN, "댓글을 작성할 권한이 없습니다."),
