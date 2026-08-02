@@ -200,11 +200,10 @@ class QueueCommandServiceTest {
     }
 
     /**
-     * 자막 Agent 배치가 실패하면 Redis 선점을 해제하고 LiveKit 오류를 그대로 노출해
-     * 호출 트랜잭션이 롤백되게 하는지 검증한다.
+     * 자막 Agent 배치가 실패해도 호출 결과와 Redis 선점을 유지하는지 검증한다.
      */
     @Test
-    void releasesRedisClaimWhenAgentDispatchFails() {
+    void keepsParticipantCallWhenAgentDispatchFails() {
         CurrentUserService currentUserService = mock(CurrentUserService.class);
         MeetingAccessService accessService = mock(MeetingAccessService.class);
         MeetingOperationSettingRepository settingRepository =
@@ -245,12 +244,14 @@ class QueueCommandServiceTest {
         doThrow(new BusinessException(ErrorCode.LIVEKIT_OPERATION_FAILED))
                 .when(agentDispatchService).ensureDispatched("meeting-room-1", 100L, "ko");
 
-        assertThatThrownBy(() -> service.call(7L, PRINCIPAL))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getErrorCode())
-                                .isEqualTo(ErrorCode.LIVEKIT_OPERATION_FAILED));
+        QueueCallResponse response = service.call(7L, PRINCIPAL);
 
-        verify(realtimeStore).releaseClaim(1L, 7L);
+        assertThat(response.queueEntryId()).isEqualTo(7L);
+        assertThat(response.status()).isEqualTo(QueueEntryStatus.CALLED);
+        assertThat(response.callSessionId()).isEqualTo(100L);
+        assertThat(entry.getStatus()).isEqualTo(QueueEntryStatus.CALLED);
+        assertThat(entry.getCallAttemptCount()).isEqualTo(1);
+        verify(realtimeStore, never()).releaseClaim(1L, 7L);
         verify(realtimeStore, never()).updateStatus(1L, 7L, QueueEntryStatus.CALLED);
     }
 
