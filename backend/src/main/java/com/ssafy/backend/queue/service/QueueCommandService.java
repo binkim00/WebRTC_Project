@@ -23,6 +23,8 @@ import com.ssafy.backend.queue.redis.QueueRealtimeStore;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
 import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,7 @@ import java.util.Set;
 /** 대기실 입장, 참가자 호출, 재호출과 노쇼 상태 변경을 처리한다. */
 @Service
 public class QueueCommandService {
+    private static final Logger log = LoggerFactory.getLogger(QueueCommandService.class);
     private static final Set<CallSessionStatus> ACTIVE_CALL_SESSION_STATUSES =
             Set.of(CallSessionStatus.CONNECTING, CallSessionStatus.ACTIVE);
 
@@ -130,8 +133,7 @@ public class QueueCommandService {
      * @param entryId 호출할 대기열 항목 식별자
      * @param principal JWT 인증 사용자 정보
      * @return 영상통화 세션 식별자를 포함한 호출 또는 재호출 결과
-     * @throws BusinessException 매니저 권한, 호출 상태 또는 최대 횟수 검증에 실패한 경우이거나
-     *                          자막 Agent 배치에 실패한 경우
+     * @throws BusinessException 매니저 권한, 호출 상태 또는 최대 횟수 검증에 실패한 경우
      */
     @Transactional
     public QueueCallResponse call(Long entryId, AuthenticatedUser principal) {
@@ -178,8 +180,7 @@ public class QueueCommandService {
      * @param meetingId 팬미팅 식별자
      * @param entry 재호출할 대기열 항목
      * @return 재호출 결과
-     * @throws BusinessException 현재 호출자가 아니거나 최대 호출 횟수를 초과한 경우이거나
-     *                          자막 Agent 배치에 실패한 경우
+     * @throws BusinessException 현재 호출자가 아니거나 최대 호출 횟수를 초과한 경우
      */
     private QueueCallResponse recallCurrent(Long meetingId, QueueEntry entry) {
         Long currentEntryId = realtimeStore.getCurrentEntryId(meetingId);
@@ -211,17 +212,24 @@ public class QueueCommandService {
      * @param meetingId 팬미팅 식별자
      * @param entry 호출 또는 재호출된 대기열 항목
      * @param callSession 해당 팬의 영상통화 세션
-     * @throws BusinessException LiveKit Dispatch 조회 또는 생성에 실패한 경우
      */
     private void dispatchSubtitleAgent(
             Long meetingId, QueueEntry entry, CallSession callSession) {
         String hostLanguage = toLanguageCode(
                 entry.getMeeting().getInfluencer().getPreferredLanguage());
-        agentDispatchService.ensureDispatched(
-                LiveKitRoomNames.forMeeting(meetingId),
-                callSession.getId(),
-                hostLanguage
-        );
+        try {
+            agentDispatchService.ensureDispatched(
+                    LiveKitRoomNames.forMeeting(meetingId),
+                    callSession.getId(),
+                    hostLanguage
+            );
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "LiveKit AI Agent Dispatch failed; keeping the participant call. "
+                            + "meetingId={}, entryId={}, callSessionId={}",
+                    meetingId, entry.getId(), callSession.getId(), exception
+            );
+        }
     }
 
     /**
