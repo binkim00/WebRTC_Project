@@ -56,6 +56,10 @@ app:
   organization:
     invitation-ttl-seconds: ${ORGANIZATION_INVITATION_TTL_SECONDS:86400}
 
+  meeting:
+    # 응모 시작 시각이 지난 공개 팬미팅을 응모 접수 상태로 바꾸는 주기이며 기본 1분이다.
+    application-open-check-delay-ms: ${MEETING_APPLICATION_OPEN_CHECK_DELAY_MS:60000}
+
   recording:
     # 녹화 파일을 저장할 서버 디스크 최상위 경로다. Docker에서는 이 경로를 볼륨으로 보존한다.
     storage-root: ${RECORDING_STORAGE_ROOT:/srv/melly/uploads}
