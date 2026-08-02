@@ -1,5 +1,6 @@
 package com.ssafy.backend.queue.controller;
 
+import com.ssafy.backend.ai.repository.AiCallSummaryRepository;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
@@ -19,6 +20,7 @@ import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.organization.repository.OrganizationRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
+import com.ssafy.backend.post.repository.AttachmentRepository;
 import com.ssafy.backend.post.repository.CommentReportRepository;
 import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
@@ -160,6 +162,12 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private CommentReportRepository commentReportRepository;
+
+    @MockitoBean
+    private AttachmentRepository attachmentRepository;
+
+    @MockitoBean
+    private AiCallSummaryRepository aiCallSummaryRepository;
 
     /** 인증 정보가 없어도 공개 팬미팅 목록 API에 접근할 수 있는지 검증한다. */
     @Test

@@ -69,6 +69,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup", "/api/v1/auth/login",
                                 "/api/v1/auth/reissue").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
+                        // Swagger UI는 API 문서 확인용이라 인증 없이 열어둔다.
+                        .requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**",
+                                "/v3/api-docs", "/v3/api-docs/**").permitAll()
                         // 테스트 토큰 컨트롤러는 설정으로 활성화된 환경에서만 등록된다.
                         .requestMatchers(HttpMethod.GET, "/livekit-test.html").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/test-token").permitAll()
@@ -169,6 +172,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/community/posts/*/comments",
                                 "/api/v1/comments/*/reports").authenticated()
 
+                        // 공지 첨부파일 콘텐츠 조회 (ATTACH-001)
+                        // 공개 공지의 첨부는 비로그인도 볼 수 있어야 하므로 URL 단위로는 열어 두고,
+                        // 아직 연결되지 않았거나 공개되지 않은 첨부의 접근 제한은
+                        // AttachmentQueryService 가 업로더·작성자·ADMIN 기준으로 검증한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/attachments/*/content")
+                                .permitAll()
+                        // 공지 첨부파일 업로드 (ATTACH-001)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/attachments").authenticated()
+
                         // 녹화 재생·다운로드 (REC-003)
                         // 브라우저 video 태그는 Authorization 헤더를 보낼 수 없어 URL의 서명 토큰으로
                         // 인가한다. 토큰 검증과 소유자 확인은 RecordingQueryService 가 수행한다.
@@ -184,6 +196,12 @@ public class SecurityConfig {
                                 "/api/v1/recordings/*",
                                 "/api/v1/users/me/recordings")
                                 .hasRole("FAN")
+
+                        // 인플루언서 탐색 (INF-001, INF-002)
+                        // 공개 API이며, 로그인 팬의 팔로우 여부는 서비스 계층에서 선택적으로 채운다.
+                        // 위쪽 /influencers/me/** 규칙보다 뒤에 두어 기존 권한 규칙을 가리지 않는다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/influencers",
+                                "/api/v1/influencers/*").permitAll()
 
                         // AI 요약·모니터링 (AI-001, AI-002, AI-003)
                         .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/summary")

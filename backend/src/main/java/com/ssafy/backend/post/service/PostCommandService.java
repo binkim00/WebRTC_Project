@@ -32,6 +32,7 @@ public class PostCommandService {
     private final CurrentUserService currentUserService;
     private final MeetingAccessService meetingAccessService;
     private final PostRepository postRepository;
+    private final AttachmentLinkService attachmentLinkService;
     private final Clock clock;
 
     /**
@@ -40,15 +41,18 @@ public class PostCommandService {
      * @param currentUserService 현재 사용자 조회 서비스
      * @param meetingAccessService 팬미팅 조회·운영 권한 검증 서비스
      * @param postRepository 게시글 저장소
+     * @param attachmentLinkService 공지 첨부파일 연결·해제 서비스
      * @param clock 논리 삭제 시각 기준 시계
      */
     public PostCommandService(CurrentUserService currentUserService,
                               MeetingAccessService meetingAccessService,
                               PostRepository postRepository,
+                              AttachmentLinkService attachmentLinkService,
                               Clock clock) {
         this.currentUserService = currentUserService;
         this.meetingAccessService = meetingAccessService;
         this.postRepository = postRepository;
+        this.attachmentLinkService = attachmentLinkService;
         this.clock = clock;
     }
 
@@ -58,11 +62,15 @@ public class PostCommandService {
      * <p>URL 역할 검사만으로는 다른 팬미팅의 운영자를 걸러낼 수 없으므로
      * {@link MeetingAccessService#requireOperator}로 팬미팅 단위 권한을 다시 검증한다.
      *
+     * <p>{@code attachmentIds}를 보내면 미리 업로드한 첨부파일(ATTACH-001)을 보낸 순서대로
+     * 이 공지에 연결한다. 첨부 연결이 실패하면 공지 저장도 함께 롤백된다.
+     *
      * @param meetingId 공지를 등록할 팬미팅 식별자
-     * @param request 제목과 본문을 담은 작성 요청
+     * @param request 제목·본문과 연결할 첨부파일 식별자를 담은 작성 요청
      * @param principal 로그인 사용자 정보
      * @return 생성된 공지 정보
-     * @throws BusinessException 팬미팅이 없거나 삭제·취소되었거나 운영 권한이 없는 경우
+     * @throws BusinessException 팬미팅이 없거나 삭제·취소되었거나 운영 권한이 없거나
+     *                           첨부파일을 연결할 수 없는 경우
      */
     @Transactional
     public NoticeCreateResponse createMeetingNotice(Long meetingId,
@@ -81,7 +89,11 @@ public class PostCommandService {
                 author, meeting, PostType.MEETING_NOTICE,
                 request.title().trim(), request.content().trim()
         );
-        return NoticeCreateResponse.from(postRepository.save(notice));
+        // 첨부 연결은 게시글 식별자를 사용하므로 저장 이후에 처리한다.
+        Post saved = postRepository.save(notice);
+        attachmentLinkService.replaceLinks(
+                saved, request.attachmentIds(), author, LocalDateTime.now(clock));
+        return NoticeCreateResponse.from(saved);
     }
 
     /**
@@ -115,12 +127,16 @@ public class PostCommandService {
      * <p>수정 권한은 공지 상세가 알려 주는 {@code canEdit}과 같은 기준인 작성자 본인 또는
      * ADMIN이다. 다른 팬미팅 경로로 들어온 공지는 존재하지 않는 것으로 취급한다.
      *
+     * <p>{@code attachmentIds}를 보내면 그 목록이 첨부 연결 상태 전체를 대신하므로, 목록에서
+     * 빠진 기존 첨부는 해제되고 빈 목록을 보내면 모든 첨부가 해제된다. 보내지 않으면 그대로 둔다.
+     *
      * @param meetingId 공지가 속한 팬미팅 식별자
      * @param noticeId 공지 식별자
-     * @param request 수정할 제목·본문을 담은 요청
+     * @param request 수정할 제목·본문과 첨부파일 식별자를 담은 요청
      * @param principal 로그인 사용자 정보
      * @return 수정된 공지 정보
-     * @throws BusinessException 공지가 없거나 다른 팬미팅의 공지이거나 수정 권한이 없는 경우
+     * @throws BusinessException 공지가 없거나 다른 팬미팅의 공지이거나 수정 권한이 없거나
+     *                           첨부파일을 연결할 수 없는 경우
      */
     @Transactional
     public PostUpdateResponse updateMeetingNotice(Long meetingId, Long noticeId,
@@ -131,6 +147,8 @@ public class PostCommandService {
         requireNoticeModifier(notice, actor);
 
         notice.update(trimmedOrNull(request.title()), trimmedOrNull(request.content()));
+        attachmentLinkService.replaceLinks(
+                notice, request.attachmentIds(), actor, LocalDateTime.now(clock));
         return PostUpdateResponse.from(notice);
     }
 
@@ -161,17 +179,22 @@ public class PostCommandService {
      * 작성자가 자신의 커뮤니티 게시글을 부분 수정한다(POST-004b).
      *
      * <p>운영자라도 다른 사람의 글 내용은 바꿀 수 없으므로 작성자 본인만 허용한다.
+     * 첨부파일은 MVP에서 공지에만 허용하므로 {@code attachmentIds}를 보내면 거부한다.
      *
      * @param postId 커뮤니티 게시글 식별자
      * @param request 수정할 제목·본문을 담은 요청
      * @param principal 로그인 사용자 정보
      * @return 수정된 게시글 정보
-     * @throws BusinessException 게시글이 없거나 커뮤니티 게시글이 아니거나 작성자가 아닌 경우
+     * @throws BusinessException 게시글이 없거나 커뮤니티 게시글이 아니거나 작성자가 아니거나
+     *                           첨부파일 연결을 요청한 경우
      */
     @Transactional
     public PostUpdateResponse updateCommunityPost(Long postId, PostUpdateRequest request,
                                                   AuthenticatedUser principal) {
         User actor = currentUserService.requireActiveUser(principal);
+        if (request.attachmentIds() != null) {
+            throw new BusinessException(ErrorCode.POST_ATTACHMENT_NOT_ALLOWED);
+        }
         Post post = requireVisiblePost(postId, PostType.COMMUNITY);
         if (!isAuthor(post, actor)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);

@@ -16,6 +16,7 @@ import com.ssafy.backend.post.dto.CommunityPostDetailResponse;
 import com.ssafy.backend.post.dto.CommunityPostSummaryResponse;
 import com.ssafy.backend.post.dto.NoticeDetailResponse;
 import com.ssafy.backend.post.dto.NoticeSummaryResponse;
+import com.ssafy.backend.post.repository.AttachmentRepository;
 import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
 import com.ssafy.backend.user.domain.User;
@@ -49,26 +50,30 @@ public class PostQueryService {
     private final OrganizationMemberRepository organizationMemberRepository;
     private final PostRepository postRepository;
     private final PostCommentRepository postCommentRepository;
+    private final AttachmentRepository attachmentRepository;
 
     /**
-     * 공지·커뮤니티 조회에 필요한 사용자·팬미팅 서비스와 조직·게시글·댓글 저장소를 주입받는다.
+     * 공지·커뮤니티 조회에 필요한 사용자·팬미팅 서비스와 조직·게시글·댓글·첨부 저장소를 주입받는다.
      *
      * @param currentUserService 현재 사용자 조회 서비스
      * @param meetingAccessService 팬미팅 조회 서비스
      * @param organizationMemberRepository 조직 구성원 저장소이며 소유 운영자 판정에 사용한다
      * @param postRepository 게시글 저장소
      * @param postCommentRepository 댓글 저장소이며 상세의 댓글 수 집계에 사용한다
+     * @param attachmentRepository 첨부파일 저장소이며 공지 상세의 첨부 목록에 사용한다
      */
     public PostQueryService(CurrentUserService currentUserService,
                             MeetingAccessService meetingAccessService,
                             OrganizationMemberRepository organizationMemberRepository,
                             PostRepository postRepository,
-                            PostCommentRepository postCommentRepository) {
+                            PostCommentRepository postCommentRepository,
+                            AttachmentRepository attachmentRepository) {
         this.currentUserService = currentUserService;
         this.meetingAccessService = meetingAccessService;
         this.organizationMemberRepository = organizationMemberRepository;
         this.postRepository = postRepository;
         this.postCommentRepository = postCommentRepository;
+        this.attachmentRepository = attachmentRepository;
     }
 
     /**
@@ -297,7 +302,13 @@ public class PostQueryService {
      */
     private NoticeDetailResponse toDetail(Post notice, AuthenticatedUser principal) {
         boolean editable = canModify(notice, principal);
-        return NoticeDetailResponse.of(notice, editable, editable);
+        return NoticeDetailResponse.of(
+                notice,
+                attachmentRepository
+                        .findAllByPost_IdAndDeletedAtIsNullOrderByDisplayOrderAsc(notice.getId()),
+                editable,
+                editable
+        );
     }
 
     /**

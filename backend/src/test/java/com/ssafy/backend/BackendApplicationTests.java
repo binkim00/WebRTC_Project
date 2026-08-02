@@ -1,5 +1,6 @@
 package com.ssafy.backend;
 
+import com.ssafy.backend.ai.repository.AiCallSummaryRepository;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
@@ -17,6 +18,7 @@ import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.organization.repository.OrganizationRepository;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
+import com.ssafy.backend.post.repository.AttachmentRepository;
 import com.ssafy.backend.post.repository.CommentReportRepository;
 import com.ssafy.backend.post.repository.PostCommentRepository;
 import com.ssafy.backend.post.repository.PostRepository;
@@ -104,6 +106,9 @@ class BackendApplicationTests {
     private InfluencerProfileRepository influencerProfileRepository;
 
     @MockitoBean
+    private AiCallSummaryRepository aiCallSummaryRepository;
+
+    @MockitoBean
     private PostRepository postRepository;
 
     @MockitoBean
@@ -111,6 +116,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private CommentReportRepository commentReportRepository;
+
+    @MockitoBean
+    private AttachmentRepository attachmentRepository;
 
     /**
      * DB 자동 구성 없이도 Spring 애플리케이션 컨텍스트가 정상적으로 시작되는지 확인한다.
