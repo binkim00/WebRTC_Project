@@ -16,6 +16,7 @@ import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
 import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.dto.FanMeetingManagementResponse;
+import com.ssafy.backend.meeting.dto.FanMeetingTestControlRequest;
 import com.ssafy.backend.meeting.dto.FanMeetingUpdateRequest;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
@@ -154,6 +155,30 @@ class FanMeetingManagementServiceTest {
         assertThat(operation.getReconnectGraceSec()).isEqualTo(90);
         assertThat(operation.getEarlyStartMinutes()).isEqualTo(15);
         assertThat(operation.getMaxRecallCount()).isEqualTo(2);
+    }
+
+    /** 테스트 제어가 상태와 응모·대기실 일정을 즉시 바꾸는지 검증한다. */
+    @Test
+    void controlsStatusAndSchedulesForTest() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = publishedMeeting(solo);
+        MeetingApplicationSetting application = applicationSetting(meeting);
+        MeetingOperationSetting operation = operationSetting(meeting);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        LocalDateTime openAt = now().minusMinutes(1);
+        FanMeetingTestControlRequest request = new FanMeetingTestControlRequest(
+                FanMeetingStatus.APPLICATION_OPEN, now().plusMinutes(12), openAt,
+                now().plusMinutes(10), now().plusMinutes(11), openAt);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+        when(fanMeetingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(meeting));
+        when(applicationSettingRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(operationSettingRepository.findById(1L)).thenReturn(Optional.of(operation));
+
+        FanMeetingManagementResponse response = service.controlForTest(1L, principal, request);
+
+        assertThat(response.status()).isEqualTo(FanMeetingStatus.APPLICATION_OPEN);
+        assertThat(application.getApplicationOpenAt()).isEqualTo(openAt);
+        assertThat(operation.getWaitingRoomOpenAt()).isEqualTo(openAt);
     }
 
     /** 응모 시작 후에는 신규 운영 정책 외 기본 정보 변경을 거부하는지 검증한다. */

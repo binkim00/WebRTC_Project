@@ -18,6 +18,7 @@ import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
 import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.dto.FanMeetingManagementResponse;
+import com.ssafy.backend.meeting.dto.FanMeetingTestControlRequest;
 import com.ssafy.backend.meeting.dto.FanMeetingUpdateRequest;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
@@ -157,6 +158,46 @@ public class FanMeetingManagementService {
                 operationValues.maxRecallCount());
         fanMeetingRepository.flush();
         return FanMeetingManagementResponse.of(meeting, application, operation);
+    }
+
+    /** 테스트용 상태와 주요 일정을 강제로 변경한다. */
+    @Transactional
+    public FanMeetingManagementResponse controlForTest(
+            Long meetingId, AuthenticatedUser principal, FanMeetingTestControlRequest request
+    ) {
+        User actor = currentUserService.requireActiveUser(principal);
+        FanMeeting meeting = requireMeetingForUpdate(meetingId);
+        requireManagerOrSolo(meeting, actor);
+        MeetingApplicationSetting application = requireApplicationSetting(meetingId);
+        MeetingOperationSetting operation = requireOperationSetting(meetingId);
+        meeting.forceControl(request.status(), request.scheduledStartAt());
+        controlApplication(application, request);
+        controlOperation(operation, request);
+        fanMeetingRepository.flush();
+        return FanMeetingManagementResponse.of(meeting, application, operation);
+    }
+
+    /** 테스트 요청의 응모 일정을 기존 값과 병합해 반영한다. */
+    private void controlApplication(
+            MeetingApplicationSetting setting, FanMeetingTestControlRequest request
+    ) {
+        setting.update(setting.isEnabled(),
+                request.applicationOpenAt() == null ? setting.getApplicationOpenAt() : request.applicationOpenAt(),
+                request.applicationCloseAt() == null ? setting.getApplicationCloseAt() : request.applicationCloseAt(),
+                request.resultAnnouncementAt() == null
+                        ? setting.getResultAnnouncementAt() : request.resultAnnouncementAt(),
+                setting.getCapacity());
+    }
+
+    /** 테스트 요청의 대기실 오픈 시각을 기존 운영 설정에 반영한다. */
+    private void controlOperation(
+            MeetingOperationSetting setting, FanMeetingTestControlRequest request
+    ) {
+        setting.update(request.waitingRoomOpenAt() == null
+                        ? setting.getWaitingRoomOpenAt() : request.waitingRoomOpenAt(),
+                setting.getCallDurationSec(), setting.isRecordingEnabled(),
+                setting.isTranslationEnabled(), setting.getReconnectGraceSec(),
+                setting.getEarlyStartMinutes(), setting.getMaxRecallCount());
     }
 
     /** 초안 팬미팅을 공개한다. */
