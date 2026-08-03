@@ -64,6 +64,15 @@ app:
     # 응모 시작 시각이 지난 공개 팬미팅을 응모 접수 상태로 바꾸는 주기이며 기본 1분이다.
     application-open-check-delay-ms: ${MEETING_APPLICATION_OPEN_CHECK_DELAY_MS:60000}
 
+  call:
+    # 통화 제한 시간과 재접속 유예 만료를 확인하는 주기이며 기본 1초다.
+    expiration-check-delay-ms: ${CALL_EXPIRATION_CHECK_DELAY_MS:1000}
+    # 호출 후 팬과 인플루언서의 접속을 기다리는 최대 시간이며 기본 60초다.
+    # 이 시간이 지나면 노쇼로 마감해 다음 참가자를 호출할 수 있게 한다.
+    connect-timeout-sec: ${CALL_CONNECT_TIMEOUT_SEC:60}
+    # 연결 시간이 초과된 대기 세션을 찾는 주기이며 기본 1초다.
+    connect-timeout-check-delay-ms: ${CALL_CONNECT_TIMEOUT_CHECK_DELAY_MS:1000}
+
   attachment:
     # 공지 첨부파일을 저장할 서버 디스크 최상위 경로다. Docker에서는 이 경로를 볼륨으로 보존한다.
     storage-root: ${ATTACHMENT_STORAGE_ROOT:/srv/melly/attachments}

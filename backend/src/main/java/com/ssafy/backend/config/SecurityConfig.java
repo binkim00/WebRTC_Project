@@ -203,6 +203,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/influencers",
                                 "/api/v1/influencers/*").permitAll()
 
+                        // 팬 본인의 통화 종료
+                        // 통화 당사자 여부는 CallSessionService 에서 다시 검증한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/call-sessions/*/end")
+                                .hasRole("FAN")
                         // AI 요약·모니터링 (AI-001, AI-002, AI-003)
                         .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/summary")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER")

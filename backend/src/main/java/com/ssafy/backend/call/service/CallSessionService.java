@@ -1,6 +1,7 @@
 package com.ssafy.backend.call.service;
 
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.call.domain.CallEndReason;
 import com.ssafy.backend.call.domain.CallSession;
 import com.ssafy.backend.call.domain.CallSessionStatus;
 import com.ssafy.backend.call.dto.CallSessionEndResponse;
@@ -74,7 +75,10 @@ public class CallSessionService {
     }
 
     /**
-     * 권한 있는 운영자가 활성 통화를 강제로 종료하고 팬만 공유 Room에서 제거한다.
+     * 권한 있는 운영자가 진행 중이거나 연결을 기다리는 통화를 강제로 종료한다.
+     *
+     * <p>활성 통화는 완료로 마감하고 팬만 공유 Room에서 제거한다. 아직 연결되지 않은 통화는
+     * 노쇼로 마감해 다음 참가자를 호출할 수 있도록 호출 자리를 비운다.
      *
      * @param callSessionId 종료할 통화 세션 식별자
      * @param reason 운영자가 입력한 강제 종료 사유
@@ -93,13 +97,45 @@ public class CallSessionService {
         CallSession callSession = callSessionRepository.findEndContextById(callSessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CALL_SESSION_NOT_FOUND));
         requireForceEndAccess(callSession, user);
+
+        LocalDateTime endedAt = LocalDateTime.now(clock);
+        try {
+            if (callSession.getStatus() == CallSessionStatus.ACTIVE) {
+                finalizer.end(callSession, endedAt, CallEndReason.FORCED, user);
+            } else if (callSession.getStatus() == CallSessionStatus.CONNECTING) {
+                finalizer.failConnecting(callSession, endedAt, CallEndReason.FORCED, user);
+            } else {
+                throw new BusinessException(ErrorCode.CALL_SESSION_STATE_CONFLICT);
+            }
+        } catch (IllegalStateException exception) {
+            throw new BusinessException(ErrorCode.CALL_SESSION_STATE_CONFLICT);
+        }
+        return CallSessionEndResponse.from(callSession);
+    }
+
+    /**
+     * 통화 중인 팬이 자신의 통화를 정상 종료한다.
+     *
+     * <p>팬이 직접 끊었을 때 재접속 유예가 끝날 때까지 기다리지 않고 바로 마감하기 위한 경로다.
+     *
+     * @param callSessionId 종료할 통화 세션 식별자
+     * @param principal JWT 인증 사용자 정보
+     * @return 종료된 통화의 최종 상태
+     * @throws BusinessException 통화가 없거나 당사자가 아니거나 활성 통화가 아닌 경우
+     */
+    @Transactional
+    public CallSessionEndResponse endByFan(Long callSessionId, AuthenticatedUser principal) {
+        User user = currentUserService.requireActiveUser(principal);
+        CallSession callSession = callSessionRepository.findEndContextById(callSessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CALL_SESSION_NOT_FOUND));
+        if (!sameUser(callSession.getQueueEntry().getParticipant().getFan(), user)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
         if (callSession.getStatus() != CallSessionStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.CALL_SESSION_STATE_CONFLICT);
         }
 
-        finalizer.end(
-                callSession, LocalDateTime.now(clock),
-                com.ssafy.backend.call.domain.CallEndReason.FORCED, user);
+        finalizer.end(callSession, LocalDateTime.now(clock), CallEndReason.NORMAL, user);
         return CallSessionEndResponse.from(callSession);
     }
 
