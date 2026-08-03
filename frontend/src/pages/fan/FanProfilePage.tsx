@@ -20,6 +20,7 @@ import {
   Select,
   Spinner,
   TextField,
+  WithdrawAccountSection,
 } from '../../components'
 
 // 백엔드 PreferredLanguage Enum(KOREAN, ENGLISH)과 동일한 값만 사용한다.
@@ -327,17 +328,7 @@ export function FanProfilePage() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
-        {/* TODO: 회원 탈퇴 API가 아직 백엔드에 없어 비활성화 상태로 둡니다. */}
-        <button
-          className="cursor-not-allowed text-sm text-[var(--color-text-tertiary)] underline underline-offset-4"
-          disabled
-          title="회원탈퇴 기능은 준비 중입니다."
-          type="button"
-        >
-          회원탈퇴
-        </button>
-      </div>
+      <WithdrawAccountSection description="탈퇴하면 응모 내역과 팬미팅 참여 기록을 다시 볼 수 없습니다." />
     </div>
   )
 }

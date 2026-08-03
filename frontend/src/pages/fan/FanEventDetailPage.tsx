@@ -17,7 +17,6 @@ import {
 import { getAuthSession } from '../../api/authSession'
 import {
   fetchPublicFanMeetingDetail,
-  type FanMeetingDetailStatus,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import {
@@ -32,23 +31,7 @@ import {
   Textarea,
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
-
-const meetingStatusContent: Record<
-  FanMeetingDetailStatus,
-  {
-    label: string
-    variant: 'primary' | 'neutral' | 'success' | 'warning' | 'danger' | 'info'
-  }
-> = {
-  DRAFT: { label: '임시 저장', variant: 'neutral' },
-  PUBLISHED: { label: '모집 예정', variant: 'info' },
-  APPLICATION_OPEN: { label: '모집 중', variant: 'success' },
-  APPLICATION_CLOSED: { label: '모집 마감', variant: 'neutral' },
-  READY: { label: '결과 발표', variant: 'warning' },
-  LIVE: { label: '모집 마감', variant: 'neutral' },
-  ENDED: { label: '모집 마감', variant: 'neutral' },
-  CANCELED: { label: '취소', variant: 'danger' },
-}
+import { fanMeetingStatusContent } from './fanMeetingStatus'
 
 const agreementItems = [
   { id: 'privacy', label: '개인정보 수집·이용 동의' },
@@ -348,9 +331,9 @@ export function FanEventDetailPage() {
           <div className="grid gap-5">
             <Badge
               className="w-fit"
-              variant={meetingStatusContent[meeting.status].variant}
+              variant={fanMeetingStatusContent[meeting.status].variant}
             >
-              {meetingStatusContent[meeting.status].label}
+              {fanMeetingStatusContent[meeting.status].label}
             </Badge>
             <div>
               <h1 className="text-3xl font-black tracking-[-0.04em]">

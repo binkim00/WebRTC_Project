@@ -15,6 +15,7 @@ import {
   Select,
   Spinner,
   TextField,
+  WithdrawAccountSection,
 } from '../../components'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
@@ -296,14 +297,8 @@ export function InfluencerProfilePage() {
         </span>
       </Link>
 
-      <div className="flex justify-end border-t border-[var(--color-divider)] pt-6">
-        {/* TODO: 회원탈퇴 확인 Dialog 연결 */}
-        <button
-          className="text-sm text-[var(--color-text-secondary)] underline underline-offset-4 transition-colors hover:text-[var(--color-error)]"
-          type="button"
-        >
-          회원탈퇴
-        </button>
+      <div className="border-t border-[var(--color-divider)] pt-6">
+        <WithdrawAccountSection description="탈퇴하면 진행한 팬미팅 기록과 팬 메모를 다시 볼 수 없습니다." />
       </div>
     </div>
   )

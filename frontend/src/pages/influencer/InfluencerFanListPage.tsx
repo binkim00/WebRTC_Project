@@ -403,11 +403,25 @@ export function InfluencerFanListPage() {
     setKeyword(keywordInput)
   }
 
+  /**
+   * 팬 기록 화면 경로를 만든다.
+   *
+   * 통화 요약 조회에는 callSessionId가 필요한데 참가자 응답에는 없다.
+   * 지금 통화 중인 팬을 여는 경우에만 현재 세션을 쿼리로 넘겨 요약 탭이 동작하게 한다.
+   */
+  function recordsPath(participant: { participantId: string; fanId: string }) {
+    const callSessionId = participant.participantId === queue.currentCall?.participantId
+      ? queue.currentCall?.callSessionId
+      : undefined
+    const callSessionQuery = callSessionId
+      ? `&callSessionId=${encodeURIComponent(callSessionId)}`
+      : ''
+    return `/influencer/fan-meetings/${fanMeetingId}/fans/${participant.fanId}/records?tab=memo${callSessionQuery}`
+  }
+
   function openMemo() {
     if (!fanMeetingId || !selectedParticipant) return
-    navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/fans/${selectedParticipant.fanId}/records?tab=memo`,
-    )
+    navigate(recordsPath(selectedParticipant))
   }
 
   return (
@@ -621,9 +635,7 @@ export function InfluencerFanListPage() {
                               className="font-bold hover:text-[var(--color-primary-coral)] hover:underline"
                               onClick={() => {
                                 setSelectedParticipant(participant)
-                                navigate(
-                                  `/influencer/fan-meetings/${fanMeetingId}/fans/${participant.fanId}/records?tab=memo`,
-                                )
+                                navigate(recordsPath(participant))
                               }}
                               type="button"
                             >

@@ -28,6 +28,8 @@ import {
   FanMeetingCallPage,
 } from '../pages/fan/FanRoutePages'
 import { FanEventListPage } from '../pages/fan/FanEventListPage'
+import { FanInfluencerListPage } from '../pages/fan/FanInfluencerListPage'
+import { FanInfluencerDetailPage } from '../pages/fan/FanInfluencerDetailPage'
 import { FanEventDetailPage } from '../pages/fan/FanEventDetailPage'
 import { FanApplicationResultPage } from '../pages/fan/FanApplicationResultPage'
 import { FanProfilePage } from '../pages/fan/FanProfilePage'
@@ -126,6 +128,15 @@ export const router = createBrowserRouter([
         path: 'fan/events/:meetingId/application-result',
         Component: FanApplicationResultPage,
       },
+      // 인플루언서 탐색은 로그인 없이도 볼 수 있는 공개 화면이다.
+      {
+        path: 'fan/influencers',
+        Component: FanInfluencerListPage,
+      },
+      {
+        path: 'fan/influencers/:influencerId',
+        Component: FanInfluencerDetailPage,
+      },
       {
         path: 'notifications',
         Component: NotificationsPage,
@@ -180,10 +191,16 @@ export const router = createBrowserRouter([
         path: 'influencer/organization/invitations/:token',
         Component: InfluencerOrganizationInvitationPage,
       },
-      {
-        path: 'rtc/livekit-test',
-        Component: LiveKitTestPage,
-      },
+      // LiveKit 연결 점검용 개발 도구다. 백엔드도 test-token API를 기본 비활성(LIVEKIT_TEST_TOKEN_ENABLED=false)
+      // 으로 두므로, 운영 빌드에서는 경로 자체를 등록하지 않아 404로 남긴다.
+      ...(import.meta.env.DEV
+        ? [
+            {
+              path: 'rtc/livekit-test',
+              Component: LiveKitTestPage,
+            },
+          ]
+        : []),
       {
         path: 'influencer/fan-meetings',
         Component: InfluencerMyMeetingPage,

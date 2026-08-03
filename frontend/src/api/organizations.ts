@@ -107,7 +107,12 @@ export async function createOrganization(request: OrganizationCreateRequest, aut
 }
 
 /**
- * 가입된 인플루언서를 초대 수락 절차 없이 조직 구성원으로 바로 연결합니다.
+ * 가입된 인플루언서를 초대 수락 절차 없이 조직 구성원으로 바로 연결합니다. (ADMIN 전용)
+ *
+ * 백엔드가 `hasRole("ADMIN")`으로 막고 서비스 계층에서도 다시 검증하므로,
+ * 매니저 화면에서 호출하면 항상 403입니다. 매니저는 createOrganizationInvitation을 쓰세요.
+ * 인플루언서 동의를 건너뛰는 경로라 관리자 도구가 생기기 전까지는 호출부가 없습니다.
+ *
  * 이미 다른 활성 조직에 소속된 사용자는 백엔드가 400으로 거절합니다.
  */
 export async function addOrganizationMember(organizationId: number, userId: number, authToken: string, signal?: AbortSignal): Promise<OrganizationMember> {

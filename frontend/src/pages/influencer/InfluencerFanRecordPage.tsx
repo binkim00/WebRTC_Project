@@ -12,6 +12,7 @@ import {
   Avatar,
   Breadcrumbs,
   Button,
+  CallSummaryPanel,
   Card,
   CardContent,
   Spinner,
@@ -69,6 +70,8 @@ export function InfluencerFanRecordPage() {
   const tab = searchParams.get('tab')
   const activeTab: RecordTab = tab === 'summary' ? 'summary' : 'memo'
   const isMemoTab = activeTab === 'memo'
+  // 통화 화면에서 넘어온 경우에만 세션을 알 수 있다. 참가자 응답에는 아직 통화 세션이 없다.
+  const callSessionId = searchParams.get('callSessionId')?.trim() || undefined
 
   const [participant, setParticipant] = useState<FanMeetingParticipant>()
   const [memos, setMemos] = useState<FanMemo[]>([])
@@ -528,8 +531,14 @@ export function InfluencerFanRecordPage() {
                   )}
                 </article>
               </div>
+            ) : callSessionId ? (
+              <CallSummaryPanel callSessionId={callSessionId} />
             ) : (
-              /* TODO(AI-001): 대화 요약 API가 아직 준비되지 않아 빈 상태를 표시한다. */
+              /*
+               * TODO(AI-001): 참가자로 통화 세션을 찾는 백엔드 조회가 없어 아직 자동 연결하지 못한다.
+               * GET /api/v1/call-sessions/{id}/summary 는 연결돼 있으므로, 참가자 응답에
+               * callSessionId가 추가되거나 (팬미팅, 팬) 기준 조회가 생기면 이 분기는 지울 수 있다.
+               */
               <div className="grid min-h-[460px] place-items-center px-6 text-center">
                 <div className="grid justify-items-center gap-4">
                   <ChatCircleText
@@ -539,9 +548,9 @@ export function InfluencerFanRecordPage() {
                     weight="duotone"
                   />
                   <div>
-                    <p className="text-lg font-extrabold">대화 요약 준비 중</p>
+                    <p className="text-lg font-extrabold">연결된 통화가 없습니다</p>
                     <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                      AI 대화 요약 기능은 준비 중입니다. 곧 만나보실 수 있어요.
+                      이 팬과의 통화 세션을 찾을 수 없어 요약을 표시할 수 없습니다.
                     </p>
                   </div>
                 </div>
