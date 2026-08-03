@@ -636,7 +636,7 @@ class RecordingApiIntegrationTest {
         application.select(LocalDateTime.of(2026, 7, 21, 10, 0));
         applicationRepository.saveAndFlush(application);
         Participant participant = participantRepository.saveAndFlush(
-                Participant.create(meeting, fan, application, 1));
+                Participant.createFromApplication(meeting, fan, application, 1));
         QueueEntry queueEntry = queueEntryRepository.saveAndFlush(
                 QueueEntry.create(meeting, participant));
         CallSession callSession = callSessionRepository.saveAndFlush(

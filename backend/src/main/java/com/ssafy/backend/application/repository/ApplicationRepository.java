@@ -34,6 +34,20 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     /** 팬미팅과 팬 식별자로 응모 결과를 조회한다. */
     Optional<Application> findByMeeting_IdAndFan_Id(Long meetingId, Long fanId);
 
+    /**
+     * 같은 팬미팅에서 다른 계정이 같은 기기 토큰으로 응모했는지 확인한다.
+     *
+     * <p>동일 기기 다계정 응모를 탐지하는 위험 신호이며, 취소된 응모도 시도 이력이므로 포함한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param deviceHash 기기 토큰의 HMAC-SHA-256 해시
+     * @param fanId 검사에서 제외할 현재 팬 식별자
+     * @return 다른 계정이 같은 기기로 응모했으면 {@code true}
+     */
+    boolean existsByMeeting_IdAndDeviceHashAndFan_IdNot(
+            Long meetingId, String deviceHash, Long fanId
+    );
+
     /** 팬미팅 취소 알림 대상 팬을 포함해 모든 응모를 조회한다. */
     @EntityGraph(attributePaths = {"fan"})
     List<Application> findAllByMeeting_Id(Long meetingId);

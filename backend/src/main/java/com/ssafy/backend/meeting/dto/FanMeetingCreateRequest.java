@@ -1,5 +1,6 @@
 package com.ssafy.backend.meeting.dto;
 
+import com.ssafy.backend.meeting.domain.ParticipantSelectionType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
  * @param description 팬미팅 설명
  * @param coverImageUrl 커버 이미지 URL
  * @param scheduledStartAt 예정 시작 시각
+ * @param participantSelectionType 참가자 선별 방식이며 생략하면 응모 방식으로 생성한다
  * @param application 응모 설정
  * @param operation 운영 설정
  */
@@ -27,9 +29,21 @@ public record FanMeetingCreateRequest(
         String description,
         @Size(max = 2048) String coverImageUrl,
         @NotNull @Future LocalDateTime scheduledStartAt,
+        ParticipantSelectionType participantSelectionType,
         @NotNull @Valid ApplicationSettingRequest application,
         @NotNull @Valid OperationSettingRequest operation
 ) {
+    /**
+     * 선별 방식을 생략한 기존 요청을 응모 방식으로 해석한다.
+     *
+     * @return 요청에 지정된 선별 방식이며 없으면 {@link ParticipantSelectionType#APPLICATION}
+     */
+    public ParticipantSelectionType resolvedParticipantSelectionType() {
+        return participantSelectionType == null
+                ? ParticipantSelectionType.APPLICATION
+                : participantSelectionType;
+    }
+
     /**
      * 팬미팅 생성 시 적용할 응모 설정을 전달한다.
      *

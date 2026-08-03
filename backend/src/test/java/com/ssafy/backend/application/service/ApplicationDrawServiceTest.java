@@ -2,6 +2,7 @@ package com.ssafy.backend.application.service;
 
 import com.ssafy.backend.application.domain.Application;
 import com.ssafy.backend.application.domain.ApplicationStatus;
+import com.ssafy.backend.application.domain.DeviceDuplicatePolicy;
 import com.ssafy.backend.application.dto.ApplicationSubmitRequest;
 import com.ssafy.backend.application.dto.DrawResultResponse;
 import com.ssafy.backend.application.dto.ResultPublishResponse;
@@ -447,11 +448,13 @@ class ApplicationDrawServiceTest {
                 mock(ApplicationFormRepository.class),
                 mock(ApplicationQuestionRepository.class),
                 mock(ApplicationAnswerRepository.class),
-                Clock.fixed(NOW, SEOUL)
+                Clock.fixed(NOW, SEOUL),
+                true,
+                DeviceDuplicatePolicy.FLAG
         );
 
         assertThatThrownBy(() -> applicationService.submit(
-                MEETING_ID, new ApplicationSubmitRequest(true, List.of()), latecomer
+                MEETING_ID, new ApplicationSubmitRequest(true, List.of()), latecomer, null
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(ErrorCode.APPLICATION_PERIOD_CLOSED));

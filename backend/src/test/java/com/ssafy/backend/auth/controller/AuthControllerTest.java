@@ -14,6 +14,7 @@ import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.auth.service.SignupService;
+import com.ssafy.backend.auth.support.DeviceTokenService;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ class AuthControllerTest {
     private LoginService loginService;
     private LogoutService logoutService;
     private RefreshTokenService refreshTokenService;
+    private DeviceTokenService deviceTokenService;
     private MockMvc mockMvc;
 
     /** 서비스 mock과 전역 예외 처리가 적용된 standalone MockMvc를 구성한다. */
@@ -43,8 +45,10 @@ class AuthControllerTest {
         loginService = mock(LoginService.class);
         logoutService = mock(LogoutService.class);
         refreshTokenService = mock(RefreshTokenService.class);
+        deviceTokenService = mock(DeviceTokenService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new AuthController(signupService, loginService, logoutService, refreshTokenService))
+                        new AuthController(signupService, loginService, logoutService,
+                                refreshTokenService, deviceTokenService))
                 .setControllerAdvice(new AuthExceptionHandler())
                 .build();
     }
