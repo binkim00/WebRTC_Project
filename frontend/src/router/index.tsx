@@ -4,65 +4,16 @@ import { AuthLayout } from '../layouts/AuthLayout'
 import { FanLayout } from '../layouts/FanLayout'
 import { InfluencerLayout } from '../layouts/InfluencerLayout'
 import { ManagerLayout } from '../layouts/ManagerLayout'
-import { LoginPage, SignupPage } from '../pages/auth/AuthRoutePages'
-import {
-  HomePage,
-  MeetingStatisticsPage,
-} from '../pages/common/CommonRoutePages'
-import { CommunityPostDetailPage } from '../pages/common/CommunityPostDetailPage'
-import { DeviceCheckPage } from '../pages/common/DeviceCheckPage'
-import { FanMeetingCommunityPage } from '../pages/common/FanMeetingCommunityPage'
-import { LiveKitTestPage } from '../pages/common/LiveKitTestPage'
-import { NotificationsPage } from '../pages/common/NotificationsPage'
-import {
-  ServiceNoticeDetailPage,
-  ServiceNoticesPage,
-} from '../pages/common/ServiceNoticesPage'
-import { YestalgiaHomeExamplePage } from '../pages/common/YestalgiaHomeExamplePage'
 import {
   ForbiddenPage,
   NotFoundPage,
   RouterErrorPage,
 } from '../pages/errors/ErrorRoutePages'
 import {
-  FanMeetingCallPage,
-} from '../pages/fan/FanRoutePages'
-import { FanEventListPage } from '../pages/fan/FanEventListPage'
-import { FanInfluencerListPage } from '../pages/fan/FanInfluencerListPage'
-import { FanInfluencerDetailPage } from '../pages/fan/FanInfluencerDetailPage'
-import { FanEventDetailPage } from '../pages/fan/FanEventDetailPage'
-import { FanApplicationResultPage } from '../pages/fan/FanApplicationResultPage'
-import { FanProfilePage } from '../pages/fan/FanProfilePage'
-import { FanApplicationsPage } from '../pages/fan/FanApplicationsPage'
-import { FanMeetingWaitingPage } from '../pages/fan/FanMeetingWaitingPage'
-import { InfluencerFanRecordPage } from '../pages/influencer/InfluencerFanRecordPage'
-import { FanMeetingParticipantsPage } from '../pages/common/FanMeetingParticipantsPage'
-import { ManagerFanListPage } from '../pages/manager/ManagerFanListPage'
-import { FanMeetingCompletePage } from '../pages/fan/FanMeetingCompletePage'
-import { FanMeetingListPage } from '../pages/fan/FanMeetingListPage'
-import { InfluencerMyMeetingPage } from '../pages/influencer/InfluencerMyMeetingPage'
-import {
-  InfluencerMeetingCallPage,
-} from '../pages/influencer/InfluencerRoutePages'
-import { InfluencerMeetingReadyPage } from '../pages/influencer/InfluencerMeetingReadyPage'
-import { InfluencerProfilePage } from '../pages/influencer/InfluencerProfilePage'
-import { InfluencerMeetingHistoryPage } from '../pages/influencer/InfluencerMeetingHistoryPage'
-import { InfluencerOrganizationInvitationPage } from '../pages/influencer/InfluencerOrganizationInvitationPage'
-import {
-  ManagerMeetingCreatePage,
-  ManagerMyPage,
-  ManagerNoticesPage,
-  ManagerRiskIncidentPage,
-  ManagerStatisticsPage,
-} from '../pages/manager/ManagerRoutePages'
-import { ManagerMeetingListPage } from '../pages/manager/ManagerMeetingListPage'
-import { ManagerMeetingDetailPage } from '../pages/manager/ManagerMeetingDetailPage'
-import { ManagerMeetingMonitorPage as LiveManagerMeetingMonitorPage } from '../pages/manager/ManagerMeetingMonitorPage'
-import { ManagerOrganizationPage } from '../pages/manager/ManagerOrganizationPage'
-import {
   LegacyEventRedirect,
   LegacyMeetingSettingsRedirect,
 } from './legacyRedirects'
+import { lazyPage } from './lazyPage'
 
 /**
  * 브라우저 URL과 페이지 컴포넌트를 연결하는 애플리케이션 최상위 라우터다.
@@ -76,120 +27,194 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        Component: HomePage,
+        lazy: lazyPage(() => import('../pages/common/CommonRoutePages'), 'HomePage'),
       },
       {
         path: 'examples/yestalgia-home',
-        Component: YestalgiaHomeExamplePage,
+        lazy: lazyPage(
+          () => import('../pages/common/YestalgiaHomeExamplePage'),
+          'YestalgiaHomeExamplePage',
+        ),
       },
       {
         Component: AuthLayout,
         children: [
           {
             path: 'login',
-            Component: LoginPage,
+            lazy: lazyPage(() => import('../pages/auth/AuthRoutePages'), 'LoginPage'),
           },
           {
             path: 'signup',
-            Component: SignupPage,
+            lazy: lazyPage(() => import('../pages/auth/AuthRoutePages'), 'SignupPage'),
           },
         ],
       },
+      // 인증 메일 링크가 도착하는 화면이다. 백엔드 EMAIL_VERIFY_BASE_URL이 이 경로를 가리킨다.
+      {
+        path: 'email-verification',
+        lazy: lazyPage(
+          () => import('../pages/auth/EmailVerifiedPage'),
+          'EmailVerifiedPage',
+        ),
+      },
       {
         path: 'fan/fan-meetings/:fanMeetingId/complete',
-        Component: FanMeetingCompletePage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanMeetingCompletePage'),
+          'FanMeetingCompletePage',
+        ),
       },
       {
         path: 'fan/fan-meetings/:fanMeetingId/waiting',
-        Component: FanMeetingWaitingPage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanMeetingWaitingPage'),
+          'FanMeetingWaitingPage',
+        ),
       },
       {
         path: 'fan/mypage/fan-meetings',
-        Component: FanMeetingListPage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanMeetingListPage'),
+          'FanMeetingListPage',
+        ),
       },
       {
         path: 'fan/mypage/profile',
-        Component: FanProfilePage,
+        lazy: lazyPage(() => import('../pages/fan/FanProfilePage'), 'FanProfilePage'),
       },
       {
         path: 'fan/mypage/applications',
-        Component: FanApplicationsPage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanApplicationsPage'),
+          'FanApplicationsPage',
+        ),
       },
       {
         path: 'fan/events',
-        Component: FanEventListPage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanEventListPage'),
+          'FanEventListPage',
+        ),
       },
       // 팬 화면 용어는 '이벤트'를 유지하되, 실제 식별자는 팬미팅 ID이므로 파라미터명을 통일한다.
       {
         path: 'fan/events/:meetingId',
-        Component: FanEventDetailPage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanEventDetailPage'),
+          'FanEventDetailPage',
+        ),
       },
       {
         path: 'fan/events/:meetingId/application-result',
-        Component: FanApplicationResultPage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanApplicationResultPage'),
+          'FanApplicationResultPage',
+        ),
       },
       // 인플루언서 탐색은 로그인 없이도 볼 수 있는 공개 화면이다.
       {
         path: 'fan/influencers',
-        Component: FanInfluencerListPage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanInfluencerListPage'),
+          'FanInfluencerListPage',
+        ),
       },
       {
         path: 'fan/influencers/:influencerId',
-        Component: FanInfluencerDetailPage,
+        lazy: lazyPage(
+          () => import('../pages/fan/FanInfluencerDetailPage'),
+          'FanInfluencerDetailPage',
+        ),
       },
       {
         path: 'notifications',
-        Component: NotificationsPage,
+        lazy: lazyPage(
+          () => import('../pages/common/NotificationsPage'),
+          'NotificationsPage',
+        ),
       },
       // 서비스 공지는 로그인 없이도 볼 수 있는 공개 화면이다.
       {
         path: 'service-notices',
-        Component: ServiceNoticesPage,
+        lazy: lazyPage(
+          () => import('../pages/common/ServiceNoticesPage'),
+          'ServiceNoticesPage',
+        ),
       },
       {
         path: 'service-notices/:noticeId',
-        Component: ServiceNoticeDetailPage,
+        lazy: lazyPage(
+          () => import('../pages/common/ServiceNoticesPage'),
+          'ServiceNoticeDetailPage',
+        ),
       },
       {
         path: 'community/posts/:postId',
-        Component: CommunityPostDetailPage,
+        lazy: lazyPage(
+          () => import('../pages/common/CommunityPostDetailPage'),
+          'CommunityPostDetailPage',
+        ),
       },
       {
         path: 'fan-meetings/:fanMeetingId',
         children: [
           {
             path: 'fans',
-            Component: FanMeetingParticipantsPage,
+            lazy: lazyPage(
+              () => import('../pages/common/FanMeetingParticipantsPage'),
+              'FanMeetingParticipantsPage',
+            ),
           },
           {
             path: 'community',
-            Component: FanMeetingCommunityPage,
+            lazy: lazyPage(
+              () => import('../pages/common/FanMeetingCommunityPage'),
+              'FanMeetingCommunityPage',
+            ),
           },
           {
             path: 'device-check',
-            Component: DeviceCheckPage,
+            lazy: lazyPage(
+              () => import('../pages/common/DeviceCheckPage'),
+              'DeviceCheckPage',
+            ),
           },
           {
             path: 'statistics',
-            Component: MeetingStatisticsPage,
+            lazy: lazyPage(
+              () => import('../pages/common/CommonRoutePages'),
+              'MeetingStatisticsPage',
+            ),
           },
         ],
       },
       {
         path: 'influencer/my-fan-meetings',
-        Component: InfluencerMyMeetingPage,
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerMyMeetingPage'),
+          'InfluencerMyMeetingPage',
+        ),
       },
       {
         path: 'influencer/mypage/profile',
-        Component: InfluencerProfilePage,
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerProfilePage'),
+          'InfluencerProfilePage',
+        ),
       },
       {
         path: 'influencer/mypage/fan-meetings',
-        Component: InfluencerMeetingHistoryPage,
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerMeetingHistoryPage'),
+          'InfluencerMeetingHistoryPage',
+        ),
       },
       {
         path: 'influencer/organization/invitations/:token',
-        Component: InfluencerOrganizationInvitationPage,
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerOrganizationInvitationPage'),
+          'InfluencerOrganizationInvitationPage',
+        ),
       },
       // LiveKit 연결 점검용 개발 도구다. 백엔드도 test-token API를 기본 비활성(LIVEKIT_TEST_TOKEN_ENABLED=false)
       // 으로 두므로, 운영 빌드에서는 경로 자체를 등록하지 않아 404로 남긴다.
@@ -197,33 +222,54 @@ export const router = createBrowserRouter([
         ? [
             {
               path: 'rtc/livekit-test',
-              Component: LiveKitTestPage,
+              lazy: lazyPage(
+                () => import('../pages/common/LiveKitTestPage'),
+                'LiveKitTestPage',
+              ),
             },
           ]
         : []),
       {
         path: 'influencer/fan-meetings',
-        Component: InfluencerMyMeetingPage,
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerMyMeetingPage'),
+          'InfluencerMyMeetingPage',
+        ),
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/fans',
-        Component: FanMeetingParticipantsPage,
+        lazy: lazyPage(
+          () => import('../pages/common/FanMeetingParticipantsPage'),
+          'FanMeetingParticipantsPage',
+        ),
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/community',
-        Component: FanMeetingCommunityPage,
+        lazy: lazyPage(
+          () => import('../pages/common/FanMeetingCommunityPage'),
+          'FanMeetingCommunityPage',
+        ),
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/device-check',
-        Component: DeviceCheckPage,
+        lazy: lazyPage(
+          () => import('../pages/common/DeviceCheckPage'),
+          'DeviceCheckPage',
+        ),
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/ready',
-        Component: InfluencerMeetingReadyPage,
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerMeetingReadyPage'),
+          'InfluencerMeetingReadyPage',
+        ),
       },
       {
         path: 'influencer/fan-meetings/:fanMeetingId/fans/:fanId/records',
-        Component: InfluencerFanRecordPage,
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerFanRecordPage'),
+          'InfluencerFanRecordPage',
+        ),
       },
       {
         path: 'fan',
@@ -235,11 +281,17 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/:fanMeetingId/call',
-            Component: FanMeetingCallPage,
+            lazy: lazyPage(
+              () => import('../pages/fan/FanRoutePages'),
+              'FanMeetingCallPage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
-            Component: FanMeetingCallPage,
+            lazy: lazyPage(
+              () => import('../pages/fan/FanRoutePages'),
+              'FanMeetingCallPage',
+            ),
           },
         ],
       },
@@ -253,11 +305,17 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/:fanMeetingId/call',
-            Component: InfluencerMeetingCallPage,
+            lazy: lazyPage(
+              () => import('../pages/influencer/InfluencerRoutePages'),
+              'InfluencerMeetingCallPage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId/calls/:callSessionId',
-            Component: InfluencerMeetingCallPage,
+            lazy: lazyPage(
+              () => import('../pages/influencer/InfluencerRoutePages'),
+              'InfluencerMeetingCallPage',
+            ),
           },
         ],
       },
@@ -292,7 +350,10 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings',
-            Component: ManagerMeetingListPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerMeetingListPage'),
+              'ManagerMeetingListPage',
+            ),
           },
           {
             path: 'fan-meetings/manage',
@@ -300,11 +361,17 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/new',
-            Component: ManagerMeetingCreatePage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerRoutePages'),
+              'ManagerMeetingCreatePage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId',
-            Component: ManagerMeetingDetailPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerMeetingDetailPage'),
+              'ManagerMeetingDetailPage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId/edit',
@@ -312,35 +379,59 @@ export const router = createBrowserRouter([
           },
           {
             path: 'fan-meetings/:fanMeetingId/notices',
-            Component: ManagerNoticesPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerRoutePages'),
+              'ManagerNoticesPage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId/statistics',
-            Component: ManagerStatisticsPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerRoutePages'),
+              'ManagerStatisticsPage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId/monitor/risk',
-            Component: ManagerRiskIncidentPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerRoutePages'),
+              'ManagerRiskIncidentPage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId/monitor',
-            Component: LiveManagerMeetingMonitorPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerMeetingMonitorPage'),
+              'ManagerMeetingMonitorPage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId/fans',
-            Component: ManagerFanListPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerFanListPage'),
+              'ManagerFanListPage',
+            ),
           },
           {
             path: 'fan-meetings/:fanMeetingId/community',
-            Component: FanMeetingCommunityPage,
+            lazy: lazyPage(
+              () => import('../pages/common/FanMeetingCommunityPage'),
+              'FanMeetingCommunityPage',
+            ),
           },
           {
             path: 'mypage',
-            Component: ManagerMyPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerRoutePages'),
+              'ManagerMyPage',
+            ),
           },
           {
             path: 'organization',
-            Component: ManagerOrganizationPage,
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerOrganizationPage'),
+              'ManagerOrganizationPage',
+            ),
           },
         ],
       },

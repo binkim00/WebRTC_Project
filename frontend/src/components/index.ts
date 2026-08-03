@@ -1,5 +1,6 @@
+export * from './account/EmailVerificationNotice'
 export * from './account/WithdrawAccountSection'
-export * from './call'
+// LiveKit 기반 통화 컴포넌트는 route chunk에서 직접 import해 초기 번들에 포함시키지 않는다.
 export * from './data-display'
 export * from './feedback'
 export * from './media/MediaDevicePreview'

@@ -19,6 +19,7 @@ import {
   fetchPublicFanMeetingDetail,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
+import { getMyProfile } from '../../api/users'
 import {
   AlertBanner,
   Badge,
@@ -26,6 +27,7 @@ import {
   Card,
   CardContent,
   Checkbox,
+  EmailVerificationNotice,
   Spinner,
   TextField,
   Textarea,
@@ -110,25 +112,67 @@ export function FanEventDetailPage() {
     participation: false,
   })
   const [applicationForm, setApplicationForm] = useState<ApplicationFormResponse>()
+  const [formLoading, setFormLoading] = useState(validMeetingId)
+  const [formError, setFormError] = useState<string>()
+  const [formReloadKey, setFormReloadKey] = useState(0)
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string>()
   const [submitMessage, setSubmitMessage] = useState<string>()
+  // undefined는 판단 불가(비로그인·구버전 백엔드·조회 실패)를 뜻하며 이때는 게이트를 켜지 않는다.
+  const [emailVerified, setEmailVerified] = useState<boolean>()
+  const [viewerEmail, setViewerEmail] = useState<string>()
+
+  // 응모 전 이메일 인증 게이트에 쓸 내 프로필을 읽는다. 팬 세션일 때만 의미가 있다.
+  useEffect(() => {
+    const session = getAuthSession()
+    if (session?.role !== 'FAN') return
+
+    const controller = new AbortController()
+    void getMyProfile(session.accessToken, controller.signal)
+      .then((profile) => {
+        if (controller.signal.aborted) return
+        setViewerEmail(profile.email)
+        // 이메일 인증 기능이 없는 백엔드는 필드가 없어 undefined로 남고 게이트가 열리지 않는다.
+        setEmailVerified(profile.emailVerified)
+      })
+      .catch(() => {
+        // 게이트는 안내용이므로 조회 실패 시 서버 검증(403)에 맡긴다.
+      })
+
+    return () => controller.abort()
+  }, [])
 
   useEffect(() => {
     if (!validMeetingId) return
 
     const controller = new AbortController()
+    setFormLoading(true)
+    setFormError(undefined)
+    setApplicationForm(undefined)
 
-    // 응모 폼은 공개 조회이므로 상세와 별개로 불러온다. 폼이 없으면(404) 질문 없이 동의만 받는다.
+    // 404는 등록된 질문이 없는 정상 상태다. 그 외 오류는 질문 누락 제출을 막기 위해 별도로 보존한다.
     void getApplicationForm(meetingId, controller.signal)
       .then(setApplicationForm)
-      .catch(() => {
-        if (!controller.signal.aborted) setApplicationForm(undefined)
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        if (reason instanceof ApiError && reason.status === 404) {
+          setApplicationForm(undefined)
+          return
+        }
+
+        setFormError(
+          reason instanceof ApiError || reason instanceof TypeError
+            ? reason.message
+            : '응모 질문을 불러오지 못했습니다.',
+        )
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setFormLoading(false)
       })
 
     return () => controller.abort()
-  }, [meetingId, validMeetingId])
+  }, [formReloadKey, meetingId, validMeetingId])
 
   useEffect(() => {
     if (!validMeetingId) return
@@ -181,6 +225,12 @@ export function FanEventDetailPage() {
       return
     }
 
+    // 질문 조회가 끝나기 전이거나 실패한 상태에서는 빈 답변으로 잘못 접수하지 않는다.
+    if (formLoading || formError) {
+      setSubmitError('응모 질문을 확인한 뒤 다시 시도해 주세요.')
+      return
+    }
+
     const questions = applicationForm?.questions ?? []
     const missingRequired = questions.filter(
       (question) => question.required && !(answers[question.questionId] ?? '').trim(),
@@ -197,6 +247,8 @@ export function FanEventDetailPage() {
       await submitApplication(
         meetingId,
         {
+          // 현재 백엔드 ApplicationSubmitRequest는 개인정보 동의만 저장한다.
+          // 녹화·참여 동의는 UI에서 필수 확인하지만 지원되지 않는 필드를 임의 전송하지 않는다.
           personalInformationConsent: agreements.privacy,
           answers: questions
             .map((question) => ({
@@ -211,14 +263,24 @@ export function FanEventDetailPage() {
       await reloadDetail()
     } catch (reason) {
       if (reason instanceof ApiError) {
+        // 인증 미완료는 화면 상태가 오래된 경우이므로 오류 문구와 함께 인증 안내로 전환한다.
+        if (reason.code === 'EMAIL_VERIFICATION_REQUIRED') {
+          setEmailVerified(false)
+          setSubmitError('이메일 인증을 완료한 뒤 응모할 수 있어요.')
+          return
+        }
         setSubmitError(
           reason.status === 401
             ? '로그인이 만료되었습니다. 다시 로그인해 주세요.'
             : reason.status === 403
               ? '팬 계정으로 로그인해야 응모할 수 있습니다.'
-              : reason.status === 409
-                ? '이미 응모한 이벤트입니다.'
-                : reason.message,
+              : reason.code === 'DEVICE_DUPLICATE_APPLICATION'
+                ? '같은 환경에서 다른 계정의 응모 이력이 확인되어 접수할 수 없습니다. 본인 계정이 맞다면 운영팀에 문의해 주세요.'
+                : reason.status === 409
+                  ? '이미 응모한 이벤트입니다.'
+                  : reason.status === 429
+                    ? '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.'
+                    : reason.message,
         )
       } else {
         setSubmitError('응모 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.')
@@ -289,8 +351,13 @@ export function FanEventDetailPage() {
   }
 
   const { meeting, influencer, viewer } = detail
-  const allAgreed = agreementItems.every((item) => agreements[item.id])
-  const canSubmitApplication = viewer.canApply && allAgreed
+  // 녹화를 사용하지 않는 팬미팅에는 모순되는 녹화 동의 항목을 노출하지 않는다.
+  const visibleAgreementItems = agreementItems.filter(
+    (item) => item.id !== 'recording' || meeting.operation.recordingEnabled,
+  )
+  const allAgreed = visibleAgreementItems.every((item) => agreements[item.id])
+  const canSubmitApplication =
+    viewer.canApply && allAgreed && !formLoading && !formError
   const canWithdraw = canWithdrawApplication(detail)
   const descriptionParagraphs = (meeting.description ?? '')
     .split(/\r?\n/)
@@ -440,13 +507,50 @@ export function FanEventDetailPage() {
 
         <aside>
           <Card>
+            {/* 응모 가능 기간에 미인증이 확인된 팬에게는 폼 대신 인증 안내를 보여 준다. */}
+            {emailVerified === false && viewer.canApply ? (
+              <CardContent className="grid gap-5">
+                {submitError ? (
+                  <AlertBanner title="응모 불가" variant="error">{submitError}</AlertBanner>
+                ) : null}
+                <EmailVerificationNotice
+                  email={viewerEmail}
+                  onVerified={() => {
+                    setEmailVerified(true)
+                    setSubmitError(undefined)
+                    setSubmitMessage('이메일 인증이 완료되었어요. 이제 응모할 수 있습니다.')
+                  }}
+                />
+              </CardContent>
+            ) : (
             <CardContent className="grid gap-5">
               <h2 className="text-2xl font-black tracking-[-0.03em]">응모 동의</h2>
               <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
                 아래 필수 항목을 모두 확인해 주세요.
               </p>
 
-              {applicationForm && applicationForm.questions.length > 0 ? (
+              {formLoading ? (
+                <div className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
+                  <Spinner label="응모 질문을 불러오는 중" size="sm" />
+                  <span>응모 질문을 불러오는 중입니다.</span>
+                </div>
+              ) : null}
+
+              {formError ? (
+                <AlertBanner title="응모 질문을 불러오지 못했습니다" variant="error">
+                  <p>{formError}</p>
+                  <Button
+                    className="mt-3"
+                    onClick={() => setFormReloadKey((key) => key + 1)}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    질문 다시 불러오기
+                  </Button>
+                </AlertBanner>
+              ) : null}
+
+              {!formLoading && !formError && applicationForm && applicationForm.questions.length > 0 ? (
                 <div className="grid gap-4">
                   {applicationForm.formDescription ? (
                     <p className="text-sm leading-6 text-[var(--color-text-secondary)]">{applicationForm.formDescription}</p>
@@ -477,7 +581,7 @@ export function FanEventDetailPage() {
               ) : null}
 
               <div className="grid gap-3">
-                {agreementItems.map((item) => (
+                {visibleAgreementItems.map((item) => (
                   <div
                     className="rounded-[var(--radius-control)] border border-[var(--color-border-control)] p-4"
                     key={item.id}
@@ -526,6 +630,7 @@ export function FanEventDetailPage() {
                 </Button>
               ) : null}
             </CardContent>
+            )}
           </Card>
         </aside>
       </div>

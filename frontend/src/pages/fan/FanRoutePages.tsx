@@ -1,5 +1,5 @@
 import { useParams, useSearchParams } from 'react-router-dom'
-import { VideoCallRoom } from '../../components'
+import { VideoCallRoom } from '../../components/call/VideoCallRoom'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 export function FanMeetingCallPage() {

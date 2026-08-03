@@ -8,6 +8,7 @@ import {
   type CallSessionStatusResponse,
   type LiveKitAccessTokenResponse,
 } from '../../api/callSessions'
+import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { Badge } from '../data-display'
 import { AlertBanner } from '../feedback'
 import { Button } from '../ui/Button'
@@ -24,6 +25,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   const [sessionStatus, setSessionStatus] = useState<CallSessionStatusResponse>()
   const [connectionError, setConnectionError] = useState<string>()
   const [statusError, setStatusError] = useState<string>()
+  const [recordingEnabled, setRecordingEnabled] = useState(false)
+  const [recordingPolicyError, setRecordingPolicyError] = useState<string>()
   const [retryCount, setRetryCount] = useState(0)
   const [loading, setLoading] = useState(!isDesignPreview)
 
@@ -40,15 +43,40 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       }
 
       setLoading(true)
+      setConnectionInfo(undefined)
+      setSessionStatus(undefined)
+      setRecordingEnabled(false)
       setConnectionError(undefined)
       setStatusError(undefined)
+      setRecordingPolicyError(undefined)
 
       try {
-        const authToken = getAuthSession()?.accessToken
+        const authSession = getAuthSession()
+        const authToken = authSession?.accessToken
         const [info, status] = await Promise.all([
           issueLiveKitAccessToken(props.callSessionId, { authToken, signal }),
           getCallSessionStatus(props.callSessionId, { authToken, signal }),
         ])
+
+        let shouldRecord = false
+        if (authSession?.role === 'FAN') {
+          try {
+            // 녹화 여부는 통화 진입 시 서버 상세를 다시 읽어 오래된 화면 값을 사용하지 않는다.
+            const meeting = await fetchPublicFanMeetingDetail(
+              Number(props.meetingId),
+              authToken,
+              signal,
+            )
+            shouldRecord = meeting.meeting.operation.recordingEnabled
+          } catch (error: unknown) {
+            if (error instanceof DOMException && error.name === 'AbortError') throw error
+            // 정책을 확인하지 못한 경우에는 개인정보 보호를 위해 녹화를 시작하지 않는다.
+            setRecordingPolicyError('팬미팅 녹화 설정을 확인하지 못해 녹화를 시작하지 않았습니다.')
+          }
+        }
+
+        if (signal.aborted) return
+        setRecordingEnabled(shouldRecord)
         setConnectionInfo(info)
         setSessionStatus(status)
       } catch (error: unknown) {
@@ -68,7 +96,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         }
       }
     },
-    [isDesignPreview, props.callSessionId],
+    [isDesignPreview, props.callSessionId, props.meetingId],
   )
 
   useEffect(() => {
@@ -85,11 +113,14 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     }
 
     let active = true
+    let timer: number | undefined
+    const controller = new AbortController()
 
     const refreshStatus = async () => {
       try {
         const status = await getCallSessionStatus(callSessionId, {
           authToken: getAuthSession()?.accessToken,
+          signal: controller.signal,
         })
 
         if (active) {
@@ -97,19 +128,23 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
           setStatusError(undefined)
         }
       } catch (error: unknown) {
-        if (active) {
+        if (active && !(error instanceof DOMException && error.name === 'AbortError')) {
           setStatusError(
             error instanceof Error ? error.message : '통화 상태를 갱신하지 못했습니다.',
           )
         }
+      } finally {
+        // 느린 요청이 겹쳐 오래된 통화 상태가 최신 상태를 덮지 않도록 완료 후 다음 조회를 예약한다.
+        if (active) timer = window.setTimeout(() => void refreshStatus(), 5_000)
       }
     }
 
-    const intervalId = window.setInterval(() => void refreshStatus(), 5000)
+    timer = window.setTimeout(() => void refreshStatus(), 5_000)
 
     return () => {
       active = false
-      window.clearInterval(intervalId)
+      controller.abort()
+      if (timer !== undefined) window.clearTimeout(timer)
     }
   }, [connectionInfo, isDesignPreview, props.callSessionId])
 
@@ -163,7 +198,12 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       token={connectionInfo.accessToken}
       video={cameraId ? { deviceId: { exact: cameraId } } : true}
     >
-      <ConnectedCallRoom {...props} sessionStatus={sessionStatus} />
+      <ConnectedCallRoom
+        {...props}
+        recordingEnabled={recordingEnabled}
+        recordingPolicyError={recordingPolicyError}
+        sessionStatus={sessionStatus}
+      />
       {connectionError ? (
         <div className="mt-4">
           <AlertBanner title="LiveKit 연결 오류" variant="error">

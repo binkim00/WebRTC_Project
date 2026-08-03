@@ -230,7 +230,8 @@ export function InfluencerMeetingReadyPage() {
     () => entries.filter((entry) => entry.status === 'COMPLETED').length,
     [entries],
   )
-  const totalFanCount = meeting?.application?.capacity ?? entries.length
+  // 모집 정원(capacity)이 아니라 실제 대기열 참가자 수를 진행률의 분모로 사용한다.
+  const totalFanCount = entries.length
 
   const currentFanName = queue?.currentCall?.nickname ?? currentEntry?.nickname
   const currentFanId = currentEntry?.fanId

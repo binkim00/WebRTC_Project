@@ -13,7 +13,12 @@ import { ConnectionState, Track } from 'livekit-client'
 import { useEffect, useState } from 'react'
 
 import { useNavigate } from 'react-router-dom'
-import { forceEndCallSession, type CallSessionStatusResponse } from '../../api/callSessions'
+import {
+  endCallSessionByFan,
+  forceEndCallSession,
+  getCallSessionStatus,
+  type CallSessionStatusResponse,
+} from '../../api/callSessions'
 import { getAuthSession } from '../../api/auth'
 import { useCallRecording } from '../../hooks/useCallRecording'
 import { AlertBanner } from '../feedback'
@@ -24,6 +29,8 @@ import { useRemainingTime } from './useRemainingTime'
 
 type ConnectedCallRoomProps = VideoCallRoomProps & {
   sessionStatus: CallSessionStatusResponse
+  recordingEnabled: boolean
+  recordingPolicyError?: string
 }
 
 export function ConnectedCallRoom({
@@ -33,6 +40,8 @@ export function ConnectedCallRoom({
     endTo,
     sessionStatus,
     forceEndOnLeave,
+    recordingEnabled,
+    recordingPolicyError,
 }: ConnectedCallRoomProps) {
   const navigate = useNavigate()
   const room = useRoomContext()
@@ -46,6 +55,7 @@ export function ConnectedCallRoom({
   const [captionEnabled, setCaptionEnabled] = useState(true)
   const [mediaAction, setMediaAction] = useState<MediaAction>()
   const [mediaError, setMediaError] = useState<string>()
+  const [departurePending, setDeparturePending] = useState(false)
   const isConnected = connectionState === ConnectionState.Connected
   const isReconnecting =
     connectionState === ConnectionState.Reconnecting ||
@@ -63,10 +73,18 @@ export function ConnectedCallRoom({
     remoteParticipant?.identity ||
     participantLabel.replace(/\s*영상$/, '')
 
-  // 팬 역할만 통화 녹화를 수행한다. (백엔드 업로드 권한도 FAN 전용)
+  // 백엔드 업로드 권한(FAN)과 팬미팅의 실제 녹화 설정이 모두 맞을 때만 녹화한다.
   const [authSession] = useState(() => getAuthSession())
-  const { stopAndUpload } = useCallRecording({
-    enabled: authSession?.role === 'FAN' && isConnected,
+  const {
+    stopAndUpload,
+    retryUpload,
+    recordingState,
+    recordingError,
+    hasPendingRecording,
+    pendingRecordingPersisted,
+  } = useCallRecording({
+    enabled: authSession?.role === 'FAN' && recordingEnabled && isConnected,
+    meetingId,
     callSessionId,
     authToken: authSession?.accessToken,
     remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
@@ -101,21 +119,57 @@ export function ConnectedCallRoom({
   }
 
   async function leaveRoom() {
-    // 녹화 중이라면 종료·업로드를 먼저 시도한다. 실패해도 통화 종료를 막지 않는다.
-    await stopAndUpload()
+    // 녹화 업로드가 실패하면 파일을 보존한 채 이 화면에서 즉시 재시도할 수 있게 한다.
+    const recordingSaved = await stopAndUpload()
 
-    if (forceEndOnLeave && callSessionId) {
+    if (callSessionId && (forceEndOnLeave || authSession?.role === 'FAN')) {
+      const authToken = authSession?.accessToken
       try {
-        await forceEndCallSession(callSessionId, { reason: '영상통화 종료' }, {
-          authToken: getAuthSession()?.accessToken,
-        })
+        if (authSession?.role === 'FAN') {
+          // FAN 전용 정상 종료 API를 연결해 LiveKit 연결뿐 아니라 서버 세션도 즉시 종료한다.
+          await endCallSessionByFan(callSessionId, { authToken })
+        } else {
+          await forceEndCallSession(
+            callSessionId,
+            { reason: '영상통화 종료' },
+            { authToken },
+          )
+        }
       } catch (error: unknown) {
-        setMediaError(error instanceof Error ? error.message : '통화 종료 상태를 서버에 반영하지 못했습니다.')
+        // 다른 경로에서 이미 종료된 경우에는 성공으로 간주하고, 그 외 실패는 화면에 남아 재시도하게 한다.
+        const latestStatus = await getCallSessionStatus(callSessionId, { authToken })
+          .catch(() => undefined)
+        if (latestStatus?.status !== 'ENDED') {
+          setMediaError(
+            error instanceof Error
+              ? error.message
+              : '통화 종료 상태를 서버에 반영하지 못했습니다.',
+          )
+          return
+        }
       }
     }
 
     await room.disconnect()
+    if (!recordingSaved) {
+      setDeparturePending(true)
+      return
+    }
     navigate(endTo)
+  }
+
+  async function handleRecordingRetry() {
+    const uploaded = await retryUpload()
+    if (uploaded && departurePending) navigate(endTo)
+  }
+
+  function continueWithPendingRecording() {
+    // IndexedDB에 보관한 세션 ID를 완료 화면에 전달해 그곳에서도 재시도할 수 있게 한다.
+    navigate(endTo, {
+      state: hasPendingRecording && pendingRecordingPersisted && callSessionId
+        ? { pendingRecordingSessionId: callSessionId }
+        : undefined,
+    })
   }
 
   useEffect(() => {
@@ -123,9 +177,14 @@ export function ConnectedCallRoom({
       return
     }
 
-    void stopAndUpload()
-      .then(() => room.disconnect())
-      .finally(() => navigate(endTo, { replace: true }))
+    void stopAndUpload().then(async (recordingSaved) => {
+      await room.disconnect()
+      if (recordingSaved) {
+        navigate(endTo, { replace: true })
+      } else {
+        setDeparturePending(true)
+      }
+    })
   }, [endTo, navigate, room, sessionStatus.status, stopAndUpload])
 
   let connectionLabel = '연결 중'
@@ -207,6 +266,54 @@ export function ConnectedCallRoom({
       {mediaError ? (
         <AlertBanner title="장비 상태를 변경하지 못했습니다" variant="error">
           {mediaError}
+        </AlertBanner>
+      ) : null}
+
+      {authSession?.role === 'FAN' && recordingPolicyError ? (
+        <AlertBanner title="녹화 설정 확인 실패" variant="warning">
+          {recordingPolicyError}
+        </AlertBanner>
+      ) : null}
+
+      {authSession?.role === 'FAN' && !recordingPolicyError && !recordingEnabled ? (
+        <AlertBanner title="녹화하지 않는 팬미팅" variant="info">
+          이 통화는 팬미팅 운영 설정에 따라 녹화되지 않습니다.
+        </AlertBanner>
+      ) : null}
+
+      {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'recording' ? (
+        <AlertBanner title="통화 녹화 중" variant="info">
+          팬미팅 설정에 따라 이 통화가 녹화되고 있습니다.
+        </AlertBanner>
+      ) : null}
+
+      {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'uploading' ? (
+        <AlertBanner title="녹화 영상 저장 중" variant="info">
+          업로드가 끝날 때까지 이 화면을 닫지 말아 주세요.
+        </AlertBanner>
+      ) : null}
+
+      {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'failed' ? (
+        <AlertBanner title="녹화 영상을 아직 저장하지 못했습니다" variant="error">
+          <p>{recordingError ?? '브라우저에 임시 보관했으며 다시 업로드할 수 있습니다.'}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="rounded-[var(--radius-control)] border border-current px-3 py-2 font-semibold"
+              onClick={() => void handleRecordingRetry()}
+              type="button"
+            >
+              업로드 다시 시도
+            </button>
+            {departurePending && pendingRecordingPersisted ? (
+              <button
+                className="rounded-[var(--radius-control)] border border-current px-3 py-2 font-semibold"
+                onClick={continueWithPendingRecording}
+                type="button"
+              >
+                완료 화면에서 재시도
+              </button>
+            ) : null}
+          </div>
         </AlertBanner>
       ) : null}
 

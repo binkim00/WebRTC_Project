@@ -24,8 +24,8 @@ export const fanMeetingStatusContent: Record<
   APPLICATION_OPEN: { label: '모집 중', variant: 'success' },
   APPLICATION_CLOSED: { label: '모집 마감', variant: 'neutral' },
   READY: { label: '결과 발표', variant: 'warning' },
-  // 진행 중·종료는 팬 입장에서 더 이상 응모할 수 없다는 뜻이라 모집 마감으로 묶는다.
-  LIVE: { label: '모집 마감', variant: 'neutral' },
-  ENDED: { label: '모집 마감', variant: 'neutral' },
+  // 참여 단계는 모집 상태와 구분해 팬이 지금 무엇을 해야 하는지 바로 알 수 있게 한다.
+  LIVE: { label: '팬미팅 진행 중', variant: 'primary' },
+  ENDED: { label: '팬미팅 종료', variant: 'neutral' },
   CANCELED: { label: '취소', variant: 'danger' },
 }

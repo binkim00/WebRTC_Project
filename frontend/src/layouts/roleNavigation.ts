@@ -25,12 +25,10 @@ const influencerNavigation: readonly RoleNavigationItem[] = [
   { label: '공지사항', to: '/service-notices' },
 ]
 
-// 솔로 인플루언서는 팬미팅을 직접 운영하면서 진행도 하므로,
-// 진행용 '나의 팬미팅'(장비 점검·준비실 진입)과 운영용 '팬미팅 관리'를 함께 제공한다.
-// 홍보·응모는 팬미팅과 같은 한 건이라 '팬미팅 관리' 안에서 함께 처리한다.
+// 솔로 인플루언서는 생성·응모·대기열·호출·통화를 한 흐름에서 처리한다.
+// 별도 일정 화면과 관리 화면을 오가게 하지 않고 운영 목록을 진입점으로 통일한다.
 const soloInfluencerNavigation: readonly RoleNavigationItem[] = [
-  { label: '나의 팬미팅', to: '/influencer/fan-meetings' },
-  { label: '팬미팅 관리', to: '/manager/fan-meetings' },
+  { label: '팬미팅 운영', to: '/manager/fan-meetings' },
   { label: '팬미팅 이력', to: '/influencer/mypage/fan-meetings' },
   { label: '알림', to: '/notifications' },
   { label: '공지사항', to: '/service-notices' },

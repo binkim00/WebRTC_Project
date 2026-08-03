@@ -85,11 +85,7 @@ function parseMeeting(value: unknown): ManagerMeetingSummary {
   }
 }
 
-/**
- * 목록 경로는 저장된 Notion 공통 REST 규칙을 기준으로 분리한 연결 지점입니다.
- * 현재 로컬 backend에는 해당 컨트롤러가 없으므로, 백엔드 구현 시 경로와 DTO를
- * 최종 대조해야 합니다.
- */
+/** 공개 팬미팅 목록 API를 조회하며 서버가 지원하는 keyword/page/size 쿼리를 그대로 전달한다. */
 export async function fetchManagerMeetings(
   query: ManagerMeetingQuery,
   authToken: string,
@@ -149,9 +145,46 @@ export async function fetchOwnedMeetings(
   authToken: string,
   signal?: AbortSignal,
 ): Promise<ManagerMeetingPage> {
+  const keyword = query.keyword?.trim().toLocaleLowerCase('ko-KR')
+  if (keyword) {
+    // 소유 팬미팅 API는 keyword를 받지 않으므로 모든 서버 페이지를 읽은 뒤 로컬에서 정확히 검색·재페이지화한다.
+    const firstPage = await fetchOwnedMeetings(
+      { status: query.status, page: 0, size: 100 },
+      authToken,
+      signal,
+    )
+    const allMeetings = [...firstPage.content]
+
+    for (let page = 1; page < firstPage.totalPages; page += 1) {
+      signal?.throwIfAborted()
+      const nextPage = await fetchOwnedMeetings(
+        { status: query.status, page, size: 100 },
+        authToken,
+        signal,
+      )
+      allMeetings.push(...nextPage.content)
+    }
+
+    const filtered = allMeetings.filter((meeting) =>
+      meeting.title.toLocaleLowerCase('ko-KR').includes(keyword) ||
+      meeting.influencerName.toLocaleLowerCase('ko-KR').includes(keyword),
+    )
+    const page = Math.max(0, query.page ?? 0)
+    const size = Math.max(1, query.size ?? 20)
+    const totalPages = Math.max(1, Math.ceil(filtered.length / size))
+
+    return {
+      content: filtered.slice(page * size, (page + 1) * size),
+      page,
+      size,
+      totalElements: filtered.length,
+      totalPages,
+      hasNext: page + 1 < totalPages,
+    }
+  }
+
   const search = new URLSearchParams()
   if (query.status) search.set('status', query.status)
-  if (query.keyword?.trim()) search.set('keyword', query.keyword.trim())
   if (query.page !== undefined) search.set('page', String(query.page))
   if (query.size !== undefined) search.set('size', String(query.size))
 

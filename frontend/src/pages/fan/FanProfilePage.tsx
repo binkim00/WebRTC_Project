@@ -17,6 +17,7 @@ import {
   Button,
   Card,
   CardContent,
+  EmailVerificationNotice,
   Select,
   Spinner,
   TextField,
@@ -151,10 +152,28 @@ export function FanProfilePage() {
           {loadError}
         </AlertBanner>
       ) : null}
+      {/* 회원정보 수정과 이메일 인증 완료가 같은 배너를 쓰므로 제목은 중립적으로 둔다. */}
       {saveNotice ? (
-        <AlertBanner title="수정 완료" variant="success">
+        <AlertBanner title="처리 완료" variant="success">
           {saveNotice}
         </AlertBanner>
+      ) : null}
+
+      {/* 미인증이 확정된 경우에만 안내한다. 구버전 백엔드는 필드가 없어(undefined) 표시하지 않는다. */}
+      {profile?.emailVerified === false ? (
+        <Card>
+          <CardContent>
+            <EmailVerificationNotice
+              email={profile.email}
+              onVerified={() => {
+                setProfile((current) =>
+                  current ? { ...current, emailVerified: true } : current,
+                )
+                setSaveNotice('이메일 인증이 완료되었어요. 이제 팬미팅 응모에 참여할 수 있습니다.')
+              }}
+            />
+          </CardContent>
+        </Card>
       ) : null}
 
       {isLoading ? (

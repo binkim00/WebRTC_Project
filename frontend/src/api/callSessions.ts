@@ -36,6 +36,13 @@ export type ForceEndCallSessionResponse = {
   endReason: 'FORCED'
 }
 
+export type CallSessionEndResponse = {
+  callSessionId: number
+  status: 'ENDED'
+  endedAt: string
+  endReason: 'NORMAL'
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -116,6 +123,18 @@ function isForceEndCallSessionResponse(
   )
 }
 
+function isCallSessionEndResponse(value: unknown): value is CallSessionEndResponse {
+  if (!isRecord(value)) return false
+
+  return (
+    typeof value.callSessionId === 'number' &&
+    Number.isFinite(value.callSessionId) &&
+    value.status === 'ENDED' &&
+    isNonEmptyString(value.endedAt) &&
+    value.endReason === 'NORMAL'
+  )
+}
+
 function unwrapApiResponse(value: unknown): unknown {
   if (!isRecord(value) || typeof value.success !== 'boolean' || !('data' in value)) {
     return value
@@ -183,6 +202,9 @@ export async function forceEndCallSession(
   if (!reason) {
     throw new TypeError('강제 종료 사유는 비어 있을 수 없습니다.')
   }
+  if (reason.length > 255) {
+    throw new TypeError('강제 종료 사유는 255자 이내로 입력해 주세요.')
+  }
 
   const response = await apiRequest<unknown>(
     `/api/v1/call-sessions/${encodedId}/force-end`,
@@ -197,6 +219,29 @@ export async function forceEndCallSession(
   const data = unwrapApiResponse(response)
   if (!isForceEndCallSessionResponse(data)) {
     throw new TypeError('통화 강제 종료 응답 형식이 올바르지 않습니다.')
+  }
+
+  return data
+}
+
+/** 팬이 통화 종료를 선택했을 때 서버 세션도 정상 종료 상태로 전환한다. */
+export async function endCallSessionByFan(
+  callSessionId: string,
+  options: CallSessionRequestOptions = {},
+): Promise<CallSessionEndResponse> {
+  const encodedId = requireCallSessionId(callSessionId)
+  const response = await apiRequest<unknown>(
+    `/api/v1/call-sessions/${encodedId}/end`,
+    {
+      method: 'POST',
+      authToken: getRequestAuthToken(options),
+      signal: options.signal,
+    },
+  )
+
+  const data = unwrapApiResponse(response)
+  if (!isCallSessionEndResponse(data)) {
+    throw new TypeError('통화 정상 종료 응답 형식이 올바르지 않습니다.')
   }
 
   return data

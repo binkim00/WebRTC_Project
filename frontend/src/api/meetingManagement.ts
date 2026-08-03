@@ -55,6 +55,33 @@ export type FanMeetingTestControlRequest = {
   waitingRoomOpenAt?: string | null
 }
 
+/** 운영 화면에서 노출하는 시간 우회 전환 대상이다. 임의 회귀 상태는 의도적으로 제외한다. */
+export type ImmediateFanMeetingStatus =
+  | 'APPLICATION_OPEN'
+  | 'APPLICATION_CLOSED'
+  | 'LIVE'
+
+export type ImmediateTransitionContext = {
+  applicationStartAt?: string | null
+  applicationEndAt?: string | null
+  /** 테스트에서 전환 시각을 고정할 때 사용한다. */
+  now?: Date
+}
+
+/**
+ * 현재 백엔드가 제공하는 강제 전환 API를 운영 UI에서 안전하게 제한하기 위한 순방향 표다.
+ *
+ * 이 검사는 실수 방지용이며 최종 권한·상태 검증은 반드시 서버가 수행해야 한다. 프론트에서는
+ * 과거 상태 복원이나 종료 상태 재개 같은 위험한 조합을 요청할 수 없게 막는다.
+ */
+const IMMEDIATE_TRANSITIONS: Partial<
+  Record<FanMeetingStatus, readonly ImmediateFanMeetingStatus[]>
+> = {
+  PUBLISHED: ['APPLICATION_OPEN'],
+  APPLICATION_OPEN: ['APPLICATION_CLOSED'],
+  READY: ['LIVE'],
+}
+
 export type FanMeetingApplicationSetting = {
   enabled: boolean
   startAt: string | null
@@ -145,6 +172,90 @@ export async function controlFanMeetingForTest(
   })
 
   return unwrapEnvelope<FanMeetingManagementResponse>(response)
+}
+
+/**
+ * 예약 시각만 우회해 다음 운영 상태로 즉시 전환한다.
+ *
+ * 백엔드에 정식 transition 엔드포인트가 아직 없어 기존 `/test-control`을 제한적으로 사용한다.
+ * 서버의 실제 기간 검증과 시작 기록을 만족시키기 위해 해당 예약 시각을 현재로 맞춘 뒤 순방향
+ * 상태만 허용한다. 정식 명령 API가 추가되면 이 함수 내부만 교체하면 된다.
+ */
+function toServerLocalDateTime(date: Date): string {
+  // KST는 일광 절약 시간이 없으므로 UTC에 9시간을 더해 offset 없는 서버 LocalDateTime을 만든다.
+  return new Date(date.getTime() + 9 * 60 * 60_000).toISOString().slice(0, 23)
+}
+
+function serverLocalDateTimeMs(value?: string | null): number {
+  if (!value) return Number.NaN
+  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)
+  return new Date(hasOffset ? value : `${value}+09:00`).getTime()
+}
+
+export async function transitionFanMeetingImmediately(
+  meetingId: string | number,
+  currentStatus: FanMeetingStatus,
+  targetStatus: ImmediateFanMeetingStatus,
+  authToken: string,
+  context: ImmediateTransitionContext = {},
+  signal?: AbortSignal,
+): Promise<FanMeetingManagementResponse> {
+  const allowedTargets = IMMEDIATE_TRANSITIONS[currentStatus]
+  if (!allowedTargets?.includes(targetStatus)) {
+    throw new TypeError(
+      `${currentStatus} 상태에서 ${targetStatus} 상태로 즉시 전환할 수 없습니다.`,
+    )
+  }
+
+  const now = context.now ?? new Date()
+  const nowValue = toServerLocalDateTime(now)
+
+  if (targetStatus === 'APPLICATION_OPEN') {
+    const originalStart = serverLocalDateTimeMs(context.applicationStartAt)
+    const originalEnd = serverLocalDateTimeMs(context.applicationEndAt)
+    const originalDuration = originalEnd - originalStart
+    const closeAt = Number.isFinite(originalEnd) && originalEnd > now.getTime()
+      ? undefined
+      : toServerLocalDateTime(
+          new Date(
+            now.getTime() +
+              (Number.isFinite(originalDuration) && originalDuration > 0
+                ? originalDuration
+                : 24 * 60 * 60_000),
+          ),
+        )
+
+    // 응모 서비스가 상태와 기간을 모두 검사하므로 시작 시각도 현재로 옮긴다.
+    return controlFanMeetingForTest(
+      meetingId,
+      {
+        status: targetStatus,
+        applicationOpenAt: nowValue,
+        ...(closeAt ? { applicationCloseAt: closeAt } : {}),
+      },
+      authToken,
+      signal,
+    )
+  }
+
+  if (targetStatus === 'APPLICATION_CLOSED') {
+    // 실제 마감 기록과 상태가 어긋나지 않도록 예약 마감 시각도 현재로 맞춘다.
+    return controlFanMeetingForTest(
+      meetingId,
+      { status: targetStatus, applicationCloseAt: nowValue },
+      authToken,
+      signal,
+    )
+  }
+
+  // LIVE 강제 지정은 actualStartAt을 기록하지 않으므로 시작 시각을 현재로 옮긴 뒤 정식 start 명령을 호출한다.
+  await controlFanMeetingForTest(
+    meetingId,
+    { scheduledStartAt: nowValue },
+    authToken,
+    signal,
+  )
+  return startFanMeeting(meetingId, authToken, signal)
 }
 
 async function postCommand(

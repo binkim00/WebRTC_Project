@@ -1,5 +1,5 @@
 import { ArrowRightIcon, SignOutIcon, UserCircle } from '@phosphor-icons/react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AUTH_EXPIRED_EVENT,
@@ -10,6 +10,10 @@ import {
 } from './api/auth'
 import { TopNavigation } from './components'
 import { getRoleNavigation } from './layouts/roleNavigation'
+import {
+  canRoleAccessPath,
+  requiredCapabilityForPath,
+} from './router/roleCapabilities'
 import { isVideoCallPath } from './router/routeState'
 
 const publicNavigationItems = [
@@ -17,31 +21,23 @@ const publicNavigationItems = [
   { label: '로그인', to: '/login' },
 ] as const
 
-function canAccessRolePath(pathname: string, role: LoginRole) {
-  if (/^\/fan(?:\/|$)/.test(pathname)) {
-    return role === 'FAN'
-  }
-
-  if (/^\/influencer(?:\/|$)/.test(pathname)) {
-    return role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
-  }
-
-  if (/^\/manager(?:\/|$)/.test(pathname)) {
-    return role === 'MANAGER' || role === 'SOLO_INFLUENCER'
-  }
-
-  if (/^\/fan-meetings\/[^/]+\/(?:fans|statistics)\/?$/.test(pathname)) {
-    return role === 'MANAGER' || role === 'INFLUENCER' || role === 'SOLO_INFLUENCER'
-  }
-
-  return true
+/** 주소만으로도 스크린리더와 브라우저 탭이 현재 화면을 구분할 수 있게 제목을 만든다. */
+function pageTitleForPath(pathname: string): string {
+  if (pathname === '/') return 'MELLY'
+  if (pathname === '/login') return '로그인 | MELLY'
+  if (pathname === '/signup') return '회원가입 | MELLY'
+  if (pathname.startsWith('/manager/fan-meetings')) return '팬미팅 운영 | MELLY'
+  if (pathname.startsWith('/influencer/fan-meetings')) return '팬미팅 진행 | MELLY'
+  if (pathname.startsWith('/fan/events')) return '팬미팅 이벤트 | MELLY'
+  if (pathname.startsWith('/fan/')) return '팬 마이페이지 | MELLY'
+  if (pathname.startsWith('/notifications')) return '알림 | MELLY'
+  if (pathname.startsWith('/service-notices')) return '공지사항 | MELLY'
+  return 'MELLY'
 }
 
 function isRolePath(pathname: string) {
-  return (
-    /^\/(?:fan|influencer|manager)(?:\/|$)/.test(pathname) ||
-    /^\/fan-meetings\/[^/]+\/(?:fans|statistics)\/?$/.test(pathname)
-  )
+  // 로그인 필요 여부와 역할 권한 검사가 같은 URL-기능 매핑을 공유한다.
+  return requiredCapabilityForPath(pathname) !== undefined
 }
 
 /**
@@ -63,7 +59,11 @@ function isPublicBrowsePath(pathname: string) {
 
 /** 역할은 가리지 않지만 로그인은 필요한 경로다. 비로그인으로 열면 API가 401만 돌려준다. */
 function isAuthenticatedOnlyPath(pathname: string) {
-  return /^\/notifications\/?$/.test(pathname)
+  return (
+    /^\/notifications\/?$/.test(pathname) ||
+    // 장비 권한을 요청하고 점검 결과를 저장하는 화면은 공개 탐색 화면이 아니므로 로그인부터 확인한다.
+    /^\/fan-meetings\/[^/]+\/device-check\/?$/.test(pathname)
+  )
 }
 
 function roleLabel(role: LoginRole) {
@@ -111,6 +111,7 @@ function App() {
   const { pathname, search } = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const previousPathRef = useRef(pathname)
   const isCallPage = isVideoCallPath(pathname)
   const isLoginPage = pathname === '/login'
   const isSignupPage = pathname === '/signup'
@@ -151,6 +152,18 @@ function App() {
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
   }, [navigate, pathname, search])
 
+  useEffect(() => {
+    document.title = pageTitleForPath(pathname)
+
+    // 클라이언트 라우팅 뒤에는 새 화면의 본문 시작점을 알려 키보드·스크린리더 사용자가 헤매지 않게 한다.
+    if (previousPathRef.current !== pathname) {
+      window.requestAnimationFrame(() => {
+        document.getElementById('main-content')?.focus({ preventScroll: true })
+      })
+      previousPathRef.current = pathname
+    }
+  }, [pathname])
+
   async function handleLogout() {
     await logout().catch(() => undefined)
     navigate('/', { replace: true })
@@ -165,7 +178,8 @@ function App() {
     return <Navigate replace to={loginPath} />
   }
 
-  if (!isPublicBrowse && authSession && !canAccessRolePath(pathname, authSession.role)) {
+  // 역할 이름만 비교하지 않고 기능 권한으로 검사해 솔로 계정의 조직 관리 접근을 막는다.
+  if (!isPublicBrowse && authSession && !canRoleAccessPath(pathname, authSession.role)) {
     return <Navigate replace to="/403" />
   }
 
@@ -266,7 +280,10 @@ function App() {
         brand="MELLY"
         items={navigationItems}
       />}
+      {/* 스킵 링크와 라우트 전환 후 포커스 이동이 도착할 수 있는 공통 본문 앵커다. */}
       <main
+        id="main-content"
+        tabIndex={-1}
         className={
           isCallPage
             ? 'mx-auto w-full max-w-[1440px] flex-1 px-3 py-5 sm:px-6 lg:px-10 lg:py-6'

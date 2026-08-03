@@ -5,7 +5,7 @@ import {
   EyeSlashIcon,
 } from '@phosphor-icons/react'
 import { useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
   isSignupRole,
@@ -16,6 +16,7 @@ import {
   type SignupRequest,
   type SignupRole,
 } from '../../api/auth'
+import { maskEmail } from '../../api/emailVerifications'
 import {
   AlertBanner,
   Button,
@@ -49,11 +50,16 @@ function isPreferredLanguage(value: string): value is PreferredLanguage {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [submitError, setSubmitError] = useState<string>()
-  const [notice, setNotice] = useState<string>()
+  // 회원가입 화면이 넘겨준 안내(이메일 인증 필요 등)를 초기값으로 표시한다.
+  const [notice, setNotice] = useState<string | undefined>(() => {
+    const state = location.state as { notice?: string } | null
+    return typeof state?.notice === 'string' ? state.notice : undefined
+  })
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -69,7 +75,8 @@ export function LoginPage() {
         password: String(formData.get('password') ?? ''),
       })
 
-      saveAuthSession(response, formData.get('remember') === 'on')
+      // HttpOnly 쿠키 기반 장기 세션 API가 없으므로 토큰은 현재 탭 세션에만 보관한다.
+      saveAuthSession(response, false)
       const requestedPath = searchParams.get('redirect')
       const safeRequestedPath =
         requestedPath?.startsWith('/') && !requestedPath.startsWith('//')
@@ -156,19 +163,17 @@ export function LoginPage() {
             />
 
             <div className="flex items-center justify-between gap-4">
-              <Checkbox
-                className="size-4 rounded-[2px]"
-                label="로그인 상태 유지"
-                name="remember"
-              />
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                보안을 위해 로그인은 현재 탭에서만 유지됩니다.
+              </p>
               <button
-                className="text-sm font-bold text-[var(--color-primary-coral)] hover:underline"
-                onClick={() =>
-                  setNotice('비밀번호 찾기 API와 화면은 현재 Notion API 정의서에 명시되어 있지 않습니다.')
-                }
+                aria-disabled="true"
+                className="cursor-not-allowed text-sm font-bold text-[var(--color-text-tertiary)]"
+                disabled
+                title="비밀번호 재설정 API가 제공되면 사용할 수 있습니다."
                 type="button"
               >
-                비밀번호 찾기
+                비밀번호 찾기 준비 중
               </button>
             </div>
 
@@ -288,7 +293,18 @@ export function SignupPage() {
 
     try {
       await signup(request)
-      navigate('/login', { replace: true })
+      // 인증 메일 발송 API는 로그인이 필요하므로 여기서는 안내만 하고 발송은 로그인 후 화면에 맡긴다.
+      // 인증 요구는 팬의 응모에만 걸리고 백엔드 배포 상태에 따라 꺼져 있을 수 있어,
+      // 팬 가입일 때만 조건부 문구로 알린다. 실제 안내 카드는 미인증이 확인된 화면이 띄운다.
+      navigate('/login', {
+        replace: true,
+        state: {
+          notice:
+            request.role === 'FAN'
+              ? `가입이 완료되었어요. 팬미팅 응모에 이메일 인증이 필요한 경우, 로그인 후 마이페이지에서 ${maskEmail(request.email)} 주소로 인증 메일을 보낼 수 있어요.`
+              : '가입이 완료되었어요. 로그인해 주세요.',
+        },
+      })
     } catch (error: unknown) {
       setSubmitError(
         error instanceof ApiError || error instanceof TypeError

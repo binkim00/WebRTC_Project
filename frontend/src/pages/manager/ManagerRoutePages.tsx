@@ -10,9 +10,10 @@ import {
   VideoCamera,
 } from '@phosphor-icons/react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
-import { saveApplicationForm } from '../../api/applications'
+import { ApiError } from '../../api/ApiError'
+import { getApplicationForm, saveApplicationForm } from '../../api/applications'
 import { getAuthSession, replaceAuthSession } from '../../api/authSession'
 import { forceEndCallSession } from '../../api/callSessions'
 import type { PageResponse } from '../../api/envelope'
@@ -54,6 +55,15 @@ import {
   toDateTimeLocalValue,
   toErrorMessage,
 } from './meetingLifecycle'
+import {
+  clearMeetingCreateLocalDraft,
+  createInitialMeetingForm,
+  hasMeaningfulMeetingDraft,
+  nextDraftQuestionKey,
+  readMeetingCreateLocalDraft,
+  writeMeetingCreateLocalDraft,
+  type DraftFormQuestion,
+} from './managerMeetingCreateDraft'
 
 const DRAFT_PAGE_SIZE = 5
 
@@ -130,16 +140,11 @@ function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
   )
 }
 
-/** 생성 마법사에서 편집하는 응모 질문 하나의 상태다. */
-type DraftFormQuestion = {
-  key: number
-  questionText: string
-  questionType: 'SHORT_TEXT' | 'LONG_TEXT'
-  required: boolean
-}
-
 /** 백엔드가 허용하는 응모 질문 최대 개수다. */
 const MAX_DRAFT_QUESTIONS = 10
+
+/** 로컬 자동 저장이 너무 잦은 디스크 쓰기를 만들지 않도록 입력 종료를 기다리는 시간이다. */
+const LOCAL_DRAFT_SAVE_DELAY_MS = 500
 
 /** 생성 마법사의 단계 라벨과 각 단계의 제목이다. */
 const STEP_LABELS = ['기본 정보', '응모·운영 설정', '응모 폼', '최종 확인']
@@ -163,31 +168,24 @@ export function ManagerMeetingCreatePage() {
   const isInfluencerAccount = session?.role === 'INFLUENCER' || session?.role === 'SOLO_INFLUENCER'
   const resolvedInfluencerId = isInfluencerAccount ? session?.userId : undefined
   const influencerNickname = isInfluencerAccount ? session?.nickname : undefined
-  const [step, setStep] = useState(0)
-  const [form, setForm] = useState<FanMeetingForm>({
-    influencerId: resolvedInfluencerId ?? 0,
-    title: '',
-    description: '',
-    coverImageUrl: null,
-    scheduledStartAt: '',
-    application: {
-      enabled: true,
-      startAt: null,
-      endAt: null,
-      resultAnnouncementAt: null,
-      capacity: 30,
-    },
-    operation: {
-      queueOpenAt: '',
-      callDurationSec: 180,
-      recordingEnabled: true,
-      translationEnabled: false,
-    },
+  // 새로고침 직후 첫 렌더부터 로컬 초안을 사용해 빈 폼이 초안을 덮어쓰지 않게 한다.
+  const restoredLocalDraftRef = useRef(readMeetingCreateLocalDraft(session?.userId))
+  const restoredLocalDraft = restoredLocalDraftRef.current
+  const [step, setStep] = useState(restoredLocalDraft?.step ?? 0)
+  const [form, setForm] = useState<FanMeetingForm>(() => {
+    const restoredForm = restoredLocalDraft?.form
+    if (!restoredForm) return createInitialMeetingForm(resolvedInfluencerId)
+
+    return isInfluencerAccount && resolvedInfluencerId
+      ? { ...restoredForm, influencerId: resolvedInfluencerId }
+      : restoredForm
   })
-  const [createdMeetingId, setCreatedMeetingId] = useState<number>()
+  const [createdMeetingId, setCreatedMeetingId] = useState<number | undefined>(
+    restoredLocalDraft?.createdMeetingId,
+  )
   const [createdMeetingStatus, setCreatedMeetingStatus] = useState<
-    'DRAFT' | 'PUBLISHED'
-  >()
+    'DRAFT' | 'PUBLISHED' | undefined
+  >(restoredLocalDraft?.createdMeetingId ? 'DRAFT' : undefined)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string>()
   const [errorTitle, setErrorTitle] = useState('입력 확인')
@@ -215,9 +213,22 @@ export function ManagerMeetingCreatePage() {
   const [draftLoading, setDraftLoading] = useState(false)
   const [draftError, setDraftError] = useState<string>()
   // 응모 폼은 팬미팅 생성 응답의 meetingId가 나온 뒤에야 저장할 수 있어 마법사 안에 상태로 들고 있는다.
-  const [questions, setQuestions] = useState<DraftFormQuestion[]>([])
-  const [formDescription, setFormDescription] = useState('')
-  const nextQuestionKey = useRef(1)
+  const [questions, setQuestions] = useState<DraftFormQuestion[]>(
+    restoredLocalDraft?.questions ?? [],
+  )
+  const [formDescription, setFormDescription] = useState(
+    restoredLocalDraft?.formDescription ?? '',
+  )
+  const nextQuestionKey = useRef(
+    nextDraftQuestionKey(restoredLocalDraft?.questions ?? []),
+  )
+  const [localDraftState, setLocalDraftState] = useState<
+    'idle' | 'restored' | 'saving' | 'saved' | 'error'
+  >(restoredLocalDraft ? 'restored' : 'idle')
+  const [localDraftSavedAt, setLocalDraftSavedAt] = useState<string | undefined>(
+    restoredLocalDraft?.savedAt,
+  )
+  const allowNavigationRef = useRef(false)
   const scheduleErrors = getScheduleErrors(toScheduleInput(form))
   const applicationEndError = scheduleErrors.find((message) =>
     message.startsWith('응모 마감'),
@@ -228,6 +239,72 @@ export function ManagerMeetingCreatePage() {
   const queueOpenError = scheduleErrors.find((message) =>
     message.startsWith('대기열 오픈'),
   )
+  const hasLocalDraftContent = hasMeaningfulMeetingDraft(
+    form,
+    questions,
+    formDescription,
+    step,
+    createdMeetingId,
+  )
+  const shouldWarnOnLeave = hasLocalDraftContent && createdMeetingStatus !== 'PUBLISHED'
+  const shouldWarnOnLeaveRef = useRef(shouldWarnOnLeave)
+  shouldWarnOnLeaveRef.current = shouldWarnOnLeave
+  const navigationBlocker = useBlocker(
+    useCallback(
+      () => !allowNavigationRef.current && shouldWarnOnLeaveRef.current,
+      [],
+    ),
+  )
+
+  /** 각 단계 입력을 브라우저에 자동 저장해 새로고침이나 탭 종료 뒤에도 복구한다. */
+  useEffect(() => {
+    if (createdMeetingStatus === 'PUBLISHED') return
+
+    if (!hasLocalDraftContent) {
+      clearMeetingCreateLocalDraft(session?.userId)
+      setLocalDraftState('idle')
+      setLocalDraftSavedAt(undefined)
+      return
+    }
+
+    setLocalDraftState('saving')
+    const timer = window.setTimeout(() => {
+      const savedAt = writeMeetingCreateLocalDraft(session?.userId, {
+        step,
+        form,
+        questions,
+        formDescription,
+        createdMeetingId,
+      })
+
+      setLocalDraftState(savedAt ? 'saved' : 'error')
+      if (savedAt) setLocalDraftSavedAt(savedAt)
+    }, LOCAL_DRAFT_SAVE_DELAY_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [
+    createdMeetingId,
+    createdMeetingStatus,
+    form,
+    formDescription,
+    hasLocalDraftContent,
+    questions,
+    session?.userId,
+    step,
+  ])
+
+  /** 브라우저 새로고침·탭 닫기에서도 작성 중임을 한 번 더 알린다. */
+  useEffect(() => {
+    if (!shouldWarnOnLeave) return
+
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      // 일부 브라우저는 returnValue 지정이 있어야 기본 이탈 확인 창을 표시한다.
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [shouldWarnOnLeave])
 
   async function openDraftDialog() {
     setDraftDialogOpen(true)
@@ -290,6 +367,34 @@ export function ManagerMeetingCreatePage() {
         token,
       )
       const { meeting } = detail
+      let loadedFormDescription = ''
+      let loadedQuestions: DraftFormQuestion[] = []
+
+      if (meeting.application.enabled) {
+        try {
+          // 팬미팅 본문과 별도인 응모 폼 API도 함께 복구해야 저장 시 기존 질문을 잃지 않는다.
+          const applicationForm = await getApplicationForm(
+            numericMeetingId,
+            undefined,
+            token,
+          )
+          loadedFormDescription = applicationForm.formDescription ?? ''
+          loadedQuestions = applicationForm.questions
+            .slice()
+            .sort((left, right) => left.displayOrder - right.displayOrder)
+            .map((question) => ({
+              key: nextQuestionKey.current++,
+              questionId: question.questionId,
+              questionText: question.questionText,
+              questionType:
+                question.questionType === 'LONG_TEXT' ? 'LONG_TEXT' : 'SHORT_TEXT',
+              required: question.required,
+            }))
+        } catch (reason) {
+          // 아직 응모 폼을 저장하지 않은 서버 초안은 빈 폼으로 계속 편집할 수 있다.
+          if (!(reason instanceof ApiError && reason.status === 404)) throw reason
+        }
+      }
 
       setForm({
         influencerId: meeting.influencerId,
@@ -322,10 +427,13 @@ export function ManagerMeetingCreatePage() {
           maxRecallCount: meeting.operation.maxRecallCount,
         },
       })
+      setFormDescription(loadedFormDescription)
+      setQuestions(loadedQuestions)
       setCreatedMeetingId(meeting.meetingId)
       setCreatedMeetingStatus('DRAFT')
       setStep(0)
       setError(undefined)
+      setLocalDraftState('saving')
       setDraftDialogOpen(false)
     } catch (reason) {
       setDraftError(
@@ -354,6 +462,31 @@ export function ManagerMeetingCreatePage() {
     if (form.application.enabled && questions.some((question) => !question.questionText.trim())) {
       setErrorTitle('입력 확인')
       setError('응모 질문 내용을 모두 입력하거나 빈 질문을 삭제해 주세요.')
+      return
+    }
+
+    if (questions.length > MAX_DRAFT_QUESTIONS) {
+      setErrorTitle('입력 확인')
+      setError(`응모 질문은 최대 ${MAX_DRAFT_QUESTIONS}개까지 등록할 수 있습니다.`)
+      return
+    }
+
+    if (publishAfterCreate && !form.application.enabled) {
+      setErrorTitle('참가자 등록 경로가 필요합니다')
+      setError(
+        '현재 백엔드에는 운영자가 참가자를 직접 추가하는 API가 없어 응모 없는 팬미팅을 발행하면 시작할 수 없습니다. 응모를 사용하거나, 지금은 초안으로만 저장해 주세요.',
+      )
+      return
+    }
+
+    const invalidPolicyValue = [
+      form.operation.reconnectGraceSec,
+      form.operation.earlyStartMinutes,
+      form.operation.maxRecallCount,
+    ].some((value) => value != null && (!Number.isInteger(value) || value < 0))
+    if (invalidPolicyValue) {
+      setErrorTitle('입력 확인')
+      setError('진행 정책 값은 비워 두거나 0 이상의 정수로 입력해 주세요.')
       return
     }
 
@@ -417,7 +550,7 @@ export function ManagerMeetingCreatePage() {
           {
             formDescription: formDescription.trim() || null,
             questions: questions.map((question, index) => ({
-              questionId: null,
+              questionId: question.questionId ?? null,
               questionText: question.questionText.trim(),
               questionType: question.questionType,
               required: question.required,
@@ -430,8 +563,22 @@ export function ManagerMeetingCreatePage() {
 
       if (publishAfterCreate) {
         await publishFanMeeting(meetingId, token)
+        // 발행이 끝난 완성본은 더 이상 복구 대상이 아니므로 로컬 초안을 먼저 지운다.
+        clearMeetingCreateLocalDraft(session?.userId)
+        allowNavigationRef.current = true
         setCreatedMeetingStatus('PUBLISHED')
         navigate(`/manager/fan-meetings/${meetingId}`)
+      } else {
+        // 서버 초안 ID까지 즉시 기록해야 직후에 이탈해도 같은 초안을 갱신하며 중복 생성하지 않는다.
+        const savedAt = writeMeetingCreateLocalDraft(session?.userId, {
+          step,
+          form,
+          questions,
+          formDescription,
+          createdMeetingId: meetingId,
+        })
+        setLocalDraftState(savedAt ? 'saved' : 'error')
+        if (savedAt) setLocalDraftSavedAt(savedAt)
       }
     } catch (reason) {
       setErrorTitle(
@@ -456,11 +603,38 @@ export function ManagerMeetingCreatePage() {
     event.preventDefault()
 
     if (step < LAST_STEP) {
+      if (step === 0 && !form.title.trim()) {
+        setErrorTitle('입력 확인')
+        setError('팬미팅명을 입력해 주세요.')
+        return
+      }
+      if (step === 2 && questions.some((question) => !question.questionText.trim())) {
+        setErrorTitle('입력 확인')
+        setError('응모 질문 내용을 모두 입력하거나 빈 질문을 삭제해 주세요.')
+        return
+      }
+
+      setError(undefined)
       setStep(step + 1)
       return
     }
 
     await saveMeeting(true)
+  }
+
+  /** SPA 내부 링크로 나갈 때 최신 입력을 즉시 저장한 뒤 사용자가 선택한 이동을 계속한다. */
+  function proceedBlockedNavigation() {
+    if (navigationBlocker.state !== 'blocked') return
+
+    writeMeetingCreateLocalDraft(session?.userId, {
+      step,
+      form,
+      questions,
+      formDescription,
+      createdMeetingId,
+    })
+    allowNavigationRef.current = true
+    navigationBlocker.proceed()
   }
 
   return (
@@ -477,6 +651,36 @@ export function ManagerMeetingCreatePage() {
           </Link>
         ) : null}
       </div>
+      <div
+        aria-live="polite"
+        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--color-divider)] bg-white px-4 py-3 text-sm"
+        role="status"
+      >
+        <span className="font-semibold">
+          {localDraftState === 'saving'
+            ? '브라우저에 임시 저장 중…'
+            : localDraftState === 'error'
+              ? '브라우저 임시 저장 실패'
+              : localDraftSavedAt
+                ? `브라우저 임시 저장 완료 · ${formatDateTime(localDraftSavedAt)}`
+                : '입력을 시작하면 이 브라우저에 자동 임시 저장됩니다.'}
+        </span>
+        <span className="text-xs text-[var(--color-text-secondary)]">
+          서버의 ‘초안 저장’과 별개이며 발행 성공 시 자동 삭제됩니다.
+        </span>
+      </div>
+      {restoredLocalDraft ? (
+        <AlertBanner title="브라우저 임시 초안을 복구했습니다" variant="success">
+          {formatDateTime(restoredLocalDraft.savedAt)}에 저장한 STEP {restoredLocalDraft.step + 1}의
+          입력을 이어서 표시합니다. 서버에 저장한 초안은 ‘초안 확인’에서 별도로 불러올 수 있습니다.
+        </AlertBanner>
+      ) : null}
+      {localDraftState === 'error' ? (
+        <AlertBanner title="브라우저 임시 저장을 사용할 수 없습니다" variant="warning">
+          저장소가 차단되었거나 용량이 부족할 수 있습니다. 페이지를 나가기 전에 마지막 단계의
+          ‘초안 저장’을 눌러 서버에 저장해 주세요.
+        </AlertBanner>
+      ) : null}
       <AlertBanner title="홍보·응모와 팬미팅은 같은 한 건입니다" variant="info">
         여기에서 만든 팬미팅이 곧 팬에게 보이는 홍보·응모 페이지입니다.
         발행 → 응모 접수 → 당첨자 추첨 → 결과 발표 → 진행 순서로 상태가 바뀌며,
@@ -487,7 +691,7 @@ export function ManagerMeetingCreatePage() {
         <Card>
           <CardHeader>
             <Badge variant="primary">STEP {step + 1}</Badge>
-            <CardTitle as="h2" className="mt-3">{STEP_TITLES[step]}</CardTitle>
+            <CardTitle as="h2" className="mt-3">{STEP_TITLES[step] ?? '팬미팅 만들기'}</CardTitle>
           </CardHeader>
           <CardContent>
             {step === 0 ? (
@@ -560,10 +764,11 @@ export function ManagerMeetingCreatePage() {
                       <TextField label="응모 정원" min={1} required reserveMessageSpace type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
                     </div>
                   ) : (
-                    <p className="text-sm text-[var(--color-text-secondary)]">
-                      응모를 사용하지 않으면 기간과 정원은 서버 규약에 맞게 비활성 값으로 전송됩니다.
-                      생성 이후에는 응모 사용 여부를 바꿀 수 없으니 신중히 선택해 주세요.
-                    </p>
+                    <AlertBanner title="응모 없이 발행할 수 없습니다" variant="warning">
+                      현재 백엔드에는 운영자가 참가자를 직접 추가하는 API가 없습니다. 응모를 끄면
+                      참가자와 대기열을 만들 수 없어 팬미팅을 시작할 수 있으므로, 이 설정은 서버
+                      초안으로만 저장할 수 있습니다. 실제 운영할 팬미팅은 응모를 켜 주세요.
+                    </AlertBanner>
                   )}
                 </section>
                 <section className="grid gap-5 sm:grid-cols-2">
@@ -576,6 +781,53 @@ export function ManagerMeetingCreatePage() {
                 <div className="grid gap-3 rounded-xl border border-[var(--color-divider)] p-4 sm:col-span-2">
                   <Checkbox checked={form.operation.recordingEnabled} label="통화 녹화를 사용합니다." onChange={(event) => setForm({ ...form, operation: { ...form.operation, recordingEnabled: event.target.checked } })} />
                   <Checkbox checked={form.operation.translationEnabled} label="실시간 번역을 사용합니다." onChange={(event) => setForm({ ...form, operation: { ...form.operation, translationEnabled: event.target.checked } })} />
+                </div>
+                <div className="grid gap-5 sm:col-span-2 sm:grid-cols-3">
+                  <TextField
+                    helperText="비우면 서버 기본값을 사용합니다."
+                    label="재접속 허용 시간(초)"
+                    min={0}
+                    onChange={(event) => setForm({
+                      ...form,
+                      operation: {
+                        ...form.operation,
+                        reconnectGraceSec: event.target.value === '' ? null : Number(event.target.value),
+                      },
+                    })}
+                    step={1}
+                    type="number"
+                    value={form.operation.reconnectGraceSec ?? ''}
+                  />
+                  <TextField
+                    helperText="비우면 서버 기본값을 사용합니다."
+                    label="조기 시작 허용(분)"
+                    min={0}
+                    onChange={(event) => setForm({
+                      ...form,
+                      operation: {
+                        ...form.operation,
+                        earlyStartMinutes: event.target.value === '' ? null : Number(event.target.value),
+                      },
+                    })}
+                    step={1}
+                    type="number"
+                    value={form.operation.earlyStartMinutes ?? ''}
+                  />
+                  <TextField
+                    helperText="비우면 서버 기본값을 사용합니다."
+                    label="최대 재호출 횟수"
+                    min={0}
+                    onChange={(event) => setForm({
+                      ...form,
+                      operation: {
+                        ...form.operation,
+                        maxRecallCount: event.target.value === '' ? null : Number(event.target.value),
+                      },
+                    })}
+                    step={1}
+                    type="number"
+                    value={form.operation.maxRecallCount ?? ''}
+                  />
                 </div>
                 </section>
               </div>
@@ -697,21 +949,81 @@ export function ManagerMeetingCreatePage() {
             ) : null}
 
             {step === 3 ? (
-              <div className="grid gap-5 sm:grid-cols-[1fr_.9fr]">
-                <div className="rounded-xl bg-[var(--color-surface-page)] p-6">
-                  <p className="text-sm font-bold text-[var(--color-primary-coral)]">홍보·응모 페이지 미리보기</p>
-                  <h3 className="mt-3 text-2xl font-black">{form.title}</h3>
-                  <p className="mt-3 text-sm text-[var(--color-text-secondary)]">{form.description?.trim() || '등록된 소개가 없습니다.'}</p>
-                </div>
-                <dl className="grid gap-3 text-sm">
-                  <div className="flex justify-between border-b py-3"><dt>인플루언서</dt><dd className="font-bold">{isInfluencerAccount ? `${influencerNickname} (#${resolvedInfluencerId})` : `사용자 #${form.influencerId || '-'}`}</dd></div>
-                  <div className="flex justify-between border-b py-3"><dt>예정 팬미팅</dt><dd className="font-bold">{form.scheduledStartAt}</dd></div>
-                  <div className="flex justify-between border-b py-3"><dt>응모</dt><dd className="font-bold">{form.application.enabled ? `${form.application.capacity}명 모집` : '사용 안 함'}</dd></div>
-                  <div className="flex justify-between border-b py-3"><dt>응모 질문</dt><dd className="font-bold">{form.application.enabled ? `${questions.length}개` : '-'}</dd></div>
-                  <div className="flex justify-between border-b py-3"><dt>대기열 오픈</dt><dd className="font-bold">{form.operation.queueOpenAt}</dd></div>
-                  <div className="flex justify-between border-b py-3"><dt>통화 시간</dt><dd className="font-bold">{form.operation.callDurationSec}초</dd></div>
-                  <div className="flex justify-between border-b py-3"><dt>녹화 / 번역</dt><dd className="font-bold">{form.operation.recordingEnabled ? '녹화 사용' : '녹화 미사용'} · {form.operation.translationEnabled ? '번역 사용' : '번역 미사용'}</dd></div>
-                </dl>
+              <div className="grid gap-5">
+                <section className="grid gap-5 rounded-xl bg-[var(--color-surface-page)] p-6 sm:grid-cols-[1fr_.9fr]">
+                  <div>
+                    <p className="text-sm font-bold text-[var(--color-primary-coral)]">기본 정보</p>
+                    <h3 className="mt-3 text-2xl font-black">{form.title}</h3>
+                    <p className="mt-3 whitespace-pre-wrap text-sm text-[var(--color-text-secondary)]">
+                      {form.description?.trim() || '등록된 소개가 없습니다.'}
+                    </p>
+                    <p className="mt-4 break-all text-xs text-[var(--color-text-secondary)]">
+                      커버 이미지: {form.coverImageUrl?.trim() || '등록 안 함'}
+                    </p>
+                  </div>
+                  <dl className="grid gap-3 text-sm">
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>인플루언서</dt><dd className="text-right font-bold">{isInfluencerAccount ? `${influencerNickname} (#${resolvedInfluencerId})` : `사용자 #${form.influencerId || '-'}`}</dd></div>
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>팬미팅 시작</dt><dd className="text-right font-bold">{formatDateTime(form.scheduledStartAt)}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="grid gap-4 rounded-xl border border-[var(--color-divider)] p-5">
+                  <h3 className="text-lg font-black">응모 일정과 설정</h3>
+                  {form.application.enabled ? (
+                    <>
+                      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                        <div className="flex justify-between gap-4 border-b py-3"><dt>응모 시작</dt><dd className="text-right font-bold">{formatDateTime(form.application.startAt)}</dd></div>
+                        <div className="flex justify-between gap-4 border-b py-3"><dt>응모 마감</dt><dd className="text-right font-bold">{formatDateTime(form.application.endAt)}</dd></div>
+                        <div className="flex justify-between gap-4 border-b py-3"><dt>결과 발표</dt><dd className="text-right font-bold">{formatDateTime(form.application.resultAnnouncementAt)}</dd></div>
+                        <div className="flex justify-between gap-4 border-b py-3"><dt>모집 정원</dt><dd className="text-right font-bold">{form.application.capacity}명</dd></div>
+                      </dl>
+                      <div className="rounded-xl bg-[var(--color-surface-page)] p-4 text-sm">
+                        <strong>응모 폼 안내</strong>
+                        <p className="mt-2 whitespace-pre-wrap text-[var(--color-text-secondary)]">
+                          {formDescription.trim() || '등록된 안내 문구가 없습니다.'}
+                        </p>
+                      </div>
+                      {questions.length > 0 ? (
+                        <ol className="grid gap-3">
+                          {questions.map((question, index) => (
+                            <li className="rounded-xl border border-[var(--color-divider)] p-4" key={question.key}>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="neutral">질문 {index + 1}</Badge>
+                                <Badge variant={question.required ? 'primary' : 'neutral'}>
+                                  {question.required ? '필수' : '선택'}
+                                </Badge>
+                                <span className="text-xs text-[var(--color-text-secondary)]">
+                                  {question.questionType === 'LONG_TEXT' ? '장문형' : '단답형'}
+                                </span>
+                              </div>
+                              <p className="mt-3 whitespace-pre-wrap text-sm font-semibold">{question.questionText}</p>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <p className="text-sm text-[var(--color-text-secondary)]">등록된 응모 질문이 없습니다.</p>
+                      )}
+                    </>
+                  ) : (
+                    <AlertBanner title="응모 사용 안 함 · 발행 불가" variant="warning">
+                      참가자를 직접 등록할 백엔드 API가 없어 현재 설정으로는 운영을 시작할 수 없습니다.
+                      초안으로 저장하거나 이전 단계에서 응모를 켜 주세요.
+                    </AlertBanner>
+                  )}
+                </section>
+
+                <section className="grid gap-4 rounded-xl border border-[var(--color-divider)] p-5">
+                  <h3 className="text-lg font-black">영상통화 운영 정책</h3>
+                  <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>대기열 오픈</dt><dd className="text-right font-bold">{formatDateTime(form.operation.queueOpenAt)}</dd></div>
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>1인 통화 시간</dt><dd className="text-right font-bold">{form.operation.callDurationSec}초</dd></div>
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>통화 녹화</dt><dd className="text-right font-bold">{form.operation.recordingEnabled ? '사용' : '사용 안 함'}</dd></div>
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>실시간 번역</dt><dd className="text-right font-bold">{form.operation.translationEnabled ? '사용' : '사용 안 함'}</dd></div>
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>재접속 허용</dt><dd className="text-right font-bold">{form.operation.reconnectGraceSec == null ? '서버 기본값' : `${form.operation.reconnectGraceSec}초`}</dd></div>
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>조기 시작 허용</dt><dd className="text-right font-bold">{form.operation.earlyStartMinutes == null ? '서버 기본값' : `${form.operation.earlyStartMinutes}분`}</dd></div>
+                    <div className="flex justify-between gap-4 border-b py-3"><dt>최대 재호출</dt><dd className="text-right font-bold">{form.operation.maxRecallCount == null ? '서버 기본값' : `${form.operation.maxRecallCount}회`}</dd></div>
+                  </dl>
+                </section>
               </div>
             ) : null}
           </CardContent>
@@ -750,7 +1062,8 @@ export function ManagerMeetingCreatePage() {
           <FormActions
             nextDisabled={
               createdMeetingStatus === 'PUBLISHED' ||
-              (step === 1 && scheduleErrors.length > 0)
+              (step === 1 && scheduleErrors.length > 0) ||
+              (step === LAST_STEP && !form.application.enabled)
             }
             nextLoading={submitting}
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
@@ -773,7 +1086,7 @@ export function ManagerMeetingCreatePage() {
         </div>
       </form>
       <Dialog
-        description="현재 계정으로 저장한 미게시 팬미팅입니다."
+        description="현재 계정으로 서버에 저장한 미게시 팬미팅입니다. 불러오면 지금 작성 중인 브라우저 임시 초안을 대체합니다."
         footer={
           <Button
             onClick={() => setDraftDialogOpen(false)}
@@ -838,6 +1151,33 @@ export function ManagerMeetingCreatePage() {
             ) : null}
           </div>
         )}
+      </Dialog>
+      <Dialog
+        description="작성 중인 내용은 이 브라우저에 임시 저장되어 나중에 복구할 수 있습니다. 그래도 현재 화면에서 나가시겠습니까?"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              onClick={() => {
+                if (navigationBlocker.state === 'blocked') navigationBlocker.reset()
+              }}
+              variant="secondary"
+            >
+              계속 작성
+            </Button>
+            <Button onClick={proceedBlockedNavigation} variant="danger">
+              임시 저장 후 나가기
+            </Button>
+          </div>
+        }
+        onOpenChange={(open) => {
+          if (!open && navigationBlocker.state === 'blocked') navigationBlocker.reset()
+        }}
+        open={navigationBlocker.state === 'blocked'}
+        title="팬미팅 작성을 중단할까요?"
+      >
+        <p className="text-sm text-[var(--color-text-secondary)]">
+          서버에 안전하게 보관하려면 최종 확인 단계에서 ‘초안 저장’을 사용해 주세요.
+        </p>
       </Dialog>
     </div>
   )
@@ -1261,13 +1601,15 @@ export function ManagerMyPage() {
                 >
                   회원정보 수정
                 </Button>
-                {/* TODO: 비밀번호 변경 API 연결 */}
+                {/* 백엔드에 비밀번호 재설정 계약이 없어 무동작 버튼을 비활성 안내로 바꾼다. */}
                 <Button
+                  disabled
                   leadingIcon={<Key aria-hidden size={17} weight="bold" />}
                   size="sm"
+                  title="비밀번호 변경 API가 제공되면 사용할 수 있습니다."
                   variant="secondary"
                 >
-                  비밀번호 변경
+                  비밀번호 변경 준비 중
                 </Button>
               </div>
             </CardContent>
@@ -1499,7 +1841,8 @@ export function ManagerRiskIncidentPage() {
             <CardTitle as="h2" className="mt-3">현재 영상통화 강제 종료</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-5">
-            <Textarea label="강제 종료 사유" required rows={4} value={reason} onChange={(event) => setReason(event.target.value)} />
+            {/* 백엔드 ForceEndCallRequest의 255자 제한을 입력 단계에서 동일하게 적용한다. */}
+            <Textarea label="강제 종료 사유" maxLength={255} required rows={4} value={reason} onChange={(event) => setReason(event.target.value)} />
             <Button disabled={submitting || ended || !reason.trim()} onClick={forceEnd} variant="danger">
               {ended ? '강제 종료 완료' : submitting ? '종료 처리 중…' : '현재 통화 강제 종료'}
             </Button>

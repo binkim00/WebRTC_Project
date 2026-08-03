@@ -12,13 +12,13 @@ import {
   Avatar,
   Breadcrumbs,
   Button,
-  CallSummaryPanel,
   Card,
   CardContent,
   Spinner,
   Tabs,
   Textarea,
 } from '../../components'
+import { CallSummaryPanel } from '../../components/call/CallSummaryPanel'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import {
@@ -37,7 +37,6 @@ type RecordTab = 'memo' | 'summary'
 
 const MEMO_MAX_LENGTH = 300
 const PARTICIPANT_LOOKUP_SIZE = 50
-const PARTICIPANT_LOOKUP_MAX_PAGES = 5
 
 function formatDate(value?: string) {
   if (!value) return '확인 불가'
@@ -131,7 +130,8 @@ export function InfluencerFanRecordPage() {
     // 경로의 fanId는 팬 회원 ID이므로 참가자 목록에서 일치하는 참가자를 찾는다.
     void (async () => {
       try {
-        for (let page = 0; page < PARTICIPANT_LOOKUP_MAX_PAGES; page += 1) {
+        let page = 0
+        while (!controller.signal.aborted) {
           const response = await fetchParticipants(
             fanMeetingId,
             { page, size: PARTICIPANT_LOOKUP_SIZE },
@@ -143,7 +143,8 @@ export function InfluencerFanRecordPage() {
             setParticipant(match)
             return
           }
-          if (!response.hasNext) return
+          if (!response.hasNext || page + 1 >= response.totalPages) return
+          page += 1
         }
       } catch {
         // 팬 프로필 보조 정보 조회 실패는 메모 기능을 막지 않는다.
@@ -154,19 +155,26 @@ export function InfluencerFanRecordPage() {
   }, [authToken, fanId, fanMeetingId])
 
   useEffect(() => {
-    if (!memos.length) {
+    const firstMemo = memos.at(0)
+    if (!firstMemo) {
       setSelectedMemoId(undefined)
       return
     }
     if (!memos.some((memo) => memo.memoId === selectedMemoId)) {
-      setSelectedMemoId(memos[0].memoId)
+      // noUncheckedIndexedAccess에서도 첫 항목 존재를 확인한 뒤 선택한다.
+      setSelectedMemoId(firstMemo.memoId)
     }
   }, [memos, selectedMemoId])
 
   const selectedMemo = memos.find((memo) => memo.memoId === selectedMemoId)
 
   const handleTabChange = (nextTab: string) => {
-    setSearchParams({ tab: nextTab })
+    // 탭만 바꿀 때 현재 통화의 callSessionId를 지우지 않아 요약 API 연결을 유지한다.
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.set('tab', nextTab)
+      return next
+    })
     setEditing(false)
   }
 
@@ -260,6 +268,8 @@ export function InfluencerFanRecordPage() {
   const tabItems = [
     {
       value: 'memo',
+      tabId: 'fan-record-memo-tab',
+      panelId: 'fan-record-memo-panel',
       label: (
         <span className="inline-flex items-center gap-2">
           <NotePencil aria-hidden size={18} weight="bold" />
@@ -272,12 +282,14 @@ export function InfluencerFanRecordPage() {
     },
     {
       value: 'summary',
+      tabId: 'fan-record-summary-tab',
+      panelId: 'fan-record-summary-panel',
       label: (
         <span className="inline-flex items-center gap-2">
           <ChatCircleText aria-hidden size={18} weight="bold" />
           대화 요약
           <span className="rounded-full bg-[var(--color-surface-page)] px-2 py-0.5 text-xs">
-            0
+            {callSessionId ? 1 : 0}
           </span>
         </span>
       ),
@@ -370,6 +382,13 @@ export function InfluencerFanRecordPage() {
               value={activeTab}
             />
 
+            {/* 탭 버튼과 현재 콘텐츠를 WAI-ARIA tab/tabpanel 관계로 연결한다. */}
+            <div
+              aria-labelledby={`fan-record-${activeTab}-tab`}
+              id={`fan-record-${activeTab}-panel`}
+              role="tabpanel"
+              tabIndex={0}
+            >
             {isMemoTab ? (
               <div className="grid min-h-[460px] md:grid-cols-[320px_minmax(0,1fr)]">
                 <section
@@ -535,9 +554,9 @@ export function InfluencerFanRecordPage() {
               <CallSummaryPanel callSessionId={callSessionId} />
             ) : (
               /*
-               * TODO(AI-001): 참가자로 통화 세션을 찾는 백엔드 조회가 없어 아직 자동 연결하지 못한다.
-               * GET /api/v1/call-sessions/{id}/summary 는 연결돼 있으므로, 참가자 응답에
-               * callSessionId가 추가되거나 (팬미팅, 팬) 기준 조회가 생기면 이 분기는 지울 수 있다.
+               * 백엔드 계약상 과거 참가자로 callSessionId를 찾는 조회 API가 없다.
+               * 현재 통화는 목록 화면이 전달한 세션으로 실제 summary API에 연결하고,
+               * 과거 통화는 서버가 참가자 응답에 세션 ID를 제공할 때까지 명시적 빈 상태로 둔다.
                */
               <div className="grid min-h-[460px] place-items-center px-6 text-center">
                 <div className="grid justify-items-center gap-4">
@@ -548,14 +567,15 @@ export function InfluencerFanRecordPage() {
                     weight="duotone"
                   />
                   <div>
-                    <p className="text-lg font-extrabold">연결된 통화가 없습니다</p>
+                    <p className="text-lg font-extrabold">과거 통화 요약 조회를 지원하지 않습니다</p>
                     <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                      이 팬과의 통화 세션을 찾을 수 없어 요약을 표시할 수 없습니다.
+                      서버가 참가자별 통화 세션 ID를 제공하지 않아 완료된 통화의 요약을 불러올 수 없습니다.
                     </p>
                   </div>
                 </div>
               </div>
             )}
+            </div>
           </Card>
 
           {actionError ? (

@@ -90,6 +90,9 @@ export function DeviceCheckPage() {
   const [searchParams] = useSearchParams()
   const isVisualPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
   const [isPlayingTestSound, setIsPlayingTestSound] = useState(false)
+  const [speakerTestPassed, setSpeakerTestPassed] = useState(false)
+  const [speakerTestError, setSpeakerTestError] = useState<string>()
+  const [networkReady, setNetworkReady] = useState(() => navigator.onLine)
   const [isEnteringQueue, setIsEnteringQueue] = useState(false)
   const [queueError, setQueueError] = useState<string>()
   const [deviceCheckWarning, setDeviceCheckWarning] = useState<string>()
@@ -112,10 +115,22 @@ export function DeviceCheckPage() {
   } = useMediaDeviceCheck()
 
   useEffect(() => {
-    if (!isVisualPreview) {
-      void start()
+    // 브라우저의 온라인 상태가 바뀌면 입장 가능 여부도 즉시 다시 계산한다.
+    const handleOnline = () => setNetworkReady(true)
+    const handleOffline = () => setNetworkReady(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
     }
-  }, [isVisualPreview, start])
+  }, [])
+
+  useEffect(() => {
+    // 출력 장치를 바꿨다면 새 장치에서 소리가 나는지 다시 확인해야 한다.
+    setSpeakerTestPassed(false)
+    setSpeakerTestError(undefined)
+  }, [selectedSpeakerId])
 
   useEffect(() => {
     if (!fanMeetingId?.trim() || isVisualPreview) return
@@ -173,13 +188,16 @@ export function DeviceCheckPage() {
   const audioTrackReady =
     isVisualPreview || stream?.getAudioTracks().some((track) => track.readyState === 'live')
   const displayedAudioLevel = isVisualPreview ? 0.64 : audioLevel
-  const networkReady = navigator.onLine
-  const allReady = Boolean(videoTrackReady && audioTrackReady && networkReady)
+  const speakerReady = isVisualPreview || speakerTestPassed
+  const allReady = Boolean(
+    videoTrackReady && audioTrackReady && speakerReady && networkReady,
+  )
 
   async function playTestSound() {
     if (isPlayingTestSound) return
 
     setIsPlayingTestSound(true)
+    setSpeakerTestError(undefined)
 
     const audio = new Audio()
     let audioContext: AudioContext | null = null
@@ -212,8 +230,13 @@ export function DeviceCheckPage() {
       oscillator.stop(audioContext.currentTime + 0.8)
 
       await new Promise<void>((resolve) => window.setTimeout(resolve, 900))
+      setSpeakerTestPassed(true)
     } catch (error) {
       console.warn('스피커 테스트를 재생하지 못했습니다.', error)
+      setSpeakerTestPassed(false)
+      setSpeakerTestError(
+        '테스트 소리를 재생하지 못했습니다. 브라우저의 소리 권한과 출력 장치를 확인해 주세요.',
+      )
     } finally {
       try {
         oscillator?.stop()
@@ -250,7 +273,8 @@ export function DeviceCheckPage() {
 
     // 장비 점검 결과를 기록한다. 서버 저장에 실패해도 입장은 막지 않는다.
     // 준비실·대기실에서 같은 장치로 미리보기를 복원할 수 있도록 선택한 장치 ID도 함께 남긴다.
-    const speakerOk = speakerOptions.length > 0 ? true : null
+    // 스피커 목록의 존재가 아니라 사용자가 실제 테스트 소리를 재생했는지를 저장한다.
+    const speakerOk = speakerReady
     const checkRecord = {
       cameraOk: Boolean(videoTrackReady),
       microphoneOk: Boolean(audioTrackReady),
@@ -399,13 +423,16 @@ export function DeviceCheckPage() {
                   },
                   {
                     label: '스피커',
-                    description: '테스트할 수 있어요',
-                    ready: speakerOptions.length > 0,
+                    description: speakerReady
+                      ? '테스트 소리가 확인됐어요'
+                      : '테스트 소리를 재생해 주세요',
+                    ready: speakerReady,
                     icon: <SpeakerHighIcon aria-hidden="true" size={19} />,
                   },
                   {
                     label: '네트워크',
-                    description: networkReady ? '연결이 안정적이에요' : '연결이 끊겼어요',
+                    // navigator.onLine은 품질 측정값이 아니므로 안정적이라고 과장하지 않는다.
+                    description: networkReady ? '브라우저가 온라인이에요' : '연결이 끊겼어요',
                     ready: networkReady,
                     icon: <WifiHighIcon aria-hidden="true" size={19} />,
                   },
@@ -466,7 +493,7 @@ export function DeviceCheckPage() {
                 </span>
               </div>
               <span className="text-xs font-bold text-[var(--color-success)]">
-                {networkReady ? '✓ 안정적' : '연결 끊김'}
+                {networkReady ? '✓ 온라인' : '연결 끊김'}
               </span>
             </div>
           </section>
@@ -561,7 +588,15 @@ export function DeviceCheckPage() {
                   <span className="text-xs text-[var(--color-text-secondary)]">소리가 들리는지 테스트해 주세요</span>
                 </span>
               </div>
-              <span className="text-xs font-bold text-[var(--color-success)]">✓ 연결됨</span>
+              <span
+                className={
+                  speakerReady
+                    ? 'text-xs font-bold text-[var(--color-success)]'
+                    : 'text-xs font-bold text-[var(--color-text-secondary)]'
+                }
+              >
+                {speakerReady ? '✓ 테스트 완료' : '테스트 필요'}
+              </span>
             </div>
             <Select
               containerClassName="[&_label]:sr-only"
@@ -581,6 +616,11 @@ export function DeviceCheckPage() {
             >
               테스트 음원 재생
             </Button>
+            {speakerTestError ? (
+              <p className="mt-2 text-sm text-[var(--color-danger)]" role="alert">
+                {speakerTestError}
+              </p>
+            ) : null}
           </section>
 
           {deviceCheckWarning ? (
@@ -612,7 +652,7 @@ export function DeviceCheckPage() {
           </p>
           {!isReady ? (
             <Button loading={isRequesting} onClick={() => void start()} variant="ghost">
-              장비 다시 확인
+              {status === 'idle' ? '카메라·마이크 권한 요청' : '장비 다시 확인'}
             </Button>
           ) : null}
         </aside>

@@ -86,8 +86,9 @@ export function LiveKitTestPage() {
     setStatus('연결이 종료되었습니다.')
   }
 
+  // 공통 App이 main 랜드마크를 제공하므로 페이지 내부는 일반 컨테이너로 둔다.
   return (
-    <main className="mx-auto grid max-w-6xl gap-6 px-5 py-10">
+    <div className="mx-auto grid max-w-6xl gap-6 px-5 py-10">
       <header>
         <Badge variant="primary">RTC API TEST</Badge>
         <h1 className="mt-3 text-3xl font-black">LiveKit 연결 테스트</h1>
@@ -108,6 +109,6 @@ export function LiveKitTestPage() {
         <Card><CardHeader><CardTitle>내 카메라</CardTitle></CardHeader><CardContent><div ref={localVideoRef} className="aspect-video overflow-hidden rounded-xl bg-slate-950 [&_video]:size-full [&_video]:object-cover" /></CardContent></Card>
         <Card><CardHeader><CardTitle>상대 참가자</CardTitle></CardHeader><CardContent><div ref={remoteVideoRef} className="aspect-video overflow-hidden rounded-xl bg-slate-950 [&_video]:size-full [&_video]:object-cover" /><p className="mt-3 text-sm text-[var(--color-text-secondary)]">같은 `test-room`에 다른 브라우저로 입장하면 상대 영상이 표시됩니다.</p></CardContent></Card>
       </section>
-    </main>
+    </div>
   )
 }
