@@ -9,9 +9,6 @@ import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.auth.service.SignupService;
-import com.ssafy.backend.auth.support.DeviceTokenService;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +22,6 @@ public class AuthController {
     private final LoginService loginService;
     private final LogoutService logoutService;
     private final RefreshTokenService refreshTokenService;
-    private final DeviceTokenService deviceTokenService;
 
     /**
      * 회원가입, 로그인과 로그아웃 비즈니스 로직을 처리할 서비스를 주입받는다.
@@ -34,55 +30,31 @@ public class AuthController {
      * @param loginService 로그인 서비스
      * @param logoutService 로그아웃 서비스
      * @param refreshTokenService 토큰 재발급 서비스
-     * @param deviceTokenService 기기 토큰 쿠키 발급 서비스
      */
     public AuthController(SignupService signupService, LoginService loginService,
-                          LogoutService logoutService, RefreshTokenService refreshTokenService,
-                          DeviceTokenService deviceTokenService) {
+                          LogoutService logoutService, RefreshTokenService refreshTokenService) {
         this.signupService = signupService;
         this.loginService = loginService;
         this.logoutService = logoutService;
         this.refreshTokenService = refreshTokenService;
-        this.deviceTokenService = deviceTokenService;
     }
 
-    /**
-     * 회원가입 요청값을 검증한 뒤 사용자를 생성하고 HTTP 201 응답을 반환한다.
-     *
-     * <p>가입 성공 시 기기 토큰 쿠키가 없으면 새로 발급해 이후 응모에서 같은 기기를 묶을 수 있게 한다.
-     *
-     * @param request 회원가입 요청
-     * @param httpRequest 기기 토큰 쿠키를 읽을 HTTP 요청
-     * @param httpResponse 기기 토큰 쿠키를 실을 HTTP 응답
-     * @return 생성된 사용자 정보
-     */
+    /** 회원가입 요청값을 검증한 뒤 사용자를 생성하고 HTTP 201 응답을 반환한다. */
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
-    public SignupResponse signup(@Valid @RequestBody SignupRequest request,
-                                 HttpServletRequest httpRequest,
-                                 HttpServletResponse httpResponse) {
-        SignupResponse response = signupService.signup(request);
-        deviceTokenService.resolveOrIssueHash(httpRequest, httpResponse);
-        return response;
+        public SignupResponse signup(@Valid @RequestBody SignupRequest request) {
+        return signupService.signup(request);
     }
 
     /**
      * 로그인 요청을 인증하고 발급된 토큰과 사용자 정보를 반환한다.
      *
-     * <p>로그인 성공 시 기기 토큰 쿠키가 없으면 새로 발급한다.
-     *
      * @param request 로그인 ID와 비밀번호를 담은 요청
-     * @param httpRequest 기기 토큰 쿠키를 읽을 HTTP 요청
-     * @param httpResponse 기기 토큰 쿠키를 실을 HTTP 응답
      * @return Access·Refresh Token과 로그인 사용자 정보
      */
     @PostMapping("/login")
-    public LoginResponse login(@Valid @RequestBody LoginRequest request,
-                               HttpServletRequest httpRequest,
-                               HttpServletResponse httpResponse) {
-        LoginResponse response = loginService.login(request);
-        deviceTokenService.resolveOrIssueHash(httpRequest, httpResponse);
-        return response;
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+        return loginService.login(request);
     }
 
     /**

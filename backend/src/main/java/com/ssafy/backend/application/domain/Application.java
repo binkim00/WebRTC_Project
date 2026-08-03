@@ -11,7 +11,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -33,12 +32,6 @@ import java.util.Objects;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_applications_meeting_fan",
                 columnNames = {"meeting_id", "fan_id"}
-        ),
-        // 같은 팬미팅에서 같은 기기 토큰을 쓴 다른 계정을 찾는 조회 전용 인덱스다.
-        // 공용 기기의 정상 응모를 막지 않도록 UNIQUE로 두지 않는다.
-        indexes = @Index(
-                name = "idx_applications_meeting_device",
-                columnList = "meeting_id, device_hash"
         )
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -73,18 +66,6 @@ public class Application extends BaseTimeEntity {
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 
-    /** 응모 시점 기기 토큰의 HMAC-SHA-256 해시이며 쿠키가 없으면 null이다. */
-    @Column(name = "device_hash", length = 64)
-    private String deviceHash;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "risk_status", nullable = false, length = 20)
-    private ApplicationRiskStatus riskStatus = ApplicationRiskStatus.NONE;
-
-    /** 운영자가 판단 근거를 볼 수 있도록 남기는 위험 사유이며 원문 토큰은 담지 않는다. */
-    @Column(name = "risk_reason", length = 255)
-    private String riskReason;
-
     /**
      * 팬의 최초 응모를 접수 상태로 생성한다.
      *
@@ -100,7 +81,6 @@ public class Application extends BaseTimeEntity {
         application.status = ApplicationStatus.SUBMITTED;
         application.personalInformationConsentAt = Objects.requireNonNull(submittedAt);
         application.submittedAt = submittedAt;
-        application.riskStatus = ApplicationRiskStatus.NONE;
         return application;
     }
 
@@ -115,30 +95,6 @@ public class Application extends BaseTimeEntity {
         this.submittedAt = submittedAt;
         this.resultDecidedAt = null;
         this.withdrawnAt = null;
-        // 재응모는 기기와 위험 판단을 다시 하므로 이전 판정을 초기화한다.
-        this.riskStatus = ApplicationRiskStatus.NONE;
-        this.riskReason = null;
-    }
-
-    /**
-     * 이번 응모에 사용된 기기 토큰 해시를 기록한다.
-     *
-     * @param deviceHash 기기 토큰의 HMAC-SHA-256 해시이며 쿠키가 없으면 {@code null}
-     */
-    public void recordDeviceHash(String deviceHash) {
-        this.deviceHash = deviceHash;
-    }
-
-    /**
-     * 같은 기기에서 다른 계정이 응모한 정황을 의심 응모로 표시한다.
-     *
-     * <p>정책상 차단하지 않고 표시만 남기므로 응모 상태 자체는 바꾸지 않는다.
-     *
-     * @param reason 운영자가 볼 위험 사유
-     */
-    public void flagAsSuspicious(String reason) {
-        this.riskStatus = ApplicationRiskStatus.FLAGGED;
-        this.riskReason = reason;
     }
 
     /**

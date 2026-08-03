@@ -145,7 +145,7 @@ public class FanMeetingManagementService {
 
         ApplicationValues applicationValues = mergeApplication(application, request.application());
         OperationValues operationValues = mergeOperation(operation, request.operation());
-        validateSchedule(meeting, scheduledStartAt, applicationValues, operationValues);
+        validateSchedule(scheduledStartAt, applicationValues, operationValues);
         if (!applicationStarted) {
             meeting.update(influencer, title, description, coverImageUrl, scheduledStartAt);
             application.update(applicationValues.enabled(), applicationValues.startAt(),
@@ -417,37 +417,15 @@ public class FanMeetingManagementService {
         );
     }
 
-    /**
-     * 변경 결과의 응모·대기실·팬미팅 일정 순서를 검증한다.
-     *
-     * <p>외부 선별 팬미팅은 응모를 다시 켤 수 없고 응모 일정도 가질 수 없으며,
-     * capacity만 등록 가능한 최대 인원으로 유지한다.
-     *
-     * @param meeting 수정 대상 팬미팅
-     * @param scheduledStartAt 변경 후 예정 시작 시각
-     * @param application 변경 후 응모 설정 값
-     * @param operation 변경 후 운영 설정 값
-     * @throws BusinessException 일정이 유효하지 않거나 선별 방식과 맞지 않는 응모 설정인 경우
-     */
-    private void validateSchedule(FanMeeting meeting, LocalDateTime scheduledStartAt,
-                                  ApplicationValues application, OperationValues operation) {
+    /** 변경 결과의 응모·대기실·팬미팅 일정 순서를 검증한다. */
+    private void validateSchedule(LocalDateTime scheduledStartAt, ApplicationValues application,
+                                  OperationValues operation) {
         if (scheduledStartAt == null || operation.queueOpenAt() == null
                 || !operation.queueOpenAt().isBefore(scheduledStartAt)
                 || operation.reconnectGraceSec() < 0
                 || operation.earlyStartMinutes() < 0
                 || operation.maxRecallCount() < 0) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
-        }
-        if (meeting.isExternalSelection()) {
-            if (application.enabled()) {
-                throw new BusinessException(ErrorCode.APPLICATION_NOT_SUPPORTED);
-            }
-            if (application.startAt() != null || application.endAt() != null
-                    || application.resultAnnouncementAt() != null
-                    || application.capacity() <= 0) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST);
-            }
-            return;
         }
         if (application.enabled()) {
             if (application.startAt() == null || application.endAt() == null

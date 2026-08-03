@@ -234,7 +234,7 @@ public class ApplicationDrawService {
                 Application application = candidates.get(index);
                 if (index < winnerCount) {
                     application.select(drawCompletedAt);
-                    participants.add(Participant.createFromApplication(
+                    participants.add(Participant.create(
                             meeting, application.getFan(), application, index + 1
                     ));
                 } else {
@@ -284,10 +284,6 @@ public class ApplicationDrawService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAN_MEETING_NOT_FOUND));
         if (meeting.getDeletedAt() != null) {
             throw new BusinessException(ErrorCode.FAN_MEETING_NOT_FOUND);
-        }
-        // 외부 선별 팬미팅은 응모가 없어 추첨과 결과 공개 대상이 아니다.
-        if (meeting.isExternalSelection()) {
-            throw new BusinessException(ErrorCode.APPLICATION_NOT_SUPPORTED);
         }
         return meeting;
     }

@@ -3,7 +3,6 @@ package com.ssafy.backend.participant.controller;
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
-import com.ssafy.backend.participant.domain.ParticipantSource;
 import com.ssafy.backend.participant.dto.ParticipantSummaryResponse;
 import com.ssafy.backend.participant.service.ParticipantQueryService;
 import org.junit.jupiter.api.Test;
@@ -70,9 +69,9 @@ class FanMeetingParticipantSecurityTest {
     @WithMockUser(roles = "MANAGER")
     void allowsManagerParticipantList() throws Exception {
         when(participantQueryService.getParticipants(
-                eq(1L), isNull(), isNull(), isNull(), eq(0), eq(20), isNull()))
+                eq(1L), isNull(), isNull(), eq(0), eq(20), isNull()))
                 .thenReturn(new PageResponse<>(List.of(new ParticipantSummaryResponse(
-                        100L, 30L, "첫째팬", null, 1, "READY", "WAITING", ParticipantSource.APPLICATION)),
+                        100L, 30L, "첫째팬", null, 1, "READY", "WAITING")),
                         0, 20, 1L, 1, false));
 
         mockMvc.perform(get("/api/v1/fan-meetings/1/participants"))
@@ -90,7 +89,7 @@ class FanMeetingParticipantSecurityTest {
     @WithMockUser(roles = "INFLUENCER")
     void allowsInfluencerParticipantList() throws Exception {
         when(participantQueryService.getParticipants(
-                eq(1L), isNull(), isNull(), isNull(), eq(0), eq(20), isNull()))
+                eq(1L), isNull(), isNull(), eq(0), eq(20), isNull()))
                 .thenReturn(new PageResponse<>(List.of(), 0, 20, 0L, 0, false));
 
         mockMvc.perform(get("/api/v1/fan-meetings/1/participants"))
@@ -103,7 +102,7 @@ class FanMeetingParticipantSecurityTest {
     @WithMockUser(roles = "MANAGER")
     void passesQueryParametersToService() throws Exception {
         when(participantQueryService.getParticipants(
-                eq(1L), eq("READY"), eq("팬"), isNull(), eq(2), eq(6), isNull()))
+                eq(1L), eq("READY"), eq("팬"), eq(2), eq(6), isNull()))
                 .thenReturn(new PageResponse<>(List.of(), 2, 6, 0L, 0, false));
 
         mockMvc.perform(get("/api/v1/fan-meetings/1/participants")
@@ -121,7 +120,7 @@ class FanMeetingParticipantSecurityTest {
     @WithMockUser(roles = "MANAGER")
     void rejectsOutOfRangePageSize() throws Exception {
         when(participantQueryService.getParticipants(
-                eq(1L), isNull(), isNull(), isNull(), eq(0), eq(101), isNull()))
+                eq(1L), isNull(), isNull(), eq(0), eq(101), isNull()))
                 .thenThrow(new BusinessException(ErrorCode.INVALID_REQUEST));
 
         mockMvc.perform(get("/api/v1/fan-meetings/1/participants").param("size", "101"))
@@ -164,7 +163,7 @@ class FanMeetingParticipantSecurityTest {
     void allowsManagerParticipantDetail() throws Exception {
         when(participantQueryService.getParticipant(eq(1L), eq(100L), isNull()))
                 .thenReturn(new ParticipantSummaryResponse(
-                        100L, 30L, "첫째팬", "https://cdn.melly.test/p.png", 1, "READY", "CALLED", ParticipantSource.APPLICATION));
+                        100L, 30L, "첫째팬", "https://cdn.melly.test/p.png", 1, "READY", "CALLED"));
 
         mockMvc.perform(get("/api/v1/fan-meetings/1/participants/100"))
                 .andExpect(status().isOk())
@@ -192,7 +191,7 @@ class FanMeetingParticipantSecurityTest {
     @WithMockUser(roles = "MANAGER")
     void rejectsNonOperatorManager() throws Exception {
         when(participantQueryService.getParticipants(
-                eq(2L), isNull(), isNull(), isNull(), eq(0), eq(20), isNull()))
+                eq(2L), isNull(), isNull(), eq(0), eq(20), isNull()))
                 .thenThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
 
         mockMvc.perform(get("/api/v1/fan-meetings/2/participants"))

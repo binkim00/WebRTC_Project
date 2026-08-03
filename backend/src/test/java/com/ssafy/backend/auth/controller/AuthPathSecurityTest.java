@@ -9,7 +9,6 @@ import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.auth.service.SignupService;
-import com.ssafy.backend.auth.support.DeviceTokenService;
 import com.ssafy.backend.common.security.RestAccessDeniedHandler;
 import com.ssafy.backend.config.SecurityConfig;
 import org.junit.jupiter.api.Test;
@@ -53,9 +52,6 @@ class AuthPathSecurityTest {
 
     @MockitoBean
     private RefreshTokenService refreshTokenService;
-
-    @MockitoBean
-    private DeviceTokenService deviceTokenService;
 
     @MockitoBean
     private JwtTokenProvider jwtTokenProvider;

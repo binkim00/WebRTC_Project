@@ -6,7 +6,6 @@ import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
-import com.ssafy.backend.auth.repository.EmailVerificationTokenRepository;
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.device.repository.DeviceCheckRepository;
 import com.ssafy.backend.influencer.repository.FanMemoRepository;
@@ -45,9 +44,6 @@ class BackendApplicationTests {
 
     @MockitoBean
     private UserRepository userRepository;
-
-    @MockitoBean
-    private EmailVerificationTokenRepository emailVerificationTokenRepository;
 
     @MockitoBean
     private FanMeetingRepository fanMeetingRepository;

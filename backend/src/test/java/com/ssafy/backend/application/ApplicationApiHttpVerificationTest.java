@@ -277,18 +277,12 @@ class ApplicationApiHttpVerificationTest {
         fanMeetingRepository.saveAndFlush(meeting);
     }
 
-    /**
-     * HTTP 검증에 사용할 활성 사용자를 저장한다.
-     *
-     * <p>응모는 이메일 인증을 마친 계정만 할 수 있으므로 저장 시점에 인증 완료로 만든다.
-     */
+    /** HTTP 검증에 사용할 활성 사용자를 저장한다. */
     private User saveUser(String loginId, String nickname, UserRole role) {
-        User user = User.createActive(
+        return userRepository.saveAndFlush(User.createActive(
                 loginId, loginId + "@example.com", "encoded-password",
                 nickname, role, PreferredLanguage.KOREAN
-        );
-        user.verifyEmail(LocalDateTime.now());
-        return userRepository.saveAndFlush(user);
+        ));
     }
 
     /** 현재 팬미팅의 응모 폼 경로를 반환한다. */

@@ -162,12 +162,4 @@ public interface CallSessionRepository extends JpaRepository<CallSession, Long> 
     @EntityGraph(attributePaths = {"queueEntry", "queueEntry.meeting"})
     List<CallSession> findByQueueEntry_Meeting_IdAndStatusIn(
             Long meetingId, Collection<CallSessionStatus> statuses);
-
-    /**
-     * 통계 내보내기에 사용할 팬미팅의 모든 통화 세션을 조회한다.
-     *
-     * @param meetingId 팬미팅 식별자
-     * @return 상태와 무관한 팬미팅의 전체 통화 세션 목록
-     */
-    List<CallSession> findByQueueEntry_Meeting_Id(Long meetingId);
 }

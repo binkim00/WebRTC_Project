@@ -121,32 +121,6 @@ public enum ErrorCode {
     USER_WITHDRAW_MEETING_IN_PROGRESS(HttpStatus.CONFLICT, "진행 중이거나 예정된 팬미팅이 있어 탈퇴할 수 없습니다."),
     LAST_ADMIN_WITHDRAW_NOT_ALLOWED(HttpStatus.CONFLICT, "마지막 관리자 계정은 탈퇴할 수 없습니다."),
 
-    // 외부 선별 참가자 CSV 등록
-    PARTICIPANT_SELECTION_TYPE_MISMATCH(HttpStatus.CONFLICT,
-            "외부 선별 방식으로 만든 팬미팅에서만 사용할 수 있습니다."),
-    PARTICIPANT_SELECTION_TYPE_NOT_CHANGEABLE(HttpStatus.CONFLICT,
-            "참가자 선별 방식은 생성 후 변경할 수 없습니다."),
-    APPLICATION_NOT_SUPPORTED(HttpStatus.CONFLICT,
-            "응모를 사용하지 않는 팬미팅입니다."),
-    EXTERNAL_PARTICIPANTS_ALREADY_CONFIRMED(HttpStatus.CONFLICT,
-            "이미 확정된 외부 선별 명단입니다."),
-    EXTERNAL_PARTICIPANT_FILE_REQUIRED(HttpStatus.BAD_REQUEST,
-            "등록할 CSV 파일이 필요합니다."),
-    EXTERNAL_PARTICIPANT_CSV_INVALID(HttpStatus.BAD_REQUEST,
-            "CSV 내용이 올바르지 않아 명단을 등록할 수 없습니다."),
-
-    // 이메일 인증 (AUTH-005~008)
-    EMAIL_VERIFICATION_REQUIRED(HttpStatus.FORBIDDEN, "이메일 인증을 먼저 완료해야 합니다."),
-    EMAIL_VERIFICATION_TOKEN_INVALID(HttpStatus.BAD_REQUEST,
-            "이메일 인증 정보가 만료되었거나 이미 사용되었습니다."),
-    EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "이미 인증이 완료된 이메일입니다."),
-
-    // 기기 토큰 기반 다계정 응모 탐지
-    DEVICE_DUPLICATE_APPLICATION(HttpStatus.CONFLICT, "같은 기기에서 다른 계정으로 이미 응모했습니다."),
-
-    // 공통 요청 빈도 제한
-    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요."),
-
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 
     private final HttpStatus status;

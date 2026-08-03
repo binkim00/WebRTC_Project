@@ -59,19 +59,16 @@ class UserControllerTest {
     void returnsMyProfileWithoutSensitiveFields() throws Exception {
         when(userProfileService.getMyProfile(PRINCIPAL)).thenReturn(new MyProfileResponse(
                 1L, "fan01", "fan@example.com", "fan", null,
-                UserRole.FAN, PreferredLanguage.KOREAN, false));
+                UserRole.FAN, PreferredLanguage.KOREAN));
 
         mockMvc.perform(get("/api/v1/users/me"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.loginId").value("fan01"))
                 .andExpect(jsonPath("$.data.role").value("FAN"))
-                .andExpect(jsonPath("$.data.emailVerified").value(false))
                 .andExpect(jsonPath("$.data.password").doesNotExist())
                 .andExpect(jsonPath("$.data.status").doesNotExist())
                 .andExpect(jsonPath("$.data.lastLoginAt").doesNotExist())
-                // 인증 완료 시각은 AUTH-008에서만 제공하고 프로필 응답에서는 제외한다.
-                .andExpect(jsonPath("$.data.emailVerifiedAt").doesNotExist())
                 .andExpect(jsonPath("$.data.withdrawnAt").doesNotExist());
     }
 
@@ -81,7 +78,7 @@ class UserControllerTest {
         when(userProfileService.updateMyProfile(eq(PRINCIPAL), any())).thenReturn(
                 new MyProfileUpdateResponse(1L, "new@example.com", "새닉네임",
                         "https://cdn.example.com/profile.png", PreferredLanguage.ENGLISH,
-                        false, LocalDateTime.of(2026, 7, 30, 15, 0)));
+                        LocalDateTime.of(2026, 7, 30, 15, 0)));
 
         mockMvc.perform(patch("/api/v1/users/me").contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -93,8 +90,6 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.userId").value(1))
                 .andExpect(jsonPath("$.data.email").value("new@example.com"))
                 .andExpect(jsonPath("$.data.preferredLanguage").value("ENGLISH"))
-                // 이메일을 바꾸면 인증이 풀리므로 프론트가 이 응답만으로 재인증 안내를 띄울 수 있어야 한다.
-                .andExpect(jsonPath("$.data.emailVerified").value(false))
                 .andExpect(jsonPath("$.data.updatedAt").value("2026-07-30T15:00:00"));
     }
 

@@ -5,7 +5,6 @@ import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
 import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
-import com.ssafy.backend.meeting.domain.ParticipantSelectionType;
 import com.ssafy.backend.meeting.dto.FanMeetingCreateRequest;
 import com.ssafy.backend.meeting.dto.FanMeetingCreateResponse;
 import com.ssafy.backend.meeting.exception.FanMeetingAccessDeniedException;
@@ -141,7 +140,7 @@ class FanMeetingServiceTest {
         FanMeetingCreateRequest base = validRequest(30L);
         FanMeetingCreateRequest request = new FanMeetingCreateRequest(
                 base.influencerId(), base.title(), base.description(), base.coverImageUrl(),
-                base.scheduledStartAt(), base.participantSelectionType(), base.application(),
+                base.scheduledStartAt(), base.application(),
                 new FanMeetingCreateRequest.OperationSettingRequest(
                         base.operation().queueOpenAt(), base.operation().callDurationSec(),
                         base.operation().recordingEnabled(), base.operation().translationEnabled(),
@@ -214,7 +213,6 @@ class FanMeetingServiceTest {
                 null,
                 null,
                 meetingStart,
-                ParticipantSelectionType.APPLICATION,
                 new FanMeetingCreateRequest.ApplicationSettingRequest(
                         true,
                         meetingStart.minusDays(1),
@@ -239,111 +237,6 @@ class FanMeetingServiceTest {
         )).isInstanceOf(InvalidFanMeetingRequestException.class);
 
         verify(fanMeetingRepository, never()).save(any());
-    }
-
-    /** 선별 방식을 생략한 기존 요청이 응모 방식으로 저장되는지 검증한다. */
-    @Test
-    void defaultsToApplicationSelectionWhenTypeOmitted() {
-        User solo = user(30L, UserRole.SOLO_INFLUENCER);
-        when(userRepository.findById(30L)).thenReturn(Optional.of(solo));
-        FanMeetingCreateRequest base = validRequest(30L);
-        FanMeetingCreateRequest request = new FanMeetingCreateRequest(
-                base.influencerId(), base.title(), base.description(), base.coverImageUrl(),
-                base.scheduledStartAt(), null, base.application(), base.operation()
-        );
-
-        fanMeetingService.create(new AuthenticatedUser(30L, UserRole.SOLO_INFLUENCER), request);
-
-        ArgumentCaptor<FanMeeting> captor = ArgumentCaptor.forClass(FanMeeting.class);
-        verify(fanMeetingRepository).save(captor.capture());
-        assertThat(captor.getValue().getParticipantSelectionType())
-                .isEqualTo(ParticipantSelectionType.APPLICATION);
-        assertThat(captor.getValue().isExternalSelection()).isFalse();
-    }
-
-    /** 응모 방식인데 응모를 사용하지 않는 요청을 저장 전에 거부하는지 검증한다. */
-    @Test
-    void rejectsApplicationSelectionWithDisabledApplication() {
-        User solo = user(30L, UserRole.SOLO_INFLUENCER);
-        when(userRepository.findById(30L)).thenReturn(Optional.of(solo));
-        FanMeetingCreateRequest request = selectionRequest(
-                30L, ParticipantSelectionType.APPLICATION, false, 20);
-
-        assertThatThrownBy(() -> fanMeetingService.create(
-                new AuthenticatedUser(30L, UserRole.SOLO_INFLUENCER), request
-        )).isInstanceOf(InvalidFanMeetingRequestException.class);
-
-        verify(fanMeetingRepository, never()).save(any());
-    }
-
-    /** 외부 선별 방식인데 응모를 사용하는 요청을 저장 전에 거부하는지 검증한다. */
-    @Test
-    void rejectsExternalSelectionWithEnabledApplication() {
-        User solo = user(30L, UserRole.SOLO_INFLUENCER);
-        when(userRepository.findById(30L)).thenReturn(Optional.of(solo));
-        FanMeetingCreateRequest request = selectionRequest(
-                30L, ParticipantSelectionType.EXTERNAL_SELECTION, true, 20);
-
-        assertThatThrownBy(() -> fanMeetingService.create(
-                new AuthenticatedUser(30L, UserRole.SOLO_INFLUENCER), request
-        )).isInstanceOf(InvalidFanMeetingRequestException.class);
-
-        verify(fanMeetingRepository, never()).save(any());
-    }
-
-    /** 외부 선별 방식이 응모 일정 없이 모집 인원만으로 생성되는지 검증한다. */
-    @Test
-    void createsExternalSelectionMeetingWithCapacityOnly() {
-        User solo = user(30L, UserRole.SOLO_INFLUENCER);
-        when(userRepository.findById(30L)).thenReturn(Optional.of(solo));
-        FanMeetingCreateRequest request = selectionRequest(
-                30L, ParticipantSelectionType.EXTERNAL_SELECTION, false, 20);
-
-        FanMeetingCreateResponse response = fanMeetingService.create(
-                new AuthenticatedUser(30L, UserRole.SOLO_INFLUENCER), request
-        );
-
-        assertThat(response.status()).isEqualTo(FanMeetingStatus.DRAFT);
-        assertThat(response.application().enabled()).isFalse();
-        ArgumentCaptor<FanMeeting> captor = ArgumentCaptor.forClass(FanMeeting.class);
-        verify(fanMeetingRepository).save(captor.capture());
-        assertThat(captor.getValue().isExternalSelection()).isTrue();
-    }
-
-    /**
-     * 선별 방식과 응모 사용 여부를 지정한 생성 요청을 만든다.
-     *
-     * <p>외부 선별은 응모 일정을 가질 수 없으므로 응모를 사용하지 않으면 일정을 비운다.
-     *
-     * @param influencerId 인플루언서 식별자
-     * @param selectionType 참가자 선별 방식
-     * @param applicationEnabled 응모 사용 여부
-     * @param capacity 모집 인원
-     * @return 지정한 조합으로 만든 팬미팅 생성 요청
-     */
-    private FanMeetingCreateRequest selectionRequest(Long influencerId,
-                                                     ParticipantSelectionType selectionType,
-                                                     boolean applicationEnabled,
-                                                     int capacity) {
-        LocalDateTime meetingStart = LocalDateTime.of(2030, 8, 10, 15, 0);
-        FanMeetingCreateRequest.ApplicationSettingRequest application = applicationEnabled
-                ? new FanMeetingCreateRequest.ApplicationSettingRequest(
-                        true, meetingStart.minusDays(10), meetingStart.minusDays(5),
-                        meetingStart.minusDays(4), capacity)
-                : new FanMeetingCreateRequest.ApplicationSettingRequest(
-                        false, null, null, null, capacity);
-        return new FanMeetingCreateRequest(
-                influencerId,
-                "Fan meeting",
-                null,
-                null,
-                meetingStart,
-                selectionType,
-                application,
-                new FanMeetingCreateRequest.OperationSettingRequest(
-                        meetingStart.minusMinutes(30), 120, true, true, null, null, null
-                )
-        );
     }
 
     /**
@@ -375,7 +268,6 @@ class FanMeetingServiceTest {
                 " Description ",
                 " https://example.com/cover.png ",
                 meetingStart,
-                ParticipantSelectionType.APPLICATION,
                 new FanMeetingCreateRequest.ApplicationSettingRequest(
                         true,
                         meetingStart.minusDays(10),

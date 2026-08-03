@@ -10,12 +10,3 @@ spring:
     init:
       mode: always
       data-locations: classpath:data-local.sql
-
-app:
-  email-verification:
-    # SMTP가 없는 로컬에서는 인증 링크를 로그와 응답으로 확인해 흐름을 검증한다.
-    # 이 설정은 local/dev/test 프로파일에서만 허용된다.
-    expose-link: true
-  device-token:
-    # 로컬은 HTTP로 접속하므로 Secure 쿠키를 끄지 않으면 브라우저가 쿠키를 폐기한다.
-    secure: false

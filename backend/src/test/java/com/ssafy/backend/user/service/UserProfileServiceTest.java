@@ -106,37 +106,6 @@ class UserProfileServiceTest {
         verify(userRepository).existsByEmailAndIdNot("new@example.com", 1L);
     }
 
-    /** 이메일을 다른 주소로 바꾸면 기존 이메일 인증이 무효가 되는지 검증한다. */
-    @Test
-    void resetsEmailVerificationWhenEmailChanges() {
-        User user = user();
-        user.verifyEmail(LocalDateTime.of(2026, 8, 1, 10, 0));
-        when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(user);
-        when(userRepository.saveAndFlush(user)).thenReturn(user);
-
-        var response = service.updateMyProfile(PRINCIPAL,
-                new MyProfileUpdateRequest(null, "changed@example.com", null, null));
-
-        assertThat(response.emailVerified()).isFalse();
-        assertThat(user.getEmailVerifiedAt()).isNull();
-    }
-
-    /** 같은 이메일을 다시 보내면 기존 인증 상태를 유지하는지 검증한다. */
-    @Test
-    void keepsEmailVerificationWhenEmailUnchanged() {
-        User user = user();
-        LocalDateTime verifiedAt = LocalDateTime.of(2026, 8, 1, 10, 0);
-        user.verifyEmail(verifiedAt);
-        when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(user);
-        when(userRepository.saveAndFlush(user)).thenReturn(user);
-
-        var response = service.updateMyProfile(PRINCIPAL,
-                new MyProfileUpdateRequest("새닉네임", " Fan@Example.com ", null, null));
-
-        assertThat(response.emailVerified()).isTrue();
-        assertThat(user.getEmailVerifiedAt()).isEqualTo(verifiedAt);
-    }
-
     /** 다른 사용자의 이메일은 거부하고 자신의 기존 이메일은 허용하는지 검증한다. */
     @Test
     void validatesEmailUniquenessExcludingCurrentUser() {
