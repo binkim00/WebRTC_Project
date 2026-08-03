@@ -115,6 +115,12 @@ export function DeviceCheckPage() {
   } = useMediaDeviceCheck()
 
   useEffect(() => {
+    // 장비 점검 화면에 진입하면 즉시 권한 요청을 시작해 별도 클릭 단계를 없앤다.
+    // 브라우저가 자동 요청을 차단한 경우에는 아래 재시도 버튼으로 다시 요청할 수 있다.
+    if (!isVisualPreview && status === 'idle') void start()
+  }, [isVisualPreview, start, status])
+
+  useEffect(() => {
     // 브라우저의 온라인 상태가 바뀌면 입장 가능 여부도 즉시 다시 계산한다.
     const handleOnline = () => setNetworkReady(true)
     const handleOffline = () => setNetworkReady(false)

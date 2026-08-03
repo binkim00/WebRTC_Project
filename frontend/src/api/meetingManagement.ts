@@ -251,11 +251,26 @@ export async function transitionFanMeetingImmediately(
   // LIVE 강제 지정은 actualStartAt을 기록하지 않으므로 시작 시각을 현재로 옮긴 뒤 정식 start 명령을 호출한다.
   await controlFanMeetingForTest(
     meetingId,
-    { scheduledStartAt: nowValue },
+    // 즉시 시작 시 대기열 오픈도 현재 시각으로 맞춰야 참가자가 바로 입장할 수 있다.
+    { scheduledStartAt: nowValue, waitingRoomOpenAt: nowValue },
     authToken,
     signal,
   )
   return startFanMeeting(meetingId, authToken, signal)
+}
+
+/** 팬미팅 시작 전에도 참가자가 대기실에서 장비를 점검할 수 있도록 대기열을 즉시 연다. */
+export function openWaitingRoomImmediately(
+  meetingId: string | number,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<FanMeetingManagementResponse> {
+  return controlFanMeetingForTest(
+    meetingId,
+    { waitingRoomOpenAt: toServerLocalDateTime(new Date()) },
+    authToken,
+    signal,
+  )
 }
 
 async function postCommand(

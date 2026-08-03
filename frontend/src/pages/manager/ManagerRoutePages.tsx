@@ -180,6 +180,31 @@ export function ManagerMeetingCreatePage() {
       ? { ...restoredForm, influencerId: resolvedInfluencerId }
       : restoredForm
   })
+
+  function applyRecommendedSchedule() {
+    const scheduled = new Date(form.scheduledStartAt)
+    if (Number.isNaN(scheduled.getTime())) return
+    const localValue = (date: Date) => {
+      const pad = (value: number) => String(value).padStart(2, '0')
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+    }
+    const applicationStart = new Date(scheduled.getTime() - 7 * 24 * 60 * 60_000)
+    const applicationEnd = new Date(scheduled.getTime() - 24 * 60 * 60_000)
+    const resultAnnouncement = new Date(scheduled.getTime() - 12 * 60 * 60_000)
+    const queueOpen = new Date(scheduled.getTime() - 30 * 60_000)
+    const minimumStart = new Date(Date.now() + 5 * 60_000)
+    const safeApplicationStart = applicationStart < minimumStart ? minimumStart : applicationStart
+    setForm((current) => ({
+      ...current,
+      application: {
+        ...current.application,
+        startAt: localValue(safeApplicationStart),
+        endAt: localValue(applicationEnd),
+        resultAnnouncementAt: localValue(resultAnnouncement),
+      },
+      operation: { ...current.operation, queueOpenAt: localValue(queueOpen) },
+    }))
+  }
   const [createdMeetingId, setCreatedMeetingId] = useState<number | undefined>(
     restoredLocalDraft?.createdMeetingId,
   )
@@ -697,7 +722,13 @@ export function ManagerMeetingCreatePage() {
             {step === 0 ? (
               <div className="grid gap-5 sm:grid-cols-2">
                 <TextField label="팬미팅명" maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText="팬에게 공개되는 홍보·응모 페이지의 제목입니다." />
-                <TextField label="예정 팬미팅 일시" required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
+                <div className="grid gap-2">
+                  <TextField label="예정 팬미팅 일시" required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
+                  <Button className="w-fit" onClick={applyRecommendedSchedule} type="button" variant="secondary">
+                    일정 자동 설정
+                  </Button>
+                  <p className="text-xs text-[var(--color-text-secondary)]">시작 일시를 기준으로 응모·결과 발표·대기열 시간을 한 번에 채웁니다.</p>
+                </div>
                 <div className="sm:col-span-2 rounded-2xl border border-[var(--color-divider)] bg-[var(--color-surface-page)] p-5">
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--color-primary-coral)]">담당 인플루언서</p>
                   {isInfluencerAccount ? (

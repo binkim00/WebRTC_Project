@@ -673,7 +673,6 @@ function OverviewPanel({
           <QuickLink label="공지 관리" to={`/manager/fan-meetings/${encodedId}/notices`} />
           <QuickLink label="실시간 운영 모니터" to={`/manager/fan-meetings/${encodedId}/monitor`} />
           <QuickLink label="결과 통계" to={`/manager/fan-meetings/${encodedId}/statistics`} />
-          <QuickLink label="커뮤니티" to={`/manager/fan-meetings/${encodedId}/community`} />
         </CardContent>
       </Card>
     </div>

@@ -378,7 +378,16 @@ export function FanMeetingListPage() {
               const statusContent = meetingStatus
                 ? fanMeetingStatusContent[meetingStatus]
                 : undefined
-              const canEnter = Boolean(item.detail?.viewer.canEnter)
+              // LIVE 상태만으로 입장을 허용하지 않는다. 대기열 오픈 시각이 지나고
+              // 서버가 참가자 입장을 허용한 경우에만 장비 점검·대기실로 이동한다.
+              const queueOpenAt = item.detail?.meeting.operation.queueOpenAt
+              const queueOpenTime = queueOpenAt ? new Date(queueOpenAt).getTime() : Number.NaN
+              const queueIsOpen = !queueOpenAt ||
+                (Number.isFinite(queueOpenTime) && Date.now() >= queueOpenTime)
+              const canEnter = Boolean(
+                queueIsOpen &&
+                  (item.detail?.viewer.canEnter || item.detail?.meeting.status === 'READY'),
+              )
               const recordingEnabled = meeting?.operation.recordingEnabled
               const recordingReady = Boolean(item.recording?.playable)
 

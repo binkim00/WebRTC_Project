@@ -5,6 +5,8 @@ export type ManagerMeetingSummary = {
   title: string
   influencerName: string
   scheduledStartAt: string
+  /** 생성 시각이 제공되지 않는 구버전 응답에서는 null이다. */
+  createdAt?: string | null
   status?: string
   /** 응모 시작 일시이며 응모를 사용하지 않으면 null이다. */
   applicationStartAt: string | null
@@ -74,6 +76,7 @@ function parseMeeting(value: unknown): ManagerMeetingSummary {
       'influencerName',
     ),
     scheduledStartAt: readString(record.scheduledStartAt, 'scheduledStartAt'),
+    createdAt: readNullableString(record.createdAt),
     status:
       typeof record.status === 'string' && record.status.trim()
         ? record.status

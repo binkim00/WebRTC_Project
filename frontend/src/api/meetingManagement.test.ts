@@ -62,6 +62,7 @@ describe('transitionFanMeetingImmediately', () => {
     expect(firstCall[0]).toMatch(/\/api\/v1\/fan-meetings\/8\/test-control$/)
     expect(JSON.parse(String((firstCall[1] as RequestInit).body))).toEqual({
       scheduledStartAt: '2026-08-03T12:00:00.000',
+      waitingRoomOpenAt: '2026-08-03T12:00:00.000',
     })
     expect(secondCall[0]).toMatch(/\/api\/v1\/fan-meetings\/8\/start$/)
     expect((secondCall[1] as RequestInit).method).toBe('POST')

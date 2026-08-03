@@ -30,6 +30,7 @@ import {
 } from '../../api/fanMeetingParticipants'
 import {
   endFanMeeting,
+  openWaitingRoomImmediately,
   startFanMeeting,
   transitionFanMeetingImmediately,
 } from '../../api/meetingManagement'
@@ -335,10 +336,12 @@ export function ManagerMeetingMonitorPage() {
   }
 
   /** 팬미팅 시작·종료를 확인 후 실행하고 상태를 갱신한다. */
-  async function runLifecycle(action: 'start' | 'startNow' | 'end') {
+  async function runLifecycle(action: 'start' | 'startNow' | 'openQueue' | 'end') {
     if (!fanMeetingId || isPreview) return
 
-    const actionAllowed = action === 'start'
+    const actionAllowed = action === 'openQueue'
+      ? meetingStatus === 'READY'
+      : action === 'start'
       ? lifecycleActions.canStart
       : action === 'startNow'
         ? lifecycleActions.canStartNow && !lifecycleActions.canStart
@@ -352,7 +355,9 @@ export function ManagerMeetingMonitorPage() {
       return
     }
 
-    const confirmText = action === 'start'
+    const confirmText = action === 'openQueue'
+      ? '팬미팅 시작 전에 대기열을 지금 오픈할까요? 당첨된 팬이 장비 점검 후 대기실에서 기다릴 수 있습니다.'
+      : action === 'start'
       ? '팬미팅을 시작할까요? 시작하면 팬미팅이 진행 중 상태로 전환됩니다.'
       : action === 'startNow'
         ? '예약 일시 전에 팬미팅을 즉시 시작할까요? 예정 시작 시각이 현재로 변경됩니다.'
@@ -368,7 +373,9 @@ export function ManagerMeetingMonitorPage() {
     setLifecycleBusy(true)
     setError(undefined)
     try {
-      const updated = action === 'start'
+      const updated = action === 'openQueue'
+        ? await openWaitingRoomImmediately(fanMeetingId, token)
+        : action === 'start'
         ? await startFanMeeting(fanMeetingId, token)
         : action === 'startNow'
           ? await transitionFanMeetingImmediately(
@@ -511,6 +518,16 @@ export function ManagerMeetingMonitorPage() {
           >
             팬미팅 시작
           </Button>
+          {meetingStatus === 'READY' ? (
+            <Button
+              disabled={lifecycleBusy || Boolean(statusError)}
+              leadingIcon={<Clock size={17} weight="bold" />}
+              onClick={() => void runLifecycle('openQueue')}
+              variant="secondary"
+            >
+              대기열 먼저 오픈
+            </Button>
+          ) : null}
           {lifecycleActions.canStartNow && !lifecycleActions.canStart ? (
             <Button
               disabled={immediateStartDisabled}
