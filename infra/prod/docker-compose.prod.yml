@@ -4,7 +4,13 @@ services:
     container_name: mysql
     restart: unless-stopped
 
+    # NOW() 등 DB가 직접 만드는 시각을 한국시간으로 맞춘다. 컨테이너 기본은 UTC 라서
+    # 그대로 두면 애플리케이션이 쓴 시각과 9시간 어긋난다. 이름 있는 시간대는 tz 테이블을
+    # 미리 적재해야 하므로, 서머타임이 없는 한국은 고정 오프셋으로 지정하는 편이 안전하다.
+    command: --default-time-zone=+09:00
+
     environment:
+      TZ: Asia/Seoul
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USERNAME}
@@ -36,6 +42,9 @@ services:
     restart: unless-stopped
 
     command: redis-server --appendonly yes
+
+    environment:
+      TZ: Asia/Seoul
 
     volumes:
       - /home/ubuntu/docker/project/redis/data:/data
@@ -88,6 +97,9 @@ services:
     restart: unless-stopped
 
     environment:
+      # 이미지에도 같은 값을 넣어 두었지만, 컨테이너 시간대를 여기서 한눈에 보이게 둔다.
+      TZ: Asia/Seoul
+
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_NAME: ${DB_NAME}
@@ -168,6 +180,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+
+    environment:
+      TZ: Asia/Seoul
 
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
