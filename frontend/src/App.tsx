@@ -44,8 +44,26 @@ function isRolePath(pathname: string) {
   )
 }
 
-function isPublicEventPath(pathname: string) {
-  return /^\/fan\/events(?:\/[^/]+)?\/?$/.test(pathname)
+/**
+ * 로그인 여부와 역할을 모두 가리지 않는 공개 탐색 경로다.
+ *
+ * 백엔드가 permitAll로 열어 둔 조회 API만 쓰는 화면이라 비로그인도 볼 수 있어야 하고,
+ * 운영자·인플루언서도 팬에게 보이는 화면을 그대로 확인할 수 있어야 한다.
+ * `/fan` 접두사를 쓰지만 팬 전용이 아니므로 역할 검사에서도 제외한다.
+ *
+ * 개인화된 하위 경로(예: `/fan/events/{id}/application-result`)는 세그먼트가 하나 더 있어
+ * 여기에 걸리지 않고 팬 전용으로 남는다.
+ */
+function isPublicBrowsePath(pathname: string) {
+  return (
+    /^\/fan\/events(?:\/[^/]+)?\/?$/.test(pathname) ||
+    /^\/fan\/influencers(?:\/[^/]+)?\/?$/.test(pathname)
+  )
+}
+
+/** 역할은 가리지 않지만 로그인은 필요한 경로다. 비로그인으로 열면 API가 401만 돌려준다. */
+function isAuthenticatedOnlyPath(pathname: string) {
+  return /^\/notifications\/?$/.test(pathname)
 }
 
 function roleLabel(role: LoginRole) {
@@ -138,11 +156,16 @@ function App() {
     navigate('/', { replace: true })
   }
 
-  if (isRolePath(pathname) && !isPublicEventPath(pathname) && !authSession) {
+  // 공개 탐색 경로는 로그인·역할 검사를 모두 건너뛴다.
+  const isPublicBrowse = isPublicBrowsePath(pathname)
+  const needsLogin =
+    !isPublicBrowse && (isRolePath(pathname) || isAuthenticatedOnlyPath(pathname))
+
+  if (needsLogin && !authSession) {
     return <Navigate replace to={loginPath} />
   }
 
-  if (authSession && !canAccessRolePath(pathname, authSession.role)) {
+  if (!isPublicBrowse && authSession && !canAccessRolePath(pathname, authSession.role)) {
     return <Navigate replace to="/403" />
   }
 
