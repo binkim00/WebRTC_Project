@@ -10,7 +10,9 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -176,10 +178,45 @@ public class AttachmentFileStorage {
         }
 
         try {
-            return Files.deleteIfExists(target);
+            boolean deleted = Files.deleteIfExists(target);
+            pruneEmptyDirectories(target.getParent());
+            return deleted;
         } catch (IOException exception) {
             log.warn("첨부파일 삭제에 실패했습니다. storageKey={}", storageKey, exception);
             return false;
+        }
+    }
+
+    /**
+     * 파일이 사라져 비게 된 날짜 디렉터리를 위로 올라가며 정리한다.
+     *
+     * <p>저장 키가 {@code yyyy/MM/dd} 구조라 삭제가 쌓이면 빈 디렉터리만 남으므로 함께 지운다.
+     * 다른 첨부가 남아 있으면 그 지점에서 멈추고, 최상위 저장 경로와 업로드 임시 디렉터리는
+     * 항상 보존한다. 정리에 실패해도 파일 삭제 결과에는 영향을 주지 않는다.
+     *
+     * @param startDirectory 정리를 시작할 디렉터리이며 보통 지운 파일의 상위 디렉터리
+     */
+    private void pruneEmptyDirectories(Path startDirectory) {
+        Path current = startDirectory;
+        while (current != null
+                && current.startsWith(storageRoot)
+                && !current.equals(storageRoot)) {
+            if (TEMP_DIRECTORY.equals(current.getFileName().toString())) {
+                // 업로드 중 임시 디렉터리는 비어 있어도 계속 사용하므로 지우지 않는다.
+                return;
+            }
+            try {
+                Files.delete(current);
+            } catch (DirectoryNotEmptyException exception) {
+                // 같은 날짜에 다른 첨부가 남아 있으면 더 올라가지 않는다.
+                return;
+            } catch (NoSuchFileException exception) {
+                // 다른 정리 작업이 먼저 지웠으면 상위 디렉터리만 이어서 확인한다.
+            } catch (IOException exception) {
+                log.debug("빈 첨부 디렉터리를 정리하지 못했습니다. path={}", current, exception);
+                return;
+            }
+            current = current.getParent();
         }
     }
 
