@@ -14,6 +14,7 @@ import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react
 
 import { ApiError } from '../../api/ApiError'
 import { getApplicationForm, saveApplicationForm } from '../../api/applications'
+import { attachmentContentUrl, uploadAttachment } from '../../api/attachments'
 import { getAuthSession, replaceAuthSession } from '../../api/authSession'
 import { forceEndCallSession } from '../../api/callSessions'
 import type { PageResponse } from '../../api/envelope'
@@ -38,6 +39,8 @@ import {
   getMeetingNotice,
   getMeetingNotices,
   updateMeetingNotice,
+  NOTICE_ATTACHMENT_MAX_COUNT,
+  type NoticeAttachmentResponse,
   type NoticeDetailResponse,
   type NoticeSummaryResponse,
 } from '../../api/notices'
@@ -1233,6 +1236,11 @@ export function ManagerNoticesPage() {
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
   const [editorError, setEditorError] = useState<string>()
+  // 첨부는 저장 전에 먼저 업로드해 식별자를 받아 두고, 저장 시 그 목록을 공지에 연결한다.
+  const [attachments, setAttachments] = useState<NoticeAttachmentResponse[]>([])
+  const [uploading, setUploading] = useState(false)
+  // 보고 있던 공지를 수정했을 때 selectedId가 그대로여서 상세가 다시 조회되지 않는 문제를 푼다.
+  const [detailReloadKey, setDetailReloadKey] = useState(0)
 
   const loadList = useCallback(async () => {
     if (!meetingId) {
@@ -1276,15 +1284,53 @@ export function ManagerNoticesPage() {
       })
 
     return () => controller.abort()
-  }, [meetingId, selectedId])
+  }, [detailReloadKey, meetingId, selectedId])
 
   /** 새 공지 작성 또는 기존 공지 수정 팝업을 연다. */
   function openEditor(target?: NoticeDetailResponse) {
     setEditingId(target?.noticeId)
     setTitle(target?.title ?? '')
     setContent(target?.content ?? '')
+    setAttachments(target?.attachments ?? [])
     setEditorError(undefined)
     setEditorOpen(true)
+  }
+
+  /** 선택한 파일을 순서대로 업로드하고 공지에 연결할 첨부 목록에 추가한다. */
+  async function uploadFiles(fileList: FileList | null) {
+    const files = fileList ? [...fileList] : []
+    if (!files.length) return
+
+    const token = getAuthSession()?.accessToken
+    if (!token) {
+      setEditorError('첨부파일을 올리려면 먼저 로그인해 주세요.')
+      return
+    }
+
+    const room = NOTICE_ATTACHMENT_MAX_COUNT - attachments.length
+    if (room <= 0) {
+      setEditorError(`첨부파일은 최대 ${NOTICE_ATTACHMENT_MAX_COUNT}개까지 연결할 수 있습니다.`)
+      return
+    }
+
+    setUploading(true)
+    setEditorError(undefined)
+    try {
+      // 서버가 개수를 거절하지 않도록 남은 자리만큼만 올린다.
+      for (const file of files.slice(0, room)) {
+        const uploaded = await uploadAttachment(file, 'NOTICE', token)
+        setAttachments((current) => [...current, uploaded])
+      }
+      if (files.length > room) {
+        setEditorError(
+          `첨부파일은 최대 ${NOTICE_ATTACHMENT_MAX_COUNT}개까지 연결할 수 있어 ${files.length - room}개는 제외했습니다.`,
+        )
+      }
+    } catch (cause) {
+      setEditorError(toErrorMessage(cause, '첨부파일을 올리지 못했습니다.'))
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function submitNotice(event: FormEvent<HTMLFormElement>) {
@@ -1304,12 +1350,26 @@ export function ManagerNoticesPage() {
     setSaving(true)
     setEditorError(undefined)
     try {
+      // 수정에서도 목록을 항상 보내 화면에서 지운 첨부가 그대로 남지 않게 한다.
+      const attachmentIds = attachments.map((attachment) => attachment.attachmentId)
       if (editingId !== undefined) {
-        await updateMeetingNotice(meetingId, editingId, { title: title.trim(), content: content.trim() }, token)
+        await updateMeetingNotice(
+          meetingId,
+          editingId,
+          { title: title.trim(), content: content.trim(), attachmentIds },
+          token,
+        )
         setMessage('공지를 수정했습니다.')
         setSelectedId(editingId)
+        // 같은 공지를 계속 보고 있으면 selectedId가 그대로라 상세가 다시 조회되지 않는다.
+        // 첨부 변경을 화면에 반영하려면 재조회를 명시적으로 요청해야 한다.
+        setDetailReloadKey((key) => key + 1)
       } else {
-        const created = await createMeetingNotice(meetingId, { title: title.trim(), content: content.trim() }, token)
+        const created = await createMeetingNotice(
+          meetingId,
+          { title: title.trim(), content: content.trim(), attachmentIds },
+          token,
+        )
         setMessage('공지를 등록했습니다.')
         setSelectedId(created.noticeId)
       }
@@ -1402,7 +1462,32 @@ export function ManagerNoticesPage() {
             {detailLoading ? (
               <p className="text-sm text-[var(--color-text-secondary)]">공지 내용을 불러오는 중입니다.</p>
             ) : detail ? (
-              <p className="whitespace-pre-wrap leading-7">{detail.content}</p>
+              <div className="grid gap-5">
+                <p className="whitespace-pre-wrap leading-7">{detail.content}</p>
+                {detail.attachments.length ? (
+                  <section className="grid gap-2 border-t border-[var(--color-divider)] pt-4">
+                    <h3 className="text-sm font-bold">첨부파일 {detail.attachments.length}개</h3>
+                    <ul className="grid gap-2">
+                      {detail.attachments.map((attachment) => (
+                        <li key={attachment.attachmentId}>
+                          <a
+                            className="text-sm font-semibold hover:underline"
+                            // download=true를 붙여 이미지·PDF가 새 탭에서 열리지 않고 저장되게 한다.
+                            href={attachmentContentUrl(attachment.attachmentId, true)}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            {attachment.originalFileName}
+                          </a>
+                          <span className="ml-2 text-xs text-[var(--color-text-secondary)]">
+                            {Math.max(1, Math.round(attachment.fileSize / 1024)).toLocaleString('ko-KR')} KB
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+              </div>
             ) : (
               <p className="text-sm text-[var(--color-text-secondary)]">왼쪽 목록에서 공지를 선택하면 내용이 표시됩니다.</p>
             )}
@@ -1425,6 +1510,54 @@ export function ManagerNoticesPage() {
         <form className="grid gap-5" id="manager-notice-form" onSubmit={submitNotice}>
           <TextField label="공지 제목" maxLength={200} required value={title} onChange={(event) => setTitle(event.target.value)} />
           <Textarea label="공지 내용" required rows={7} value={content} onChange={(event) => setContent(event.target.value)} />
+
+          <fieldset className="grid gap-3">
+            <legend className="text-sm font-bold">
+              첨부파일 <span className="font-medium text-[var(--color-text-secondary)]">({attachments.length}/{NOTICE_ATTACHMENT_MAX_COUNT})</span>
+            </legend>
+            <input
+              accept="image/*,.pdf"
+              className="block w-full text-sm"
+              disabled={uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT}
+              multiple
+              onChange={(event) => {
+                void uploadFiles(event.target.files)
+                // 같은 파일을 다시 선택해도 change가 발생하도록 입력값을 비운다.
+                event.target.value = ''
+              }}
+              type="file"
+            />
+            {uploading ? <p className="text-sm text-[var(--color-text-secondary)]">첨부파일을 올리는 중입니다.</p> : null}
+            {attachments.length ? (
+              <ul className="grid gap-2">
+                {attachments.map((attachment) => (
+                  <li className="flex items-center justify-between gap-3 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3 py-2 text-sm" key={attachment.attachmentId}>
+                    <a
+                      className="min-w-0 flex-1 truncate font-semibold hover:underline"
+                      href={attachmentContentUrl(attachment.attachmentId)}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {attachment.originalFileName}
+                    </a>
+                    <Button
+                      leadingIcon={<Trash size={14} />}
+                      onClick={() =>
+                        setAttachments((current) =>
+                          current.filter((item) => item.attachmentId !== attachment.attachmentId),
+                        )
+                      }
+                      size="sm"
+                      variant="ghost"
+                    >
+                      제거
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </fieldset>
+
           {editorError ? <AlertBanner title="저장 실패" variant="error">{editorError}</AlertBanner> : null}
         </form>
       </Dialog>

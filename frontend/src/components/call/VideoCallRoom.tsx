@@ -27,6 +27,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   const [statusError, setStatusError] = useState<string>()
   const [recordingEnabled, setRecordingEnabled] = useState(false)
   const [recordingPolicyError, setRecordingPolicyError] = useState<string>()
+  // 통화 시작 전에는 서버의 남은 시간이 0이라 카운트다운 대기 값으로 쓸 설정 값이 필요하다.
+  const [callDurationSec, setCallDurationSec] = useState<number>()
   const [retryCount, setRetryCount] = useState(0)
   const [loading, setLoading] = useState(!isDesignPreview)
 
@@ -46,6 +48,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       setConnectionInfo(undefined)
       setSessionStatus(undefined)
       setRecordingEnabled(false)
+      setCallDurationSec(undefined)
       setConnectionError(undefined)
       setStatusError(undefined)
       setRecordingPolicyError(undefined)
@@ -58,25 +61,31 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
           getCallSessionStatus(props.callSessionId, { authToken, signal }),
         ])
 
+        // 녹화 여부와 통화 제한 시간은 통화 진입 시 서버 상세를 다시 읽어
+        // 오래된 화면 값을 쓰지 않는다. 상세 조회는 모든 역할에 열려 있다.
         let shouldRecord = false
-        if (authSession?.role === 'FAN') {
-          try {
-            // 녹화 여부는 통화 진입 시 서버 상세를 다시 읽어 오래된 화면 값을 사용하지 않는다.
-            const meeting = await fetchPublicFanMeetingDetail(
-              Number(props.meetingId),
-              authToken,
-              signal,
-            )
-            shouldRecord = meeting.meeting.operation.recordingEnabled
-          } catch (error: unknown) {
-            if (error instanceof DOMException && error.name === 'AbortError') throw error
-            // 정책을 확인하지 못한 경우에는 개인정보 보호를 위해 녹화를 시작하지 않는다.
+        let durationSec: number | undefined
+        try {
+          const meeting = await fetchPublicFanMeetingDetail(
+            Number(props.meetingId),
+            authToken,
+            signal,
+          )
+          durationSec = meeting.meeting.operation.callDurationSec
+          shouldRecord =
+            authSession?.role === 'FAN' && meeting.meeting.operation.recordingEnabled
+        } catch (error: unknown) {
+          if (error instanceof DOMException && error.name === 'AbortError') throw error
+          // 정책을 확인하지 못한 경우에는 개인정보 보호를 위해 녹화를 시작하지 않는다.
+          // 카운트다운은 서버가 보내는 남은 시간으로 계속 동작하므로 통화 자체는 막지 않는다.
+          if (authSession?.role === 'FAN') {
             setRecordingPolicyError('팬미팅 녹화 설정을 확인하지 못해 녹화를 시작하지 않았습니다.')
           }
         }
 
         if (signal.aborted) return
         setRecordingEnabled(shouldRecord)
+        setCallDurationSec(durationSec)
         setConnectionInfo(info)
         setSessionStatus(status)
       } catch (error: unknown) {
@@ -200,6 +209,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     >
       <ConnectedCallRoom
         {...props}
+        callDurationSec={callDurationSec}
         recordingEnabled={recordingEnabled}
         recordingPolicyError={recordingPolicyError}
         sessionStatus={sessionStatus}

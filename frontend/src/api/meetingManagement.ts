@@ -186,10 +186,30 @@ function toServerLocalDateTime(date: Date): string {
   return new Date(date.getTime() + 9 * 60 * 60_000).toISOString().slice(0, 23)
 }
 
-function serverLocalDateTimeMs(value?: string | null): number {
+/**
+ * 서버가 보낸 LocalDateTime 문자열을 밀리초로 바꾼다.
+ *
+ * offset이 없는 값은 서버 시간대(KST) 기준으로 해석한다. `new Date(value)`에 그대로 넘기면
+ * 브라우저 시간대를 따라가므로 KST가 아닌 환경에서 오픈 시각 비교가 어긋난다.
+ */
+export function serverLocalDateTimeMs(value?: string | null): number {
   if (!value) return Number.NaN
   const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)
   return new Date(hasOffset ? value : `${value}+09:00`).getTime()
+}
+
+/**
+ * 대기실 오픈 시각이 이미 지났는지 확인한다.
+ *
+ * 백엔드 `QueueCommandService.enter()`와 같은 기준이다. 오픈 시각이 없으면 제한이 없다고 본다.
+ *
+ * @param queueOpenAt 운영 설정의 대기열 오픈 일시
+ * @param now 비교 기준 시각이며 기본값은 현재다
+ */
+export function isWaitingRoomOpen(queueOpenAt?: string | null, now = Date.now()): boolean {
+  if (!queueOpenAt) return true
+  const openAt = serverLocalDateTimeMs(queueOpenAt)
+  return Number.isFinite(openAt) && now >= openAt
 }
 
 export async function transitionFanMeetingImmediately(
@@ -271,6 +291,30 @@ export function openWaitingRoomImmediately(
     authToken,
     signal,
   )
+}
+
+/**
+ * 대기실을 먼저 연 뒤 팬미팅을 시작한다.
+ *
+ * `POST /start`는 상태만 LIVE로 바꾸고 대기실 오픈 시각은 그대로 두는데, 시작 허용 시각은
+ * `earlyStartMinutes`가, 입장 허용 시각은 `waitingRoomOpenAt`이 따로 결정한다. 두 기준이
+ * 어긋나면 팬미팅이 진행 중인데도 팬은 `WAITING_ROOM_NOT_OPEN`으로 계속 막히므로 시작과
+ * 동시에 오픈 시각을 현재로 당긴다.
+ *
+ * 오픈 요청이 실패해도 시작 자체는 막지 않는다. 실제 오픈 여부는 응답의
+ * `operation.queueOpenAt`을 {@link isWaitingRoomOpen}으로 다시 확인해 호출자가 안내한다.
+ */
+export async function startFanMeetingWithOpenWaitingRoom(
+  meetingId: string | number,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<FanMeetingManagementResponse> {
+  try {
+    await openWaitingRoomImmediately(meetingId, authToken, signal)
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause
+  }
+  return startFanMeeting(meetingId, authToken, signal)
 }
 
 async function postCommand(

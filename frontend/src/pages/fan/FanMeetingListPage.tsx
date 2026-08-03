@@ -1,5 +1,5 @@
 import { ImageSquare } from '@phosphor-icons/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
@@ -12,7 +12,8 @@ import {
   type FanMeetingDetailStatus,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
-import { enterQueue } from '../../api/queue'
+import { isWaitingRoomOpen, serverLocalDateTimeMs } from '../../api/meetingManagement'
+import { enterQueue, interpretQueueEnterError } from '../../api/queue'
 import {
   getAllMyRecordings,
   issueRecordingDownloadUrl,
@@ -88,6 +89,11 @@ export function FanMeetingListPage() {
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
+  // 자동 재조회는 목록을 스피너로 바꾸지 않고 조용히 갱신해야 하므로 최초 로딩과 구분한다.
+  const [refreshing, setRefreshing] = useState(false)
+  const backgroundReloadRef = useRef(false)
+  // 자동 재조회가 겹치지 않도록 마지막 조회 시각을 기억해 최소 간격을 지킨다.
+  const lastLoadedAtRef = useRef(0)
   const [partialWarning, setPartialWarning] = useState<string>()
   const [enteringMeetingId, setEnteringMeetingId] = useState<number>()
   const [queueError, setQueueError] = useState<{ meetingId: number; message: string }>()
@@ -104,7 +110,13 @@ export function FanMeetingListPage() {
       return () => controller.abort()
     }
 
-    setLoading(true)
+    // 자동 재조회는 이미 그려 둔 목록을 유지한 채 갱신 표시만 남긴다.
+    const isBackgroundReload = backgroundReloadRef.current
+    backgroundReloadRef.current = false
+    lastLoadedAtRef.current = Date.now()
+
+    if (isBackgroundReload) setRefreshing(true)
+    else setLoading(true)
     setListError(undefined)
     setPartialWarning(undefined)
 
@@ -186,12 +198,91 @@ export function FanMeetingListPage() {
             : '내 팬미팅 목록을 불러오지 못했습니다.',
         )
       } finally {
-        if (!controller.signal.aborted) setLoading(false)
+        if (!controller.signal.aborted) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       }
     })()
 
     return () => controller.abort()
   }, [reloadKey])
+
+  /**
+   * 아직 대기실에 입장할 수 없는 예정 팬미팅 수다.
+   *
+   * 카드의 `canEnter`와 같은 기준(대기열 오픈 시각 + 서버의 입장 허용 여부)을 쓴다.
+   * 하나라도 남아 있으면 화면을 열어 둔 사이 상태가 바뀔 수 있으므로 자동 재조회가 필요하다.
+   */
+  const waitingCount = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          item.listStatus === 'upcoming' &&
+          !(
+            isWaitingRoomOpen(item.detail?.meeting.operation.queueOpenAt) &&
+            (item.detail?.viewer.canEnter || item.detail?.meeting.status === 'READY')
+          ),
+      ).length,
+    [items],
+  )
+
+  /**
+   * 아직 오픈 전인 팬미팅 중 가장 이른 오픈 시각(ms)이며 없으면 undefined다.
+   *
+   * 목록을 다시 읽은 직후에만 다시 계산되므로 여기서 쓰는 현재 시각은 그 시점 기준이다.
+   */
+  const nextQueueOpenAtMs = useMemo(() => {
+    const now = Date.now()
+    const futureOpenTimes = items
+      .filter((item) => item.listStatus === 'upcoming')
+      .map((item) => serverLocalDateTimeMs(item.detail?.meeting.operation.queueOpenAt))
+      .filter((time) => Number.isFinite(time) && time > now)
+    return futureOpenTimes.length ? Math.min(...futureOpenTimes) : undefined
+  }, [items])
+
+  useEffect(() => {
+    if (nextQueueOpenAtMs === undefined) return
+
+    // 예정된 오픈 시각에 딱 한 번만 다시 조회한다. 주기 폴링과 달리 낭비되는 요청이 없다.
+    // 서버와 브라우저의 시계 차이를 감수하도록 1초 여유를 둔다.
+    const delay = Math.max(1_000, nextQueueOpenAtMs + 1_000 - Date.now())
+    // setTimeout은 지연이 2^31-1ms(약 24.8일)를 넘으면 넘쳐서 즉시 실행된다. 그대로 두면
+    // 먼 미래의 팬미팅 때문에 재조회가 무한 반복되므로 예약하지 않고 아래 경로에 맡긴다.
+    if (delay > 2_147_483_647) return
+
+    const timer = window.setTimeout(() => {
+      backgroundReloadRef.current = true
+      setReloadKey((key) => key + 1)
+    }, delay)
+
+    return () => window.clearTimeout(timer)
+  }, [nextQueueOpenAtMs])
+
+  useEffect(() => {
+    if (waitingCount === 0) return
+
+    // 운영자가 대기열을 수동으로 열면 오픈 시각이 과거로 바뀌어 위 예약 타이머가 걸리지 않는다.
+    // 화면 복귀와 느린 주기 두 경로로 그 변경을 따라잡는다.
+    const MIN_RELOAD_INTERVAL_MS = 15_000
+    const reloadInBackground = () => {
+      // 보이지 않는 탭에서는 갱신해도 볼 수 없으므로 요청을 아낀다.
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastLoadedAtRef.current < MIN_RELOAD_INTERVAL_MS) return
+      backgroundReloadRef.current = true
+      setReloadKey((key) => key + 1)
+    }
+
+    window.addEventListener('focus', reloadInBackground)
+    document.addEventListener('visibilitychange', reloadInBackground)
+    const interval = window.setInterval(reloadInBackground, 30_000)
+
+    return () => {
+      window.removeEventListener('focus', reloadInBackground)
+      document.removeEventListener('visibilitychange', reloadInBackground)
+      window.clearInterval(interval)
+    }
+  }, [waitingCount])
 
   const filteredItems = useMemo(() => {
     if (status !== 'upcoming' && status !== 'completed') return []
@@ -242,19 +333,14 @@ export function FanMeetingListPage() {
       await enterQueue(meetingId, session.accessToken)
       navigate(`/fan/fan-meetings/${meetingId}/waiting`)
     } catch (error: unknown) {
-      if (error instanceof ApiError && error.status === 409) {
+      // 서버는 "이미 입장함"과 "오픈 전·대기열 미초기화"를 모두 409로 반환하므로
+      // 상태 코드가 아니라 ErrorCode로 구분해야 실패 사유가 화면에서 사라지지 않는다.
+      const { alreadyEntered, message } = interpretQueueEnterError(error)
+      if (alreadyEntered) {
         navigate(`/fan/fan-meetings/${meetingId}/waiting`)
         return
       }
-      setQueueError({
-        meetingId,
-        message:
-          error instanceof ApiError && error.status === 403
-            ? '확정 참가자로 등록된 팬만 대기실에 입장할 수 있습니다.'
-            : error instanceof Error
-              ? error.message
-              : '대기실에 입장하지 못했습니다.',
-      })
+      setQueueError({ meetingId, message })
     } finally {
       setEnteringMeetingId(undefined)
     }
@@ -342,6 +428,17 @@ export function FanMeetingListPage() {
                 ? '참가가 확정된 다가오는 팬미팅을 확인하세요.'
                 : '참여한 팬미팅과 저장된 녹화 영상을 확인하세요.'}
             </p>
+            {/* 대기열이 열리면 새로고침 없이 버튼이 바뀐다는 것을 알려 준다. */}
+            {isUpcoming && waitingCount > 0 ? (
+              <p
+                aria-live="polite"
+                className="mt-2 text-sm font-semibold text-[var(--color-text-tertiary)]"
+              >
+                {refreshing
+                  ? '대기열 상태를 확인하는 중입니다.'
+                  : '대기열이 열리면 이 화면에서 바로 입장할 수 있습니다.'}
+              </p>
+            ) : null}
           </div>
           <Tabs
             ariaLabel="팬미팅 목록 상태"
@@ -380,10 +477,7 @@ export function FanMeetingListPage() {
                 : undefined
               // LIVE 상태만으로 입장을 허용하지 않는다. 대기열 오픈 시각이 지나고
               // 서버가 참가자 입장을 허용한 경우에만 장비 점검·대기실로 이동한다.
-              const queueOpenAt = item.detail?.meeting.operation.queueOpenAt
-              const queueOpenTime = queueOpenAt ? new Date(queueOpenAt).getTime() : Number.NaN
-              const queueIsOpen = !queueOpenAt ||
-                (Number.isFinite(queueOpenTime) && Date.now() >= queueOpenTime)
+              const queueIsOpen = isWaitingRoomOpen(item.detail?.meeting.operation.queueOpenAt)
               const canEnter = Boolean(
                 queueIsOpen &&
                   (item.detail?.viewer.canEnter || item.detail?.meeting.status === 'READY'),

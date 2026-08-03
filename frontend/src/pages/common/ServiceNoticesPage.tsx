@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, PushPin } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { attachmentContentUrl } from '../../api/attachments'
 import type { PageResponse } from '../../api/envelope'
 import {
   getServiceNotice,
@@ -194,6 +195,30 @@ export function ServiceNoticeDetailPage() {
           <div className="mt-7 whitespace-pre-wrap border-t border-[var(--color-divider)] pt-7 leading-7">
             {notice.content}
           </div>
+          {/* 백엔드는 공지에 첨부를 연결할 수 있으므로 읽는 쪽에서도 내려받을 수 있게 한다. */}
+          {notice.attachments.length ? (
+            <section className="mt-7 grid gap-2 border-t border-[var(--color-divider)] pt-6">
+              <h2 className="text-sm font-bold">첨부파일 {notice.attachments.length}개</h2>
+              <ul className="grid gap-2">
+                {notice.attachments.map((attachment) => (
+                  <li key={attachment.attachmentId}>
+                    <a
+                      className="text-sm font-semibold hover:underline"
+                      // download=true를 붙여 이미지·PDF가 새 탭에서 열리지 않고 저장되게 한다.
+                      href={attachmentContentUrl(attachment.attachmentId, true)}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {attachment.originalFileName}
+                    </a>
+                    <span className="ml-2 text-xs text-[var(--color-text-secondary)]">
+                      {Math.max(1, Math.round(attachment.fileSize / 1024)).toLocaleString('ko-KR')} KB
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </Card>
       )}
     </div>

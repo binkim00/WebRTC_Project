@@ -39,8 +39,11 @@ export function PreviewCallRoom({ endTo, participantLabel }: VideoCallRoomProps)
       <CallStage
         cameraEnabled={cameraEnabled}
         captionEnabled={captionEnabled}
-        captionSpeaker="Melly"
-        captionText="오늘 만나게 돼서 정말 반가워요!"
+        // 실제 화면처럼 지나간 대사와 현재 발화가 함께 보이도록 두 줄을 넣는다.
+        captionLines={[
+          { speaker: '나', text: '오늘 초대해 주셔서 감사해요.' },
+          { speaker: 'Melly', text: '오늘 만나게 돼서 정말 반가워요!' },
+        ]}
         connected
         connectionLabel="연결 완료"
         localVideo={localVideo}

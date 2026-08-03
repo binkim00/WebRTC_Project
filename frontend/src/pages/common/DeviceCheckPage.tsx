@@ -10,9 +10,8 @@ import {
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import previewCameraImage from '../../assets/call-preview-remote.jpg'
-import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
-import { enterQueue } from '../../api/queue'
+import { enterQueue, interpretQueueEnterError } from '../../api/queue'
 import { saveDeviceCheck } from '../../api/deviceChecks'
 import { fetchMeetingDetail } from '../../api/fanMeetingParticipants'
 import {
@@ -332,20 +331,16 @@ export function DeviceCheckPage() {
       await enterQueue(meetingId, session.accessToken)
       navigate(`/fan/fan-meetings/${encodeURIComponent(meetingId)}/waiting`)
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) {
+      // 서버는 "이미 입장함"과 "오픈 전·대기열 미초기화"를 모두 409로 반환한다.
+      // 상태 코드만 보고 전부 재입장으로 넘기면 실제로 막힌 팬이 순번 없는 대기실에 갇혀
+      // 원인이 화면에서 사라지므로 ErrorCode로 구분한다.
+      const { alreadyEntered, message } = interpretQueueEnterError(error)
+      if (alreadyEntered) {
         navigate(`/fan/fan-meetings/${encodeURIComponent(meetingId)}/waiting`)
         return
       }
 
-      if (error instanceof ApiError && error.status === 403) {
-        setQueueError('확정 참가자로 등록된 팬만 대기실에 입장할 수 있습니다.')
-      } else {
-        setQueueError(
-          error instanceof ApiError || error instanceof TypeError
-            ? error.message
-            : '대기실에 입장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
-        )
-      }
+      setQueueError(message)
     } finally {
       setIsEnteringQueue(false)
     }

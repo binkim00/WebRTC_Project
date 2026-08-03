@@ -30,8 +30,9 @@ import {
 } from '../../api/fanMeetingParticipants'
 import {
   endFanMeeting,
+  isWaitingRoomOpen,
   openWaitingRoomImmediately,
-  startFanMeeting,
+  startFanMeetingWithOpenWaitingRoom,
   transitionFanMeetingImmediately,
 } from '../../api/meetingManagement'
 import {
@@ -108,6 +109,8 @@ export function ManagerMeetingMonitorPage() {
   const [changeRequests, setChangeRequests] = useState<QueueChangeRequestSummaryResponse[]>([])
   const [lifecycleBusy, setLifecycleBusy] = useState(false)
   const [requestBusyId, setRequestBusyId] = useState<number>()
+  // 대기열 오픈 안내는 실패가 아니라 경고이므로 loadQueue가 지우는 error와 분리해 보관한다.
+  const [waitingRoomWarning, setWaitingRoomWarning] = useState<string>()
 
   // 폴링과 수동 새로고침이 겹치면 이전 요청을 취소해 오래된 응답이 최신 화면을 덮지 않게 한다.
   const queueRequestIdRef = useRef(0)
@@ -340,7 +343,8 @@ export function ManagerMeetingMonitorPage() {
     if (!fanMeetingId || isPreview) return
 
     const actionAllowed = action === 'openQueue'
-      ? meetingStatus === 'READY'
+      // 시작 후에야 오픈이 늦은 것을 알아차리는 경우가 있어 LIVE에서도 수동 오픈을 남겨 둔다.
+      ? meetingStatus === 'READY' || meetingStatus === 'LIVE'
       : action === 'start'
       ? lifecycleActions.canStart
       : action === 'startNow'
@@ -356,9 +360,9 @@ export function ManagerMeetingMonitorPage() {
     }
 
     const confirmText = action === 'openQueue'
-      ? '팬미팅 시작 전에 대기열을 지금 오픈할까요? 당첨된 팬이 장비 점검 후 대기실에서 기다릴 수 있습니다.'
+      ? '대기열을 지금 오픈할까요? 당첨된 팬이 장비 점검 후 대기실에서 기다릴 수 있습니다.'
       : action === 'start'
-      ? '팬미팅을 시작할까요? 시작하면 팬미팅이 진행 중 상태로 전환됩니다.'
+      ? '팬미팅을 시작할까요? 대기열도 함께 오픈되어 당첨된 팬이 바로 입장할 수 있습니다.'
       : action === 'startNow'
         ? '예약 일시 전에 팬미팅을 즉시 시작할까요? 예정 시작 시각이 현재로 변경됩니다.'
         : '팬미팅을 종료할까요? 종료하면 대기열 운영이 마무리됩니다.'
@@ -376,7 +380,9 @@ export function ManagerMeetingMonitorPage() {
       const updated = action === 'openQueue'
         ? await openWaitingRoomImmediately(fanMeetingId, token)
         : action === 'start'
-        ? await startFanMeeting(fanMeetingId, token)
+        // POST /start는 상태만 LIVE로 바꾸고 대기실 오픈 시각은 그대로 두므로,
+        // 시작만 하면 오픈 예정 시각까지 팬이 입장할 수 없다. 오픈을 함께 처리한다.
+        ? await startFanMeetingWithOpenWaitingRoom(fanMeetingId, token)
         : action === 'startNow'
           ? await transitionFanMeetingImmediately(
               fanMeetingId,
@@ -386,6 +392,12 @@ export function ManagerMeetingMonitorPage() {
             )
           : await endFanMeeting(fanMeetingId, token)
       setMeetingStatus(updated.status)
+      // 시작했는데 대기열이 아직 닫혀 있으면 팬은 입장 시 409로 막힌다. 조용히 넘기지 않고 알린다.
+      setWaitingRoomWarning(
+        action !== 'end' && !isWaitingRoomOpen(updated.operation.queueOpenAt)
+          ? '대기열 오픈 시각이 아직 지나지 않아 팬이 대기실에 입장할 수 없습니다. ‘대기열 지금 오픈’을 눌러 주세요.'
+          : undefined,
+      )
       await Promise.all([loadQueue(), loadMeetingStatus()])
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '팬미팅 상태 변경에 실패했습니다.')
@@ -518,14 +530,15 @@ export function ManagerMeetingMonitorPage() {
           >
             팬미팅 시작
           </Button>
-          {meetingStatus === 'READY' ? (
+          {meetingStatus === 'READY' || meetingStatus === 'LIVE' ? (
             <Button
               disabled={lifecycleBusy || Boolean(statusError)}
               leadingIcon={<Clock size={17} weight="bold" />}
               onClick={() => void runLifecycle('openQueue')}
+              title="대기실 오픈 시각을 현재로 당겨 당첨된 팬이 바로 입장할 수 있게 합니다."
               variant="secondary"
             >
-              대기열 먼저 오픈
+              대기열 지금 오픈
             </Button>
           ) : null}
           {lifecycleActions.canStartNow && !lifecycleActions.canStart ? (
@@ -549,6 +562,7 @@ export function ManagerMeetingMonitorPage() {
 
       {isPreview ? <AlertBanner title="개발 미리보기" variant="warning">대기열 상태 변경은 현재 화면에만 반영됩니다.</AlertBanner> : null}
       {statusError ? <AlertBanner title="상태 변경 기능이 잠겼습니다" variant="warning">{statusError}</AlertBanner> : null}
+      {waitingRoomWarning ? <AlertBanner title="팬이 아직 대기실에 입장할 수 없습니다" variant="warning">{waitingRoomWarning}</AlertBanner> : null}
       {error ? <AlertBanner title="대기열 작업을 완료할 수 없습니다" variant="error">{error}</AlertBanner> : null}
 
       {isSoloInfluencer ? (
