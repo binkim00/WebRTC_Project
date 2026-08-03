@@ -106,6 +106,12 @@ public class FanMeeting extends BaseTimeEntity {
         this.scheduledStartAt = Objects.requireNonNull(scheduledStartAt);
     }
 
+    /** 테스트용 상태 변경이다. */
+    public void forceControl(FanMeetingStatus status, LocalDateTime scheduledStartAt) {
+        if (status != null) this.status = status;
+        if (scheduledStartAt != null) this.scheduledStartAt = scheduledStartAt;
+    }
+
     /**
      * 공개 전 초안 상태의 팬미팅을 생성한다.
      * 조직과 매니저는 1인 인플루언서가 생성하는 경우 null일 수 있다.
