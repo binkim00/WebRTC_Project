@@ -48,6 +48,18 @@ cd /home/ubuntu/docker/project/S15P11E106/infra/prod
 | `JwtConfig.SERVICE_ZONE` | `Clock.system(Asia/Seoul)` | `Clock` 빈을 주입받는 시각 계산 전부 |
 | `docker-compose.prod.yml` | `TZ` + mysql `--default-time-zone=+09:00` | DB의 `NOW()`, 각 컨테이너 로그 시각 |
 
+컨테이너별로 방식이 다릅니다. **livekit과 portainer에는 `TZ`를 넣으면 안 됩니다.**
+두 이미지에는 tzdata가 없어 Go 런타임이 `Asia/Seoul`을 찾지 못하고, 그러면
+`/etc/localtime`까지 무시한 채 UTC로 고정됩니다. 실측으로 확인한 동작입니다.
+
+| 서비스 | 방식 | 이유 |
+|---|---|---|
+| backend, mysql, redis, nginx, frontend, jenkins | `TZ: Asia/Seoul` | 이미지에 tzdata 있음 |
+| livekit, portainer | `/usr/share/zoneinfo/Asia/Seoul:/etc/localtime:ro` 마운트, **`TZ` 미설정** | tzdata 없음. `TZ`를 넣으면 오히려 UTC가 됨 |
+
+마운트 방식은 호스트의 시간대 파일을 직접 붙이므로 호스트 시간대 설정과 무관합니다.
+다만 호스트에 tzdata가 있어야 합니다(Ubuntu 기본 설치).
+
 `Clock` 빈을 코드에서 고정해 두었으므로 컨테이너 `TZ`가 빠져도 업무 시각 계산은 흔들리지
 않습니다. 다만 `TZ`가 없으면 `LocalDateTime.now()`를 직접 쓰는 소수 지점과 로그 시각이
 UTC로 돌아가므로 둘 다 유지해야 합니다.
