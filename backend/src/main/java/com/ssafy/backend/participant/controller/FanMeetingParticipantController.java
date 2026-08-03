@@ -3,6 +3,7 @@ package com.ssafy.backend.participant.controller;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.common.api.PageResponse;
+import com.ssafy.backend.participant.domain.ParticipantSource;
 import com.ssafy.backend.participant.dto.ParticipantSummaryResponse;
 import com.ssafy.backend.participant.service.ParticipantQueryService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,6 +35,7 @@ public class FanMeetingParticipantController {
      * @param meetingId 팬미팅 식별자
      * @param participantStatus 참가자 상태 필터이며 생략하면 전체 상태를 조회한다
      * @param keyword 팬 닉네임 검색어이며 생략하면 전체 참가자를 조회한다
+     * @param participantSource 참가자 출처 필터이며 생략하면 출처를 구분하지 않는다
      * @param page 페이지 번호
      * @param size 페이지 크기
      * @param principal JWT 인증 사용자 정보
@@ -44,12 +46,13 @@ public class FanMeetingParticipantController {
             @PathVariable Long meetingId,
             @RequestParam(required = false) String participantStatus,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) ParticipantSource participantSource,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
         return ApiResponse.success(participantQueryService.getParticipants(
-                meetingId, participantStatus, keyword, page, size, principal));
+                meetingId, participantStatus, keyword, participantSource, page, size, principal));
     }
 
     /**

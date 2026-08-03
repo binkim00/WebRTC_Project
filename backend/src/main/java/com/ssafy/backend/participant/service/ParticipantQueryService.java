@@ -7,6 +7,7 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.participant.domain.Participant;
+import com.ssafy.backend.participant.domain.ParticipantSource;
 import com.ssafy.backend.participant.dto.ParticipantSummaryResponse;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
 import com.ssafy.backend.queue.domain.QueueEntry;
@@ -57,6 +58,7 @@ public class ParticipantQueryService {
      * @param meetingId 팬미팅 식별자
      * @param participantStatus 참가자 상태 필터이며 비우면 전체 상태를 조회한다
      * @param keyword 팬 닉네임 검색어이며 비우면 전체 참가자를 조회한다
+     * @param participantSource 참가자 출처 필터이며 비우면 출처를 구분하지 않는다
      * @param page 페이지 번호
      * @param size 페이지 크기
      * @param principal JWT 인증 사용자 정보
@@ -66,18 +68,20 @@ public class ParticipantQueryService {
     @Transactional(readOnly = true)
     public PageResponse<ParticipantSummaryResponse> getParticipants(
             Long meetingId, String participantStatus, String keyword,
-            int page, int size, AuthenticatedUser principal
+            ParticipantSource participantSource, int page, int size, AuthenticatedUser principal
     ) {
         User operator = currentUserService.requireActiveUser(principal);
         meetingAccessService.requireOperator(meetingId, operator);
         validatePage(page, size);
 
-        Page<Participant> participants = participantRepository.searchByMeeting(
-                meetingId,
-                normalizeFilter(participantStatus),
-                normalizeFilter(keyword),
-                PageRequest.of(page, size)
-        );
+        String status = normalizeFilter(participantStatus);
+        String normalizedKeyword = normalizeFilter(keyword);
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Page<Participant> participants = participantSource == null
+                ? participantRepository.searchByMeeting(
+                        meetingId, status, normalizedKeyword, pageRequest)
+                : participantRepository.searchByMeetingAndSource(
+                        meetingId, status, normalizedKeyword, participantSource, pageRequest);
         if (participants.isEmpty()) {
             return PageResponse.from(participants.map(
                     participant -> ParticipantSummaryResponse.of(participant, null)));

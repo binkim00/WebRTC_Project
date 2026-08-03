@@ -3,6 +3,7 @@ package com.ssafy.backend.participant.controller;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.common.api.PageResponse;
+import com.ssafy.backend.participant.domain.ParticipantSource;
 import com.ssafy.backend.participant.dto.ParticipantSummaryResponse;
 import com.ssafy.backend.participant.service.ParticipantQueryService;
 import com.ssafy.backend.user.domain.UserRole;
@@ -26,12 +27,12 @@ class FanMeetingParticipantControllerTest {
         FanMeetingParticipantController controller = new FanMeetingParticipantController(service);
         PageResponse<ParticipantSummaryResponse> expected =
                 new PageResponse<>(List.of(), 0, 6, 0L, 0, false);
-        when(service.getParticipants(1L, "READY", "팬", 0, 6, MANAGER)).thenReturn(expected);
+        when(service.getParticipants(1L, "READY", "팬", null, 0, 6, MANAGER)).thenReturn(expected);
 
         ApiResponse<PageResponse<ParticipantSummaryResponse>> response =
-                controller.getParticipants(1L, "READY", "팬", 0, 6, MANAGER);
+                controller.getParticipants(1L, "READY", "팬", null, 0, 6, MANAGER);
 
-        verify(service).getParticipants(1L, "READY", "팬", 0, 6, MANAGER);
+        verify(service).getParticipants(1L, "READY", "팬", null, 0, 6, MANAGER);
         assertThat(response.success()).isTrue();
         assertThat(response.data()).isSameAs(expected);
     }
@@ -42,7 +43,7 @@ class FanMeetingParticipantControllerTest {
         ParticipantQueryService service = mock(ParticipantQueryService.class);
         FanMeetingParticipantController controller = new FanMeetingParticipantController(service);
         ParticipantSummaryResponse expected = new ParticipantSummaryResponse(
-                100L, 30L, "첫째팬", null, 1, "READY", "WAITING");
+                100L, 30L, "첫째팬", null, 1, "READY", "WAITING", ParticipantSource.APPLICATION);
         when(service.getParticipant(1L, 100L, MANAGER)).thenReturn(expected);
 
         ApiResponse<ParticipantSummaryResponse> response =

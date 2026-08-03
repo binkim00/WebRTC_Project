@@ -141,9 +141,14 @@ public class ApplicationFormService {
 
     /** 삭제되지 않은 팬미팅을 조회하고 없으면 공통 예외를 발생시킨다. */
     private FanMeeting requireMeeting(Long meetingId) {
-        return fanMeetingRepository.findById(meetingId)
-                .filter(meeting -> meeting.getDeletedAt() == null)
+        FanMeeting meeting = fanMeetingRepository.findById(meetingId)
+                .filter(found -> found.getDeletedAt() == null)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAN_MEETING_NOT_FOUND));
+        // 외부 선별 팬미팅은 응모 폼을 사용하지 않으므로 조회와 저장을 모두 차단한다.
+        if (meeting.isExternalSelection()) {
+            throw new BusinessException(ErrorCode.APPLICATION_NOT_SUPPORTED);
+        }
+        return meeting;
     }
 
     /**

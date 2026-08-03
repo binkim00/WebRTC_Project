@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -42,6 +44,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return 조건을 만족하는 회원 수
      */
     long countByRoleAndStatus(UserRole role, UserStatus status);
+
+    /**
+     * 외부 선별 명단의 이메일에 해당하는 회원을 한 번에 조회한다.
+     *
+     * <p>명단 행마다 조회하지 않도록 정규화된 이메일 목록으로 일괄 조회한다.
+     *
+     * @param emails 소문자로 정규화된 이메일 목록
+     * @return 이메일이 일치하는 회원 목록이며 가입하지 않은 이메일은 결과에 없다
+     */
+    List<User> findAllByEmailIn(Collection<String> emails);
 
     /**
      * 조직 소속 변경이 끝날 때까지 사용자 행에 쓰기 잠금을 걸어 조회한다.
