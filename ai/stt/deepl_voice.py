@@ -34,7 +34,7 @@ class DeepLVoiceAdapter(STTAdapter):
         self._api_key = api_key
         self._target_lang = target_lang
         self._ws = None
-        self._closed = False
+        self._stop = asyncio.Event()  # close() 시 set → 오디오 입력 종료 신호
 
     async def transcribe(
         self,
@@ -64,24 +64,41 @@ class DeepLVoiceAdapter(STTAdapter):
         )
 
         try:
-            done, pending = await asyncio.wait(
+            done, _ = await asyncio.wait(
                 [send_task, recv_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            for task in pending:
-                task.cancel()
+            if recv_task in done:
+                # 수신이 먼저 끝남(정상 종료/에러) → 송신 정리
+                send_task.cancel()
+            else:
+                # 송신이 먼저 끝남(오디오 종료/close) → end_of_source_media가 나갔으니
+                # 수신이 end_of_stream을 받아 '마지막 문장'을 flush할 시간을 준다.
+                try:
+                    await asyncio.wait_for(recv_task, timeout=SENTENCE_TIMEOUT + 2.0)
+                except asyncio.TimeoutError:
+                    recv_task.cancel()
         except asyncio.CancelledError:
             send_task.cancel()
             recv_task.cancel()
+            raise
+        finally:
+            for t in (send_task, recv_task):
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(send_task, recv_task, return_exceptions=True)
+            if self._ws:
+                try:
+                    await self._ws.close()
+                except Exception:
+                    pass
+                self._ws = None
 
     async def close(self) -> None:
-        self._closed = True
-        if self._ws:
-            try:
-                await self._ws.close()
-            except Exception:
-                pass
-            self._ws = None
+        # 오디오 입력만 끊는다(_stop). _send_audio가 end_of_source_media를 보내면
+        # DeepL이 '마지막 문장'을 flush하고 end_of_stream을 보내 수신부가 처리한다.
+        # WS는 transcribe가 drain을 마친 뒤 닫는다.
+        self._stop.set()
 
     # ── 내부 메서드 ───────────────────────────────────────────────────────────
 
@@ -105,42 +122,50 @@ class DeepLVoiceAdapter(STTAdapter):
         return data["streaming_url"], data["token"]
 
     async def _send_audio(self, audio_stream) -> None:
-        """AudioStream에서 청크를 모아서 WebSocket으로 전송. (200ms 버퍼링)"""
+        """AudioStream에서 청크를 모아서 WebSocket으로 전송. (200ms 버퍼링)
+
+        close()가 self._stop을 set하면 다음 프레임을 기다리지 않고 입력을 끊고,
+        남은 버퍼와 end_of_source_media(종료 신호)를 보내 DeepL이 '마지막 문장'을 flush하게 한다.
+        """
+        buffer = bytearray()
+        CHUNK_SIZE = 19200  # 48000Hz × 2bytes × 200ms
+        aiter = audio_stream.__aiter__()
+        stop_task = asyncio.ensure_future(self._stop.wait())
         try:
-            buffer = bytearray()
-            CHUNK_SIZE = 19200  # 48000Hz × 2bytes × 200ms
-
-            async for audio_event in audio_stream:
-                if self._closed:
+            while True:
+                frame_task = asyncio.ensure_future(aiter.__anext__())
+                done, _ = await asyncio.wait(
+                    {frame_task, stop_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if stop_task in done:
+                    frame_task.cancel()
                     break
-                frame = audio_event.frame
-                buffer.extend(frame.data.tobytes())
-
+                try:
+                    audio_event = frame_task.result()
+                except StopAsyncIteration:
+                    break
+                buffer.extend(audio_event.frame.data.tobytes())
                 if len(buffer) >= CHUNK_SIZE:
-                    message = json.dumps({
+                    await self._ws.send(json.dumps({
                         "source_media_chunk": {
                             "data": base64.b64encode(bytes(buffer)).decode(),
                         }
-                    })
-                    await self._ws.send(message)
+                    }))
                     buffer.clear()
         except (asyncio.CancelledError, websockets.exceptions.ConnectionClosed):
             pass
         finally:
-            # 남은 버퍼 전송
-            if buffer and self._ws and not self._closed:
+            stop_task.cancel()
+            # 남은 버퍼 + 종료 신호 (WS 열려 있으면) → 마지막 문장 flush 유도
+            if self._ws:
                 try:
-                    message = json.dumps({
-                        "source_media_chunk": {
-                            "data": base64.b64encode(bytes(buffer)).decode(),
-                        }
-                    })
-                    await self._ws.send(message)
-                except Exception:
-                    pass
-            # 종료 신호
-            if self._ws and not self._closed:
-                try:
+                    if buffer:
+                        await self._ws.send(json.dumps({
+                            "source_media_chunk": {
+                                "data": base64.b64encode(bytes(buffer)).decode(),
+                            }
+                        }))
                     await self._ws.send(json.dumps({"end_of_source_media": {}}))
                 except Exception:
                     pass
@@ -205,10 +230,8 @@ class DeepLVoiceAdapter(STTAdapter):
             flush_timer = asyncio.create_task(flush_sentence())
 
         try:
+            # _stop에 즉시 break하지 않는다 — end_of_stream(마지막 문장 flush)까지 처리한다.
             async for raw_message in self._ws:
-                if self._closed:
-                    break
-
                 message = json.loads(raw_message)
 
                 # 에러 처리
