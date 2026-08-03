@@ -108,7 +108,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/call")
-                                .hasRole("MANAGER")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings").authenticated()
                         // --- 이하 WAVE 1~3 신규 엔드포인트 권한 선반영 ---
                         // 병렬 작업 세션이 이 파일을 동시에 수정하면 충돌이 확정적이므로 규칙만 미리 등록한다.
@@ -155,13 +155,13 @@ public class SecurityConfig {
 
                         // 대기 순서 변경 (QUEUE-005, QREQ-001~003)
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/queue-entries/*/position")
-                                .hasRole("MANAGER")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/queue-entries/*/change-requests")
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/queue-change-requests")
-                                .hasRole("MANAGER")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/queue-change-requests/*")
-                                .hasRole("MANAGER")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
 
                         // 팬미팅 결과 통계 (STAT-001)
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/statistics")
@@ -228,9 +228,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/summary")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/moderations")
-                                .hasAnyRole("MANAGER", "ADMIN")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/moderations/*/review")
-                                .hasAnyRole("MANAGER", "ADMIN")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)

@@ -88,7 +88,7 @@ app:
 
   application:
     # 응모 전 이메일 인증을 강제한다. 기존 회원 인증 유도 기간에만 잠시 false로 둔다.
-    email-verification-required: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:true}
+    email-verification-required: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:false}
     # 동일 기기 다계정 응모 처리 정책이다. FLAG는 표시만, BLOCK은 409로 거부한다.
     device-duplicate-policy: ${APPLICATION_DEVICE_DUPLICATE_POLICY:FLAG}
 
