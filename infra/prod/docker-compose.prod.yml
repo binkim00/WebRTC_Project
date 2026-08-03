@@ -63,12 +63,25 @@ services:
     container_name: livekit
     restart: unless-stopped
 
-    command:
-      - --config
-      - /etc/livekit.yaml
-
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      # Compose가 배포 시점에 key/secret을 치환한 뒤 LiveKit이 전체 YAML을 읽는다.
+      # keys와 webhook.api_key가 같은 key를 사용하므로 서명 검증 쌍이 어긋나지 않는다.
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: true
+        redis:
+          address: redis:6379
+          db: 1
+        keys:
+          "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}": "${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}"
+        webhook:
+          api_key: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}"
+          urls:
+            - http://backend:8080/api/v1/livekit/webhook
 
     depends_on:
       redis:
@@ -82,7 +95,6 @@ services:
       - "7882:7882/udp"
 
     volumes:
-      - ./livekit/livekit.prod.yaml:/etc/livekit.yaml:ro
       # 다른 서비스와 달리 TZ 환경변수를 쓰지 않는다. 이 이미지에는 tzdata 가 없어
       # TZ 를 넣으면 Go 런타임이 Asia/Seoul 을 찾지 못하고 /etc/localtime 도 무시한 채
       # UTC 로 고정된다. 실측: TZ 만 설정하면 UTC, 이 마운트만 하면 KST.

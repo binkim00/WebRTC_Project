@@ -7,6 +7,13 @@ ENV_FILE="/home/ubuntu/docker/project/.env"
 
 cd "$PROJECT_ROOT"
 
+# 필수 변수 치환과 최종 Compose 문법을 컨테이너 변경 전에 검증한다.
+docker compose \
+  -p project \
+  --env-file "$ENV_FILE" \
+  -f "$COMPOSE_FILE" \
+  config --quiet
+
 docker compose \
   -p project \
   --env-file "$ENV_FILE" \

@@ -8,6 +8,52 @@
 - `.env`: 루트 `/home/ubuntu/docker/project/.env`로 연결된 심볼릭 링크
 - `scripts/deploy.sh`: 빌드, 실행, 상태 확인을 한 번에 실행하는 스크립트
 
+## LiveKit webhook
+
+LiveKit은 참가자 입장 같은 서버 이벤트를 일반 API 호출과 반대 방향으로 백엔드에
+알려 주는 webhook을 사용합니다. 운영 LiveKit은 다음 내부 Docker 네트워크 주소로
+이벤트를 보냅니다.
+
+```text
+http://backend:8080/api/v1/livekit/webhook
+```
+
+전체 LiveKit YAML은 `docker-compose.prod.yml`의 `LIVEKIT_CONFIG`로 전달됩니다.
+Compose가 배포 시점에 `LIVEKIT_API_KEY`와 `LIVEKIT_API_SECRET`을 치환하며, 같은 key가
+LiveKit의 `keys`와 `webhook.api_key`에 사용됩니다. 백엔드도 이 key/secret 쌍으로
+Authorization 서명과 본문 해시를 검증합니다. 두 변수 중 하나라도 없으면
+`docker compose config --quiet` 단계에서 배포가 중단됩니다.
+
+배포 전에 secret 값을 출력하지 않고 설정을 검증합니다.
+
+```bash
+docker compose -p project \
+  --env-file /home/ubuntu/docker/project/.env \
+  -f infra/prod/docker-compose.prod.yml \
+  config --quiet
+```
+
+배포 후에는 다음처럼 전달과 수신 여부만 확인합니다. Authorization 헤더나 환경 변수
+전체를 출력하는 명령은 사용하지 않습니다.
+
+```bash
+docker compose -p project --env-file /home/ubuntu/docker/project/.env \
+  -f infra/prod/docker-compose.prod.yml logs --since=10m livekit backend \
+  | grep -E 'webhook|participant_joined'
+```
+
+두 참가자가 입장하면 세션이 `ACTIVE`가 되고 `startedAt`/`endsAt`이 채워지는지,
+남은 시간이 감소한 뒤 `ENDED`와 대기열 완료 및 다음 참가자 호출까지 이어지는지
+확인합니다.
+
+### Rollback
+
+배포가 실패하면 코드에서 이전 검증된 커밋의 LiveKit Compose 설정을 복구한 뒤 같은
+`deploy.sh`를 다시 실행합니다. 데이터베이스 변경은 없으므로 DB rollback은 필요하지
+않습니다. 이전 파일 마운트 방식으로 되돌리면 webhook 설정도 함께 사라져 자동 통화
+시작과 종료가 다시 멈출 수 있으므로, rollback 후에는 수동 종료 절차를 사용하고
+LiveKit 및 backend 로그를 확인합니다. 운영 `.env`나 secret 값 자체는 변경하지 않습니다.
+
 ## 운영 원칙
 
 1. 실제 환경 변수는 `/home/ubuntu/docker/project/.env`에만 보관합니다.

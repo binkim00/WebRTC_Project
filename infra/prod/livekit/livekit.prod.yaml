@@ -10,3 +10,6 @@ rtc:
 redis:
   address: redis:6379
   db: 1
+
+# 운영에서는 secret을 Git에 남기지 않기 위해 이 파일을 직접 마운트하지 않는다.
+# 실제 설정은 docker-compose.prod.yml의 LIVEKIT_CONFIG에서 구성된다.

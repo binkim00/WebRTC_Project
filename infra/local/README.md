@@ -84,6 +84,17 @@ Signalling can succeed while media is dead, so check the media path itself:
    `inbound-rtp` `framesDecoded` increasing on both sides. A connected state with
    `framesDecoded` stuck at 0 means the media ports or `LIVEKIT_NODE_IP` are wrong.
 
+## Verifying the webhook
+
+Local LiveKit sends events to `http://host.docker.internal:8080/api/v1/livekit/webhook`.
+Run the backend on port 8080, join the same room as host and fan, and confirm that the backend
+receives `participant_joined`. The session should change from `CONNECTING` to `ACTIVE`, with
+`startedAt` and `endsAt` populated. A request with an invalid signature must be rejected.
+
+The API key identifies the signing credential; the API secret creates and verifies its signature.
+The backend and LiveKit must use the same pair. Do not print the Authorization header while
+troubleshooting.
+
 ## Notes
 
 - Local `docker-compose.local.yml` uses named volumes for MySQL and Redis and isolates them on `melly-local-network`.

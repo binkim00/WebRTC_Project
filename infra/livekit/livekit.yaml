@@ -7,6 +7,6 @@ rtc:
   use_external_ip: false
 
 webhook:
-  api_key: devkey
+  api_key: ACTUAL_LIVEKIT_API_KEY
   urls:
     - http://host.docker.internal:8080/api/v1/livekit/webhook
