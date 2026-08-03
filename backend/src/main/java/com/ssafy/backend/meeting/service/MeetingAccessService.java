@@ -77,6 +77,10 @@ public class MeetingAccessService {
     @Transactional(readOnly = true)
     public FanMeeting requireManager(Long meetingId, User user) {
         FanMeeting meeting = requireMeeting(meetingId);
+        if (user.getRole() == UserRole.SOLO_INFLUENCER
+                && sameUser(meeting.getInfluencer(), user)) {
+            return meeting;
+        }
         if (user.getRole() != UserRole.MANAGER) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }

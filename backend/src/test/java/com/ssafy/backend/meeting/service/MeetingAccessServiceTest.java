@@ -34,6 +34,22 @@ class MeetingAccessServiceTest {
         assertThat(service.requireManager(1L, manager)).isSameAs(meeting);
     }
 
+    /** 1인 인플루언서가 자신이 주최하는 팬미팅의 매니저 전용 운영 권한을 갖는지 검증한다. */
+    @Test
+    void allowsSoloInfluencerAsManagerForOwnMeeting() {
+        FanMeetingRepository meetingRepository = mock(FanMeetingRepository.class);
+        OrganizationMemberRepository memberRepository = mock(OrganizationMemberRepository.class);
+        MeetingAccessService service = new MeetingAccessService(meetingRepository, memberRepository);
+        User soloInfluencer = mock(User.class);
+        FanMeeting meeting = mock(FanMeeting.class);
+        when(soloInfluencer.getRole()).thenReturn(UserRole.SOLO_INFLUENCER);
+        when(soloInfluencer.getId()).thenReturn(10L);
+        when(meeting.getInfluencer()).thenReturn(soloInfluencer);
+        when(meetingRepository.findById(1L)).thenReturn(Optional.of(meeting));
+
+        assertThat(service.requireManager(1L, soloInfluencer)).isSameAs(meeting);
+    }
+
     /** 팬미팅을 주최한 인플루언서 본인이 인플루언서 전용 권한을 얻는지 검증한다. */
     @Test
     void allowsHostInfluencer() {
