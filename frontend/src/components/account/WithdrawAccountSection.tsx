@@ -48,8 +48,9 @@ export function WithdrawAccountSection({
     try {
       await withdrawMyAccount(password, token)
       clearAuthSession()
+      // 로그인 라우트는 AuthLayout 아래에 있지만 경로는 최상위 '/login'이다. '/auth/login'은 404다.
       // 탈퇴한 계정으로는 어떤 화면도 조회할 수 없어 라우터 전환 대신 전체 새로고침으로 상태를 비운다.
-      window.location.replace('/auth/login')
+      window.location.replace('/login')
     } catch (cause) {
       if (cause instanceof ApiError) {
         setError(

@@ -26,6 +26,7 @@ import {
   Spinner,
   TextField,
 } from '../../components'
+import { fanMeetingStatusContent } from './fanMeetingStatus'
 
 const meetingStatusOptions = [
   { label: '전체', value: 'all' },
@@ -34,15 +35,6 @@ const meetingStatusOptions = [
   { label: '모집 마감', value: 'CLOSED' },
   { label: '결과 발표', value: 'READY' },
 ]
-
-const meetingStatusContent = {
-  PUBLISHED: { label: '모집 예정', variant: 'info' },
-  APPLICATION_OPEN: { label: '모집 중', variant: 'success' },
-  APPLICATION_CLOSED: { label: '모집 마감', variant: 'neutral' },
-  READY: { label: '결과 발표', variant: 'warning' },
-  LIVE: { label: '모집 마감', variant: 'neutral' },
-  ENDED: { label: '모집 마감', variant: 'neutral' },
-} as const
 
 const applicationStatusContent: Record<
   FanMeetingApplicationStatus,
@@ -248,7 +240,7 @@ export function FanEventListPage() {
                   meeting.applicationEndAt === null
                 const statusContent = applicationDisabled
                   ? { label: '응모 없음', variant: 'neutral' as const }
-                  : meetingStatusContent[meeting.status]
+                  : fanMeetingStatusContent[meeting.status]
                 const applicationContent = !applicationDisabled && meeting.applicationStatus
                   ? applicationStatusContent[meeting.applicationStatus]
                   : null

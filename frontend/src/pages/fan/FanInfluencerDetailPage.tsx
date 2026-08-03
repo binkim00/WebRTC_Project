@@ -14,7 +14,7 @@ import {
   Spinner,
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
-import { meetingStatusBadge, meetingStatusLabel } from '../manager/meetingLifecycle'
+import { fanMeetingStatusContent } from './fanMeetingStatus'
 
 /** 백엔드 LocalDateTime 문자열을 한국어 날짜·시각 표기로 바꾼다. */
 function formatDateTime(value: string): string {
@@ -162,8 +162,11 @@ export function FanInfluencerDetailPage() {
                     />
                   ) : null}
                   <CardContent className="grid content-start gap-3">
-                    <Badge className="w-fit" variant={meetingStatusBadge(meeting.status)}>
-                      {meetingStatusLabel(meeting.status)}
+                    <Badge
+                      className="w-fit"
+                      variant={fanMeetingStatusContent[meeting.status].variant}
+                    >
+                      {fanMeetingStatusContent[meeting.status].label}
                     </Badge>
                     <p className="text-base font-extrabold">{meeting.title}</p>
                     <p className="text-sm text-[var(--color-text-secondary)]">

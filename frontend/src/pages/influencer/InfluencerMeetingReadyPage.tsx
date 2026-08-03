@@ -278,8 +278,16 @@ export function InfluencerMeetingReadyPage() {
 
   const handleOpenMemo = () => {
     if (!fanMeetingId || !currentFanId) { return }
+    // 통화 요약 조회에는 callSessionId가 필요한데 참가자 응답에는 없다.
+    // 진행 중인 통화의 상대 팬을 여는 경우에만 현재 세션을 함께 넘겨 요약 탭이 동작하게 한다.
+    const callSessionId = currentEntry?.participantId === queue?.currentCall?.participantId
+      ? queue?.currentCall?.callSessionId
+      : undefined
+    const callSessionQuery = callSessionId
+      ? `&callSessionId=${encodeURIComponent(callSessionId)}`
+      : ''
     navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/fans/${currentFanId}/records?tab=memo`
+      `/influencer/fan-meetings/${fanMeetingId}/fans/${currentFanId}/records?tab=memo${callSessionQuery}`
     )
   }
 
