@@ -1,7 +1,11 @@
 services:
   mysql:
     image: 'mysql:8.4'
+    # 운영과 같은 시간대로 맞춘다. 이게 없으면 컨테이너가 UTC 라서
+    # data-local.sql 의 NOW() 가 애플리케이션 시각보다 9시간 이르게 들어간다.
+    command: --default-time-zone=+09:00
     environment:
+      - 'TZ=Asia/Seoul'
       - 'MYSQL_DATABASE=melly'
       - 'MYSQL_PASSWORD=secret'
       - 'MYSQL_ROOT_PASSWORD=verysecret'
@@ -11,5 +15,7 @@ services:
 
   redis:
     image: 'redis:7.4-alpine'
+    environment:
+      - 'TZ=Asia/Seoul'
     ports:
       - '6379:6379'

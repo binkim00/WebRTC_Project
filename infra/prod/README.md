@@ -37,6 +37,33 @@ cd /home/ubuntu/docker/project/S15P11E106/infra/prod
 - `jenkins`
 - `portainer`
 
+## 시간대
+
+서비스 기준 시간대는 **한국시간(Asia/Seoul)** 입니다. 컨테이너 기본값은 UTC라서
+설정을 빼면 저장되는 시각이 9시간 어긋납니다. 세 겹으로 맞춰 두었습니다.
+
+| 위치 | 설정 | 담당 범위 |
+|---|---|---|
+| `backend/Dockerfile` | `ENV TZ=Asia/Seoul` + `/etc/localtime` | JVM 기본 시간대. `BaseTimeEntity`의 `created_at` 등 |
+| `JwtConfig.SERVICE_ZONE` | `Clock.system(Asia/Seoul)` | `Clock` 빈을 주입받는 시각 계산 전부 |
+| `docker-compose.prod.yml` | `TZ` + mysql `--default-time-zone=+09:00` | DB의 `NOW()`, 각 컨테이너 로그 시각 |
+
+`Clock` 빈을 코드에서 고정해 두었으므로 컨테이너 `TZ`가 빠져도 업무 시각 계산은 흔들리지
+않습니다. 다만 `TZ`가 없으면 `LocalDateTime.now()`를 직접 쓰는 소수 지점과 로그 시각이
+UTC로 돌아가므로 둘 다 유지해야 합니다.
+
+MySQL은 이름 있는 시간대(`Asia/Seoul`) 대신 고정 오프셋 `+09:00`을 씁니다. 이름을 쓰려면
+tz 테이블을 미리 적재해야 하는데, 한국은 서머타임이 없어 두 값이 항상 같습니다.
+
+호스트 자체의 시간대까지 맞추려면(로그인 세션, cron, `docker logs` 이외의 시스템 로그):
+
+```bash
+sudo timedatectl set-timezone Asia/Seoul
+timedatectl   # Time zone: Asia/Seoul (KST, +0900) 확인
+```
+
+컨테이너는 호스트 시간대를 상속하지 않으므로 위 Compose 설정과 별개입니다.
+
 ## 주의사항
 
 - `archive/`는 백업/구성 보관용입니다. 운영 Compose에는 포함되지 않습니다.
