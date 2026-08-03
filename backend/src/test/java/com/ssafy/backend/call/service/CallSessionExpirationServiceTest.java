@@ -16,6 +16,7 @@ import java.util.Optional;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class CallSessionExpirationServiceTest {
@@ -23,6 +24,7 @@ class CallSessionExpirationServiceTest {
     private static final Long CALL_SESSION_ID = 100L;
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final Instant FIXED_INSTANT = Instant.parse("2026-07-28T02:00:00Z");
+    private static final long CONNECT_TIMEOUT_SEC = 60L;
 
     private CallSessionRepository callSessionRepository;
     private CallSessionFinalizer finalizer;
@@ -41,7 +43,8 @@ class CallSessionExpirationServiceTest {
                 callSessionRepository,
                 finalizer,
                 realtimeStore,
-                Clock.fixed(FIXED_INSTANT, SEOUL)
+                Clock.fixed(FIXED_INSTANT, SEOUL),
+                CONNECT_TIMEOUT_SEC
         );
         callSession = mock(CallSession.class);
         now = LocalDateTime.ofInstant(FIXED_INSTANT, SEOUL);
@@ -71,5 +74,37 @@ class CallSessionExpirationServiceTest {
         service.endIfExpired(CALL_SESSION_ID);
 
         verify(finalizer).end(callSession, now, CallEndReason.FAN_LEFT, null);
+    }
+
+    /** 연결 대기 시간이 지난 세션을 연결 실패로 마감하는지 검증한다. */
+    @Test
+    void failsConnectingCallWhenConnectTimeoutPasses() {
+        when(callSession.getStatus()).thenReturn(CallSessionStatus.CONNECTING);
+        when(callSession.getCreatedAt()).thenReturn(now.minusSeconds(CONNECT_TIMEOUT_SEC));
+
+        service.failIfConnectTimedOut(CALL_SESSION_ID);
+
+        verify(finalizer).failConnecting(callSession, now, CallEndReason.CONNECTION_FAILED, null);
+    }
+
+    /** 연결 대기 시간이 남은 세션은 그대로 두는지 검증한다. */
+    @Test
+    void keepsConnectingCallBeforeConnectTimeout() {
+        when(callSession.getStatus()).thenReturn(CallSessionStatus.CONNECTING);
+        when(callSession.getCreatedAt()).thenReturn(now.minusSeconds(CONNECT_TIMEOUT_SEC - 1));
+
+        service.failIfConnectTimedOut(CALL_SESSION_ID);
+
+        verifyNoInteractions(finalizer);
+    }
+
+    /** 이미 통화가 시작된 세션은 연결 시간 초과로 마감하지 않는지 검증한다. */
+    @Test
+    void keepsActiveCallOnConnectTimeoutCheck() {
+        when(callSession.getCreatedAt()).thenReturn(now.minusHours(1));
+
+        service.failIfConnectTimedOut(CALL_SESSION_ID);
+
+        verifyNoInteractions(finalizer);
     }
 }

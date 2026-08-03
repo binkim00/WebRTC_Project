@@ -120,6 +120,23 @@ public interface CallSessionRepository extends JpaRepository<CallSession, Long> 
     List<Long> findExpiredActiveIds(@Param("now") LocalDateTime now);
 
     /**
+     * 생성 후 정해진 시간까지 연결되지 않은 통화 세션 식별자를 조회한다.
+     *
+     * <p>연결 대기 세션은 {@code endsAt}과 {@code reconnectAllowedUntil}이 모두 비어 있어
+     * 활성 세션 만료 조회에 걸리지 않으므로 생성 시각을 기준으로 따로 찾는다.
+     *
+     * @param threshold 이 시각 이전에 생성된 세션을 시간 초과로 판단할 기준 시각
+     * @return 연결 시간이 초과된 통화 세션 식별자 목록
+     */
+    @Query("""
+            select callSession.id
+            from CallSession callSession
+            where callSession.status = com.ssafy.backend.call.domain.CallSessionStatus.CONNECTING
+              and callSession.createdAt <= :threshold
+            """)
+    List<Long> findTimedOutConnectingIds(@Param("threshold") LocalDateTime threshold);
+
+    /**
      * 팬미팅에 지정 상태의 영상통화 세션이 존재하는지 확인한다.
      *
      * @param meetingId 팬미팅 식별자

@@ -96,6 +96,33 @@ class CallSessionTest {
         assertThat(callSession.getEndedBy()).isNull();
     }
 
+    /** 운영자가 끊은 연결 대기 세션에 종료 사유와 종료 주체가 남는지 검증한다. */
+    @Test
+    void failsConnectingCallWithOperatorContext() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "ko");
+        LocalDateTime failedAt = LocalDateTime.of(2026, 7, 28, 11, 0);
+        User operator = mock(User.class);
+
+        callSession.failConnecting(failedAt, CallEndReason.FORCED, operator);
+
+        assertThat(callSession.getStatus()).isEqualTo(CallSessionStatus.FAILED);
+        assertThat(callSession.getEndedAt()).isEqualTo(failedAt);
+        assertThat(callSession.getEndReason()).isEqualTo(CallEndReason.FORCED);
+        assertThat(callSession.getEndedBy()).isSameAs(operator);
+    }
+
+    /** 종료 사유 없이 연결 대기 실패를 기록하지 않는지 검증한다. */
+    @Test
+    void rejectsFailingConnectingCallWithoutReason() {
+        CallSession callSession = CallSession.createConnecting(
+                mock(QueueEntry.class), "meeting-room-1", "ko");
+
+        assertThatThrownBy(() -> callSession.failConnecting(
+                LocalDateTime.of(2026, 7, 28, 11, 0), null, null))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     /** 이미 시작된 영상통화에는 연결 대기 실패 전이를 적용하지 않는지 검증한다. */
     @Test
     void rejectsFailingActiveCallAsConnecting() {

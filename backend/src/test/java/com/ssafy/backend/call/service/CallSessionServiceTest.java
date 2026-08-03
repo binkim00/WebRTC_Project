@@ -7,6 +7,8 @@ import com.ssafy.backend.call.domain.CallSessionStatus;
 import com.ssafy.backend.call.dto.CallSessionEndResponse;
 import com.ssafy.backend.call.dto.CallSessionStatusResponse;
 import com.ssafy.backend.call.repository.CallSessionRepository;
+import com.ssafy.backend.common.exception.BusinessException;
+import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
@@ -24,8 +26,10 @@ import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class CallSessionServiceTest {
@@ -116,6 +120,132 @@ class CallSessionServiceTest {
         verify(finalizer).end(callSession, endedAt, CallEndReason.FORCED, manager);
         assertThat(response.status()).isEqualTo(CallSessionStatus.ENDED);
         assertThat(response.endReason()).isEqualTo(CallEndReason.FORCED);
+    }
+
+    /** 아직 연결되지 않은 통화를 매니저가 종료하면 노쇼로 마감하는지 검증한다. */
+    @Test
+    void forceEndsConnectingCallAsNoShow() {
+        User manager = user(13L, UserRole.MANAGER);
+        QueueEntry queueEntry = mock(QueueEntry.class);
+        FanMeeting meeting = mock(FanMeeting.class);
+        CallSession callSession = mock(CallSession.class);
+        LocalDateTime endedAt = LocalDateTime.ofInstant(FIXED_INSTANT, SEOUL);
+        AuthenticatedUser principal = new AuthenticatedUser(13L, UserRole.MANAGER);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(manager);
+        when(callSessionRepository.findEndContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(callSession.getQueueEntry()).thenReturn(queueEntry);
+        when(callSession.getStatus()).thenReturn(
+                CallSessionStatus.CONNECTING, CallSessionStatus.CONNECTING,
+                CallSessionStatus.FAILED);
+        when(callSession.getEndedAt()).thenReturn(endedAt);
+        when(callSession.getEndReason()).thenReturn(CallEndReason.FORCED);
+        when(queueEntry.getMeeting()).thenReturn(meeting);
+        when(meeting.getId()).thenReturn(MEETING_ID);
+        when(meetingAccessService.requireManager(MEETING_ID, manager)).thenReturn(meeting);
+
+        CallSessionEndResponse response = service.forceEnd(
+                CALL_SESSION_ID, "응답 없어 종료", principal);
+
+        verify(finalizer).failConnecting(callSession, endedAt, CallEndReason.FORCED, manager);
+        assertThat(response.status()).isEqualTo(CallSessionStatus.FAILED);
+        assertThat(response.endReason()).isEqualTo(CallEndReason.FORCED);
+    }
+
+    /** 이미 종료된 통화의 강제 종료 요청을 상태 충돌로 거절하는지 검증한다. */
+    @Test
+    void rejectsForceEndForAlreadyFinishedCall() {
+        User manager = user(13L, UserRole.MANAGER);
+        QueueEntry queueEntry = mock(QueueEntry.class);
+        FanMeeting meeting = mock(FanMeeting.class);
+        CallSession callSession = mock(CallSession.class);
+        AuthenticatedUser principal = new AuthenticatedUser(13L, UserRole.MANAGER);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(manager);
+        when(callSessionRepository.findEndContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(callSession.getQueueEntry()).thenReturn(queueEntry);
+        when(callSession.getStatus()).thenReturn(CallSessionStatus.ENDED);
+        when(queueEntry.getMeeting()).thenReturn(meeting);
+        when(meeting.getId()).thenReturn(MEETING_ID);
+        when(meetingAccessService.requireManager(MEETING_ID, manager)).thenReturn(meeting);
+
+        assertThatThrownBy(() -> service.forceEnd(CALL_SESSION_ID, "종료", principal))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.CALL_SESSION_STATE_CONFLICT));
+        verifyNoInteractions(finalizer);
+    }
+
+    /** 통화 중인 팬이 직접 종료하면 정상 종료 사유로 마감하는지 검증한다. */
+    @Test
+    void endsActiveCallByFanWithNormalReason() {
+        User fan = user(11L, UserRole.FAN);
+        Participant participant = mock(Participant.class);
+        QueueEntry queueEntry = mock(QueueEntry.class);
+        CallSession callSession = mock(CallSession.class);
+        LocalDateTime endedAt = LocalDateTime.ofInstant(FIXED_INSTANT, SEOUL);
+        AuthenticatedUser principal = new AuthenticatedUser(11L, UserRole.FAN);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(fan);
+        when(callSessionRepository.findEndContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(callSession.getQueueEntry()).thenReturn(queueEntry);
+        when(callSession.getStatus()).thenReturn(CallSessionStatus.ACTIVE, CallSessionStatus.ENDED);
+        when(callSession.getEndedAt()).thenReturn(endedAt);
+        when(callSession.getEndReason()).thenReturn(CallEndReason.NORMAL);
+        when(queueEntry.getParticipant()).thenReturn(participant);
+        when(participant.getFan()).thenReturn(fan);
+
+        CallSessionEndResponse response = service.endByFan(CALL_SESSION_ID, principal);
+
+        verify(finalizer).end(callSession, endedAt, CallEndReason.NORMAL, fan);
+        assertThat(response.status()).isEqualTo(CallSessionStatus.ENDED);
+        assertThat(response.endReason()).isEqualTo(CallEndReason.NORMAL);
+    }
+
+    /** 통화 당사자가 아닌 팬의 종료 요청을 거절하는지 검증한다. */
+    @Test
+    void rejectsEndRequestFromOtherFan() {
+        User otherFan = user(12L, UserRole.FAN);
+        User callFan = user(11L, UserRole.FAN);
+        Participant participant = mock(Participant.class);
+        QueueEntry queueEntry = mock(QueueEntry.class);
+        CallSession callSession = mock(CallSession.class);
+        AuthenticatedUser principal = new AuthenticatedUser(12L, UserRole.FAN);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(otherFan);
+        when(callSessionRepository.findEndContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(callSession.getQueueEntry()).thenReturn(queueEntry);
+        when(queueEntry.getParticipant()).thenReturn(participant);
+        when(participant.getFan()).thenReturn(callFan);
+
+        assertThatThrownBy(() -> service.endByFan(CALL_SESSION_ID, principal))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.ACCESS_DENIED));
+        verifyNoInteractions(finalizer);
+    }
+
+    /** 아직 연결되지 않은 통화에 대한 팬의 종료 요청을 상태 충돌로 거절하는지 검증한다. */
+    @Test
+    void rejectsFanEndRequestForConnectingCall() {
+        User fan = user(11L, UserRole.FAN);
+        Participant participant = mock(Participant.class);
+        QueueEntry queueEntry = mock(QueueEntry.class);
+        CallSession callSession = mock(CallSession.class);
+        AuthenticatedUser principal = new AuthenticatedUser(11L, UserRole.FAN);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(fan);
+        when(callSessionRepository.findEndContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(callSession.getQueueEntry()).thenReturn(queueEntry);
+        when(callSession.getStatus()).thenReturn(CallSessionStatus.CONNECTING);
+        when(queueEntry.getParticipant()).thenReturn(participant);
+        when(participant.getFan()).thenReturn(fan);
+
+        assertThatThrownBy(() -> service.endByFan(CALL_SESSION_ID, principal))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.CALL_SESSION_STATE_CONFLICT));
+        verifyNoInteractions(finalizer);
     }
 
     /** 식별자와 역할이 지정된 사용자 mock을 생성한다. */

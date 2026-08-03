@@ -5,6 +5,7 @@ import com.ssafy.backend.call.domain.CallSession;
 import com.ssafy.backend.call.domain.CallSessionStatus;
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ public class CallSessionExpirationService {
     private final CallSessionFinalizer finalizer;
     private final QueueRealtimeStore realtimeStore;
     private final Clock clock;
+    private final long connectTimeoutSec;
 
     /**
      * 만료 세션 조회와 공통 종료 처리에 필요한 의존성을 주입받는다.
@@ -30,17 +32,20 @@ public class CallSessionExpirationService {
      * @param finalizer 공통 통화 종료 처리기
      * @param realtimeStore 마지막 이탈 역할 저장소
      * @param clock 서버 기준 시각 제공자
+     * @param connectTimeoutSec 호출 후 연결을 기다리는 최대 시간(초)
      */
     public CallSessionExpirationService(
             CallSessionRepository callSessionRepository,
             CallSessionFinalizer finalizer,
             QueueRealtimeStore realtimeStore,
-            Clock clock
+            Clock clock,
+            @Value("${app.call.connect-timeout-sec:60}") long connectTimeoutSec
     ) {
         this.callSessionRepository = callSessionRepository;
         this.finalizer = finalizer;
         this.realtimeStore = realtimeStore;
         this.clock = clock;
+        this.connectTimeoutSec = connectTimeoutSec;
     }
 
     /**
@@ -61,6 +66,30 @@ public class CallSessionExpirationService {
         if (endReason != null) {
             finalizer.end(callSession, now, endReason, null);
         }
+    }
+
+    /**
+     * 세션을 쓰기 잠금으로 다시 확인하고 연결 시간이 초과된 대기 통화만 실패 처리한다.
+     *
+     * <p>연결 대기 세션은 자동으로 정리되지 않으면 팬미팅당 한 건만 허용되는 활성 세션 자리를
+     * 계속 차지해 다음 참가자 호출을 막으므로, 시간이 지나면 노쇼로 마감해 자리를 비운다.
+     *
+     * @param callSessionId 연결 시간 초과 후보 통화 세션 식별자
+     */
+    @Transactional
+    public void failIfConnectTimedOut(Long callSessionId) {
+        CallSession callSession = callSessionRepository.findEndContextById(callSessionId)
+                .orElse(null);
+        if (callSession == null || callSession.getStatus() != CallSessionStatus.CONNECTING) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime createdAt = callSession.getCreatedAt();
+        if (createdAt == null || createdAt.plusSeconds(connectTimeoutSec).isAfter(now)) {
+            return;
+        }
+        finalizer.failConnecting(callSession, now, CallEndReason.CONNECTION_FAILED, null);
     }
 
     /**
