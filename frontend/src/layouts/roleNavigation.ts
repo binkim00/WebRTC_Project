@@ -8,6 +8,7 @@ export type RoleNavigationItem = {
 // 모든 역할의 프로필(마이페이지)은 상단 우측의 프로필 요약(클릭 시 이동)으로 제공하므로 중앙 메뉴에서 제외한다.
 const fanNavigation: readonly RoleNavigationItem[] = [
   { label: '이벤트', to: '/fan/events' },
+  { label: '인플루언서', to: '/fan/influencers' },
   { label: '응모한 이벤트', to: '/fan/mypage/applications' },
   {
     label: '예정 팬미팅',

@@ -21,6 +21,12 @@ export type UpdateUserProfileRequest = {
   preferredLanguage: string
 }
 
+/** 탈퇴 처리 결과다. withdrawnAt은 백엔드가 기록한 탈퇴 시각이다. */
+export type WithdrawResult = {
+  withdrawnAt: string
+  success: boolean
+}
+
 export type UpdatedUserProfile = {
   userId: number
   email: string
@@ -97,4 +103,31 @@ export async function updateMyProfile(
   }
 
   return response.data
+}
+
+/**
+ * 회원을 탈퇴 처리한다. 본인 확인을 위해 현재 비밀번호가 필요하다.
+ *
+ * 백엔드가 Authorization 헤더의 토큰까지 무효화하므로 성공 뒤에는 세션을 반드시 정리해야 한다.
+ */
+export async function withdrawMyAccount(
+  password: string,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<WithdrawResult> {
+  const response = await apiRequest<ApiEnvelope<unknown>>('/api/v1/users/me', {
+    method: 'DELETE',
+    authToken,
+    signal,
+    body: JSON.stringify({ password }),
+  })
+
+  if (!response.success || !isRecord(response.data)) {
+    throw new TypeError('회원탈퇴 응답 형식이 올바르지 않습니다.')
+  }
+
+  return {
+    withdrawnAt: typeof response.data.withdrawnAt === 'string' ? response.data.withdrawnAt : '',
+    success: response.data.success === true,
+  }
 }

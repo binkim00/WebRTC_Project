@@ -28,6 +28,8 @@ import {
   FanMeetingCallPage,
 } from '../pages/fan/FanRoutePages'
 import { FanEventListPage } from '../pages/fan/FanEventListPage'
+import { FanInfluencerListPage } from '../pages/fan/FanInfluencerListPage'
+import { FanInfluencerDetailPage } from '../pages/fan/FanInfluencerDetailPage'
 import { FanEventDetailPage } from '../pages/fan/FanEventDetailPage'
 import { FanApplicationResultPage } from '../pages/fan/FanApplicationResultPage'
 import { FanProfilePage } from '../pages/fan/FanProfilePage'
@@ -125,6 +127,15 @@ export const router = createBrowserRouter([
       {
         path: 'fan/events/:meetingId/application-result',
         Component: FanApplicationResultPage,
+      },
+      // 인플루언서 탐색은 로그인 없이도 볼 수 있는 공개 화면이다.
+      {
+        path: 'fan/influencers',
+        Component: FanInfluencerListPage,
+      },
+      {
+        path: 'fan/influencers/:influencerId',
+        Component: FanInfluencerDetailPage,
       },
       {
         path: 'notifications',

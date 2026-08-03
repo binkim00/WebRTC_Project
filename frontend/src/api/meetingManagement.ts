@@ -39,6 +39,22 @@ export type FanMeetingUpdateRequest = {
   operation?: OperationSettingPatch
 }
 
+/**
+ * 테스트용 강제 상태·일정 변경 요청이다.
+ *
+ * 일반 PATCH가 application/operation 객체로 감싸는 것과 달리 평평한 구조이며,
+ * 필드 이름도 백엔드 엔티티 기준(applicationOpenAt, waitingRoomOpenAt)이라 서로 다르다.
+ * 생략하거나 null로 보낸 값은 기존 설정을 그대로 유지한다.
+ */
+export type FanMeetingTestControlRequest = {
+  status?: FanMeetingStatus | null
+  scheduledStartAt?: string | null
+  applicationOpenAt?: string | null
+  applicationCloseAt?: string | null
+  resultAnnouncementAt?: string | null
+  waitingRoomOpenAt?: string | null
+}
+
 export type FanMeetingApplicationSetting = {
   enabled: boolean
   startAt: string | null
@@ -105,6 +121,27 @@ export async function patchFanMeeting(
     authToken,
     signal,
     body: JSON.stringify(patch),
+  })
+
+  return unwrapEnvelope<FanMeetingManagementResponse>(response)
+}
+
+/**
+ * 상태와 주요 일정을 검증 없이 강제로 바꾼다. (운영자·1인 인플루언서 전용)
+ *
+ * 정상 전환 규칙을 건너뛰는 테스트·시연 전용 경로이므로 일반 운영 흐름에서는 쓰지 않는다.
+ */
+export async function controlFanMeetingForTest(
+  meetingId: string | number,
+  request: FanMeetingTestControlRequest,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<FanMeetingManagementResponse> {
+  const response = await apiRequest<unknown>(meetingPath(meetingId, '/test-control'), {
+    method: 'PATCH',
+    authToken,
+    signal,
+    body: JSON.stringify(request),
   })
 
   return unwrapEnvelope<FanMeetingManagementResponse>(response)
