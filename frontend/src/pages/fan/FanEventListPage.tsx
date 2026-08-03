@@ -243,8 +243,13 @@ export function FanEventListPage() {
             </p>
             <div className="grid gap-6 sm:grid-cols-2">
               {paginatedMeetings.map((meeting) => {
-                const statusContent = meetingStatusContent[meeting.status]
-                const applicationContent = meeting.applicationStatus
+                const applicationDisabled =
+                  meeting.applicationStartAt === null &&
+                  meeting.applicationEndAt === null
+                const statusContent = applicationDisabled
+                  ? { label: '응모 없음', variant: 'neutral' as const }
+                  : meetingStatusContent[meeting.status]
+                const applicationContent = !applicationDisabled && meeting.applicationStatus
                   ? applicationStatusContent[meeting.applicationStatus]
                   : null
 
@@ -294,7 +299,9 @@ export function FanEventListPage() {
                             응모 마감일
                           </dt>
                           <dd className="mt-1 text-sm font-bold">
-                            {formatDate(meeting.applicationEndAt)}
+                            {applicationDisabled
+                              ? '응모 없음'
+                              : formatDate(meeting.applicationEndAt)}
                           </dd>
                         </div>
                       </dl>

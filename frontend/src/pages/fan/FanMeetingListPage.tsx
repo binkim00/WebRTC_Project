@@ -2,8 +2,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
+import { fetchPublicFanMeetings } from '../../api/fanMeetings'
 import { enterQueue } from '../../api/queue'
-import { fetchManagerMeetings } from '../../api/managerMeetings'
 import {
     AlertBanner,
     Badge,
@@ -51,28 +51,28 @@ export function FanMeetingListPage() {
             return () => controller.abort()
         }
 
-        void fetchManagerMeetings(
+        void fetchPublicFanMeetings(
             { page: 0, size: 100 },
             session.accessToken,
             controller.signal,
         )
             .then((result) => {
                 setServerMeetings(
-                    result.content.map((item) => {
+                    result.content
+                      .filter((item) => item.applicationStatus === 'SELECTED')
+                      .map((item) => {
                         const completed =
-                            item.status === 'COMPLETED' ||
-                            item.status === 'ENDED' ||
-                            item.status === 'CANCELED'
+                            item.status === 'ENDED'
 
                         return {
-                            id: Number(item.meetingId),
+                            id: item.meetingId,
                             title: item.title,
                             influencerName: item.influencerName,
                             meetingAt: new Date(item.scheduledStartAt).toLocaleString('ko-KR'),
                             status: completed ? 'completed' : 'upcoming',
                             canEnter: false,
                         }
-                    }),
+                      }),
                 )
                 setListError(undefined)
             })

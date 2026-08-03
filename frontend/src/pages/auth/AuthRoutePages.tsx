@@ -5,7 +5,7 @@ import {
   EyeSlashIcon,
 } from '@phosphor-icons/react'
 import { useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
   isSignupRole,
@@ -49,6 +49,7 @@ function isPreferredLanguage(value: string): value is PreferredLanguage {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [submitError, setSubmitError] = useState<string>()
@@ -69,12 +70,17 @@ export function LoginPage() {
       })
 
       saveAuthSession(response, formData.get('remember') === 'on')
+      const requestedPath = searchParams.get('redirect')
+      const safeRequestedPath =
+        requestedPath?.startsWith('/') && !requestedPath.startsWith('//')
+          ? requestedPath
+          : undefined
       const landingPath =
-        response.role === 'FAN'
+        safeRequestedPath ?? (response.role === 'FAN'
           ? '/fan/mypage/fan-meetings?status=upcoming'
           : response.role === 'INFLUENCER'
             ? '/influencer/fan-meetings'
-            : '/manager/fan-meetings'
+            : '/manager/fan-meetings')
       navigate(landingPath, { replace: true })
     } catch (error: unknown) {
       setSubmitError(

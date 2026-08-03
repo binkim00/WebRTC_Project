@@ -90,7 +90,7 @@ function UserProfileSummary({ session }: { session: LoginResponse }) {
 }
 
 function App() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const isCallPage = isVideoCallPath(pathname)
@@ -104,6 +104,8 @@ function App() {
     /^\/influencer\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const authSession = getAuthSession()
   const isAuthenticated = authSession !== null
+  const returnTo = `${pathname}${search}`
+  const loginPath = `/login?redirect=${encodeURIComponent(returnTo)}`
   const isQaCapture =
     import.meta.env.DEV &&
     isCallPage &&
@@ -117,13 +119,19 @@ function App() {
       ? getRoleNavigation(authSession.role)
       : isHomePage
         ? []
-        : publicNavigationItems
+        : publicNavigationItems.map((item) =>
+            item.to === '/login' ? { ...item, to: loginPath } : item,
+          )
 
   useEffect(() => {
-    const handleAuthExpired = () => navigate('/login', { replace: true })
+    const handleAuthExpired = () => {
+      navigate(`/login?redirect=${encodeURIComponent(`${pathname}${search}`)}`, {
+        replace: true,
+      })
+    }
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
-  }, [navigate])
+  }, [navigate, pathname, search])
 
   async function handleLogout() {
     await logout().catch(() => undefined)
@@ -131,7 +139,7 @@ function App() {
   }
 
   if (isRolePath(pathname) && !isPublicEventPath(pathname) && !authSession) {
-    return <Navigate replace to="/login" />
+    return <Navigate replace to={loginPath} />
   }
 
   if (authSession && !canAccessRolePath(pathname, authSession.role)) {
@@ -178,7 +186,7 @@ function App() {
                   <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
                     이벤트
                   </Link>
-                  <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
+                  <Link className="hover:text-[var(--color-primary-coral)]" to={loginPath}>
                     로그인
                   </Link>
                 </>
