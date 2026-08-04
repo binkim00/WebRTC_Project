@@ -70,8 +70,9 @@ export function ConnectedCallRoom({
 
   // 팬 역할만 통화 녹화를 수행한다. (백엔드 업로드 권한도 FAN 전용)
   const [authSession] = useState(() => getAuthSession())
+  const browserRecordingEnabled = import.meta.env.VITE_RECORDING_MODE !== 'egress'
   const { stopAndUpload } = useCallRecording({
-    enabled: authSession?.role === 'FAN' && isConnected,
+    enabled: browserRecordingEnabled && authSession?.role === 'FAN' && isConnected,
     callSessionId,
     authToken: authSession?.accessToken,
     remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
@@ -215,7 +216,14 @@ export function ConnectedCallRoom({
             <span className="font-mono text-[var(--color-text-primary)]">{callSessionId}</span>
           </p>
         </div>
-        <p>실시간 자막은 LiveKit transcription 데이터가 전달될 때 표시됩니다.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          {authSession?.role === 'FAN' ? (
+            <span className="rounded-full bg-[var(--color-danger-soft)] px-3 py-1 font-semibold text-[var(--color-danger)]">
+              녹화 중 · {browserRecordingEnabled ? '브라우저' : '서버 Egress'}
+            </span>
+          ) : null}
+          <p>실시간 자막은 LiveKit transcription 데이터가 전달될 때 표시됩니다.</p>
+        </div>
       </div>
 
       {mediaError ? (

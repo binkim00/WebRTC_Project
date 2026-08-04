@@ -25,8 +25,8 @@ function formatDateTime(iso: string): string {
 }
 
 /** 바이트 크기를 사람이 읽기 쉬운 단위로 바꾼다. */
-function formatFileSize(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes <= 0) return '-'
+function formatFileSize(bytes: number | null): string {
+    if (bytes === null || !Number.isFinite(bytes) || bytes <= 0) return '-'
     const units = ['B', 'KB', 'MB', 'GB']
     const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
     return `${(bytes / 1024 ** exponent).toFixed(exponent === 0 ? 0 : 1)}${units[exponent]}`
@@ -62,6 +62,7 @@ export function FanMeetingCompletePage() {
     const [loadError, setLoadError] = useState<string>()
     const [downloading, setDownloading] = useState(false)
     const [downloadError, setDownloadError] = useState<string>()
+    const [refreshTick, setRefreshTick] = useState(0)
 
     useEffect(() => {
         if (!fanMeetingId?.trim() || !session) {
@@ -70,7 +71,7 @@ export function FanMeetingCompletePage() {
         }
 
         const abortController = new AbortController()
-        setLoading(true)
+        setLoading(refreshTick === 0)
         setLoadError(undefined)
 
         getMyRecordings({ page: 0, size: 20 }, session.accessToken, abortController.signal)
@@ -98,6 +99,8 @@ export function FanMeetingCompletePage() {
                     )
                     if (abortController.signal.aborted) return
                     setContentToken(extractContentToken(downloadUrl) ?? undefined)
+                } else {
+                    setContentToken(undefined)
                 }
             })
             .catch((error: unknown) => {
@@ -116,7 +119,24 @@ export function FanMeetingCompletePage() {
             })
 
         return () => abortController.abort()
-    }, [fanMeetingId, session])
+    }, [fanMeetingId, refreshTick, session])
+
+    const recordingStatus = detail?.status ?? recording?.status
+    const shouldPoll = Boolean(
+        session &&
+        !loadError &&
+        (!recordingStatus || ['STARTING', 'RECORDING', 'PROCESSING'].includes(recordingStatus)),
+    )
+
+    useEffect(() => {
+        if (!shouldPoll) return
+
+        const intervalId = window.setInterval(
+            () => setRefreshTick((tick) => tick + 1),
+            5_000,
+        )
+        return () => window.clearInterval(intervalId)
+    }, [shouldPoll])
 
     async function handleDownload() {
         if (!recording || !session) {
@@ -182,13 +202,26 @@ export function FanMeetingCompletePage() {
         recordingTitle = '녹화 정보를 불러오지 못했습니다'
         recordingDescription = loadError
         recordingVariant = 'error'
+    } else if (recordingStatus === 'FAILED') {
+        recordingTitle = '녹화 영상을 저장하지 못했습니다'
+        recordingDescription = detail?.failureMessage
+            ?? '통화는 정상 종료되었지만 녹화 처리에 실패했습니다.'
+        recordingVariant = 'error'
     } else if (isRecordingReady) {
         recordingTitle = '녹화 영상 저장이 완료되었습니다'
         recordingDescription = '아래에서 녹화 영상을 확인하고 다운로드할 수 있어요.'
         recordingVariant = 'success'
     } else if (recording) {
-        recordingTitle = '녹화 영상을 저장하고 있습니다'
-        recordingDescription = '잠시만 기다려 주세요. 저장이 완료되면 이 화면에 표시됩니다.'
+        if (recordingStatus === 'STARTING') {
+            recordingTitle = '서버 녹화를 준비하고 있습니다'
+            recordingDescription = '통화방의 녹화 작업을 시작하고 있습니다.'
+        } else if (recordingStatus === 'RECORDING') {
+            recordingTitle = '녹화 종료를 확인하고 있습니다'
+            recordingDescription = '서버에서 통화 영상을 안전하게 마무리하고 있습니다.'
+        } else {
+            recordingTitle = '녹화 영상을 처리하고 있습니다'
+            recordingDescription = '파일 검증이 끝나면 이 화면에서 자동으로 재생할 수 있습니다.'
+        }
     }
 
     return (
@@ -278,7 +311,9 @@ export function FanMeetingCompletePage() {
                                     </h2>
                                     <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">
                                         영상은 마이페이지의 팬미팅 히스토리에서{' '}
-                                        {formatDateTime(recording.availableUntil)}까지 유지됩니다.
+                                        {recording.availableUntil
+                                            ? formatDateTime(recording.availableUntil)
+                                            : '보관 만료 시각 확인 전'}까지 유지됩니다.
                                         기간 안에 필요한 영상을 다운로드해 주세요.
                                     </p>
                                 </div>

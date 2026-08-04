@@ -109,6 +109,8 @@ function App() {
     isCallPage &&
     searchParams.get('preview') === '1' &&
     searchParams.get('qa') === '1'
+  const isConsentPreview =
+    import.meta.env.DEV && isCallPage && searchParams.get('preview') === 'consent'
   const isPageQaCapture =
     import.meta.env.DEV && !isCallPage && searchParams.get('qa') === '1'
   const navigationItems = isAuthPage || isDeviceCheckPage
@@ -130,7 +132,8 @@ function App() {
     navigate('/', { replace: true })
   }
 
-  if (isRolePath(pathname) && !isPublicEventPath(pathname) && !authSession) {
+  if (isRolePath(pathname) && !isPublicEventPath(pathname) && !authSession
+      && !isConsentPreview) {
     return <Navigate replace to="/login" />
   }
 
