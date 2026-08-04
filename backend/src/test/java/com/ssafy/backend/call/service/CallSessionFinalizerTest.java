@@ -7,6 +7,7 @@ import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
+import com.ssafy.backend.recording.egress.RecordingEgressCoordinator;
 import com.ssafy.backend.user.domain.User;
 import org.junit.jupiter.api.Test;
 
@@ -25,8 +26,10 @@ class CallSessionFinalizerTest {
         LiveKitRoomParticipantService participantService =
                 mock(LiveKitRoomParticipantService.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        RecordingEgressCoordinator recordingEgressCoordinator =
+                mock(RecordingEgressCoordinator.class);
         CallSessionFinalizer finalizer = new CallSessionFinalizer(
-                participantService, realtimeStore);
+                participantService, realtimeStore, recordingEgressCoordinator);
         CallSession callSession = mock(CallSession.class);
         QueueEntry queueEntry = mock(QueueEntry.class);
         FanMeeting meeting = mock(FanMeeting.class);
@@ -42,6 +45,7 @@ class CallSessionFinalizerTest {
         finalizer.end(callSession, endedAt, CallEndReason.FORCED, endedBy);
 
         verify(participantService).removeFan("meeting-room-7", 100L);
+        verify(recordingEgressCoordinator).prepareStop(callSession);
         verify(callSession).end(endedAt, CallEndReason.FORCED, endedBy);
         verify(queueEntry).complete();
         verify(realtimeStore).updateStatus(7L, 20L, QueueEntryStatus.DONE);
@@ -56,8 +60,10 @@ class CallSessionFinalizerTest {
         LiveKitRoomParticipantService participantService =
                 mock(LiveKitRoomParticipantService.class);
         QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        RecordingEgressCoordinator recordingEgressCoordinator =
+                mock(RecordingEgressCoordinator.class);
         CallSessionFinalizer finalizer = new CallSessionFinalizer(
-                participantService, realtimeStore);
+                participantService, realtimeStore, recordingEgressCoordinator);
         CallSession callSession = mock(CallSession.class);
         QueueEntry queueEntry = mock(QueueEntry.class);
         FanMeeting meeting = mock(FanMeeting.class);

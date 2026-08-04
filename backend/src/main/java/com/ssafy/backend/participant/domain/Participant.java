@@ -93,4 +93,18 @@ public class Participant extends BaseTimeEntity {
         participant.assignedOrder = assignedOrder;
         return participant;
     }
+
+    /**
+     * 팬이 녹화에 동의한 최초 시각을 멱등하게 기록한다.
+     *
+     * @param consentedAt 동의한 서버 시각
+     * @return 최초로 저장된 동의 시각
+     */
+    public LocalDateTime consentToRecording(LocalDateTime consentedAt) {
+        Objects.requireNonNull(consentedAt);
+        if (recordingConsentAt == null) {
+            recordingConsentAt = consentedAt;
+        }
+        return recordingConsentAt;
+    }
 }

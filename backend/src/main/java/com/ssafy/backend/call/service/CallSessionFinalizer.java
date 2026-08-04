@@ -6,6 +6,7 @@ import com.ssafy.backend.livekit.service.LiveKitRoomParticipantService;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
+import com.ssafy.backend.recording.egress.RecordingEgressCoordinator;
 import com.ssafy.backend.user.domain.User;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ public class CallSessionFinalizer {
 
     private final LiveKitRoomParticipantService participantService;
     private final QueueRealtimeStore realtimeStore;
+    private final RecordingEgressCoordinator recordingEgressCoordinator;
 
     /**
      * LiveKit 참가자 관리와 대기열 실시간 저장소를 주입받는다.
@@ -26,10 +28,12 @@ public class CallSessionFinalizer {
      */
     public CallSessionFinalizer(
             LiveKitRoomParticipantService participantService,
-            QueueRealtimeStore realtimeStore
+            QueueRealtimeStore realtimeStore,
+            RecordingEgressCoordinator recordingEgressCoordinator
     ) {
         this.participantService = participantService;
         this.realtimeStore = realtimeStore;
+        this.recordingEgressCoordinator = recordingEgressCoordinator;
     }
 
     /**
@@ -48,6 +52,7 @@ public class CallSessionFinalizer {
     ) {
         QueueEntry queueEntry = callSession.getQueueEntry();
         Long meetingId = queueEntry.getMeeting().getId();
+        recordingEgressCoordinator.prepareStop(callSession);
         participantService.removeFan(callSession.getRoomId(), callSession.getId());
         callSession.end(endedAt, endReason, endedBy);
         queueEntry.complete();

@@ -90,6 +90,11 @@ app:
     expiration-check-delay-ms: ${RECORDING_EXPIRATION_CHECK_DELAY_MS:600000}
     # 업로드 파일 최대 바이트이며 multipart 한도와 같은 2GB를 유지한다.
     max-file-size-bytes: ${RECORDING_MAX_FILE_SIZE_BYTES:2147483648}
+    egress:
+      # 검증 완료 전에는 배포돼도 Egress가 자동 시작되지 않도록 기본값을 false로 둔다.
+      enabled: ${RECORDING_EGRESS_ENABLED:false}
+      output-root: ${RECORDING_EGRESS_OUTPUT_ROOT:/out}
+      layout: ${RECORDING_EGRESS_LAYOUT:grid}
 
 jwt:
   secret: ${JWT_SECRET}

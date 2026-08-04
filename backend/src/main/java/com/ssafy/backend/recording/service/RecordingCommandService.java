@@ -2,6 +2,7 @@ package com.ssafy.backend.recording.service;
 
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.call.domain.CallSession;
+import com.ssafy.backend.call.domain.CallSessionStatus;
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
@@ -10,6 +11,7 @@ import com.ssafy.backend.recording.config.RecordingStorageProperties;
 import com.ssafy.backend.recording.domain.Recording;
 import com.ssafy.backend.recording.domain.RecordingMediaType;
 import com.ssafy.backend.recording.dto.RecordingUploadResponse;
+import com.ssafy.backend.recording.dto.RecordingConsentResponse;
 import com.ssafy.backend.recording.repository.RecordingRepository;
 import com.ssafy.backend.recording.storage.RecordingFileStorage;
 import com.ssafy.backend.user.domain.User;
@@ -121,6 +123,28 @@ public class RecordingCommandService {
             fileStorage.delete(storageKey);
             throw exception;
         }
+    }
+
+    /**
+     * 통화 시작 전에 참여 팬의 녹화 동의를 기록한다.
+     *
+     * @param callSessionId 동의할 통화 세션 식별자
+     * @param principal 로그인 팬
+     * @return 최초 동의 시각
+     */
+    @Transactional
+    public RecordingConsentResponse consent(Long callSessionId,
+                                             AuthenticatedUser principal) {
+        User fan = currentUserService.requireActiveUser(principal);
+        CallSession callSession = callSessionRepository.findAccessContextById(callSessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CALL_SESSION_NOT_FOUND));
+        accessPolicy.requireParticipantFan(callSession, fan);
+        if (callSession.getStatus() != CallSessionStatus.CONNECTING) {
+            throw new BusinessException(ErrorCode.CALL_SESSION_STATE_CONFLICT);
+        }
+        LocalDateTime consentedAt = callSession.getQueueEntry().getParticipant()
+                .consentToRecording(LocalDateTime.now(clock));
+        return new RecordingConsentResponse(callSessionId, consentedAt);
     }
 
     /**

@@ -190,6 +190,7 @@ public class SecurityConfig {
                         // 통화 참여자 본인 여부는 서비스 계층에서 다시 검증한다.
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/call-sessions/*/recordings/upload",
+                                "/api/v1/call-sessions/*/recordings/consent",
                                 "/api/v1/recordings/*/download-url")
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.GET,

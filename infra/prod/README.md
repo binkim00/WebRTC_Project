@@ -60,6 +60,70 @@ bash ./infra/prod/scripts/check-egress-capacity.sh
 측정해야 하며, `docker stats` 결과와 녹화 파일 용량을 함께 비교합니다. Room Composite
 Egress 한 건의 기준 CPU 비용은 3코어이므로 PoC에서는 동시 녹화를 1건으로 제한합니다.
 
+## Egress PoC 컨테이너
+
+PoC는 `docker-compose.egress-poc.yml`에 격리되어 있으며 기존 `deploy.sh`에서는 읽지
+않습니다. 따라서 일반 배포로 Egress가 자동 기동되지 않습니다. 실제 팬미팅이 없는
+시간에만 다음 전용 스크립트로 제어합니다.
+
+```bash
+cd /home/ubuntu/docker/project/S15P11E106
+
+# secret을 출력하지 않고 Compose와 필수 변수를 검증
+bash ./infra/prod/scripts/egress-poc.sh validate
+
+# 이미지 pull과 PoC 컨테이너 시작
+bash ./infra/prod/scripts/egress-poc.sh start
+
+# 상태와 최근 로그 확인
+bash ./infra/prod/scripts/egress-poc.sh status
+bash ./infra/prod/scripts/egress-poc.sh logs
+
+# 녹화 시험 직후 중지 및 제거
+bash ./infra/prod/scripts/egress-poc.sh stop
+bash ./infra/prod/scripts/egress-poc.sh remove
+```
+
+Egress는 LiveKit과 같은 API key/secret 및 Redis DB 1을 사용하고 내부 주소
+`ws://livekit:7880`으로 접속합니다. 출력 파일은 기본적으로
+`/srv/melly/uploads/egress-poc` 아래에만 저장합니다. 파일 출력 요청에서도 반드시
+컨테이너 경로 `/out/...mp4`를 사용해야 합니다.
+
+수동 Room Composite 요청 예시는 `egress-poc-request.example.json`에 있으며, 테스트 방
+이름은 `melly-egress-poc`, 출력 경로는 `/out/{room_name}-{time}.mp4`다. 실제 서비스의
+방 이름이나 녹화 파일과 섞이지 않는다.
+
+PoC에는 다음 안전 제한이 적용됩니다.
+
+- Egress `v1.13.0` 이미지 고정
+- CPU 최대 3코어, 메모리 4GB, shared memory 1GB
+- Room Composite 작업 비용 3코어로 동시 1건만 수락
+- 파일 녹화 최대 10분
+- 운영 포트 외부 공개 없음
+- 기존 서비스 자동 시작·재시작 없음
+- Chrome sandbox는 PoC에 한해 비활성화
+
+운영 전환 시에는 Egress 전용 서버 또는 공식 seccomp profile을 사용한 Chrome sandbox
+활성화를 별도로 검토합니다.
+
+### 단일 녹화 부하 측정
+
+`egress-load-measure.sh`는 모의 송출자 2명과 수신자 2명을 90초 동안 연결하고, 유휴·녹화·
+회복 구간의 호스트 및 backend, LiveKit, Egress CPU·메모리를 CSV로 기록합니다. 실행 중인
+`livekit-egress-poc` 컨테이너가 있으면 중단하며, 자신이 시작한 테스트 컨테이너만 종료 시
+제거합니다. 실제 팬미팅이 없는 시간에만 실행합니다.
+
+LiveKit CLI `lk`가 PATH에 없으면 다운로드한 실행 파일 경로를 `LK_BIN`으로 지정합니다.
+
+```bash
+cd /home/ubuntu/docker/project/S15P11E106
+LK_BIN=/tmp/melly-egress-poc/lk bash ./infra/prod/scripts/egress-load-measure.sh
+```
+
+측정 CSV와 로그는 `/tmp/melly-egress-poc`에, 생성된 MP4는
+`/srv/melly/uploads/egress-poc`에 남습니다. 현재 측정 결과와 해석은
+`docs/livekit-egress-poc-result.md`를 참고합니다.
+
 ### Rollback
 
 배포가 실패하면 코드에서 이전 검증된 커밋의 LiveKit Compose 설정을 복구한 뒤 같은

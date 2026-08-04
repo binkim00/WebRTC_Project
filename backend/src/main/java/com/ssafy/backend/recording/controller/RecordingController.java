@@ -7,6 +7,7 @@ import com.ssafy.backend.recording.dto.RecordingDetailResponse;
 import com.ssafy.backend.recording.dto.RecordingDownloadUrlResponse;
 import com.ssafy.backend.recording.dto.RecordingSummaryResponse;
 import com.ssafy.backend.recording.dto.RecordingUploadResponse;
+import com.ssafy.backend.recording.dto.RecordingConsentResponse;
 import com.ssafy.backend.recording.service.RecordingCommandService;
 import com.ssafy.backend.recording.service.RecordingQueryService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -79,6 +80,15 @@ public class RecordingController {
         return ApiResponse.success(
                 commandService.upload(callSessionId, file, durationSec, principal)
         );
+    }
+
+    /** 통화 입장 전에 팬의 녹화 동의를 기록한다. */
+    @PostMapping("/call-sessions/{callSessionId}/recordings/consent")
+    public ApiResponse<RecordingConsentResponse> consentRecording(
+            @PathVariable Long callSessionId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(commandService.consent(callSessionId, principal));
     }
 
     /**

@@ -10,6 +10,8 @@ import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
+import com.ssafy.backend.recording.egress.RecordingEgressCoordinator;
+import com.ssafy.backend.recording.egress.RecordingEgressWebhookHandler;
 import livekit.LivekitWebhook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,9 @@ public class LiveKitWebhookService {
     private static final String PARTICIPANT_JOINED = "participant_joined";
     private static final String PARTICIPANT_LEFT = "participant_left";
     private static final String PARTICIPANT_CONNECTION_ABORTED = "participant_connection_aborted";
+    private static final String EGRESS_STARTED = "egress_started";
+    private static final String EGRESS_UPDATED = "egress_updated";
+    private static final String EGRESS_ENDED = "egress_ended";
     private static final String ROLE_ATTRIBUTE = "role";
     private static final String CALL_SESSION_ID_ATTRIBUTE = "call_session_id";
     private static final String FAN_ROLE = "FAN";
@@ -36,6 +41,8 @@ public class LiveKitWebhookService {
     private final CallSessionRepository callSessionRepository;
     private final MeetingOperationSettingRepository operationSettingRepository;
     private final QueueRealtimeStore realtimeStore;
+    private final RecordingEgressCoordinator recordingEgressCoordinator;
+    private final RecordingEgressWebhookHandler recordingEgressWebhookHandler;
     private final Clock clock;
 
     /**
@@ -50,11 +57,15 @@ public class LiveKitWebhookService {
             CallSessionRepository callSessionRepository,
             MeetingOperationSettingRepository operationSettingRepository,
             QueueRealtimeStore realtimeStore,
+            RecordingEgressCoordinator recordingEgressCoordinator,
+            RecordingEgressWebhookHandler recordingEgressWebhookHandler,
             Clock clock
     ) {
         this.callSessionRepository = callSessionRepository;
         this.operationSettingRepository = operationSettingRepository;
         this.realtimeStore = realtimeStore;
+        this.recordingEgressCoordinator = recordingEgressCoordinator;
+        this.recordingEgressWebhookHandler = recordingEgressWebhookHandler;
         this.clock = clock;
     }
 
@@ -80,6 +91,10 @@ public class LiveKitWebhookService {
             } else if (PARTICIPANT_LEFT.equals(event.getEvent())
                     || PARTICIPANT_CONNECTION_ABORTED.equals(event.getEvent())) {
                 handleParticipantDisconnected(event);
+            } else if (EGRESS_STARTED.equals(event.getEvent())
+                    || EGRESS_UPDATED.equals(event.getEvent())
+                    || EGRESS_ENDED.equals(event.getEvent())) {
+                recordingEgressWebhookHandler.handle(event);
             }
         } catch (RuntimeException exception) {
             realtimeStore.releaseWebhookEvent(eventId);
@@ -195,6 +210,7 @@ public class LiveKitWebhookService {
         callSession.activate(startedAt, setting.getCallDurationSec());
         queueEntry.startCall();
         realtimeStore.updateStatus(meetingId, queueEntry.getId(), QueueEntryStatus.IN_CALL);
+        recordingEgressCoordinator.prepareStart(callSession, setting, startedAt);
     }
 
     /**

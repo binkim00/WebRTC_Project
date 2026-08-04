@@ -10,6 +10,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -25,7 +26,10 @@ import java.util.Objects;
  */
 @Getter
 @Entity
-@Table(name = "recordings")
+@Table(name = "recordings", indexes = {
+        @Index(name = "idx_recordings_status_updated_at",
+                columnList = "status, updated_at")
+})
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Recording extends BaseTimeEntity {
 
@@ -54,8 +58,34 @@ public class Recording extends BaseTimeEntity {
     private Integer durationSec;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "source", nullable = false, length = 30,
+            columnDefinition = "VARCHAR(30) DEFAULT 'BROWSER_UPLOAD'")
+    private RecordingSource source;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private RecordingStatus status;
+
+    @Column(name = "egress_id", unique = true, length = 128)
+    private String egressId;
+
+    @Column(name = "room_name", length = 255)
+    private String roomName;
+
+    @Column(name = "requested_at")
+    private LocalDateTime requestedAt;
+
+    @Column(name = "egress_started_at")
+    private LocalDateTime egressStartedAt;
+
+    @Column(name = "egress_ended_at")
+    private LocalDateTime egressEndedAt;
+
+    @Column(name = "failure_code", length = 100)
+    private String failureCode;
+
+    @Column(name = "failure_message", length = 1000)
+    private String failureMessage;
 
     @Column(name = "retry_count", nullable = false)
     private Integer retryCount;
@@ -95,11 +125,117 @@ public class Recording extends BaseTimeEntity {
         recording.storageKey = Objects.requireNonNull(storageKey);
         recording.fileSizeBytes = fileSizeBytes;
         recording.durationSec = durationSec;
+        recording.source = RecordingSource.BROWSER_UPLOAD;
         recording.status = RecordingStatus.AVAILABLE;
         recording.retryCount = 0;
         recording.completedAt = Objects.requireNonNull(completedAt);
         recording.availableUntil = Objects.requireNonNull(availableUntil);
         return recording;
+    }
+
+    /**
+     * LiveKit Egress 시작 요청을 보낼 녹화 메타데이터를 먼저 생성한다.
+     *
+     * @param callSession 녹화 대상 통화 세션
+     * @param fileName 사용자에게 표시할 MP4 파일명
+     * @param storageKey 녹화 저장소 안의 상대 경로
+     * @param requestedAt 시작 요청을 확정한 서버 시각
+     * @return 시작 대기 상태의 Egress 녹화
+     */
+    public static Recording createEgressStarting(CallSession callSession, String fileName,
+                                                  String storageKey,
+                                                  LocalDateTime requestedAt) {
+        Recording recording = new Recording();
+        recording.callSession = Objects.requireNonNull(callSession);
+        recording.fileName = Objects.requireNonNull(fileName);
+        recording.contentType = "video/mp4";
+        recording.storageKey = Objects.requireNonNull(storageKey);
+        recording.source = RecordingSource.LIVEKIT_EGRESS;
+        recording.status = RecordingStatus.STARTING;
+        recording.retryCount = 0;
+        recording.roomName = Objects.requireNonNull(callSession.getRoomId());
+        recording.requestedAt = Objects.requireNonNull(requestedAt);
+        return recording;
+    }
+
+    /** LiveKit이 발급한 Egress ID를 멱등하게 연결한다. */
+    public void assignEgressId(String egressId) {
+        if (egressId == null || egressId.isBlank()) {
+            throw new IllegalArgumentException("Egress ID는 비어 있을 수 없습니다.");
+        }
+        if (this.egressId != null && !this.egressId.equals(egressId)) {
+            throw new IllegalStateException("이미 다른 Egress 작업이 연결되어 있습니다.");
+        }
+        this.egressId = egressId;
+    }
+
+    /** Egress가 실제 녹화를 시작한 상태를 반영한다. */
+    public void markRecording(LocalDateTime startedAt) {
+        if (isTerminal() || status == RecordingStatus.PROCESSING) {
+            return;
+        }
+        if (status != RecordingStatus.STARTING && status != RecordingStatus.RECORDING) {
+            throw new IllegalStateException("녹화 시작을 반영할 수 없는 상태입니다.");
+        }
+        status = RecordingStatus.RECORDING;
+        if (egressStartedAt == null && startedAt != null) {
+            egressStartedAt = startedAt;
+        }
+    }
+
+    /** 통화 종료 또는 Egress 종료 준비 상태를 반영한다. */
+    public void markProcessing() {
+        if (isTerminal() || status == RecordingStatus.PROCESSING) {
+            return;
+        }
+        if (status != RecordingStatus.STARTING && status != RecordingStatus.RECORDING) {
+            throw new IllegalStateException("녹화 종료를 준비할 수 없는 상태입니다.");
+        }
+        status = RecordingStatus.PROCESSING;
+    }
+
+    /** Egress 작업이 끝난 시각을 기록하고 파일 검증 전 처리 상태를 유지한다. */
+    public void markEgressEnded(LocalDateTime endedAt) {
+        if (isTerminal()) {
+            return;
+        }
+        markProcessing();
+        if (egressEndedAt == null && endedAt != null) {
+            egressEndedAt = endedAt;
+        }
+    }
+
+    /** Egress 시작·진행·종료 실패를 녹화 실패로 확정한다. */
+    public void markFailed(String failureCode, String failureMessage,
+                           LocalDateTime endedAt) {
+        if (status == RecordingStatus.AVAILABLE
+                || status == RecordingStatus.EXPIRED
+                || status == RecordingStatus.DELETED) {
+            return;
+        }
+        status = RecordingStatus.FAILED;
+        this.failureCode = normalize(failureCode, 100);
+        this.failureMessage = normalize(failureMessage, 1000);
+        if (egressEndedAt == null && endedAt != null) {
+            egressEndedAt = endedAt;
+        }
+    }
+
+    /** 외부 작업이 더 이상 상태를 바꿀 수 없는지 반환한다. */
+    public boolean isTerminal() {
+        return status == RecordingStatus.AVAILABLE
+                || status == RecordingStatus.FAILED
+                || status == RecordingStatus.EXPIRED
+                || status == RecordingStatus.DELETED;
+    }
+
+    private String normalize(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.length() <= maxLength
+                ? normalized : normalized.substring(0, maxLength);
     }
 
     /**

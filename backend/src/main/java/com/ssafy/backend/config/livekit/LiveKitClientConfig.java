@@ -2,6 +2,7 @@ package com.ssafy.backend.config.livekit;
 
 import io.livekit.server.AgentDispatchServiceClient;
 import io.livekit.server.RoomServiceClient;
+import io.livekit.server.EgressServiceClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -33,6 +34,16 @@ public class LiveKitClientConfig {
     @Bean
     public RoomServiceClient roomServiceClient(LiveKitProperties properties) {
         return RoomServiceClient.createClient(
+                toHttpUrl(properties.getUrl()),
+                properties.getApiKey(),
+                properties.getApiSecret()
+        );
+    }
+
+    /** Room Composite 녹화 시작·중지에 사용할 Egress API 클라이언트를 생성한다. */
+    @Bean
+    public EgressServiceClient egressServiceClient(LiveKitProperties properties) {
+        return EgressServiceClient.createClient(
                 toHttpUrl(properties.getUrl()),
                 properties.getApiKey(),
                 properties.getApiSecret()

@@ -1,0 +1,11 @@
+{
+  "room_name": "melly-egress-poc",
+  "layout": "grid",
+  "file_outputs": [
+    {
+      "file_type": "MP4",
+      "filepath": "/out/{room_name}-{time}.mp4"
+    }
+  ],
+  "preset": "H264_720P_30"
+}

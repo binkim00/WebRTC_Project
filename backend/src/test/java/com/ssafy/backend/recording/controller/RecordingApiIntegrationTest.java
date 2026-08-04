@@ -186,6 +186,23 @@ class RecordingApiIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].playable").value(true));
     }
 
+    /** 통화 참여 팬이 시작 전에 녹화에 동의하면 최초 동의 시각이 저장되는지 검증한다. */
+    @Test
+    void recordsParticipantConsentBeforeCallStarts() throws Exception {
+        Fixture fixture = fixture("consent");
+
+        mockMvc.perform(post(consentPath(fixture.callSessionId()))
+                        .header("Authorization", bearer(fixture.fan())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.callSessionId").value(fixture.callSessionId()))
+                .andExpect(jsonPath("$.data.consentedAt").exists());
+
+        CallSession callSession = callSessionRepository
+                .findAccessContextById(fixture.callSessionId()).orElseThrow();
+        assertThat(callSession.getQueueEntry().getParticipant().getRecordingConsentAt())
+                .isNotNull();
+    }
+
     /** MP4 업로드가 허용되는지 검증한다. */
     @Test
     void uploadsMp4Recording() throws Exception {
@@ -551,6 +568,11 @@ class RecordingApiIntegrationTest {
     /** 업로드 API 경로를 만든다. */
     private String uploadPath(long callSessionId) {
         return "/api/v1/call-sessions/" + callSessionId + "/recordings/upload";
+    }
+
+    /** 녹화 동의 API 경로를 만든다. */
+    private String consentPath(long callSessionId) {
+        return "/api/v1/call-sessions/" + callSessionId + "/recordings/consent";
     }
 
     /** 녹화 상세 API 경로를 만든다. */

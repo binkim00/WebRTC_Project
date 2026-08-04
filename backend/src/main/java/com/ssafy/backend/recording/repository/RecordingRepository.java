@@ -6,6 +6,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -26,6 +28,25 @@ public interface RecordingRepository extends JpaRepository<Recording, Long> {
      * @return 이미 녹화가 있으면 true
      */
     boolean existsByCallSession_Id(Long callSessionId);
+
+    /** 통화 세션에 연결된 녹화를 조회한다. */
+    Optional<Recording> findByCallSession_Id(Long callSessionId);
+
+    /** 통화 종료와 Egress webhook의 동시 상태 변경을 직렬화한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Recording r where r.callSession.id = :callSessionId")
+    Optional<Recording> findByCallSessionIdForUpdate(
+            @Param("callSessionId") Long callSessionId);
+
+    /** Egress 상태 변경을 직렬화하기 위해 녹화 행을 쓰기 잠금으로 조회한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Recording r where r.id = :recordingId")
+    Optional<Recording> findByIdForUpdate(@Param("recordingId") Long recordingId);
+
+    /** Egress webhook 상태 변경을 직렬화하기 위해 작업 ID로 쓰기 잠금 조회한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from Recording r where r.egressId = :egressId")
+    Optional<Recording> findByEgressIdForUpdate(@Param("egressId") String egressId);
 
     /**
      * 권한 검증에 필요한 통화·대기열·참가자·팬을 함께 조회한다.
