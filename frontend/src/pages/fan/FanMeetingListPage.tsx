@@ -76,6 +76,15 @@ function isCompletedStatus(status: FanMeetingDetailStatus | undefined): boolean 
   return status === 'ENDED' || status === 'CANCELED'
 }
 
+function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
+  // 추첨 상태와 결과 공개 상태는 다르므로 READY 이후에만 팬 목록에 노출한다.
+  return (
+    detail?.meeting.status === 'READY' ||
+    detail?.meeting.status === 'LIVE' ||
+    detail?.meeting.status === 'ENDED'
+  )
+}
+
 function parsePage(value: string | null): number {
   const page = Number(value)
   return Number.isInteger(page) && page > 0 ? page : 1
@@ -190,7 +199,8 @@ export function FanMeetingListPage() {
               .join(' '),
           )
         }
-        setItems(enrichedItems)
+        // 결과 공개 전 SELECTED 응모는 예정 팬미팅으로 보이지 않게 한다.
+        setItems(enrichedItems.filter((item) => isResultPublished(item.detail)))
       } catch (error: unknown) {
         if (controller.signal.aborted) return
         setListError(
