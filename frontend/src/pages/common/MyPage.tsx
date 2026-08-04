@@ -56,7 +56,8 @@ function roleContentOf(role: LoginRole): RoleContent {
         {
           title: '팬미팅',
           description: '신청한 팬미팅 목록으로 이동합니다.',
-          to: '/fan/mypage/fan-meetings',
+          // 이 목록 화면은 status 쿼리(upcoming/completed)가 없으면 목록 대신 오류 화면을 보여준다.
+          to: '/fan/mypage/fan-meetings?status=upcoming',
         },
       ],
       withdrawDescription: '탈퇴하면 응모 내역과 참여 기록을 다시 볼 수 없습니다.',
