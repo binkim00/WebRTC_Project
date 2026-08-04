@@ -2,16 +2,19 @@
 
 import type { ComponentType } from "react";
 
-type PageModule = {
-    default: ComponentType;
-};
-
-export function lazyPage(importer: () => Promise<PageModule>) {
+/**
+ * 라우트 모듈의 특정 named export를 React Router의 lazy 형식으로 변환한다.
+ * 페이지를 실제 방문할 때만 내려받게 해 초기 번들에서 LiveKit·운영 화면 코드를 분리한다.
+ */
+export function lazyPage<Module, ExportName extends keyof Module>(
+    importer: () => Promise<Module>,
+    exportName: ExportName,
+) {
     return async () => {
         const module = await importer();
 
         return {
-            Component: module.default,
+            Component: module[exportName] as ComponentType,
         };
     };
 }

@@ -16,6 +16,7 @@ export type ApplicationAnswerRequest = {
 }
 
 export type ApplicationSubmitRequest = {
+  /** 현재 백엔드가 응모 시 영구 저장하는 필수 동의 값이다. */
   personalInformationConsent: boolean
   /** 최대 10개 */
   answers: ApplicationAnswerRequest[]
@@ -160,6 +161,11 @@ type MyApplicationsQuery = {
   size?: number
 }
 
+type AllMyApplicationsQuery = Omit<MyApplicationsQuery, 'page' | 'size'>
+
+/** 백엔드가 한 번에 허용하는 내 응모 목록의 최대 페이지 크기다. */
+const MAX_MY_APPLICATION_PAGE_SIZE = 100
+
 type ApplicantsQuery = {
   applicationStatus?: ApplicationStatus
   keyword?: string
@@ -228,6 +234,37 @@ export async function getMyApplications(
   )
 
   return unwrapEnvelope<PageResponse<MyApplicationSummaryResponse>>(response)
+}
+
+/**
+ * 내 응모 내역을 백엔드 페이지가 끝날 때까지 가져온다.
+ *
+ * 팬미팅 히스토리는 응모 내역과 팬미팅 상세를 합쳐야 정확한 진행 상태를 알 수 있다.
+ * 존재하지 않는 통합 목록 엔드포인트를 만들지 않고, 실제 `/users/me/applications`
+ * 계약의 페이지를 순회해 한 목록으로 조합한다.
+ */
+export async function getAllMyApplications(
+  query: AllMyApplicationsQuery,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<MyApplicationSummaryResponse[]> {
+  const applications: MyApplicationSummaryResponse[] = []
+  let page = 0
+
+  while (true) {
+    signal?.throwIfAborted()
+    const response = await getMyApplications(
+      { ...query, page, size: MAX_MY_APPLICATION_PAGE_SIZE },
+      authToken,
+      signal,
+    )
+    applications.push(...response.content)
+
+    if (!response.hasNext || page + 1 >= response.totalPages) {
+      return applications
+    }
+    page += 1
+  }
 }
 
 /** 응모자 목록을 조회한다. (운영자 전용) */

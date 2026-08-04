@@ -26,23 +26,13 @@ import {
   Spinner,
   TextField,
 } from '../../components'
+import { fanMeetingStatusContent } from './fanMeetingStatus'
 
 const meetingStatusOptions = [
   { label: '전체', value: 'all' },
   { label: '모집 예정', value: 'PUBLISHED' },
   { label: '모집 중', value: 'APPLICATION_OPEN' },
-  { label: '모집 마감', value: 'CLOSED' },
-  { label: '결과 발표', value: 'READY' },
 ]
-
-const meetingStatusContent = {
-  PUBLISHED: { label: '모집 예정', variant: 'info' },
-  APPLICATION_OPEN: { label: '모집 중', variant: 'success' },
-  APPLICATION_CLOSED: { label: '모집 마감', variant: 'neutral' },
-  READY: { label: '결과 발표', variant: 'warning' },
-  LIVE: { label: '모집 마감', variant: 'neutral' },
-  ENDED: { label: '모집 마감', variant: 'neutral' },
-} as const
 
 const applicationStatusContent: Record<
   FanMeetingApplicationStatus,
@@ -66,26 +56,17 @@ const initialFilters: EventFilters = {
 const promotionMeetingStatuses = [
   'PUBLISHED',
   'APPLICATION_OPEN',
-  'APPLICATION_CLOSED',
-  'READY',
-  'LIVE',
-  'ENDED',
 ] as const satisfies readonly PublicFanMeetingStatus[]
 
 type RecruitmentStatusFilter =
   | 'PUBLISHED'
   | 'APPLICATION_OPEN'
-  | 'CLOSED'
-  | 'READY'
 
 function matchesRecruitmentStatus(
   meetingStatus: PublicFanMeetingStatus,
   filter?: RecruitmentStatusFilter,
 ): boolean {
   if (!filter) return true
-  if (filter === 'CLOSED') {
-    return ['APPLICATION_CLOSED', 'LIVE', 'ENDED'].includes(meetingStatus)
-  }
   return meetingStatus === filter
 }
 
@@ -106,7 +87,9 @@ function formatDateTime(value: string): string {
 
 function formatDate(value: string | null): string {
   if (!value) return '-'
-  return formatDateTime(value).split(' ')[0]
+  const formatted = formatDateTime(value)
+  // 비정상 날짜 문자열에는 공백이 없을 수 있으므로 원문 정규화 결과를 안전하게 사용한다.
+  return formatted.split(' ')[0] ?? formatted
 }
 
 export function FanEventListPage() {
@@ -136,9 +119,7 @@ export function FanEventListPage() {
         const nextMeetings = meetingPage.content
           .filter(
             (meeting) =>
-              promotionMeetingStatuses.includes(
-                meeting.status,
-              ) &&
+              promotionMeetingStatuses.some((status) => status === meeting.status) &&
               matchesRecruitmentStatus(meeting.status, filters.status),
           )
           .sort(
@@ -243,8 +224,13 @@ export function FanEventListPage() {
             </p>
             <div className="grid gap-6 sm:grid-cols-2">
               {paginatedMeetings.map((meeting) => {
-                const statusContent = meetingStatusContent[meeting.status]
-                const applicationContent = meeting.applicationStatus
+                const applicationDisabled =
+                  meeting.applicationStartAt === null &&
+                  meeting.applicationEndAt === null
+                const statusContent = applicationDisabled
+                  ? { label: '응모 없음', variant: 'neutral' as const }
+                  : fanMeetingStatusContent[meeting.status]
+                const applicationContent = !applicationDisabled && meeting.applicationStatus
                   ? applicationStatusContent[meeting.applicationStatus]
                   : null
 
@@ -294,7 +280,9 @@ export function FanEventListPage() {
                             응모 마감일
                           </dt>
                           <dd className="mt-1 text-sm font-bold">
-                            {formatDate(meeting.applicationEndAt)}
+                            {applicationDisabled
+                              ? '응모 없음'
+                              : formatDate(meeting.applicationEndAt)}
                           </dd>
                         </div>
                       </dl>

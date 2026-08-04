@@ -68,4 +68,7 @@
   --shadow-media: 0 18px 52px rgb(35 38 47 / 8%);
   --shadow-modal: 0 24px 64px rgb(35 38 47 / 16%);
   --shadow-final-cta: 0 12px 28px rgb(212 64 61 / 20%);
+
+  /* 접근성 레이어 */
+  --z-skip-link: 100;
 }

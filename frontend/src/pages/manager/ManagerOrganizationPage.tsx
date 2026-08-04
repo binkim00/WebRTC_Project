@@ -1,8 +1,7 @@
-import { Buildings, Copy, Link as LinkIcon, UserMinus, UserPlus } from '@phosphor-icons/react'
+import { Buildings, Copy, Link as LinkIcon, UserMinus } from '@phosphor-icons/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { getAuthSession } from '../../api/auth'
 import {
-  addOrganizationMember,
   createOrganization,
   createOrganizationInvitation,
   getMyOrganization,
@@ -130,30 +129,6 @@ export function ManagerOrganizationPage() {
     }
   }
 
-  /** 초대 수락을 기다리지 않고 인플루언서를 조직 구성원으로 바로 연결한다. */
-  async function handleAddMemberDirectly() {
-    const target = resolveInviteTarget()
-    if (!target) return
-    if (!window.confirm(`회원번호 ${target.targetId} 인플루언서를 조직에 바로 추가할까요? 상대방 수락 없이 즉시 소속됩니다.`)) {
-      return
-    }
-
-    setSaving(true)
-    setError(undefined)
-    setMessage(undefined)
-    try {
-      const member = await addOrganizationMember(target.organizationId, target.targetId, target.token)
-      setInfluencerId('')
-      setInvitation(undefined)
-      setMessage(`${member.nickname} 인플루언서를 조직에 추가했습니다.`)
-      await loadOrganization(false)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '인플루언서를 조직에 추가하지 못했습니다.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   async function copyInvitationLink() {
     if (!invitation) return
     try {
@@ -244,17 +219,13 @@ export function ManagerOrganizationPage() {
             <CardHeader>
               <CardTitle as="h2">인플루언서 추가</CardTitle>
               <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                회원번호를 입력한 뒤 방식을 선택하세요. <strong>초대 링크</strong>는 인플루언서가 링크에서 수락해야 소속되고,
-                <strong> 바로 추가</strong>는 수락 없이 즉시 소속시킵니다.
+                회원번호로 초대 링크를 발급하세요. 인플루언서가 링크에서 수락해야 조직에 소속됩니다.
               </p>
             </CardHeader>
             <CardContent className="grid gap-5">
               <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={handleInvite}>
                 <TextField containerClassName="min-w-0 flex-1" helperText="인플루언서 프로필의 회원번호" label="인플루언서 회원번호" onChange={(event) => setInfluencerId(event.currentTarget.value)} required type="number" value={influencerId} />
-                <div className="flex flex-wrap gap-2">
-                  <Button loading={saving} leadingIcon={<LinkIcon aria-hidden size={18} weight="bold" />} type="submit" variant="secondary">초대 링크 발급</Button>
-                  <Button disabled={saving} leadingIcon={<UserPlus aria-hidden size={18} weight="bold" />} onClick={() => void handleAddMemberDirectly()} type="button">바로 추가</Button>
-                </div>
+                <Button loading={saving} leadingIcon={<LinkIcon aria-hidden size={18} weight="bold" />} type="submit">초대 링크 발급</Button>
               </form>
 
               {invitation ? (

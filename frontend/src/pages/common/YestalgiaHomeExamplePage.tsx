@@ -70,7 +70,8 @@ export function YestalgiaHomeExamplePage() {
   const pageRef = useRef<HTMLDivElement>(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [activeStoryIndex, setActiveStoryIndex] = useState(0)
-  const activeStory = fanStories[activeStoryIndex]
+  // 인덱스가 예상 범위를 벗어나더라도 예시 화면이 깨지지 않도록 첫 항목으로 복구한다.
+  const activeStory = fanStories[activeStoryIndex] ?? fanStories[0]
 
   useEffect(() => {
     const page = pageRef.current
@@ -207,7 +208,8 @@ export function YestalgiaHomeExamplePage() {
         </nav>
       </div>
 
-      <main>
+      {/* 공통 App의 main 랜드마크와 중첩되지 않도록 예시 콘텐츠는 div로 감싼다. */}
+      <div>
         <section className="editorial-hero" id="top">
           <p className="editorial-kicker" data-reveal="left">ONE-TO-ONE VIDEO FAN MEETING</p>
           <h1 data-reveal="up">
@@ -405,7 +407,7 @@ export function YestalgiaHomeExamplePage() {
             src={heroJellies}
           />
         </section>
-      </main>
+      </div>
 
       <footer className="editorial-footer">
         <Link to="/">기존 MELLY 홈으로 돌아가기</Link>

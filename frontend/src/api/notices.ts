@@ -16,7 +16,7 @@ export type NoticeSummaryResponse = {
   title: string
   authorId: number
   authorNickname: string
-  /** 첨부파일 미구현으로 항상 null */
+  /** 첨부한 이미지가 있으면 대표 이미지 URL이고 없으면 null이다. */
   thumbnailUrl: string | null
   createdAt: string
   pinned: boolean
@@ -30,7 +30,7 @@ export type NoticeDetailResponse = {
   authorId: number
   authorNickname: string
   thumbnailUrl: string | null
-  /** 첨부파일 미구현으로 항상 빈 배열 */
+  /** 표시 순서대로 정렬된 첨부파일이며 없으면 빈 배열이다. */
   attachments: NoticeAttachmentResponse[]
   createdAt: string
   updatedAt: string
@@ -39,9 +39,18 @@ export type NoticeDetailResponse = {
   canDelete: boolean
 }
 
+/** 공지 한 건에 연결할 수 있는 첨부파일 최대 개수이며 백엔드 검증과 같은 값이다. */
+export const NOTICE_ATTACHMENT_MAX_COUNT = 10
+
 export type NoticeCreateRequest = {
   title: string
   content: string
+  /**
+   * 연결할 첨부파일 식별자이며 보낸 순서가 표시 순서가 된다.
+   *
+   * `POST /api/v1/attachments`로 먼저 업로드한 뒤 받은 식별자를 넘긴다.
+   */
+  attachmentIds?: number[]
 }
 
 export type NoticeCreateResponse = {
@@ -54,6 +63,13 @@ export type NoticeCreateResponse = {
 export type NoticeUpdateRequest = {
   title?: string
   content?: string
+  /**
+   * 연결할 첨부파일 식별자 전체 목록이다.
+   *
+   * PATCH이므로 생략하면 기존 첨부를 유지하고, 보내면 그 목록이 연결 상태를 대신한다.
+   * 빈 배열을 보내면 모든 첨부가 해제된다.
+   */
+  attachmentIds?: number[]
 }
 
 export type PostUpdateResponse = {

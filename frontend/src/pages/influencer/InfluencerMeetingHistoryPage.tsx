@@ -35,6 +35,11 @@ const statusContent: Record<string, { label: string; variant: 'neutral' | 'prima
   CANCELED: { label: '취소', variant: 'danger' },
 }
 
+const fallbackStatusContent = {
+  label: '종료',
+  variant: 'success',
+} as const
+
 const pageSize = 5
 
 function formatScheduledAt(value: string) {
@@ -104,7 +109,8 @@ export function InfluencerMeetingHistoryPage() {
   }
 
   function statusOf(meeting: ManagerMeetingSummary) {
-    return statusContent[meeting.status ?? 'ENDED'] ?? statusContent.ENDED
+    // 백엔드가 새 상태를 추가해도 배지 렌더링이 중단되지 않도록 안전한 기본값을 둔다.
+    return statusContent[meeting.status ?? 'ENDED'] ?? fallbackStatusContent
   }
 
   return (

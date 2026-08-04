@@ -12,7 +12,7 @@ import heroJellies from '../../assets/main-hero-jellies.webp'
 import eventSeoun from '../../assets/main-event-seoun.webp'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
-import { fetchManagerMeetings } from '../../api/managerMeetings'
+import { fetchPublicFanMeetings } from '../../api/fanMeetings'
 import {
   getFanMeetingStatistics,
   type FanMeetingStatisticsResponse,
@@ -27,7 +27,7 @@ import {
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 type FeaturedMeeting = {
-  id: string
+  id: number
   eyebrow: string
   title: string
   influencer: string
@@ -81,9 +81,8 @@ export function HomePage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    const authToken = getAuthSession()?.accessToken ?? ''
 
-    void fetchManagerMeetings({ page: 0, size: 3 }, authToken, controller.signal)
+    void fetchPublicFanMeetings({ page: 0, size: 3 }, undefined, controller.signal)
       .then((result) => {
         setFeaturedMeetings(
           result.content.map((meeting, index) => ({
