@@ -234,6 +234,13 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'influencer/fans',
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerMyFansPage'),
+          'InfluencerMyFansPage',
+        ),
+      },
+      {
         path: 'influencer/fan-meetings/:fanMeetingId/fans',
         lazy: lazyPage(
           () => import('../pages/common/FanMeetingParticipantsPage'),
