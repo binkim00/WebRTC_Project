@@ -2,11 +2,11 @@ import {
   RoomAudioRenderer,
   VideoTrack,
   useConnectionState,
+  useDataChannel,
   useLocalParticipant,
   useParticipants,
   useRoomContext,
   useTracks,
-  useTranscriptions,
 } from '@livekit/components-react'
 import { UserCircleIcon } from '@phosphor-icons/react'
 import { ConnectionState, Track } from 'livekit-client'
@@ -24,6 +24,12 @@ import { useCallRecording } from '../../hooks/useCallRecording'
 import { AlertBanner } from '../feedback'
 import { CallStage } from './CallStage'
 import { EndCallDialog } from './EndCallDialog'
+import {
+  SUBTITLE_DATA_TOPIC,
+  appendSubtitleLine,
+  parseSubtitlePayload,
+  type SubtitleLine,
+} from './subtitleChannel'
 import type { MediaAction, VideoCallRoomProps } from './types'
 import { useRemainingTime } from './useRemainingTime'
 
@@ -61,7 +67,6 @@ export function ConnectedCallRoom({
   const participants = useParticipants()
   const cameraTracks = useTracks([Track.Source.Camera])
   const microphoneTracks = useTracks([Track.Source.Microphone])
-  const transcriptions = useTranscriptions()
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant()
   const [endDialogOpen, setEndDialogOpen] = useState(false)
   const [captionEnabled, setCaptionEnabled] = useState(true)
@@ -80,6 +85,13 @@ export function ConnectedCallRoom({
     connectionState === ConnectionState.SignalReconnecting
   const remaining = useRemainingTime(sessionStatus, callDurationSec)
   const remoteParticipants = participants.filter((participant) => !participant.isLocal)
+  /**
+   * 자막 AI가 Room에 들어와 있는지 여부다.
+   *
+   * 자막이 안 보일 때 "AI가 아직 안 들어옴"과 "들어왔는데 대사가 없음"을 화면에서 구분해,
+   * 디스패치 문제인지 STT 문제인지 바로 좁힐 수 있게 한다.
+   */
+  const isSubtitleAgentPresent = participants.some((participant) => participant.isAgent)
   const remoteParticipant = remoteParticipants[0]
   const remoteCameraTrack = cameraTracks.find((track) => !track.participant.isLocal)
   const localCameraTrack = cameraTracks.find((track) => track.participant.isLocal)
@@ -91,31 +103,54 @@ export function ConnectedCallRoom({
     participantLabel.replace(/\s*영상$/, '')
 
   /**
-   * 자막 스트림을 화자 이름이 붙은 최근 대사 목록으로 만든다.
+   * 자막 AI가 데이터 채널로 보내는 대사를 모은다.
    *
-   * LiveKit은 같은 발화를 갱신하며 여러 번 보내므로 스트림 식별자로 마지막 값만 남긴다.
-   * 마지막 한 줄만 쓰면 이전 대사가 즉시 사라져 읽을 시간이 없으므로 최근 세 줄을 유지한다.
+   * 자막은 LiveKit 기본 transcription API로 오지 않는다. AI 워커가
+   * `publish_data(topic="subtitle")`로 직접 만든 JSON을 보내므로 그 토픽을 구독해야 한다.
+   * (이전에는 `useTranscriptions()`를 썼는데, 워커가 그 경로로 아무것도 publish하지 않아
+   *  에이전트가 정상 동작해도 자막이 영원히 비어 있었다.)
    */
-  const captionLines = useMemo(() => {
-    const byStream = new Map<string, { speaker: string; text: string }>()
-    for (const transcription of transcriptions) {
-      const text = transcription.text.trim()
-      if (!text) continue
-
-      const { identity } = transcription.participantInfo
-      const speaker =
-        identity === localParticipant.identity
-          ? '나'
-          : participants.find((participant) => participant.identity === identity)?.name
-            || remoteName
-      byStream.set(transcription.streamInfo.id, { speaker, text })
-    }
-
-    return [...byStream.values()].slice(-3)
-  }, [localParticipant.identity, participants, remoteName, transcriptions])
+  const [subtitleLines, setSubtitleLines] = useState<SubtitleLine[]>([])
 
   // 백엔드 업로드 권한(FAN)과 팬미팅의 실제 녹화 설정이 모두 맞을 때만 녹화한다.
   const [authSession] = useState(() => getAuthSession())
+
+  // 팬과 호스트 1:1 통화이므로, 내가 말한 대사가 아니면 항상 상대방이 말한 것이다.
+  const subtitleSpeakerNames = useMemo(
+    () => ({ influencer: remoteName, fan: remoteName }),
+    [remoteName],
+  )
+
+  // 핸들러 identity가 바뀌면 데이터 채널 구독이 다시 걸릴 수 있고, 그 틈에 도착한 자막을
+  // 놓칠 수 있다. 하필 그 시점이 상대 이름이 채워지는 통화 시작 직후여서 첫 대사가 사라진다.
+  // 최신 값은 ref로 읽어 콜백 identity를 영구히 고정한다.
+  const viewerRoleRef = useRef(authSession?.role)
+  viewerRoleRef.current = authSession?.role
+  const subtitleSpeakerNamesRef = useRef(subtitleSpeakerNames)
+  subtitleSpeakerNamesRef.current = subtitleSpeakerNames
+
+  const handleSubtitleMessage = useCallback((message: { payload: Uint8Array }) => {
+    const payload = parseSubtitlePayload(message.payload)
+    if (!payload) return
+
+    setSubtitleLines((current) =>
+      appendSubtitleLine(
+        current,
+        payload,
+        viewerRoleRef.current,
+        subtitleSpeakerNamesRef.current,
+      ),
+    )
+  }, [])
+
+  useDataChannel(SUBTITLE_DATA_TOPIC, handleSubtitleMessage)
+
+  useEffect(() => {
+    // 팬이 교체되면 이전 팬의 대사를 비운다.
+    // 호스트는 팬미팅 내내 같은 방에 머물기 때문에 화면이 저절로 초기화되지 않아,
+    // 통화 세션이 바뀔 때 직접 지워야 이전 팬의 자막이 새 통화에 남지 않는다.
+    setSubtitleLines([])
+  }, [callSessionId])
   const {
     stopAndUpload,
     retryUpload,
@@ -344,7 +379,7 @@ export function ConnectedCallRoom({
       <CallStage
         cameraEnabled={isCameraEnabled}
         captionEnabled={captionEnabled}
-        captionLines={captionLines}
+        captionLines={subtitleLines}
         connected={isConnected}
         connectionLabel={connectionLabel}
         localVideo={localVideo}
@@ -373,9 +408,11 @@ export function ConnectedCallRoom({
           </p>
         </div>
         <p>
-          {captionLines.length
+          {subtitleLines.length
             ? '실시간 자막을 표시하고 있습니다.'
-            : '실시간 자막은 자막 AI가 Room에 참여하면 표시됩니다.'}
+            : isSubtitleAgentPresent
+              ? '자막 AI가 입장했습니다. 첫 대사를 기다리고 있습니다.'
+              : '자막 AI가 아직 Room에 들어오지 않아 자막을 표시할 수 없습니다.'}
         </p>
       </div>
 
@@ -441,7 +478,10 @@ export function ConnectedCallRoom({
       ) : null}
 
       <EndCallDialog
-        onConfirm={() => void finishCall(true)}
+        onConfirm={() => {
+          setEndDialogOpen(false)
+          void finishCall(true)
+        }}
         onLeaveRoom={hostStaysConnected ? () => void leaveRoom() : undefined}
         onOpenChange={setEndDialogOpen}
         open={endDialogOpen}
