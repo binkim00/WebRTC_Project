@@ -16,6 +16,7 @@ import {
 } from '../../api/pendingRecordings'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { AlertBanner, Button, Card, CardContent } from '../../components'
+import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 function formatDateTime(iso: string | null | undefined): string {
@@ -348,7 +349,7 @@ export function FanMeetingCompletePage() {
                             <Card className="p-6">
                                 <div className="min-w-0">
                                     {playbackUrl ? (
-                                        <video
+                                        <RecordingVideo
                                             className="aspect-video w-full rounded-[var(--radius-panel)] bg-black"
                                             controls
                                             controlsList="nodownload"
@@ -356,7 +357,7 @@ export function FanMeetingCompletePage() {
                                             src={playbackUrl}
                                         >
                                             브라우저가 영상 재생을 지원하지 않습니다. 아래 다운로드 버튼을 이용해 주세요.
-                                        </video>
+                                        </RecordingVideo>
                                     ) : (
                                         <div className="flex aspect-video items-center justify-center rounded-[var(--radius-panel)] bg-[var(--color-divider)] text-[var(--color-text-secondary)]">
                                             재생 링크를 준비하고 있습니다

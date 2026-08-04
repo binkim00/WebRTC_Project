@@ -56,11 +56,19 @@ export async function changeQueuePosition(
   queueEntryId: string | number,
   newPosition: number,
   authToken: string,
+  reason?: string,
   signal?: AbortSignal,
 ): Promise<QueuePositionChangeResponse> {
+  // reason이 비어 있으면 backend가 기본 안내 문구를 사용하므로
+  // 빈 문자열 대신 undefined로 보내 불필요한 값을 저장하지 않는다.
   const response = await apiRequest<unknown>(
     `/api/v1/queue-entries/${encodeURIComponent(String(queueEntryId))}/position`,
-    { method: 'PATCH', authToken, signal, body: JSON.stringify({ newPosition }) },
+    {
+      method: 'PATCH',
+      authToken,
+      signal,
+      body: JSON.stringify({ newPosition, reason: reason?.trim() || undefined }),
+    },
   )
 
   return unwrapEnvelope<QueuePositionChangeResponse>(response)

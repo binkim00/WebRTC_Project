@@ -62,19 +62,18 @@ export function EmailVerifiedPage() {
   // URL에 새 토큰이 나타날 때마다 확인한다. 개발용 링크로 같은 라우트에 다시 들어오는
   // 경우(쿼리만 변경)에도 동작해야 하므로 첫 마운트 1회로 제한하지 않는다.
   useEffect(() => {
-    if (!session) return
-
     const fresh = searchParams.get('token')?.trim()
     if (!fresh || fresh === processedTokenRef.current) return
 
     processedTokenRef.current = fresh
     setToken(fresh)
-    void runConfirm(fresh, session.accessToken)
+    // 인증 링크는 토큰 자체가 소유 증명이므로 로그인하지 않은 브라우저에서도 확인한다.
+    void runConfirm(fresh, session?.accessToken)
     // session 객체는 렌더마다 새로 만들어지므로 토큰 파라미터 변화에만 반응한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  async function runConfirm(rawToken: string, accessToken: string) {
+  async function runConfirm(rawToken: string, accessToken?: string) {
     setPhase({ kind: 'checking' })
     try {
       const status = await confirmEmailVerification(rawToken, accessToken)
@@ -113,17 +112,58 @@ export function EmailVerifiedPage() {
   /** 429·일시 오류 후 재시도한다. 보관해 둔 토큰을 그대로 다시 확인한다. */
   function retryConfirm() {
     const accessToken = getAuthSession()?.accessToken
-    if (token && accessToken) void runConfirm(token, accessToken)
+    if (token) void runConfirm(token, accessToken)
   }
 
   // 인증 완료는 본인 확인이 필요하므로 로그인 후 이 주소(토큰 포함)로 되돌아온다.
-  if (!session) {
+  const hasToken = Boolean(token ?? searchParams.get('token')?.trim())
+
+  // 토큰 없이 직접 접근한 경우에만 로그인 화면으로 보낸다.
+  if (!session && !hasToken) {
     const redirect = encodeURIComponent(`${location.pathname}${location.search}`)
     return <Navigate replace to={`/login?redirect=${redirect}`} />
   }
 
-  const hasToken = Boolean(token ?? searchParams.get('token')?.trim())
-  const fallbackPath = session.role === 'FAN' ? '/fan/events' : '/'
+  // 메일 링크를 다른 브라우저에서 연 비로그인 사용자도 인증 결과를 확인할 수 있어야 한다.
+  // 이 분기는 아래의 로그인 사용자용 완료 화면과 달리 인증 후 로그인 화면으로 이동시킨다.
+  if (!session) {
+    return (
+      <div className="mx-auto grid w-full max-w-xl gap-6 py-12">
+        <Card>
+          <CardContent className="grid gap-6 p-8">
+            {phase.kind === 'checking' ? (
+              <div className="flex min-h-40 items-center justify-center">
+                <Spinner label="이메일 인증을 확인하는 중" size="lg" />
+              </div>
+            ) : phase.kind === 'verified' ? (
+              <AlertBanner title="이메일 인증이 완료되었습니다" variant="success">
+                이제 로그인해서 서비스를 이용해 주세요.
+              </AlertBanner>
+            ) : (
+              <AlertBanner title="이메일 인증을 완료하지 못했습니다" variant="error">
+                {phase.kind === 'failed'
+                  ? phase.message
+                  : phase.kind === 'rateLimited'
+                    ? '확인 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.'
+                    : '인증 링크가 만료되었거나 이미 사용되었습니다.'}
+              </AlertBanner>
+            )}
+            {phase.kind === 'verified' ? (
+              <Button className="w-full" onClick={() => navigate('/login')} size="lg">
+                로그인하러 가기
+              </Button>
+            ) : phase.kind === 'rateLimited' || phase.kind === 'failed' ? (
+              <Button className="w-full" onClick={retryConfirm} variant="secondary">
+                다시 확인하기
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const fallbackPath = session?.role === 'FAN' ? '/fan/events' : session ? '/' : '/login'
   const donePath = returnTo ?? fallbackPath
   const doneLabel = returnTo ? '이전 화면으로 돌아가기' : session.role === 'FAN' ? '이벤트 보러 가기' : '홈으로 가기'
 

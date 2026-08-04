@@ -9,6 +9,7 @@ import {
   resendEmailVerification,
   sendEmailVerification,
 } from '../../api/emailVerifications'
+import { useNowTicker } from '../../hooks/useNowTicker'
 import { AlertBanner } from '../feedback/AlertBanner'
 import { Button } from '../ui/Button'
 
@@ -42,7 +43,6 @@ export function EmailVerificationNotice({
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
-  const [now, setNow] = useState(() => Date.now())
 
   // 이메일을 모른 채 렌더링되면(인증 완료 페이지의 실패 분기) 상태 조회로 채운다.
   // 이 조회는 기능이 없는 구버전 백엔드에서 404(→401 마스킹)가 될 수 있지만, email 없이
@@ -73,18 +73,17 @@ export function EmailVerificationNotice({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email])
 
-  // 재발송 카운트다운 동안만 1초 간격으로 시간을 갱신한다.
+  // 재발송 카운트다운 동안만 1초 간격으로 시각을 갱신한다.
+  // 남은 시간(cooldownRemainingSec)은 now에서 파생되므로 그것을 enabled에 넘기면 순환 참조가 된다.
+  // 렌더 시점의 Date.now()로 판단해 순환을 끊는다. 매 틱마다 이 조건이 다시 평가되고,
+  // 쿨다운이 끝나면 false가 되어 useNowTicker가 타이머를 정리한다.
+  const cooldownPending = cooldownUntil !== undefined && Date.now() < cooldownUntil
+  // useNowTicker가 활성화 직후 시각을 즉시 동기화하므로 발송 시점에 따로 now를 맞출 필요가 없다.
+  const now = useNowTicker(1_000, cooldownPending)
+
   const cooldownRemainingSec = cooldownUntil
     ? Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
     : 0
-  const cooldownActive = cooldownRemainingSec > 0
-
-  useEffect(() => {
-    if (!cooldownActive) return
-
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000)
-    return () => window.clearInterval(timer)
-  }, [cooldownActive])
 
   /** 인증 메일을 보낸다. 이미 한 번 보냈으면 재발송 경로를 쓴다. */
   async function handleSend() {
@@ -104,7 +103,6 @@ export function EmailVerificationNotice({
       setSentOnce(true)
       setKnownEmail(result.email)
       setCooldownUntil(Date.now() + RESEND_COOLDOWN_MS)
-      setNow(Date.now())
       setMessage('인증 메일을 보냈어요. 메일함에서 인증 링크를 눌러 주세요.')
       // 개발 프로파일에서만 내려오는 값이며, 로컬에서 메일 없이 흐름을 확인할 때 쓴다.
       if (import.meta.env.DEV && result.devToken) setDevToken(result.devToken)
@@ -116,7 +114,6 @@ export function EmailVerificationNotice({
       if (reason instanceof ApiError && reason.status === 429) {
         // 서버 쿨다운이 진행 중이라는 뜻이므로 버튼도 같은 시간만큼 잠가 반복 429를 막는다.
         setCooldownUntil(Date.now() + RESEND_COOLDOWN_MS)
-        setNow(Date.now())
         setError('요청이 너무 많아요. 잠시 후 다시 시도해 주세요.')
         return
       }

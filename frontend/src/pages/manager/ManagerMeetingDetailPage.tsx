@@ -25,6 +25,15 @@ import {
   type FanMeetingUpdateRequest,
 } from '../../api/meetingManagement'
 import { fetchParticipants } from '../../api/fanMeetingParticipants'
+import { useNowTicker } from '../../hooks/useNowTicker'
+import {
+  CALL_DURATION_MAX_MINUTES,
+  CALL_DURATION_MIN_MINUTES,
+  callDurationSecToMinutesInput,
+  formatCallDuration,
+  minutesInputToCallDurationSec,
+  validateCallDurationSec,
+} from './callDuration'
 import {
   AlertBanner,
   Badge,
@@ -258,7 +267,10 @@ export function ManagerMeetingDetailPage() {
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
   const [applicantsRefresh, setApplicantsRefresh] = useState(0)
-  const [actionNow, setActionNow] = useState(() => new Date())
+  // 마감·조기 시작 경계가 지나면 새로고침하지 않아도 버튼 상태를 다시 계산한다.
+  const actionNowMs = useNowTicker(15_000)
+  // getAvailableActions가 Date를 받고 useMemo 의존성으로도 쓰이므로 identity를 고정한다.
+  const actionNow = useMemo(() => new Date(actionNowMs), [actionNowMs])
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!meetingId) {
@@ -306,11 +318,6 @@ export function ManagerMeetingDetailPage() {
     return () => controller.abort()
   }, [load])
 
-  useEffect(() => {
-    // 마감·조기 시작 경계가 지나면 새로고침하지 않아도 버튼 상태를 다시 계산한다.
-    const timer = window.setInterval(() => setActionNow(new Date()), 15_000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   const actions = useMemo(
     () =>
@@ -656,7 +663,7 @@ function OverviewPanel({
             />
             <FlowStep
               done={['LIVE', 'ENDED'].includes(meeting.status)}
-              description={`대기열 개방 ${formatDateTime(meeting.operation.queueOpenAt)} · 1인 통화 ${meeting.operation.callDurationSec}초`}
+              description={`대기열 개방 ${formatDateTime(meeting.operation.queueOpenAt)} · 1인 통화 ${formatCallDuration(meeting.operation.callDurationSec)}`}
               title="5. 팬미팅 진행"
             />
           </ol>
@@ -733,10 +740,22 @@ function SettingsPanel({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
+  // 통화 시간은 분 단위로 입력받고 초로 저장한다. 입력 도중의 빈 문자열을 초로
+  // 환산할 수 없으므로 표시용 문자열을 별도 상태로 둔다.
+  const [callDurationMinutesInput, setCallDurationMinutesInput] = useState(() =>
+    callDurationSecToMinutesInput(detail.meeting.operation.callDurationSec),
+  )
+  const callDurationError = validateCallDurationSec(
+    minutesInputToCallDurationSec(callDurationMinutesInput),
+  )
 
   useEffect(() => {
     setForm(toSettingsForm(detail))
     setDirty(new Set())
+    // 서버 값이 다시 들어오면 분 입력값도 함께 맞춘다.
+    setCallDurationMinutesInput(
+      callDurationSecToMinutesInput(detail.meeting.operation.callDurationSec),
+    )
   }, [detail])
 
   /** 필드 값을 바꾸고 변경 목록에 기록한다. 변경한 필드만 PATCH에 담는다. */
@@ -769,6 +788,12 @@ function SettingsPanel({
     }
     if (scheduleErrors.length > 0) {
       setError(scheduleErrors[0])
+      return
+    }
+    // 통화 시간을 건드렸을 때만 막는다. 다른 항목만 고치는 저장은 서버에서 온
+    // 범위 밖 값(예: API로 설정된 90초) 때문에 막히지 않아야 한다.
+    if (dirty.has('callDurationSec') && callDurationError) {
+      setError(callDurationError)
       return
     }
 
@@ -952,16 +977,23 @@ function SettingsPanel({
             type="datetime-local"
             value={form.queueOpenAt}
           />
-          <Select
+          <TextField
             disabled={operationLocked}
+            endAdornment={<span className="pr-3 text-sm text-[var(--color-text-secondary)]">분</span>}
+            error={callDurationError}
+            helperText={`${CALL_DURATION_MIN_MINUTES}~${CALL_DURATION_MAX_MINUTES}분 사이로 입력합니다.`}
             label="1인 통화 시간"
-            onChange={(event) => setField('callDurationSec', Number(event.target.value))}
-            options={[
-              { value: '120', label: '2분' },
-              { value: '180', label: '3분' },
-              { value: '300', label: '5분' },
-            ]}
-            value={String(form.callDurationSec)}
+            max={CALL_DURATION_MAX_MINUTES}
+            min={CALL_DURATION_MIN_MINUTES}
+            step={1}
+            type="number"
+            value={callDurationMinutesInput}
+            onChange={(event) => {
+              // 입력 중 빈 문자열은 초로 환산할 수 없으므로 표시용 문자열을 따로 들고 있는다.
+              setCallDurationMinutesInput(event.target.value)
+              const seconds = minutesInputToCallDurationSec(event.target.value)
+              if (seconds !== undefined) setField('callDurationSec', seconds)
+            }}
           />
           <div className="grid gap-3 rounded-xl border border-[var(--color-divider)] p-4 sm:col-span-2">
             <Checkbox

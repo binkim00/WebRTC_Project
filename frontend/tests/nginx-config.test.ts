@@ -15,7 +15,8 @@ describe('nginx 보안 및 캐시 설정', () => {
     expect(nginxConfig).toContain('X-Content-Type-Options "nosniff"')
     expect(nginxConfig).toContain('X-Frame-Options "DENY"')
     expect(nginxConfig).toContain('Permissions-Policy')
-    expect(nginxConfig).toContain('Strict-Transport-Security')
+    // Jenkins는 HTTP 8080 포트를 사용하므로 HSTS로 HTTPS 리다이렉트를 강제하지 않는다.
+    expect(nginxConfig).not.toContain('Strict-Transport-Security')
   })
 
   it('해시 정적 자산만 immutable로 장기 캐시한다', () => {

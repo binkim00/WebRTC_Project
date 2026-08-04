@@ -34,6 +34,16 @@ describe('팬미팅 생성 로컬 초안', () => {
     ).toBe(true)
   })
 
+  it('서버 초안 ID만 있고 입력이 비었으면 저장 대상으로 보지 않는다', () => {
+    const form = createInitialMeetingForm(9)
+
+    // createdMeetingId를 근거로 삼으면 이 함수가 영구히 true가 되어 자동 정리가 불가능해진다.
+    // 그러면 사용자가 입력을 모두 지워도 초안이 남아 계속 복구되는 교착에 빠진다.
+    expect(hasMeaningfulMeetingDraft(form, [], '', 0, 55)).toBe(false)
+    // 실제 입력이 남아 있으면 서버 초안 ID와 무관하게 저장 대상이다.
+    expect(hasMeaningfulMeetingDraft({ ...form, title: '남은 입력' }, [], '', 0, 55)).toBe(true)
+  })
+
   it('저장한 폼·질문·서버 초안 ID를 같은 사용자에게 온전히 복구한다', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-03T12:34:56.000Z'))

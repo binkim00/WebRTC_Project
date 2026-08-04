@@ -1,6 +1,6 @@
 import { LiveKitRoom } from '@livekit/components-react'
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import {
   getCallSessionStatus,
@@ -8,7 +8,10 @@ import {
   type CallSessionStatusResponse,
   type LiveKitAccessTokenResponse,
 } from '../../api/callSessions'
+import { fetchMeetingQueue } from '../../api/fanMeetingParticipants'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
+import { isQueueNotInitialized } from '../../api/queue'
+import { usePolling } from '../../hooks/usePolling'
 import { Badge } from '../data-display'
 import { AlertBanner } from '../feedback'
 import { Button } from '../ui/Button'
@@ -32,6 +35,27 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   const [callDurationSec, setCallDurationSec] = useState<number>()
   const [retryCount, setRetryCount] = useState(0)
   const [loading, setLoading] = useState(!isDesignPreview)
+  const [meetingClosed, setMeetingClosed] = useState<'ENDED' | 'CANCELED'>()
+  const navigate = useNavigate()
+
+  const hostStaysConnected = props.hostStaysConnected ?? false
+
+  /**
+   * 방 입장 토큰을 발급받는 기준 세션이다.
+   *
+   * 호스트 토큰은 통화 세션이 아니라 팬미팅 Room에 대한 권한이므로, 팬이 교체될 때
+   * 다시 발급받지 않는다. 이 값을 바꾸지 않는 한 LiveKitRoom의 token prop이 그대로 유지되어
+   * 재연결이 일어나지 않는다. 연결이 끊겨 재입장이 필요할 때만 갱신한다.
+   */
+  const [connectSessionId, setConnectSessionId] = useState(props.callSessionId)
+  /** 지금 진행 중인 통화 세션이다. 상태 폴링·남은 시간·종료 API가 이 값을 따른다. */
+  const [activeCallSessionId, setActiveCallSessionId] = useState(props.callSessionId)
+
+  // 주소의 세션이 바뀌면(팬 통화 진입 등) 두 값을 함께 맞춘다.
+  useEffect(() => {
+    setConnectSessionId(props.callSessionId)
+    setActiveCallSessionId(props.callSessionId)
+  }, [props.callSessionId])
 
   const loadConnectionInfo = useCallback(
     async (signal: AbortSignal) => {
@@ -39,7 +63,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         return
       }
 
-      if (!props.callSessionId) {
+      if (!connectSessionId) {
         setConnectionError('통화 연결에 필요한 callSessionId가 없습니다.')
         setLoading(false)
         return
@@ -58,8 +82,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         const authSession = getAuthSession()
         const authToken = authSession?.accessToken
         const [info, status] = await Promise.all([
-          issueLiveKitAccessToken(props.callSessionId, { authToken, signal }),
-          getCallSessionStatus(props.callSessionId, { authToken, signal }),
+          issueLiveKitAccessToken(connectSessionId, { authToken, signal }),
+          getCallSessionStatus(connectSessionId, { authToken, signal }),
         ])
 
         // 녹화 여부와 통화 제한 시간은 통화 진입 시 서버 상세를 다시 읽어
@@ -106,7 +130,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         }
       }
     },
-    [isDesignPreview, props.callSessionId, props.meetingId],
+    [connectSessionId, isDesignPreview, props.meetingId],
   )
 
   useEffect(() => {
@@ -129,51 +153,117 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     })
   }, [connectionInfo, props.callSessionId])
 
-  useEffect(() => {
-    const callSessionId = props.callSessionId
+  /**
+   * 끊긴 연결을 새 토큰으로 다시 붙인다.
+   *
+   * 재입장 시점의 진행 중 세션으로 토큰을 발급받아야 하므로 connectSessionId를 현재 세션에 맞춘다.
+   * 두 값이 같아 상태가 바뀌지 않는 경우에도 retryCount로 재조회를 강제한다.
+   */
+  const handleReconnectNeeded = useCallback(() => {
+    setConnectSessionId(activeCallSessionId)
+    setRetryCount((count) => count + 1)
+  }, [activeCallSessionId])
 
-    if (isDesignPreview || !callSessionId || !connectionInfo) {
-      return
-    }
+  /**
+   * 호스트가 대기열의 현재 통화를 따라간다.
+   *
+   * 팬이 교체되면 진행 중인 통화 세션만 바꿔 끼우고 LiveKit 연결은 그대로 유지한다.
+   * 다음 팬이 아직 없으면 마지막 세션(ENDED)을 유지해 화면이 대기 상태로 남는다.
+   */
+  const followCurrentCall = useCallback(
+    async (signal: AbortSignal) => {
+      const authToken = getAuthSession()?.accessToken
+      if (!authToken) return
 
-    let active = true
-    let timer: number | undefined
-    const controller = new AbortController()
-
-    const refreshStatus = async () => {
       try {
-        const status = await getCallSessionStatus(callSessionId, {
-          authToken: getAuthSession()?.accessToken,
-          signal: controller.signal,
-        })
-
-        if (active) {
-          setSessionStatus(status)
-          setStatusError(undefined)
-        }
+        const queue = await fetchMeetingQueue(props.meetingId, authToken, signal)
+        const nextCallSessionId = queue.currentCall?.callSessionId
+        if (nextCallSessionId) setActiveCallSessionId(String(nextCallSessionId))
       } catch (error: unknown) {
-        if (active && !(error instanceof DOMException && error.name === 'AbortError')) {
-          setStatusError(
-            error instanceof Error ? error.message : '통화 상태를 갱신하지 못했습니다.',
-          )
-        }
-      } finally {
-        // 느린 요청이 겹쳐 오래된 통화 상태가 최신 상태를 덮지 않도록 완료 후 다음 조회를 예약한다.
-        if (active) timer = window.setTimeout(() => void refreshStatus(), 5_000)
+        if (signal.aborted) return
+        // 팬미팅이 끝나 대기열이 정리되면 따라갈 통화가 없다. 오류로 다루지 않는다.
+        if (isQueueNotInitialized(error)) return
       }
-    }
+    },
+    [props.meetingId],
+  )
 
-    timer = window.setTimeout(() => void refreshStatus(), 5_000)
+  usePolling(followCurrentCall, {
+    intervalMs: 3_000,
+    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo),
+  })
 
-    return () => {
-      active = false
-      controller.abort()
-      if (timer !== undefined) window.clearTimeout(timer)
+  // 통화 세션이 끝난 것과 팬미팅 전체가 끝난 것은 다르다. 호스트는 통화방에
+  // 남아 있으므로 팬미팅 상태를 별도로 확인해 전체 종료를 놓치지 않는다.
+  const loadMeetingStatus = useCallback(async (signal: AbortSignal) => {
+    if (!hostStaysConnected || meetingClosed) return
+
+    const authToken = getAuthSession()?.accessToken
+    if (!authToken) return
+
+    try {
+      const detail = await fetchPublicFanMeetingDetail(Number(props.meetingId), authToken, signal)
+      const status = detail.meeting.status
+      if (status === 'ENDED' || status === 'CANCELED') {
+        setMeetingClosed(status)
+      }
+    } catch {
+      // 일시적인 조회 실패는 통화 화면을 끊지 않고 다음 polling에서 재확인한다.
     }
-  }, [connectionInfo, isDesignPreview, props.callSessionId])
+  }, [hostStaysConnected, meetingClosed, props.meetingId])
+
+  usePolling(loadMeetingStatus, {
+    intervalMs: 3_000,
+    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo) && !meetingClosed,
+  })
+
+  useEffect(() => {
+    if (!meetingClosed) return
+
+    const timer = window.setTimeout(() => navigate('/', { replace: true }), 3_000)
+    return () => window.clearTimeout(timer)
+  }, [meetingClosed, navigate])
+
+  const refreshStatus = useCallback(
+    async (signal: AbortSignal) => {
+      if (!activeCallSessionId) return
+
+      try {
+        const status = await getCallSessionStatus(activeCallSessionId, {
+          authToken: getAuthSession()?.accessToken,
+          signal,
+        })
+        setSessionStatus(status)
+        setStatusError(undefined)
+      } catch (error: unknown) {
+        if (signal.aborted) return
+        setStatusError(
+          error instanceof Error ? error.message : '통화 상태를 갱신하지 못했습니다.',
+        )
+      }
+    },
+    [activeCallSessionId],
+  )
+
+  // usePolling은 직렬 폴링이라 느린 요청이 겹쳐 오래된 통화 상태가 최신 상태를 덮지 않는다.
+  // 차례가 바뀌면 activeCallSessionId가 변해 즉시 새 세션 상태를 읽는다.
+  usePolling(refreshStatus, {
+    intervalMs: 5_000,
+    enabled: !isDesignPreview && Boolean(activeCallSessionId) && Boolean(connectionInfo),
+  })
 
   if (isDesignPreview) {
     return <PreviewCallRoom {...props} />
+  }
+
+  if (meetingClosed) {
+    return (
+      <div className="mx-auto grid max-w-3xl gap-6 py-10">
+        <AlertBanner title={meetingClosed === 'CANCELED' ? '팬미팅이 취소되었습니다' : '팬미팅이 종료되었습니다'} variant="info">
+          팬미팅이 종료되어 영상통화방을 나갑니다. 잠시 후 메인 화면으로 이동합니다.
+        </AlertBanner>
+      </div>
+    )
   }
 
   if (!connectionInfo || !sessionStatus) {
@@ -225,6 +315,9 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       <ConnectedCallRoom
         {...props}
         callDurationSec={callDurationSec}
+        // 종료·남은 시간·요약이 모두 진행 중인 세션을 따라야 하므로 주소 값이 아닌 활성 세션을 넘긴다.
+        callSessionId={activeCallSessionId}
+        onReconnectNeeded={handleReconnectNeeded}
         recordingEnabled={recordingEnabled}
         recordingPolicyError={recordingPolicyError}
         sessionStatus={sessionStatus}

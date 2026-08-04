@@ -15,6 +15,10 @@ import {
   getMyApplication,
   type MyApplicationResponse,
 } from '../../api/applications'
+import {
+  fetchPublicFanMeetingDetail,
+  type PublicFanMeetingDetail,
+} from '../../api/fanMeetings'
 import { AlertBanner, Badge, Card, CardContent, Spinner } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
@@ -31,9 +35,18 @@ function formatDateTime(value: string | null | undefined): string {
   })
 }
 
+function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
+  return (
+    detail?.meeting.status === 'READY' ||
+    detail?.meeting.status === 'LIVE' ||
+    detail?.meeting.status === 'ENDED'
+  )
+}
+
 export function FanApplicationResultPage() {
   const { meetingId } = useParams()
   const [application, setApplication] = useState<MyApplicationResponse | null>()
+  const [resultPublished, setResultPublished] = useState<boolean>()
   const [error, setError] = useState<string>()
 
   useEffect(() => {
@@ -47,9 +60,30 @@ export function FanApplicationResultPage() {
       return () => controller.abort()
     }
 
+    setResultPublished(undefined)
     void getMyApplication(meetingId, session.accessToken, controller.signal)
-      .then((result) => {
+      .then(async (result) => {
         setApplication(result)
+        if (
+          result &&
+          (result.applicationStatus === 'SELECTED' ||
+            result.applicationStatus === 'NOT_SELECTED')
+        ) {
+          try {
+            const detail = await fetchPublicFanMeetingDetail(
+              Number(meetingId),
+              session.accessToken,
+              controller.signal,
+            )
+            setResultPublished(isResultPublished(detail))
+          } catch {
+            if (controller.signal.aborted) return
+            // 공개 여부를 확인하지 못하면 결과를 숨기는 쪽으로 처리한다.
+            setResultPublished(false)
+          }
+        } else {
+          setResultPublished(true)
+        }
         setError(undefined)
       })
       .catch((reason: unknown) => {
@@ -111,8 +145,16 @@ export function FanApplicationResultPage() {
     )
   }
 
-  const isSelected = application.applicationStatus === 'SELECTED'
-  const isPending = application.applicationStatus === 'SUBMITTED'
+  const isSelected =
+    resultPublished === true && application.applicationStatus === 'SELECTED'
+  const isPending =
+    resultPublished !== true || application.applicationStatus === 'SUBMITTED'
+  // 결과 확인 후 상태에 맞는 목록으로 돌아가도록 연결한다.
+  // 당첨자는 예정 팬미팅, 미당첨자는 응모 내역의 미당첨 필터로 이동한다.
+  const resultListPath = isSelected
+    ? '/fan/mypage/fan-meetings?status=upcoming'
+    : `/fan/mypage/applications?status=${isPending ? 'SUBMITTED' : 'NOT_SELECTED'}`
+  const resultListLabel = isSelected ? '예정 팬미팅으로 이동' : '응모 내역으로 돌아가기'
 
   return (
     <div className="grid gap-6">
@@ -241,7 +283,8 @@ export function FanApplicationResultPage() {
             ) : (
               <Link
                 className="inline-flex min-h-[var(--control-height)] w-full items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-6 py-2 text-sm font-semibold transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
-                to="/fan/mypage/applications"
+                aria-label={resultListLabel}
+                to={resultListPath}
               >
                 응모 내역으로 돌아가기
                 <ArrowRight aria-hidden size={18} weight="bold" />

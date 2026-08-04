@@ -24,6 +24,7 @@ import {
   type QueueEntry,
   type QueueStatus,
 } from '../../api/fanMeetingParticipants'
+import { isQueueNotInitialized } from '../../api/queue'
 import {
   AlertBanner,
   Badge,
@@ -296,7 +297,16 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
           authToken,
           controller.signal,
         ),
-        fetchMeetingQueue(fanMeetingId, authToken, controller.signal),
+        // 대기열은 상태 필터를 보정하는 보조 정보일 뿐이다. 대기열을 아직 열지 않았거나
+        // 팬미팅이 종료되면 백엔드가 409 QUEUE_NOT_INITIALIZED를 반환하는데, 이때
+        // Promise.all이 함께 깨져 팬 목록 전체가 "불러오지 못했습니다"로 실패했다.
+        // 빈 대기열로 대체하면 참가자 API가 주는 queueStatus로 그대로 표시할 수 있다.
+        fetchMeetingQueue(fanMeetingId, authToken, controller.signal).catch(
+          (reason: unknown) => {
+            if (isQueueNotInitialized(reason)) return { entries: [] } as MeetingQueue
+            throw reason
+          },
+        ),
       ])
       const allParticipants = [...firstParticipantPage.content]
 
