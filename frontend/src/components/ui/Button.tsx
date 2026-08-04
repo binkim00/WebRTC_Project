@@ -1,7 +1,13 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { cn } from './cn'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
+export type ButtonVariant =
+  | 'primary'
+  | 'outline'
+  | 'text'
+  | 'secondary'
+  | 'ghost'
+  | 'danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -19,6 +25,8 @@ const variantClasses: Record<ButtonVariant, string> = {
     'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-page)] active:bg-[var(--color-divider)]',
   outline:
     'border-[var(--color-primary-coral)] bg-transparent text-[var(--color-primary-coral)] hover:bg-[var(--color-primary-coral-soft)] active:bg-[var(--color-primary-coral-soft-border)]',
+  text:
+    'border-transparent bg-transparent text-[var(--color-primary-coral)] hover:bg-[var(--color-primary-coral-soft)] active:bg-[var(--color-primary-coral-soft-border)]',
   ghost:
     'border-transparent bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)] hover:text-[var(--color-text-primary)] active:bg-[var(--color-divider)]',
   danger:
@@ -37,11 +45,11 @@ function buttonClassName({
   className,
 }: Pick<ButtonProps, 'variant' | 'size' | 'className'> = {}) {
   return cn(
-    'inline-flex items-center justify-center gap-[var(--space-control-gap)] whitespace-nowrap rounded-[var(--radius-control)] border font-semibold',
+    'mj-font-label inline-flex items-center justify-center gap-[var(--space-control-gap)] whitespace-nowrap rounded-[var(--radius-control)] border',
     'transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out',
     'active:translate-y-px motion-reduce:transform-none motion-reduce:transition-none',
     'focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
-    'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45',
+    'disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-[var(--color-control-disabled-border)] disabled:bg-[var(--color-control-disabled-bg)] disabled:text-[var(--color-control-disabled-text)]',
     variantClasses[variant],
     sizeClasses[size],
     className,

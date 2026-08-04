@@ -8,8 +8,7 @@ import {
   type LoginResponse,
   type LoginRole,
 } from './api/auth'
-import { TopNavigation } from './components'
-import { getRoleNavigation } from './layouts/roleNavigation'
+import { AppHeader } from './components'
 import {
   canRoleAccessPath,
   requiredCapabilityForPath,
@@ -134,13 +133,18 @@ function App() {
     import.meta.env.DEV && !isCallPage && searchParams.get('qa') === '1'
   const navigationItems = isAuthPage || isDeviceCheckPage
     ? []
-    : authSession
-      ? getRoleNavigation(authSession.role)
-      : isHomePage
-        ? []
-        : publicNavigationItems.map((item) =>
-            item.to === '/login' ? { ...item, to: loginPath } : item,
-          )
+    : isHomePage
+      ? []
+      : publicNavigationItems.map((item) =>
+          item.to === '/login' ? { ...item, to: loginPath } : item,
+        )
+  const roleHeaderRole =
+    authSession && !isAuthPage && !isDeviceCheckPage
+      ? authSession.role
+      : undefined
+  const headerNavigationProps = roleHeaderRole
+    ? ({ role: roleHeaderRole } as const)
+    : ({ items: navigationItems } as const)
 
   useEffect(() => {
     const handleAuthExpired = () => {
@@ -191,7 +195,8 @@ function App() {
         isPageQaCapture ? 'w-[1758px]' : '',
       ].join(' ')}
     >
-      {isEditorialExamplePage ? null : <TopNavigation
+      {isEditorialExamplePage ? null : <AppHeader
+        {...headerNavigationProps}
         ariaLabel="주요 화면"
         centerContent={
           isDeviceCheckPage ? (
@@ -277,8 +282,6 @@ function App() {
             </div>
           ) : undefined
         }
-        brand="MELLY"
-        items={navigationItems}
       />}
       {/* 스킵 링크와 라우트 전환 후 포커스 이동이 도착할 수 있는 공통 본문 앵커다. */}
       <main

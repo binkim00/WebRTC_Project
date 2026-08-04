@@ -69,7 +69,7 @@ export function TopNavigation({
       <NavLink
         className={({ isActive }) =>
           cn(
-            'relative inline-flex min-h-11 items-center whitespace-nowrap px-1 text-[15px] font-semibold',
+            'mj-font-label relative inline-flex min-h-11 items-center whitespace-nowrap px-1 text-[15px]',
             'transition-colors duration-200 motion-reduce:transition-none',
             "after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:rounded-t-[3px] after:bg-transparent after:content-['']",
             isActive
@@ -101,7 +101,7 @@ export function TopNavigation({
       </a>
       <div className="relative mx-auto flex h-full w-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
         <Link
-          className="shrink-0 text-[28px] font-black tracking-[-0.055em] text-[var(--color-text-primary)]"
+          className="mj-font-title shrink-0 text-[28px] tracking-[-0.06em] text-[var(--color-text-primary)]"
           to={brandTo}
         >
           {brand}
@@ -128,7 +128,7 @@ export function TopNavigation({
               aria-controls={mobileMenuId}
               aria-expanded={mobileMenuOpen}
               aria-label={`모바일 메뉴 ${mobileMenuOpen ? '닫기' : '열기'}`}
-              className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] [&::-webkit-details-marker]:hidden"
+              className="mj-font-label inline-flex min-h-11 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-sm text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] [&::-webkit-details-marker]:hidden"
               ref={mobileMenuButtonRef}
             >
               메뉴

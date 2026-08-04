@@ -34,7 +34,10 @@ function FieldFrame({
 }: FieldFrameProps) {
   return (
     <div className={cn('grid gap-[var(--space-field-gap)] text-left', className)}>
-      <label className="text-sm font-semibold text-[var(--color-text-primary)]" htmlFor={id}>
+      <label
+        className="mj-font-label text-sm text-[var(--color-text-primary)]"
+        htmlFor={id}
+      >
         {label}
         {required ? <span className="ml-1 text-[var(--color-error)]">*</span> : null}
       </label>
@@ -55,10 +58,10 @@ function FieldFrame({
 }
 
 const fieldClassName = cn(
-  'min-h-[var(--control-height)] w-full rounded-[var(--radius-control)] border bg-[var(--color-surface-panel)] px-[var(--input-padding-inline)] py-2 text-sm text-[var(--color-text-primary)]',
+  'mj-font-body min-h-[var(--control-height)] w-full rounded-[var(--radius-control)] border bg-[var(--color-surface-panel)] px-[var(--input-padding-inline)] py-2 text-sm text-[var(--color-text-primary)]',
   'placeholder:text-[var(--color-text-secondary)] transition-[background-color,border-color,box-shadow] duration-200',
   'focus:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
-  'disabled:cursor-not-allowed disabled:bg-[var(--color-surface-page)] disabled:text-[var(--color-text-tertiary)]',
+  'disabled:cursor-not-allowed disabled:border-[var(--color-control-disabled-border)] disabled:bg-[var(--color-control-disabled-bg)] disabled:text-[var(--color-control-disabled-text)]',
 )
 
 const fieldStateClasses = {
@@ -301,7 +304,7 @@ export function Checkbox({
       <label
         className={cn(
           'flex items-start gap-[var(--space-control-gap)]',
-          disabled ? 'cursor-not-allowed opacity-45' : 'cursor-pointer',
+          disabled ? 'cursor-not-allowed text-[var(--color-control-disabled-text)]' : 'cursor-pointer',
         )}
         htmlFor={id}
       >
@@ -320,7 +323,9 @@ export function Checkbox({
           {...props}
         />
         <span>
-          <span className="block text-sm font-medium text-[var(--color-text-primary)]">{label}</span>
+          <span className="mj-font-body block text-sm text-[var(--color-text-primary)]">
+            {label}
+          </span>
           {description ? (
             <span className="mt-0.5 block text-sm text-[var(--color-text-secondary)]" id={descriptionId}>
               {description}
@@ -379,9 +384,9 @@ export function RadioGroup({
       className={cn('grid gap-3', className)}
       disabled={disabled}
     >
-      <legend className="text-sm font-semibold text-slate-800">
+      <legend className="mj-font-label text-sm text-[var(--color-text-primary)]">
         {legend}
-        {required ? <span className="ml-1 text-red-600">*</span> : null}
+        {required ? <span className="ml-1 text-[var(--color-error)]">*</span> : null}
       </legend>
       <div className={cn(appearance === 'button' ? 'grid gap-2 sm:grid-cols-2' : 'grid gap-3')}>
         {options.map((option) => {
@@ -391,7 +396,7 @@ export function RadioGroup({
               className={cn(
                 'cursor-pointer',
                 appearance === 'default' && 'flex items-start gap-3',
-                option.disabled && 'cursor-not-allowed opacity-45',
+                option.disabled && 'cursor-not-allowed text-[var(--color-control-disabled-text)]',
               )}
               htmlFor={optionId}
               key={option.value}
@@ -401,7 +406,7 @@ export function RadioGroup({
                 className={cn(
                   appearance === 'button'
                     ? 'peer sr-only'
-                    : 'mt-0.5 size-4 accent-violet-700 focus-visible:ring-2 focus-visible:ring-violet-500',
+                    : 'mt-0.5 size-4 accent-[var(--color-primary-coral)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
                 )}
                 defaultChecked={value === undefined ? defaultValue === option.value : undefined}
                 disabled={option.disabled}
@@ -415,16 +420,18 @@ export function RadioGroup({
               <span
                 className={cn(
                   appearance === 'button' &&
-                    'block h-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center transition',
+                    'block h-full rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-4 py-3 text-center transition-colors motion-reduce:transition-none',
                   appearance === 'button' &&
                     'peer-checked:border-[var(--color-primary-coral)] peer-checked:bg-[var(--color-primary-coral-soft)] peer-checked:ring-1 peer-checked:ring-[var(--color-primary-coral)]',
                   appearance === 'button' &&
                     'peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--color-focus-indigo)] peer-focus-visible:ring-offset-2',
                 )}
               >
-                <span className="block text-sm font-semibold text-slate-800">{option.label}</span>
+                <span className="mj-font-label block text-sm text-[var(--color-text-primary)]">
+                  {option.label}
+                </span>
                 {option.description ? (
-                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                  <span className="mt-1 block text-xs leading-5 text-[var(--color-text-muted)]">
                     {option.description}
                   </span>
                 ) : null}
@@ -433,7 +440,11 @@ export function RadioGroup({
           )
         })}
       </div>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="text-sm text-[var(--color-error)]" id={`${groupId}-error`}>
+          {error}
+        </p>
+      ) : null}
     </fieldset>
   )
 }
@@ -460,13 +471,24 @@ export function Switch({
   const switchId = useId()
 
   return (
-    <div className={cn('flex items-start justify-between gap-4', disabled && 'opacity-50')}>
+    <div className="flex items-start justify-between gap-4">
       <span>
-        <span className="block text-sm font-medium text-slate-800" id={`${switchId}-label`}>
+        <span
+          className={cn(
+            'mj-font-body block text-sm',
+            disabled
+              ? 'text-[var(--color-control-disabled-text)]'
+              : 'text-[var(--color-text-primary)]',
+          )}
+          id={`${switchId}-label`}
+        >
           {label}
         </span>
         {description ? (
-          <span className="mt-0.5 block text-sm text-slate-500" id={`${switchId}-description`}>
+          <span
+            className="mt-0.5 block text-sm text-[var(--color-text-muted)]"
+            id={`${switchId}-description`}
+          >
             {description}
           </span>
         ) : null}
@@ -476,10 +498,10 @@ export function Switch({
         aria-describedby={description ? `${switchId}-description` : undefined}
         aria-labelledby={`${switchId}-label`}
         className={cn(
-          'relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2',
-          checked ? 'bg-violet-700' : 'bg-slate-300',
-          disabled && 'cursor-not-allowed',
+          'relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors motion-reduce:transition-none',
+          'focus-visible:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
+          checked ? 'bg-[var(--color-primary-coral)]' : 'bg-[var(--color-surface-muted)]',
+          disabled && 'cursor-not-allowed bg-[var(--color-control-disabled-bg)]',
           className,
         )}
         disabled={disabled}
@@ -491,7 +513,7 @@ export function Switch({
         <span
           aria-hidden="true"
           className={cn(
-            'absolute top-0.5 size-5 rounded-full bg-white shadow transition',
+            'absolute top-0.5 size-5 rounded-full bg-[var(--color-surface-panel)] shadow transition-transform motion-reduce:transition-none',
             checked ? 'left-5.5' : 'left-0.5',
           )}
         />
@@ -527,16 +549,21 @@ export function Slider({
   return (
     <div className={cn('grid gap-2', containerClassName)}>
       <div className="flex items-center justify-between gap-4">
-        <label className="text-sm font-semibold text-slate-800" htmlFor={id}>
+        <label
+          className="mj-font-label text-sm text-[var(--color-text-primary)]"
+          htmlFor={id}
+        >
           {label}
         </label>
-        {showValue ? <output className="text-sm text-slate-500">{String(displayValue)}</output> : null}
+        {showValue ? (
+          <output className="text-sm text-[var(--color-text-muted)]">{String(displayValue)}</output>
+        ) : null}
       </div>
       <input
         className={cn(
-          'h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-violet-700',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2',
-          'disabled:cursor-not-allowed disabled:opacity-45',
+          'h-2 w-full cursor-pointer appearance-none rounded-full bg-[var(--color-surface-muted)] accent-[var(--color-primary-coral)]',
+          'focus-visible:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
+          'disabled:cursor-not-allowed disabled:bg-[var(--color-control-disabled-bg)]',
           className,
         )}
         defaultValue={defaultValue}
