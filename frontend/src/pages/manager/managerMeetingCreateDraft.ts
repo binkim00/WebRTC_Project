@@ -138,7 +138,17 @@ export function createInitialMeetingForm(influencerId?: number): FanMeetingForm 
   }
 }
 
-/** 현재 입력에 복구할 가치가 있는 값이 있는지 판단해 빈 초안을 남기지 않는다. */
+/**
+ * 현재 입력에 복구할 가치가 있는 값이 있는지 판단해 빈 초안을 남기지 않는다.
+ *
+ * `createdMeetingId`는 **판단 근거로 쓰지 않는다.** 이전에는 첫 조건이 `createdMeetingId ||`였는데,
+ * 서버 초안 ID가 한 번 박히면 이 함수가 영구히 true를 반환해 자동 정리 분기에 절대 진입하지 못했다.
+ * 사용자가 제목·일시·질문을 모두 지워도 초안이 남아 계속 복구되는 교착의 원인이었다.
+ * 서버 초안은 서버에 남아 있고 '초안 확인'으로 다시 불러올 수 있으므로,
+ * 입력 내용이 비었다면 로컬 초안은 지워도 잃는 것이 없다.
+ *
+ * @param createdMeetingId 호출부 호환을 위해 남긴 인자이며 판단에 쓰지 않는다.
+ */
 export function hasMeaningfulMeetingDraft(
   form: FanMeetingForm,
   questions: DraftFormQuestion[],
@@ -146,9 +156,9 @@ export function hasMeaningfulMeetingDraft(
   step: number,
   createdMeetingId?: number,
 ): boolean {
+  void createdMeetingId
   return Boolean(
-    createdMeetingId ||
-      step > 0 ||
+    step > 0 ||
       form.title.trim() ||
       form.description?.trim() ||
       form.coverImageUrl?.trim() ||

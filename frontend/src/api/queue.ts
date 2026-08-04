@@ -138,6 +138,23 @@ export function interpretQueueEnterError(
   }
 }
 
+/**
+ * 대기열이 아직 열리지 않았거나 팬미팅 종료로 정리된 상태인지 판별한다.
+ *
+ * 백엔드는 Redis에 대기열 초기화 키가 없으면 409 `QUEUE_NOT_INITIALIZED`
+ * ("대기열이 초기화되지 않았습니다.")를 반환한다. 이 상태가 되는 경우는 두 가지다.
+ *
+ * 1. 대기열을 아직 열지 않았다.
+ * 2. **팬미팅을 종료했다.** 종료 처리(`FanMeetingManagementService`)가 Redis의 대기열 키를
+ *    모두 지우므로, 종료 뒤에는 대기열 조회가 항상 이 코드로 실패한다.
+ *
+ * 즉 장애가 아니라 "대기열이 없는 정상 상태"다. 호출부는 오류 배너를 띄우는 대신
+ * 빈 대기열로 취급해야 한다.
+ */
+export function isQueueNotInitialized(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'QUEUE_NOT_INITIALIZED'
+}
+
 export async function getMyQueue(
   meetingId: string | number,
   authToken: string,
