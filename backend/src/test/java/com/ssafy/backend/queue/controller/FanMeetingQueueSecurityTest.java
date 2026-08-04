@@ -248,7 +248,7 @@ class FanMeetingQueueSecurityTest {
     @WithMockUser(roles = "MANAGER")
     void allowsManagerToChangePosition() throws Exception {
         when(positionService.changePosition(
-                eq(7L), eq(new QueuePositionChangeRequest(2)), isNull()))
+                eq(7L), eq(new QueuePositionChangeRequest(2, null)), isNull()))
                 .thenReturn(new QueuePositionChangeResponse(
                         4, 2, LocalDateTime.of(2026, 7, 30, 12, 0)));
 

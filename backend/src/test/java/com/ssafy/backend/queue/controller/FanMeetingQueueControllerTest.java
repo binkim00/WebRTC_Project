@@ -63,7 +63,9 @@ class FanMeetingQueueControllerTest {
                 0,
                 null,
                 null,
-                false
+                false,
+                null,
+                null
         );
         when(queryService.getMySnapshot(1L, FAN_PRINCIPAL)).thenReturn(expected);
 

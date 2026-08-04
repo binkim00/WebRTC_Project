@@ -6,6 +6,8 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
+import com.ssafy.backend.notification.domain.Notification;
+import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
@@ -38,6 +40,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class QueuePositionServiceTest {
@@ -50,8 +53,11 @@ class QueuePositionServiceTest {
     private final MeetingAccessService meetingAccessService = mock(MeetingAccessService.class);
     private final QueueEntryRepository entryRepository = mock(QueueEntryRepository.class);
     private final QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+    private final NotificationRepository notificationRepository =
+            mock(NotificationRepository.class);
     private final QueuePositionService service = new QueuePositionService(
-            currentUserService, meetingAccessService, entryRepository, realtimeStore,
+            currentUserService, meetingAccessService, entryRepository, notificationRepository,
+            realtimeStore,
             Clock.fixed(NOW.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault()));
 
     /** 뒤에 있던 참가자를 앞으로 옮기면 사이 참가자들이 한 칸씩 밀리는지 검증한다. */
@@ -65,7 +71,7 @@ class QueuePositionServiceTest {
         givenReorderSucceeds();
 
         QueuePositionChangeResponse response =
-                service.changePosition(14L, new QueuePositionChangeRequest(2), PRINCIPAL);
+                service.changePosition(14L, new QueuePositionChangeRequest(2, null), PRINCIPAL);
 
         assertThat(response.previousPosition()).isEqualTo(4);
         assertThat(response.newPosition()).isEqualTo(2);
@@ -89,7 +95,7 @@ class QueuePositionServiceTest {
         givenReorderSucceeds();
 
         QueuePositionChangeResponse response =
-                service.changePosition(11L, new QueuePositionChangeRequest(3), PRINCIPAL);
+                service.changePosition(11L, new QueuePositionChangeRequest(3, null), PRINCIPAL);
 
         assertThat(response.previousPosition()).isEqualTo(1);
         assertThat(response.newPosition()).isEqualTo(3);
@@ -108,7 +114,7 @@ class QueuePositionServiceTest {
         givenReorderSucceeds();
 
         QueuePositionChangeResponse response =
-                service.changePosition(13L, new QueuePositionChangeRequest(1), PRINCIPAL);
+                service.changePosition(13L, new QueuePositionChangeRequest(1, null), PRINCIPAL);
 
         assertThat(response.newPosition()).isEqualTo(1);
         assertThat(third.getQueuePosition()).isEqualTo(1);
@@ -126,7 +132,7 @@ class QueuePositionServiceTest {
         givenReorderSucceeds();
 
         QueuePositionChangeResponse response =
-                service.changePosition(11L, new QueuePositionChangeRequest(3), PRINCIPAL);
+                service.changePosition(11L, new QueuePositionChangeRequest(3, null), PRINCIPAL);
 
         assertThat(response.newPosition()).isEqualTo(3);
         assertThat(first.getQueuePosition()).isEqualTo(3);
@@ -141,7 +147,7 @@ class QueuePositionServiceTest {
         givenQueue(List.of(first, second, third));
         givenReorderSucceeds();
 
-        QueuePositionChangeResponse response = service.moveEntry(MEETING_ID, 11L, null);
+        QueuePositionChangeResponse response = service.moveEntry(MEETING_ID, 11L, null, null);
 
         assertThat(response.previousPosition()).isEqualTo(1);
         assertThat(response.newPosition()).isEqualTo(3);
@@ -159,7 +165,7 @@ class QueuePositionServiceTest {
         givenReorderSucceeds();
 
         QueuePositionChangeResponse response =
-                service.changePosition(12L, new QueuePositionChangeRequest(2), PRINCIPAL);
+                service.changePosition(12L, new QueuePositionChangeRequest(2, null), PRINCIPAL);
 
         assertThat(response.previousPosition()).isEqualTo(2);
         assertThat(response.newPosition()).isEqualTo(2);
@@ -175,7 +181,7 @@ class QueuePositionServiceTest {
         givenReorderSucceeds();
 
         QueuePositionChangeResponse response =
-                service.changePosition(11L, new QueuePositionChangeRequest(1), PRINCIPAL);
+                service.changePosition(11L, new QueuePositionChangeRequest(1, null), PRINCIPAL);
 
         assertThat(response.previousPosition()).isEqualTo(1);
         assertThat(response.newPosition()).isEqualTo(1);
@@ -188,7 +194,7 @@ class QueuePositionServiceTest {
         givenQueue(List.of(only));
 
         assertThatThrownBy(() ->
-                service.changePosition(11L, new QueuePositionChangeRequest(2), PRINCIPAL))
+                service.changePosition(11L, new QueuePositionChangeRequest(2, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_POSITION_OUT_OF_RANGE));
@@ -201,7 +207,7 @@ class QueuePositionServiceTest {
         givenQueue(List.of(waitingEntry(11L, 1), waitingEntry(12L, 2)));
 
         assertThatThrownBy(() ->
-                service.changePosition(12L, new QueuePositionChangeRequest(0), PRINCIPAL))
+                service.changePosition(12L, new QueuePositionChangeRequest(0, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_POSITION_OUT_OF_RANGE));
@@ -213,7 +219,7 @@ class QueuePositionServiceTest {
         givenQueue(List.of(waitingEntry(11L, 1), waitingEntry(12L, 2)));
 
         assertThatThrownBy(() ->
-                service.changePosition(12L, new QueuePositionChangeRequest(-1), PRINCIPAL))
+                service.changePosition(12L, new QueuePositionChangeRequest(-1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_POSITION_OUT_OF_RANGE));
@@ -225,7 +231,7 @@ class QueuePositionServiceTest {
         givenQueue(List.of(waitingEntry(11L, 1), waitingEntry(12L, 2)));
 
         assertThatThrownBy(() ->
-                service.changePosition(11L, new QueuePositionChangeRequest(3), PRINCIPAL))
+                service.changePosition(11L, new QueuePositionChangeRequest(3, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_POSITION_OUT_OF_RANGE));
@@ -239,7 +245,7 @@ class QueuePositionServiceTest {
         givenQueue(List.of(inCall, waiting));
 
         assertThatThrownBy(() ->
-                service.changePosition(11L, new QueuePositionChangeRequest(2), PRINCIPAL))
+                service.changePosition(11L, new QueuePositionChangeRequest(2, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_STATE_CONFLICT));
@@ -254,7 +260,7 @@ class QueuePositionServiceTest {
         givenQueue(List.of(done, waiting));
 
         assertThatThrownBy(() ->
-                service.changePosition(11L, new QueuePositionChangeRequest(2), PRINCIPAL))
+                service.changePosition(11L, new QueuePositionChangeRequest(2, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_STATE_CONFLICT));
@@ -271,7 +277,7 @@ class QueuePositionServiceTest {
         givenReorderSucceeds();
 
         QueuePositionChangeResponse response =
-                service.changePosition(14L, new QueuePositionChangeRequest(3), PRINCIPAL);
+                service.changePosition(14L, new QueuePositionChangeRequest(3, null), PRINCIPAL);
 
         assertThat(response.newPosition()).isEqualTo(3);
         assertThat(done.getQueuePosition()).isEqualTo(1);
@@ -290,7 +296,7 @@ class QueuePositionServiceTest {
         givenQueue(List.of(done, waitingSecond, waitingThird));
 
         assertThatThrownBy(() ->
-                service.changePosition(13L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(13L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_POSITION_OUT_OF_RANGE));
@@ -303,7 +309,7 @@ class QueuePositionServiceTest {
         when(entryRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
-                service.changePosition(99L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(99L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_ENTRY_NOT_FOUND));
@@ -320,7 +326,7 @@ class QueuePositionServiceTest {
                 .thenThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
 
         assertThatThrownBy(() ->
-                service.changePosition(11L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(11L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ACCESS_DENIED));
         verify(entryRepository, never()).findAllByMeetingIdOrderByIdForUpdate(MEETING_ID);
@@ -336,7 +342,7 @@ class QueuePositionServiceTest {
         when(realtimeStore.isInitialized(MEETING_ID)).thenReturn(false);
 
         assertThatThrownBy(() ->
-                service.changePosition(11L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(11L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_NOT_INITIALIZED));
@@ -353,7 +359,7 @@ class QueuePositionServiceTest {
                 .thenReturn(QueueReorderResult.STATE_CONFLICT);
 
         assertThatThrownBy(() ->
-                service.changePosition(12L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(12L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_STATE_CONFLICT));
@@ -370,7 +376,7 @@ class QueuePositionServiceTest {
                 .thenReturn(QueueReorderResult.ENTRY_MISSING);
 
         assertThatThrownBy(() ->
-                service.changePosition(12L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(12L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_STATE_CONFLICT));
@@ -384,7 +390,7 @@ class QueuePositionServiceTest {
                 .thenReturn(QueueReorderResult.NOT_INITIALIZED);
 
         assertThatThrownBy(() ->
-                service.changePosition(12L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(12L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_NOT_INITIALIZED));
@@ -400,7 +406,7 @@ class QueuePositionServiceTest {
         doThrow(new IllegalStateException("DB 반영 실패")).when(entryRepository).flush();
 
         assertThatThrownBy(() ->
-                service.changePosition(12L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(12L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_STATE_CONFLICT));
@@ -409,6 +415,44 @@ class QueuePositionServiceTest {
         ArgumentCaptor<Map<Long, Integer>> captor = ArgumentCaptor.forClass(Map.class);
         verify(realtimeStore).restorePositions(eq(MEETING_ID), captor.capture());
         assertThat(captor.getValue()).containsOnly(entry(11L, 1), entry(12L, 2));
+    }
+
+    /** 순번이 바뀐 참가자마다 사유를 기록하고 알림을 만드는지 검증한다. */
+    @Test
+    void recordsReasonAndNotifiesEntriesWhosePositionChanged() {
+        QueueEntry first = waitingEntry(11L, 1);
+        QueueEntry second = waitingEntry(12L, 2);
+        QueueEntry third = waitingEntry(13L, 3);
+        givenQueue(List.of(first, second, third));
+        givenReorderSucceeds();
+
+        service.changePosition(
+                13L, new QueuePositionChangeRequest(1, "장비 점검이 늦어졌습니다."), PRINCIPAL);
+
+        assertThat(third.getLastChangeReason())
+                .contains("대기 순번이 3번에서 1번으로 변경되었습니다.")
+                .contains("사유: 장비 점검이 늦어졌습니다.");
+        assertThat(third.getLastChangedAt()).isEqualTo(NOW);
+        assertThat(first.getLastChangeReason()).startsWith("다른 참가자의 순서 조정으로");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<Notification>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(notificationRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).hasSize(3);
+    }
+
+    /** 순번이 그대로면 사유를 남기지 않고 알림도 만들지 않는지 검증한다. */
+    @Test
+    void skipsReasonAndNotificationWhenNoPositionChanged() {
+        QueueEntry first = waitingEntry(11L, 1);
+        QueueEntry second = waitingEntry(12L, 2);
+        givenQueue(List.of(first, second));
+        givenReorderSucceeds();
+
+        service.changePosition(12L, new QueuePositionChangeRequest(2, null), PRINCIPAL);
+
+        assertThat(first.getLastChangeReason()).isNull();
+        assertThat(second.getLastChangeReason()).isNull();
+        verifyNoInteractions(notificationRepository);
     }
 
     /**
@@ -468,6 +512,7 @@ class QueuePositionServiceTest {
         when(meeting.getId()).thenReturn(MEETING_ID);
         Participant participant = mock(Participant.class);
         when(participant.getAssignedOrder()).thenReturn(position);
+        when(participant.getFan()).thenReturn(mock(User.class));
         QueueEntry queueEntry = QueueEntry.create(meeting, participant);
         ReflectionTestUtils.setField(queueEntry, "id", entryId);
         ReflectionTestUtils.setField(queueEntry, "status", status);
