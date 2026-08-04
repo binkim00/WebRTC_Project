@@ -1,5 +1,9 @@
 # Production Deployment (infra/prod)
 
+> 운영 Egress worker는 기본 배포에서 시작되지 않는 `egress` profile입니다. 사전 점검,
+> 단계적 활성화, 모니터링, 롤백은 `scripts/egress-ops.sh`와
+> `docs/livekit-egress-operations-runbook.md`를 사용합니다.
+
 이 디렉터리는 운영 서버의 단일 소스입니다.
 
 ## 주요 구성

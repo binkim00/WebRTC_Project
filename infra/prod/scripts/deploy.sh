@@ -7,6 +7,12 @@ ENV_FILE="/home/ubuntu/docker/project/.env"
 
 cd "$PROJECT_ROOT"
 
+# 일반 배포는 Egress worker를 시작하지 않는다. 기능 플래그만 켜진 불완전 배포를 차단한다.
+if grep -Eiq '^RECORDING_EGRESS_ENABLED=(true|1|yes)[[:space:]]*$' "$ENV_FILE"; then
+  echo "RECORDING_EGRESS_ENABLED=true 배포는 egress-ops.sh activate를 사용해야 합니다." >&2
+  exit 1
+fi
+
 # 필수 변수 치환과 최종 Compose 문법을 컨테이너 변경 전에 검증한다.
 docker compose \
   -p project \
