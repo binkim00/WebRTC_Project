@@ -469,7 +469,10 @@ export function ConnectedCallRoom({
       ) : null}
 
       <EndCallDialog
-        onConfirm={() => void finishCall(true)}
+        onConfirm={() => {
+          setEndDialogOpen(false)
+          void finishCall(true)
+        }}
         onLeaveRoom={hostStaysConnected ? () => void leaveRoom() : undefined}
         onOpenChange={setEndDialogOpen}
         open={endDialogOpen}

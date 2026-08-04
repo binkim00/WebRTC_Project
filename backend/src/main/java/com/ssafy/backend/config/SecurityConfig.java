@@ -92,6 +92,10 @@ public class SecurityConfig {
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/influencers/me/followers")
                                 .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
+                        // 팔로워 목록과 달리 참가 이력을 기준으로 하며, 본인이 개최한 팬미팅으로만
+                        // 범위가 제한되므로 팔로워 목록과 같은 역할 규칙을 적용한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/influencers/me/participant-fans")
+                                .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/organizations/*/members")
                                 .hasRole("ADMIN")
                         // 외부 선별 참가자 명단 CSV 양식은 팬미팅 식별자가 없는 공통 경로라
