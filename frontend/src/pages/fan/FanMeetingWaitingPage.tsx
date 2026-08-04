@@ -7,7 +7,7 @@ import {
   WifiHigh,
   Wrench,
 } from '@phosphor-icons/react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertBanner, Badge, Button, Card, Dialog, Textarea } from '../../components'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/authSession'
@@ -15,6 +15,7 @@ import { ApiError } from '../../api/ApiError'
 import { fetchMeetingDetail, type MeetingDetail } from '../../api/fanMeetingParticipants'
 import { getMyQueue, type QueueSnapshotResponse } from '../../api/queue'
 import { createQueueChangeRequest } from '../../api/queueManagement'
+import { usePolling } from '../../hooks/usePolling'
 
 /** DeviceCheckPage가 sessionStorage에 저장하는 장비 점검 기록이다. */
 type DeviceCheckRecord = {
@@ -57,48 +58,126 @@ function readDeviceCheckRecord(meetingId: string): DeviceCheckRecord | null {
 
 const MAX_CHANGE_REASON_LENGTH = 500
 
+/**
+ * 이미 허용된 브라우저 기능만 사용해 호출을 보조한다.
+ * Notification 권한을 여기서 요청하지 않으므로 대기 중 갑작스러운 권한 팝업이 뜨지 않는다.
+ */
+function notifyFanCall(meetingTitle: string) {
+  if ('Notification' in window && window.Notification.permission === 'granted') {
+    try {
+      new window.Notification('팬미팅 호출', {
+        body: `${meetingTitle}에 지금 입장해 주세요.`,
+        tag: 'melly-fan-meeting-call',
+      })
+    } catch {
+      // OS 알림을 만들 수 없어도 화면 알림과 문서 제목 변경은 계속 제공한다.
+    }
+  }
+
+  // 진동은 지원하는 모바일 브라우저에서만 동작하며 별도 권한을 요청하지 않는다.
+  try {
+    window.navigator.vibrate?.([180, 100, 180])
+  } catch {
+    // 브라우저 정책으로 진동이 차단되면 조용히 건너뛴다.
+  }
+
+  // 사용자 상호작용이 있었던 브라우저에서는 짧은 호출음을 재생한다. 자동 재생 차단은 정상이다.
+  const AudioContextConstructor =
+    window.AudioContext ??
+    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioContextConstructor) return
+
+  try {
+    const context = new AudioContextConstructor()
+    void context.resume()
+      .then(() => {
+        const oscillator = context.createOscillator()
+        const gain = context.createGain()
+        gain.gain.value = 0.08
+        oscillator.frequency.value = 880
+        oscillator.connect(gain)
+        gain.connect(context.destination)
+        oscillator.addEventListener('ended', () => void context.close(), { once: true })
+        oscillator.start()
+        oscillator.stop(context.currentTime + 0.35)
+      })
+      .catch(() => void context.close())
+  } catch {
+    // Web Audio가 차단된 환경에서도 시각·보조기기 알림은 유지한다.
+  }
+}
+
 export function FanMeetingWaitingPage() {
   const { fanMeetingId } = useParams()
   const navigate = useNavigate()
   const [meetingInfo, setMeetingInfo] = useState<MeetingDetail>()
   const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshotResponse>()
-  const [error, setError] = useState<string>()
+  const [meetingError, setMeetingError] = useState<string>()
+  const [queueError, setQueueError] = useState<string>()
   const [changeDialogOpen, setChangeDialogOpen] = useState(false)
   const [changeReason, setChangeReason] = useState('')
   const [isRequestingChange, setIsRequestingChange] = useState(false)
   const [changeRequested, setChangeRequested] = useState(false)
   const [changeError, setChangeError] = useState<string>()
+  const originalDocumentTitleRef = useRef(document.title)
+  const callAnnouncedRef = useRef(false)
 
   const deviceCheck = useMemo(
     () => (fanMeetingId ? readDeviceCheckRecord(fanMeetingId) : null),
     [fanMeetingId],
   )
 
-  const loadWaitingState = useCallback(async (signal?: AbortSignal) => {
+  const loadMeetingInfo = useCallback(async (signal?: AbortSignal) => {
     if (!fanMeetingId) return
 
     const session = getAuthSession()
     if (!session || session.role !== 'FAN') {
-      setError('팬 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
+      setMeetingError('팬 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
       return
     }
 
     try {
-      const [nextMeetingInfo, nextQueueSnapshot] = await Promise.all([
-        fetchMeetingDetail(fanMeetingId, session.accessToken, signal),
-        getMyQueue(fanMeetingId, session.accessToken, signal),
-      ])
-
+      const nextMeetingInfo = await fetchMeetingDetail(
+        fanMeetingId,
+        session.accessToken,
+        signal,
+      )
       setMeetingInfo(nextMeetingInfo)
+      setMeetingError(undefined)
+    } catch (reason) {
+      if (signal?.aborted) return
+      setMeetingError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : '팬미팅 정보를 불러오지 못했습니다.',
+      )
+    }
+  }, [fanMeetingId])
+
+  const loadQueueState = useCallback(async (signal?: AbortSignal) => {
+    if (!fanMeetingId) return
+
+    const session = getAuthSession()
+    if (!session || session.role !== 'FAN') {
+      setQueueError('팬 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
+      return
+    }
+
+    try {
+      const nextQueueSnapshot = await getMyQueue(
+        fanMeetingId,
+        session.accessToken,
+        signal,
+      )
       setQueueSnapshot(nextQueueSnapshot)
-      setError(undefined)
+      setQueueError(undefined)
 
       if (nextQueueSnapshot.displayStatus === 'COMPLETED') {
         navigate(`/fan/fan-meetings/${fanMeetingId}/complete`, { replace: true })
       }
     } catch (reason) {
       if (signal?.aborted) return
-      setError(
+      setQueueError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
           : '대기열 상태를 불러오지 못했습니다.',
@@ -108,31 +187,59 @@ export function FanMeetingWaitingPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    void loadWaitingState(controller.signal)
+    void loadMeetingInfo(controller.signal)
 
-    const timer = window.setInterval(() => {
-      void loadWaitingState(controller.signal)
-    }, 3_000)
+    return () => controller.abort()
+  }, [loadMeetingInfo])
 
-    return () => {
-      controller.abort()
-      window.clearInterval(timer)
-    }
-  }, [loadWaitingState])
-
-  if (!fanMeetingId) {
-    return null
-  }
+  // 대기 순번은 실시간성이 중요하므로 3초마다 갱신한다.
+  // usePolling은 직렬 폴링이라 느린 네트워크에서도 응답 순서가 뒤집히지 않는다.
+  usePolling(loadQueueState, { intervalMs: 3_000 })
 
   const currentPosition = queueSnapshot?.position ?? 0
   const estimatedWaitMinutes = Math.ceil((queueSnapshot?.estimatedWaitSec ?? 0) / 60)
   const isCalled = Boolean(queueSnapshot?.canEnterCall && queueSnapshot.callSessionId)
+  const isCallInProgress = queueSnapshot?.displayStatus === 'IN_CALL'
+  const queueStatusLabel = isCalled
+    ? '호출됨'
+    : isCallInProgress
+      ? '통화 진행 중'
+      : queueSnapshot
+        ? '대기 중'
+        : '상태 확인 중'
   // 장비 점검 기록이 없으면 미확인 상태로 표시한다.
   const connectionHealthy = deviceCheck ? deviceCheck.networkOk : undefined
   const deviceChecked = deviceCheck
     ? deviceCheck.cameraOk && deviceCheck.microphoneOk
     : undefined
   const trimmedChangeReason = changeReason.trim()
+  const error = meetingError ?? queueError
+
+  useEffect(() => {
+    const meetingTitle = meetingInfo?.title ?? '팬미팅'
+
+    if (isCalled) {
+      document.title = `[호출] ${meetingTitle} | ${originalDocumentTitleRef.current}`
+      if (!callAnnouncedRef.current) {
+        callAnnouncedRef.current = true
+        notifyFanCall(meetingTitle)
+      }
+      return
+    }
+
+    callAnnouncedRef.current = false
+    document.title = originalDocumentTitleRef.current
+  }, [isCalled, meetingInfo?.title])
+
+  useEffect(() => {
+    return () => {
+      document.title = originalDocumentTitleRef.current
+    }
+  }, [])
+
+  if (!fanMeetingId) {
+    return null
+  }
 
   async function handleChangeRequestSubmit() {
     if (isRequestingChange || !queueSnapshot) return
@@ -189,9 +296,25 @@ export function FanMeetingWaitingPage() {
     <div className="grid gap-6 pb-8">
       {error ? (
         <AlertBanner title="대기실 정보를 확인할 수 없습니다" variant="error">
-          {error}
+          <p>{error}</p>
+          <Button
+            className="mt-3"
+            onClick={() => {
+              void loadMeetingInfo()
+              void loadQueueState()
+            }}
+            size="sm"
+            variant="secondary"
+          >
+            다시 확인
+          </Button>
         </AlertBanner>
       ) : null}
+
+      {/* 호출 전환을 색상에 의존하지 않고 스크린 리더에도 즉시 알린다. */}
+      <p aria-atomic="true" aria-live="assertive" className="sr-only">
+        {isCalled ? '팬미팅에 호출되었습니다. 지금 입장해 주세요.' : '팬미팅 호출 대기 중입니다.'}
+      </p>
 
       <Card className="overflow-hidden">
         <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -257,7 +380,9 @@ export function FanMeetingWaitingPage() {
                     : '점검 필요'}
               </strong>
             </p>
-            <Badge variant="success">대기 중</Badge>
+            <Badge variant={isCalled ? 'primary' : isCallInProgress ? 'warning' : 'success'}>
+              {queueStatusLabel}
+            </Badge>
           </div>
         </div>
       </Card>
@@ -275,7 +400,7 @@ export function FanMeetingWaitingPage() {
                 </p>
               </div>
               <Badge className="gap-1.5" variant="neutral">
-                순번 확인 중
+                {queueSnapshot ? `${queueSnapshot.position}번 배정` : '순번 확인 중'}
               </Badge>
             </header>
 
@@ -283,13 +408,13 @@ export function FanMeetingWaitingPage() {
               <div className="grid content-center gap-4 py-6 sm:border-r sm:border-[var(--color-divider)] sm:px-5 lg:py-8">
                 <dt className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-tertiary)]">
                   <ListNumbers aria-hidden size={22} weight="bold" />
-                  초기 배정 번호
+                  배정 순번
                 </dt>
                 <dd className="text-4xl font-black tracking-[-0.04em] text-[var(--color-text-primary)]">
-                  {queueSnapshot?.position ?? '-'}번
+                  {queueSnapshot ? `${queueSnapshot.position}번` : '-'}
                 </dd>
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                  팬미팅 참여 시 처음 배정된 번호예요
+                  현재 서버에 반영된 내 순번이에요
                 </p>
               </div>
 
@@ -299,7 +424,7 @@ export function FanMeetingWaitingPage() {
                   현재 대기 위치
                 </dt>
                 <dd className="text-4xl font-black tracking-[-0.04em] text-[var(--color-primary-coral)]">
-                  {currentPosition}번째
+                  {queueSnapshot ? `${currentPosition}번째` : '-'}
                 </dd>
                 <p className="text-sm text-[var(--color-text-secondary)]">
                   앞에 {queueSnapshot?.aheadCount ?? '-'}명이 기다리고 있어요
@@ -312,7 +437,7 @@ export function FanMeetingWaitingPage() {
                   예상 대기시간
                 </dt>
                 <dd className="text-4xl font-black tracking-[-0.04em]">
-                  약 {estimatedWaitMinutes}분
+                  {queueSnapshot ? `약 ${estimatedWaitMinutes}분` : '-'}
                 </dd>
                 <p className="text-sm text-[var(--color-text-secondary)]">
                   진행 상황에 따라 달라질 수 있어요
@@ -327,6 +452,18 @@ export function FanMeetingWaitingPage() {
                 <li>재호출 후에도 입장하지 않으면 참여가 종료될 수 있습니다.</li>
               </ul>
             </AlertBanner>
+
+            {/* backend가 순번 변경 대상별로 저장한 안내 문구를 대기 화면에도 표시한다. */}
+            {queueSnapshot?.lastChangeReason ? (
+              <AlertBanner title="대기 순번이 변경되었습니다" variant="info">
+                <p>{queueSnapshot.lastChangeReason}</p>
+                {queueSnapshot.lastChangedAt ? (
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                    반영 시각: {new Date(queueSnapshot.lastChangedAt).toLocaleString('ko-KR')}
+                  </p>
+                ) : null}
+              </AlertBanner>
+            ) : null}
 
             <section className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] p-5">
               <div>

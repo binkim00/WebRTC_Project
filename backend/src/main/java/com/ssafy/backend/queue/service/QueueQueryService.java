@@ -6,6 +6,8 @@ import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
+import com.ssafy.backend.meeting.domain.FanMeeting;
+import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
@@ -22,10 +24,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 
 /** 참가자와 운영자에게 필요한 현재 대기열 상태를 조회한다. */
 @Service
 public class QueueQueryService {
+    private static final Set<QueueEntryStatus> FINISHED_STATUSES = Set.of(
+            QueueEntryStatus.DONE,
+            QueueEntryStatus.NO_SHOW,
+            QueueEntryStatus.SKIPPED,
+            QueueEntryStatus.REMOVED);
+
     private final CurrentUserService currentUserService;
     private final QueueEntryRepository queueEntryRepository;
     private final CallSessionRepository callSessionRepository;
@@ -57,7 +66,18 @@ public class QueueQueryService {
         this.meetingAccessService = meetingAccessService;
     }
 
-    /** 로그인 참가자의 순번, 앞선 인원과 예상 대기시간을 조회한다. */
+    /**
+     * 로그인 참가자의 순번, 앞선 인원과 예상 대기시간을 조회한다.
+     *
+     * <p>팬미팅이 종료되면 Redis 실시간 상태가 모두 정리되므로, 실시간 상태를 찾을 수 없으면
+     * 권위 있는 DB 상태로 되돌아가 종료를 알린다. 그렇지 않으면 이미 끝난 팬미팅에서 대기 화면이
+     * 종료를 인지하지 못하고 오류만 반복해서 받는다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal JWT 인증 사용자 정보
+     * @return 현재 대기 상태 스냅샷이며 팬미팅이 끝났으면 종료 상태로 응답한다
+     * @throws BusinessException 참가자가 아니거나 아직 대기열이 초기화되지 않은 경우
+     */
     @Transactional(readOnly = true)
     public QueueSnapshotResponse getMySnapshot(Long meetingId, AuthenticatedUser principal) {
         User user = currentUserService.requireActiveUser(principal);
@@ -65,7 +85,7 @@ public class QueueQueryService {
                 .findByMeeting_IdAndParticipant_Fan_Id(meetingId, user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPANT_NOT_FOUND));
         if (!realtimeStore.isInitialized(meetingId)) {
-            throw new BusinessException(ErrorCode.QUEUE_NOT_INITIALIZED);
+            return finishedSnapshot(entry);
         }
 
         QueueEntryStatus status = realtimeStore.getStatus(meetingId, entry.getId());
@@ -74,7 +94,7 @@ public class QueueQueryService {
         MeetingOperationSetting setting = operationSettingRepository.findById(meetingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_SETTING_NOT_FOUND));
         if (status == null || position == null || peopleAhead < 0) {
-            throw new BusinessException(ErrorCode.QUEUE_NOT_INITIALIZED);
+            return finishedSnapshot(entry);
         }
         if (status == QueueEntryStatus.NOT_ENTERED) {
             throw new BusinessException(ErrorCode.QUEUE_ENTRY_NOT_ENTERED);
@@ -94,7 +114,39 @@ public class QueueQueryService {
                 entry.getCallAttemptCount(),
                 entry.getCalledAt(),
                 callSessionId,
-                callSessionId != null
+                callSessionId != null,
+                entry.getLastChangeReason(),
+                entry.getLastChangedAt()
+        );
+    }
+
+    /**
+     * 실시간 상태가 없는 참가자를 권위 있는 DB 상태로 응답한다.
+     *
+     * <p>DB 상태가 이미 종결됐다면 팬미팅이 끝나 실시간 상태가 정리된 경우이므로 종료로 안내하고,
+     * 아직 진행 중이어야 하는 상태라면 실시간 상태가 있어야 하므로 미초기화 오류를 그대로 알린다.
+     *
+     * @param entry 조회 대상 대기열 항목
+     * @return DB 상태로 만든 종료 스냅샷
+     * @throws BusinessException 아직 종결되지 않아 실시간 상태가 있어야 하는 경우
+     */
+    private QueueSnapshotResponse finishedSnapshot(QueueEntry entry) {
+        QueueEntryStatus status = entry.getStatus();
+        if (status == null || !FINISHED_STATUSES.contains(status)) {
+            throw new BusinessException(ErrorCode.QUEUE_NOT_INITIALIZED);
+        }
+        return new QueueSnapshotResponse(
+                entry.getId(),
+                entry.getQueuePosition(),
+                0L,
+                0L,
+                QueueDisplayStatus.from(status),
+                entry.getCallAttemptCount(),
+                entry.getCalledAt(),
+                null,
+                false,
+                entry.getLastChangeReason(),
+                entry.getLastChangedAt()
         );
     }
 
@@ -113,18 +165,24 @@ public class QueueQueryService {
     /**
      * 팬미팅 운영자가 현재 통화와 전체 대기열을 조회합니다.
      *
+     * <p>팬미팅이 종료되면 실시간 대기열이 정리되므로, 운영 화면이 종료와 아직 초기화되지 않은
+     * 상태를 구분할 수 있도록 서로 다른 오류로 알린다.
+     *
      * @param meetingId 팬미팅 식별자
      * @param principal JWT 인증 사용자 정보
      * @return 현재 통화와 입장한 참가자 대기열
+     * @throws BusinessException 운영 권한이 없거나 팬미팅이 이미 종료되었거나 대기열이 초기화되지 않은 경우
      */
     @Transactional(readOnly = true)
     public QueueManagementResponse getManagementQueue(
             Long meetingId, AuthenticatedUser principal
     ) {
         User operator = currentUserService.requireActiveUser(principal);
-        meetingAccessService.requireOperator(meetingId, operator);
+        FanMeeting meeting = meetingAccessService.requireOperator(meetingId, operator);
         if (!realtimeStore.isInitialized(meetingId)) {
-            throw new BusinessException(ErrorCode.QUEUE_NOT_INITIALIZED);
+            throw new BusinessException(meeting.getStatus() == FanMeetingStatus.ENDED
+                    ? ErrorCode.FAN_MEETING_ALREADY_ENDED
+                    : ErrorCode.QUEUE_NOT_INITIALIZED);
         }
 
         List<QueueManagementResponse.Entry> entries = queueEntryRepository

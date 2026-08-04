@@ -22,6 +22,7 @@ public enum ErrorCode {
     FAN_MEETING_NOT_FOUND(HttpStatus.NOT_FOUND, "팬미팅을 찾을 수 없습니다."),
     FAN_MEETING_STATE_CONFLICT(HttpStatus.CONFLICT, "현재 팬미팅 상태에서는 요청을 처리할 수 없습니다."),
     FAN_MEETING_START_NOT_ALLOWED(HttpStatus.CONFLICT, "아직 팬미팅을 시작할 수 없습니다."),
+    FAN_MEETING_ALREADY_ENDED(HttpStatus.CONFLICT, "이미 종료된 팬미팅입니다."),
     APPLICATION_SETTING_NOT_FOUND(HttpStatus.CONFLICT, "응모 설정이 없습니다."),
     OPERATION_SETTING_NOT_FOUND(HttpStatus.CONFLICT, "운영 설정이 없습니다."),
     PARTICIPANT_NOT_FOUND(HttpStatus.FORBIDDEN, "팬미팅 참가자가 아닙니다."),
@@ -120,6 +121,34 @@ public enum ErrorCode {
     USER_ALREADY_WITHDRAWN(HttpStatus.CONFLICT, "이미 탈퇴한 계정입니다."),
     USER_WITHDRAW_MEETING_IN_PROGRESS(HttpStatus.CONFLICT, "진행 중이거나 예정된 팬미팅이 있어 탈퇴할 수 없습니다."),
     LAST_ADMIN_WITHDRAW_NOT_ALLOWED(HttpStatus.CONFLICT, "마지막 관리자 계정은 탈퇴할 수 없습니다."),
+
+    // 외부 선별 참가자 CSV 등록
+    PARTICIPANT_SELECTION_TYPE_MISMATCH(HttpStatus.CONFLICT,
+            "외부 선별 방식으로 만든 팬미팅에서만 사용할 수 있습니다."),
+    PARTICIPANT_SELECTION_TYPE_NOT_CHANGEABLE(HttpStatus.CONFLICT,
+            "참가자 선별 방식은 생성 후 변경할 수 없습니다."),
+    APPLICATION_NOT_SUPPORTED(HttpStatus.CONFLICT,
+            "응모를 사용하지 않는 팬미팅입니다."),
+    EXTERNAL_PARTICIPANTS_ALREADY_CONFIRMED(HttpStatus.CONFLICT,
+            "이미 확정된 외부 선별 명단입니다."),
+    EXTERNAL_PARTICIPANT_FILE_REQUIRED(HttpStatus.BAD_REQUEST,
+            "등록할 CSV 파일이 필요합니다."),
+    EXTERNAL_PARTICIPANT_CSV_INVALID(HttpStatus.BAD_REQUEST,
+            "CSV 내용이 올바르지 않아 명단을 등록할 수 없습니다."),
+
+    // 이메일 인증 (AUTH-005~008)
+    EMAIL_VERIFICATION_REQUIRED(HttpStatus.FORBIDDEN, "이메일 인증을 먼저 완료해야 합니다."),
+    EMAIL_VERIFICATION_TOKEN_INVALID(HttpStatus.BAD_REQUEST,
+            "이메일 인증 정보가 만료되었거나 이미 사용되었습니다."),
+    EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "이미 인증이 완료된 이메일입니다."),
+    // SMTP 발송 실패는 서버 밖 원인이라 502로 알리고, 사용자가 재발송으로 복구할 수 있게 한다.
+    EMAIL_VERIFICATION_SEND_FAILED(HttpStatus.BAD_GATEWAY, "인증 메일을 발송하지 못했습니다."),
+
+    // 기기 토큰 기반 다계정 응모 탐지
+    DEVICE_DUPLICATE_APPLICATION(HttpStatus.CONFLICT, "같은 기기에서 다른 계정으로 이미 응모했습니다."),
+
+    // 공통 요청 빈도 제한
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요."),
 
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 

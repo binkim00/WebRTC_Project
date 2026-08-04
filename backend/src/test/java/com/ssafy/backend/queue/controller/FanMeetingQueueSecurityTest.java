@@ -6,6 +6,7 @@ import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
+import com.ssafy.backend.auth.repository.EmailVerificationTokenRepository;
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.device.repository.DeviceCheckRepository;
@@ -78,6 +79,9 @@ class FanMeetingQueueSecurityTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private EmailVerificationTokenRepository emailVerificationTokenRepository;
 
     @MockitoBean
     private QueueCommandService commandService;
@@ -244,7 +248,7 @@ class FanMeetingQueueSecurityTest {
     @WithMockUser(roles = "MANAGER")
     void allowsManagerToChangePosition() throws Exception {
         when(positionService.changePosition(
-                eq(7L), eq(new QueuePositionChangeRequest(2)), isNull()))
+                eq(7L), eq(new QueuePositionChangeRequest(2, null)), isNull()))
                 .thenReturn(new QueuePositionChangeResponse(
                         4, 2, LocalDateTime.of(2026, 7, 30, 12, 0)));
 

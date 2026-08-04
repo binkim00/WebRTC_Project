@@ -288,7 +288,7 @@ class QueueChangeRequestServiceTest {
         QueueEntry queueEntry = queueEntry(7L, 10L, 2, QueueEntryStatus.WAITING);
         QueueChangeRequest changeRequest = pendingRequest(5L, queueEntry);
         givenManagerProcessing(changeRequest);
-        when(positionService.moveEntry(MEETING_ID, 7L, 4))
+        when(positionService.moveEntry(eq(MEETING_ID), eq(7L), eq(4), any()))
                 .thenReturn(new QueuePositionChangeResponse(2, 4, NOW));
 
         QueueChangeRequestDecisionResponse response = service.process(
@@ -304,7 +304,7 @@ class QueueChangeRequestServiceTest {
         assertThat(changeRequest.getStatus()).isEqualTo(QueueChangeRequestStatus.APPROVED);
         assertThat(changeRequest.getChangedQueuePosition()).isEqualTo(4);
         assertThat(changeRequest.getProcessedAt()).isEqualTo(NOW);
-        verify(positionService).moveEntry(MEETING_ID, 7L, 4);
+        verify(positionService).moveEntry(eq(MEETING_ID), eq(7L), eq(4), any());
     }
 
     /** 승인 요청에 새 순번이 없으면 대기열 마지막으로 이동시키는지 검증한다. */
@@ -313,7 +313,7 @@ class QueueChangeRequestServiceTest {
         QueueEntry queueEntry = queueEntry(7L, 10L, 2, QueueEntryStatus.WAITING);
         QueueChangeRequest changeRequest = pendingRequest(5L, queueEntry);
         givenManagerProcessing(changeRequest);
-        when(positionService.moveEntry(eq(MEETING_ID), eq(7L), isNull()))
+        when(positionService.moveEntry(eq(MEETING_ID), eq(7L), isNull(), any()))
                 .thenReturn(new QueuePositionChangeResponse(2, 5, NOW));
 
         QueueChangeRequestDecisionResponse response = service.process(
@@ -325,7 +325,7 @@ class QueueChangeRequestServiceTest {
         assertThat(response.status()).isEqualTo(QueueChangeRequestStatus.APPROVED);
         assertThat(response.previousPosition()).isEqualTo(2);
         assertThat(response.changedPosition()).isEqualTo(5);
-        verify(positionService).moveEntry(eq(MEETING_ID), eq(7L), isNull());
+        verify(positionService).moveEntry(eq(MEETING_ID), eq(7L), isNull(), any());
     }
 
     /** 거절 처리에서는 순번을 이동하지 않고 거절 결과만 반환하는지 검증한다. */
@@ -347,7 +347,7 @@ class QueueChangeRequestServiceTest {
         assertThat(response.processedAt()).isEqualTo(NOW);
         assertThat(changeRequest.getStatus()).isEqualTo(QueueChangeRequestStatus.REJECTED);
         assertThat(changeRequest.getChangedQueuePosition()).isNull();
-        verify(positionService, never()).moveEntry(anyLong(), anyLong(), any());
+        verify(positionService, never()).moveEntry(anyLong(), anyLong(), any(), any());
     }
 
     /** 이미 처리된 요청을 다시 처리하려는 시도를 충돌로 거부하는지 검증한다. */
@@ -365,7 +365,7 @@ class QueueChangeRequestServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_CHANGE_REQUEST_CONFLICT));
-        verify(positionService, never()).moveEntry(anyLong(), anyLong(), any());
+        verify(positionService, never()).moveEntry(anyLong(), anyLong(), any(), any());
     }
 
     /** 존재하지 않는 순서 변경 요청 처리를 404로 거부하는지 검증한다. */
@@ -401,7 +401,7 @@ class QueueChangeRequestServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ACCESS_DENIED));
         assertThat(changeRequest.getStatus()).isEqualTo(QueueChangeRequestStatus.PENDING);
-        verify(positionService, never()).moveEntry(anyLong(), anyLong(), any());
+        verify(positionService, never()).moveEntry(anyLong(), anyLong(), any(), any());
     }
 
     /** 승인 시점에 팬이 이미 호출되어 이동할 수 없으면 승인 처리를 중단하는지 검증한다. */
@@ -410,7 +410,7 @@ class QueueChangeRequestServiceTest {
         QueueEntry queueEntry = queueEntry(7L, 10L, 1, QueueEntryStatus.CALLED);
         QueueChangeRequest changeRequest = pendingRequest(5L, queueEntry);
         givenManagerProcessing(changeRequest);
-        when(positionService.moveEntry(MEETING_ID, 7L, 3))
+        when(positionService.moveEntry(eq(MEETING_ID), eq(7L), eq(3), any()))
                 .thenThrow(new BusinessException(ErrorCode.QUEUE_STATE_CONFLICT));
 
         assertThatThrownBy(() -> service.process(

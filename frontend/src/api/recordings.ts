@@ -1,8 +1,9 @@
 import { ApiError } from './ApiError'
 import { apiRequest } from './client'
 import { buildQuery, unwrapEnvelope, type PageResponse } from './envelope'
+import { deletePendingRecording, getPendingRecording } from './pendingRecordings'
 
-const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+const API_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
 
 export type RecordingUploadResponse = {
   recordingId: number
@@ -26,7 +27,6 @@ export type RecordingDetailResponse = {
   source: 'BROWSER_UPLOAD' | 'LIVEKIT_EGRESS'
   status: string
   failureCode: string | null
-  failureMessage: string | null
   requestedAt: string | null
   egressStartedAt: string | null
   completedAt: string | null
@@ -64,10 +64,12 @@ export type RecordingDownloadUrlResponse = {
   expiresInSeconds: number
 }
 
-type MyRecordingsQuery = {
+export type MyRecordingsQuery = {
   page?: number
   size?: number
 }
+
+const MAX_MY_RECORDING_PAGE_SIZE = 100
 
 /** 팬이 통화방에 연결되기 전에 녹화 동의를 서버에 기록한다. */
 export async function consentToRecording(
@@ -120,7 +122,13 @@ export async function uploadRecording(
   signal?: AbortSignal,
 ): Promise<RecordingUploadResponse> {
   const formData = new FormData()
-  const fileName = file instanceof File ? file.name : 'recording.webm'
+  // 백엔드는 확장자와 MIME 타입이 일치하는지 검증하므로 Blob 타입에 맞는 이름을 사용한다.
+  const fileName =
+    file instanceof File
+      ? file.name
+      : file.type.toLowerCase().startsWith('video/mp4')
+        ? 'recording.mp4'
+        : 'recording.webm'
   formData.append('file', file, fileName)
 
   const query = durationSec !== undefined ? `?durationSec=${encodeURIComponent(String(durationSec))}` : ''
@@ -182,6 +190,100 @@ export async function getMyRecordings(
   )
 
   return unwrapEnvelope<PageResponse<RecordingSummaryResponse>>(response)
+}
+
+/** 실제 내 녹화 목록 API의 모든 페이지를 순회한다. */
+export async function getAllMyRecordings(
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<RecordingSummaryResponse[]> {
+  const recordings: RecordingSummaryResponse[] = []
+  let page = 0
+
+  while (true) {
+    signal?.throwIfAborted()
+    const response = await getMyRecordings(
+      { page, size: MAX_MY_RECORDING_PAGE_SIZE },
+      authToken,
+      signal,
+    )
+    recordings.push(...response.content)
+
+    if (!response.hasNext || page + 1 >= response.totalPages) {
+      return recordings
+    }
+    page += 1
+  }
+}
+
+/** 첫 20건에만 의존하지 않고 특정 팬미팅의 내 녹화를 모든 페이지에서 찾는다. */
+export async function findMyRecordingByMeeting(
+  meetingId: string | number,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<RecordingSummaryResponse | null> {
+  const normalizedMeetingId = Number(meetingId)
+  const recordings = await getAllMyRecordings(authToken, signal)
+  return recordings.find((recording) => recording.meetingId === normalizedMeetingId) ?? null
+}
+
+/** 완료 화면에서 IndexedDB에 남은 녹화 파일을 실제 업로드 API로 재전송한다. */
+export async function retryPendingRecordingUpload(
+  callSessionId: string,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const pending = await getPendingRecording(callSessionId)
+  if (!pending) return false
+
+  try {
+    await uploadRecording(
+      callSessionId,
+      pending.blob,
+      pending.durationSec ?? undefined,
+      authToken,
+      signal,
+    )
+  } catch (error: unknown) {
+    if (!(error instanceof ApiError && error.code === 'RECORDING_ALREADY_EXISTS')) {
+      throw error
+    }
+  }
+
+  await deletePendingRecording(callSessionId)
+  return true
+}
+
+/** 백엔드가 발급한 상대 서명 URL에서 콘텐츠 토큰을 안전하게 읽는다. */
+export function extractRecordingContentToken(downloadUrl: string): string | null {
+  try {
+    // 토큰 추출에는 호스트가 중요하지 않으므로 상대 API base 설정과 무관한 origin을 기준으로 삼는다.
+    return new URL(downloadUrl, window.location.origin).searchParams.get('token')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 백엔드 서명 응답을 현재 API 호스트의 재생·다운로드 URL로 바꾼다.
+ * 서버 계약대로 토큰이 있으면 정식 content 경로를 사용하고, 구버전 응답은 원래 URL로 폴백한다.
+ */
+export function resolveRecordingContentUrl(
+  response: RecordingDownloadUrlResponse,
+  download = false,
+): string {
+  const token = extractRecordingContentToken(response.downloadUrl)
+  if (token) return buildRecordingContentUrl(response.recordingId, token, download)
+
+  try {
+    if (/^https?:\/\//i.test(response.downloadUrl)) return response.downloadUrl
+    const path = response.downloadUrl.startsWith('/')
+      ? response.downloadUrl
+      : `/${response.downloadUrl}`
+    return `${API_URL}${path}`
+  } catch {
+    return response.downloadUrl
+  }
 }
 
 /** 서명 토큰으로 재생·다운로드 가능한 절대 콘텐츠 URL을 만든다. */

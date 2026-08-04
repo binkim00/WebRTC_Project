@@ -136,6 +136,52 @@ LK_BIN=/tmp/melly-egress-poc/lk bash ./infra/prod/scripts/egress-load-measure.sh
 시작과 종료가 다시 멈출 수 있으므로, rollback 후에는 수동 종료 절차를 사용하고
 LiveKit 및 backend 로그를 확인합니다. 운영 `.env`나 secret 값 자체는 변경하지 않습니다.
 
+## AI 에이전트 (ai-agent)
+
+자막(DeepL Voice / Google STT)과 통화 요약을 담당하는 LiveKit worker 입니다. 백엔드 API를
+호출하지 않고 MySQL에 직접 쓰며, LiveKit에는 내부 네트워크(`ws://livekit:7880`)로 붙습니다.
+`WorkerOptions`에 `agent_name`을 지정하지 않으므로 room 생성 시 자동 dispatch 됩니다.
+
+이미지는 `ai/requirements.lock`으로 빌드합니다. `requirements.txt`는 직접 의존성 목록이며
+버전이 고정되어 있지 않습니다. `livekit-agents`는 0.x와 1.x의 API가 서로 다르므로, 검증된
+조합(`livekit-agents 1.6.6` / `livekit 1.1.13`)을 유지하려면 lock을 갱신해 배포합니다.
+
+운영 `.env`에 다음 키가 필요합니다. `LANGSMITH_PROJECT`는 따옴표 없이 적습니다.
+
+```text
+DEEPL_API_KEY=
+GMS_API_KEY=
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=Melly
+```
+
+`GOOGLE_APPLICATION_CREDENTIALS`는 `.env`에 넣지 않습니다. Compose가 컨테이너 안의 경로로
+고정하고, 실제 서비스 계정 키 파일은 호스트에 두고 읽기 전용으로 마운트합니다.
+
+```bash
+mkdir -p /home/ubuntu/docker/project/secrets
+# google-credentials.json 을 위 디렉터리에 저장한 뒤
+chmod 600 /home/ubuntu/docker/project/secrets/google-credentials.json
+```
+
+키 파일은 저장소 안에 두지 않습니다. `ai/` 아래에 두면 `Dockerfile`의 `COPY . .`가 이미지
+레이어에 그대로 굽습니다(`ai/.dockerignore`로 1차 차단해 두었습니다). 파일이 없으면
+`deploy.sh`는 경고를 남기고 `ai-agent`만 건너뜁니다. Docker는 없는 마운트 소스를 빈
+디렉터리로 만들어 버려서, 그대로 올리면 컨테이너가 기동 직후 조용히 깨집니다.
+
+기동 확인은 로그로 합니다.
+
+```bash
+docker compose -p project --env-file /home/ubuntu/docker/project/.env \
+  -f infra/prod/docker-compose.prod.yml logs --since=5m ai-agent
+```
+
+LiveKit에 worker로 등록되었는지, DB 연결 풀이 초기화되었는지를 확인합니다. 자막이 나오지
+않을 때는 `DEEPL_API_KEY`(외국어 통화)와 서비스 계정 키(한국어 통화)를 나눠서 봅니다.
+요약이 비면 `GMS_API_KEY`와 `gms.ssafy.io` 아웃바운드를 확인합니다.
+
 ## 운영 원칙
 
 1. 실제 환경 변수는 `/home/ubuntu/docker/project/.env`에만 보관합니다.
@@ -161,6 +207,7 @@ cd /home/ubuntu/docker/project/S15P11E106/infra/prod
 - `livekit`
 - `backend`
 - `frontend`
+- `ai-agent`
 - `nginx`
 - `jenkins`
 - `portainer`
@@ -184,6 +231,7 @@ cd /home/ubuntu/docker/project/S15P11E106/infra/prod
 |---|---|---|
 | backend, mysql, redis, nginx, frontend, jenkins | `TZ: Asia/Seoul` | 이미지에 tzdata 있음 |
 | livekit, portainer | `/usr/share/zoneinfo/Asia/Seoul:/etc/localtime:ro` 마운트, **`TZ` 미설정** | tzdata 없음. `TZ`를 넣으면 오히려 UTC가 됨 |
+| ai-agent | 같은 마운트, **`TZ` 미설정** | `python:3.11-slim`의 tzdata 포함 여부를 실측하지 못했다. 마운트는 tzdata 유무와 무관하게 동작하므로 안전한 쪽을 택했다. DB에 쓰는 시각은 `ai/db/timeutil.py`가 KST 고정 오프셋으로 만들어 이 설정과 무관하다 |
 
 마운트 방식은 호스트의 시간대 파일을 직접 붙이므로 호스트 시간대 설정과 무관합니다.
 다만 호스트에 tzdata가 있어야 합니다(Ubuntu 기본 설치).

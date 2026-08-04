@@ -7,6 +7,7 @@ import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
+import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.recording.config.RecordingStorageProperties;
 import com.ssafy.backend.recording.domain.Recording;
 import com.ssafy.backend.recording.domain.RecordingMediaType;
@@ -139,11 +140,15 @@ public class RecordingCommandService {
         CallSession callSession = callSessionRepository.findAccessContextById(callSessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CALL_SESSION_NOT_FOUND));
         accessPolicy.requireParticipantFan(callSession, fan);
+        Participant participant = callSession.getQueueEntry().getParticipant();
+        if (participant.getRecordingConsentAt() != null) {
+            return new RecordingConsentResponse(
+                    callSessionId, participant.getRecordingConsentAt());
+        }
         if (callSession.getStatus() != CallSessionStatus.CONNECTING) {
             throw new BusinessException(ErrorCode.CALL_SESSION_STATE_CONFLICT);
         }
-        LocalDateTime consentedAt = callSession.getQueueEntry().getParticipant()
-                .consentToRecording(LocalDateTime.now(clock));
+        LocalDateTime consentedAt = participant.consentToRecording(LocalDateTime.now(clock));
         return new RecordingConsentResponse(callSessionId, consentedAt);
     }
 

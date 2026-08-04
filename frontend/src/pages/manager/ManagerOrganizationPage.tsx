@@ -1,8 +1,7 @@
-import { Buildings, Copy, Link as LinkIcon, UserMinus, UserPlus } from '@phosphor-icons/react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { Buildings, Copy, Link as LinkIcon, UserMinus } from '@phosphor-icons/react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { getAuthSession } from '../../api/auth'
 import {
-  addOrganizationMember,
   createOrganization,
   createOrganizationInvitation,
   getMyOrganization,
@@ -10,6 +9,7 @@ import {
   type MyOrganizationMembers,
 } from '../../api/organizations'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/data-display'
+import { usePolling } from '../../hooks/usePolling'
 import { AlertBanner } from '../../components/feedback/AlertBanner'
 import { Button } from '../../components/ui/Button'
 import { TextField, Textarea } from '../../components/ui/FormControls'
@@ -40,7 +40,13 @@ export function ManagerOrganizationPage() {
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
 
-  async function loadOrganization(showSpinner = true) {
+  /**
+   * 조직 정보를 읽습니다.
+   *
+   * @param showSpinner false면 화면 깜빡임 없이 조용히 갱신합니다(백그라운드 동기화용).
+   * @param signal 폴링이 중단될 때 요청을 취소하기 위한 signal입니다.
+   */
+  const loadOrganization = useCallback(async (showSpinner = true, signal?: AbortSignal) => {
     const token = getAuthSession()?.accessToken
     if (!token) {
       setError('조직 정보를 조회하려면 먼저 로그인해 주세요.')
@@ -51,26 +57,38 @@ export function ManagerOrganizationPage() {
     if (showSpinner) setLoading(true)
     setError(undefined)
     try {
-      setData(await getMyOrganization(token))
+      setData(await getMyOrganization(token, signal))
     } catch (cause) {
+      // 폴링이 취소한 요청이면 사용자에게 보여줄 오류가 아닙니다.
+      if (signal?.aborted) return
       setError(cause instanceof Error ? cause.message : '조직 정보를 불러오지 못했습니다.')
     } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void loadOrganization()
-    // 다른 창에서 인플루언서가 초대를 수락한 뒤 돌아오면 최신 구성원 목록을 다시 읽습니다.
-    const refreshOnFocus = () => void loadOrganization()
-    window.addEventListener('focus', refreshOnFocus)
-    // 수락 직후에도 매니저 화면에 반영되도록 짧은 주기로 목록을 동기화합니다.
-    const interval = window.setInterval(() => void loadOrganization(false), 10000)
-    return () => {
-      window.removeEventListener('focus', refreshOnFocus)
-      window.clearInterval(interval)
+      if (!signal?.aborted) setLoading(false)
     }
   }, [])
+
+  /** usePolling에 넘길 백그라운드 동기화 함수입니다. 스피너를 띄우지 않습니다. */
+  const syncOrganization = useCallback(
+    (signal: AbortSignal) => loadOrganization(false, signal),
+    [loadOrganization],
+  )
+
+  // 최초 진입에서는 스피너와 함께 읽습니다.
+  useEffect(() => {
+    void loadOrganization()
+  }, [loadOrganization])
+
+  // 인플루언서가 다른 창에서 초대를 수락하면 매니저 화면에도 반영되어야 합니다.
+  // 10초 주기 동기화와 창 포커스 복귀, 두 경로로 변경을 따라잡습니다.
+  //
+  // 이전 구현은 setInterval을 빈 의존성 useEffect 안에서 만들어 첫 렌더의 loadOrganization을
+  // 계속 붙잡고 있었고(stale closure), 요청 취소도 하지 않아 언마운트 후 setState가 발생할 수
+  // 있었습니다. 또 포커스 복귀 시 스피너를 띄워 목록이 깜빡였는데 이제는 조용히 갱신합니다.
+  usePolling(syncOrganization, {
+    intervalMs: 10_000,
+    immediate: false,
+    refreshOnFocus: true,
+  })
 
   function setField(field: keyof typeof initialForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -125,30 +143,6 @@ export function ManagerOrganizationPage() {
       setMessage('초대가 발급되었습니다. 아래 링크를 해당 인플루언서에게 전달해 주세요.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '인플루언서 초대에 실패했습니다.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  /** 초대 수락을 기다리지 않고 인플루언서를 조직 구성원으로 바로 연결한다. */
-  async function handleAddMemberDirectly() {
-    const target = resolveInviteTarget()
-    if (!target) return
-    if (!window.confirm(`회원번호 ${target.targetId} 인플루언서를 조직에 바로 추가할까요? 상대방 수락 없이 즉시 소속됩니다.`)) {
-      return
-    }
-
-    setSaving(true)
-    setError(undefined)
-    setMessage(undefined)
-    try {
-      const member = await addOrganizationMember(target.organizationId, target.targetId, target.token)
-      setInfluencerId('')
-      setInvitation(undefined)
-      setMessage(`${member.nickname} 인플루언서를 조직에 추가했습니다.`)
-      await loadOrganization(false)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '인플루언서를 조직에 추가하지 못했습니다.')
     } finally {
       setSaving(false)
     }
@@ -244,17 +238,13 @@ export function ManagerOrganizationPage() {
             <CardHeader>
               <CardTitle as="h2">인플루언서 추가</CardTitle>
               <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                회원번호를 입력한 뒤 방식을 선택하세요. <strong>초대 링크</strong>는 인플루언서가 링크에서 수락해야 소속되고,
-                <strong> 바로 추가</strong>는 수락 없이 즉시 소속시킵니다.
+                회원번호로 초대 링크를 발급하세요. 인플루언서가 링크에서 수락해야 조직에 소속됩니다.
               </p>
             </CardHeader>
             <CardContent className="grid gap-5">
               <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={handleInvite}>
                 <TextField containerClassName="min-w-0 flex-1" helperText="인플루언서 프로필의 회원번호" label="인플루언서 회원번호" onChange={(event) => setInfluencerId(event.currentTarget.value)} required type="number" value={influencerId} />
-                <div className="flex flex-wrap gap-2">
-                  <Button loading={saving} leadingIcon={<LinkIcon aria-hidden size={18} weight="bold" />} type="submit" variant="secondary">초대 링크 발급</Button>
-                  <Button disabled={saving} leadingIcon={<UserPlus aria-hidden size={18} weight="bold" />} onClick={() => void handleAddMemberDirectly()} type="button">바로 추가</Button>
-                </div>
+                <Button loading={saving} leadingIcon={<LinkIcon aria-hidden size={18} weight="bold" />} type="submit">초대 링크 발급</Button>
               </form>
 
               {invitation ? (

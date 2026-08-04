@@ -68,7 +68,7 @@ class ApplicationDrawTransitionTest {
         Application application = Application.submit(meeting, fan, SUBMITTED_AT);
         application.select(DECIDED_AT);
 
-        Participant participant = Participant.create(meeting, fan, application, 1);
+        Participant participant = Participant.createFromApplication(meeting, fan, application, 1);
 
         assertThat(participant.getStatus()).isEqualTo("READY");
         assertThat(participant.getAssignedOrder()).isEqualTo(1);
@@ -85,7 +85,7 @@ class ApplicationDrawTransitionTest {
         User fan = user(1L, UserRole.FAN);
         Application application = Application.submit(meeting, fan, SUBMITTED_AT);
 
-        assertThatThrownBy(() -> Participant.create(meeting, fan, application, 0))
+        assertThatThrownBy(() -> Participant.createFromApplication(meeting, fan, application, 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

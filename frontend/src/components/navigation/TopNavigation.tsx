@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { cn } from '../ui/cn'
 
@@ -16,6 +16,8 @@ export type TopNavigationProps = {
   actions?: ReactNode
   ariaLabel?: string
   className?: string
+  skipLinkLabel?: string
+  skipLinkTargetId?: string
 }
 
 export function TopNavigation({
@@ -26,8 +28,41 @@ export function TopNavigation({
   actions,
   ariaLabel = '주요 메뉴',
   className,
+  skipLinkLabel = '본문으로 건너뛰기',
+  skipLinkTargetId = 'main-content',
 }: TopNavigationProps) {
   const mobileMenuRef = useRef<HTMLDetailsElement>(null)
+  const mobileMenuButtonRef = useRef<HTMLElement>(null)
+  const mobileMenuId = `${useId().replaceAll(':', '')}-mobile-navigation`
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const hasMobileMenu = items.length > 0 || Boolean(actions)
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+
+    /** 메뉴 바깥을 누르면 작은 화면에서 메뉴가 콘텐츠를 계속 가리지 않도록 닫는다. */
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !mobileMenuRef.current?.contains(event.target)) {
+        setMobileMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
+  }, [mobileMenuOpen])
+
+  function handleMobileMenuKeyDown(event: KeyboardEvent<HTMLDetailsElement>) {
+    if (event.key !== 'Escape' || !mobileMenuOpen) return
+
+    event.preventDefault()
+    setMobileMenuOpen(false)
+    mobileMenuButtonRef.current?.focus()
+  }
+
+  function focusMainContent() {
+    // 해시 이동만으로 포커스가 바뀌지 않는 브라우저에서도 스크린 리더 위치를 함께 옮긴다.
+    document.getElementById(skipLinkTargetId)?.focus()
+  }
 
   const navigationLinks = (mobile = false) =>
     items.map((item) => (
@@ -47,7 +82,7 @@ export function TopNavigation({
         }
         end={item.end}
         key={`${mobile ? 'mobile' : 'desktop'}-${item.to}`}
-        onClick={mobile ? () => mobileMenuRef.current?.removeAttribute('open') : undefined}
+        onClick={mobile ? () => setMobileMenuOpen(false) : undefined}
         to={item.to}
       >
         {item.label}
@@ -61,6 +96,9 @@ export function TopNavigation({
         className,
       )}
     >
+      <a className="skip-link" href={`#${skipLinkTargetId}`} onClick={focusMainContent}>
+        {skipLinkLabel}
+      </a>
       <div className="relative mx-auto flex h-full w-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
         <Link
           className="shrink-0 text-[28px] font-black tracking-[-0.055em] text-[var(--color-text-primary)]"
@@ -78,22 +116,41 @@ export function TopNavigation({
           </nav>
         )}
         {actions ? <div className="hidden shrink-0 items-center gap-2 md:flex">{actions}</div> : null}
-        <details className="relative md:hidden" ref={mobileMenuRef}>
-          <summary
-            aria-label="모바일 메뉴 열기"
-            className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] [&::-webkit-details-marker]:hidden"
+        {hasMobileMenu ? (
+          <details
+            className="relative md:hidden"
+            onKeyDown={handleMobileMenuKeyDown}
+            onToggle={(event) => setMobileMenuOpen(event.currentTarget.open)}
+            open={mobileMenuOpen}
+            ref={mobileMenuRef}
           >
-            메뉴
-          </summary>
-          <div className="absolute right-0 z-30 mt-2 grid min-w-56 gap-1 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-2 shadow-[var(--shadow-modal)]">
-            <nav aria-label={`${ariaLabel} 모바일`} className="grid">
-              {navigationLinks(true)}
-            </nav>
-            {actions ? (
-              <div className="mt-1 border-t border-[var(--color-divider)] pt-2">{actions}</div>
-            ) : null}
-          </div>
-        </details>
+            <summary
+              aria-controls={mobileMenuId}
+              aria-expanded={mobileMenuOpen}
+              aria-label={`모바일 메뉴 ${mobileMenuOpen ? '닫기' : '열기'}`}
+              className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] [&::-webkit-details-marker]:hidden"
+              ref={mobileMenuButtonRef}
+            >
+              메뉴
+            </summary>
+            <div
+              className="absolute right-0 z-30 mt-2 grid min-w-56 gap-1 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-2 shadow-[var(--shadow-modal)]"
+              id={mobileMenuId}
+            >
+              <nav aria-label={`${ariaLabel} 모바일`} className="grid">
+                {navigationLinks(true)}
+              </nav>
+              {actions ? (
+                <div
+                  className="mt-1 border-t border-[var(--color-divider)] pt-2"
+                  onClickCapture={() => setMobileMenuOpen(false)}
+                >
+                  {actions}
+                </div>
+              ) : null}
+            </div>
+          </details>
+        ) : null}
       </div>
     </header>
   )

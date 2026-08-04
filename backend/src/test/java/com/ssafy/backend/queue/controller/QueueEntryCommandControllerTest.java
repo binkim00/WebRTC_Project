@@ -82,7 +82,7 @@ class QueueEntryCommandControllerTest {
                 mock(QueueCommandService.class), positionService,
                 mock(QueueChangeRequestService.class));
         AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.MANAGER);
-        QueuePositionChangeRequest request = new QueuePositionChangeRequest(2);
+        QueuePositionChangeRequest request = new QueuePositionChangeRequest(2, null);
         QueuePositionChangeResponse expected = new QueuePositionChangeResponse(
                 4, 2, LocalDateTime.of(2026, 7, 30, 12, 0));
         when(positionService.changePosition(7L, request, principal)).thenReturn(expected);

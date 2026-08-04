@@ -109,8 +109,40 @@ public class RecordingEgressRecoveryService {
         return client.listByRoom(context.roomName()).stream()
                 .filter(info -> info.getEgressId() != null && !info.getEgressId().isBlank())
                 .filter(info -> info.getStartedAt() == 0 || info.getStartedAt() >= earliest)
+                .filter(info -> matchesRequestedOutput(info, context.storageKey()))
                 .max(Comparator.comparingLong(this::latestTimestamp))
                 .orElse(null);
+    }
+
+    /** 공유 Room의 다른 통화를 연결하지 않도록 시작 요청의 출력 경로까지 대조한다. */
+    private boolean matchesRequestedOutput(LivekitEgress.EgressInfo info, String storageKey) {
+        if (!info.hasRoomComposite()) {
+            return false;
+        }
+        String expected = outputPath(storageKey);
+        LivekitEgress.RoomCompositeEgressRequest request = info.getRoomComposite();
+        if (request.getFileOutputsList().stream()
+                .anyMatch(output -> expected.equals(normalizePath(output.getFilepath())))) {
+            return true;
+        }
+        return request.hasFile()
+                && expected.equals(normalizePath(request.getFile().getFilepath()));
+    }
+
+    private String outputPath(String storageKey) {
+        String root = normalizePath(properties.outputRoot());
+        return root.endsWith("/") ? root + storageKey : root + "/" + storageKey;
+    }
+
+    private String normalizePath(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim().replace('\\', '/');
+        while (normalized.length() > 1 && normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     private long latestTimestamp(LivekitEgress.EgressInfo info) {

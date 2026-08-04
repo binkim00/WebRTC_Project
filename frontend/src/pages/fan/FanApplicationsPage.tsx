@@ -1,13 +1,17 @@
 import { ArrowLeft, ArrowRight, CalendarBlank } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import {
-  getMyApplications,
+  getAllMyApplications,
   type ApplicationStatus,
   type MyApplicationSummaryResponse,
 } from '../../api/applications'
+import {
+  fetchPublicFanMeetingDetail,
+  type PublicFanMeetingDetail,
+} from '../../api/fanMeetings'
 import {
   AlertBanner,
   Badge,
@@ -19,7 +23,21 @@ import {
 
 const PAGE_SIZE = 6
 
+function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
+  // 추첨 직후에는 응모 상태가 SELECTED/NOT_SELECTED로 바뀌지만,
+  // 운영자가 결과를 공개하면 팬미팅 상태가 READY로 전환된다.
+  return (
+    detail?.meeting.status === 'READY' ||
+    detail?.meeting.status === 'LIVE' ||
+    detail?.meeting.status === 'ENDED'
+  )
+}
+
 type StatusFilter = 'all' | ApplicationStatus
+
+function isStatusFilter(value: string | null): value is StatusFilter {
+  return value === 'all' || value === 'SUBMITTED' || value === 'SELECTED' || value === 'NOT_SELECTED' || value === 'WITHDRAWN'
+}
 
 const statusFilterItems: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: '전체' },
@@ -52,7 +70,11 @@ function formatDateTime(value: string): string {
 }
 
 export function FanApplicationsPage() {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedStatus = searchParams.get('status')
+  const statusFilter: StatusFilter = isStatusFilter(requestedStatus)
+    ? requestedStatus
+    : 'all'
   const [page, setPage] = useState(0)
   const [applications, setApplications] = useState<MyApplicationSummaryResponse[]>()
   const [totalPages, setTotalPages] = useState(1)
@@ -69,19 +91,44 @@ export function FanApplicationsPage() {
       return () => controller.abort()
     }
 
-    void getMyApplications(
-      {
-        applicationStatus: statusFilter === 'all' ? undefined : statusFilter,
-        page,
-        size: PAGE_SIZE,
-      },
-      session.accessToken,
-      controller.signal,
-    )
-      .then((result) => {
-        setApplications(result.content)
-        setTotalPages(result.totalPages)
-        setTotalElements(result.totalElements)
+    void getAllMyApplications({}, session.accessToken, controller.signal)
+      .then(async (allApplications) => {
+        const checkedApplications = await Promise.all(
+          allApplications.map(async (application) => {
+            if (
+              application.applicationStatus !== 'SELECTED' &&
+              application.applicationStatus !== 'NOT_SELECTED'
+            ) {
+              return { application, resultPublished: true }
+            }
+
+            try {
+              const detail = await fetchPublicFanMeetingDetail(
+                application.meetingId,
+                session.accessToken,
+                controller.signal,
+              )
+              return { application, resultPublished: isResultPublished(detail) }
+            } catch (reason: unknown) {
+              if (controller.signal.aborted) throw reason
+              // 결과 공개 여부를 확인하지 못한 응모는 상태를 노출하지 않는다.
+              return { application, resultPublished: false }
+            }
+          }),
+        )
+        const filteredApplications = checkedApplications
+          .filter(({ application, resultPublished }) =>
+            resultPublished &&
+            (statusFilter === 'all' || application.applicationStatus === statusFilter),
+          )
+          .map(({ application }) => application)
+        const nextTotalPages = Math.max(1, Math.ceil(filteredApplications.length / PAGE_SIZE))
+        const nextPage = Math.min(page, nextTotalPages - 1)
+
+        setApplications(filteredApplications.slice(nextPage * PAGE_SIZE, (nextPage + 1) * PAGE_SIZE))
+        setTotalPages(nextTotalPages)
+        setTotalElements(filteredApplications.length)
+        if (nextPage !== page) setPage(nextPage)
         setError(undefined)
       })
       .catch((reason: unknown) => {
@@ -139,7 +186,7 @@ export function FanApplicationsPage() {
               ].join(' ')}
               key={item.value}
               onClick={() => {
-                setStatusFilter(item.value)
+                setSearchParams(item.value === 'all' ? {} : { status: item.value })
                 setPage(0)
               }}
               type="button"
@@ -217,7 +264,9 @@ export function FanApplicationsPage() {
                           >
                             상세히 보기
                           </Link>
-                          {resultDecided ? (
+                          {resultDecided &&
+                          statusFilter !== 'SELECTED' &&
+                          statusFilter !== 'NOT_SELECTED' ? (
                             <Link
                               className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
                               to={`/fan/events/${application.meetingId}/application-result`}

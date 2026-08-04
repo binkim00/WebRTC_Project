@@ -1,6 +1,6 @@
 import { LiveKitRoom } from '@livekit/components-react'
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import { consentToRecording } from '../../api/recordings'
 import {
@@ -9,6 +9,10 @@ import {
   type CallSessionStatusResponse,
   type LiveKitAccessTokenResponse,
 } from '../../api/callSessions'
+import { fetchMeetingQueue } from '../../api/fanMeetingParticipants'
+import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
+import { isQueueNotInitialized } from '../../api/queue'
+import { usePolling } from '../../hooks/usePolling'
 import { Badge } from '../data-display'
 import { AlertBanner } from '../feedback'
 import { Button } from '../ui/Button'
@@ -22,20 +26,44 @@ export type { VideoCallRoomProps } from './types'
 export function VideoCallRoom(props: VideoCallRoomProps) {
   const [searchParams] = useSearchParams()
   const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
-  const isConsentPreview = import.meta.env.DEV && searchParams.get('preview') === 'consent'
   const [authSession] = useState(() => getAuthSession())
-  const requiresRecordingConsent = authSession?.role === 'FAN' || isConsentPreview
-  const [recordingConsentGranted, setRecordingConsentGranted] = useState(
-    !requiresRecordingConsent,
-  )
-  const [consentSubmitting, setConsentSubmitting] = useState(false)
-  const [consentError, setConsentError] = useState<string>()
   const [connectionInfo, setConnectionInfo] = useState<LiveKitAccessTokenResponse>()
   const [sessionStatus, setSessionStatus] = useState<CallSessionStatusResponse>()
   const [connectionError, setConnectionError] = useState<string>()
   const [statusError, setStatusError] = useState<string>()
+  const [recordingEnabled, setRecordingEnabled] = useState(false)
+  const [recordingPolicyError, setRecordingPolicyError] = useState<string>()
+  // 통화 시작 전에는 서버의 남은 시간이 0이라 카운트다운 대기 값으로 쓸 설정 값이 필요하다.
+  const [callDurationSec, setCallDurationSec] = useState<number>()
   const [retryCount, setRetryCount] = useState(0)
-  const [loading, setLoading] = useState(!isDesignPreview && !requiresRecordingConsent)
+  const [loading, setLoading] = useState(!isDesignPreview)
+  const [meetingClosed, setMeetingClosed] = useState<'ENDED' | 'CANCELED'>()
+  const [recordingConsentGranted, setRecordingConsentGranted] = useState(
+    authSession?.role !== 'FAN',
+  )
+  const [consentSubmitting, setConsentSubmitting] = useState(false)
+  const [consentError, setConsentError] = useState<string>()
+  const navigate = useNavigate()
+
+  const hostStaysConnected = props.hostStaysConnected ?? false
+
+  /**
+   * 방 입장 토큰을 발급받는 기준 세션이다.
+   *
+   * 호스트 토큰은 통화 세션이 아니라 팬미팅 Room에 대한 권한이므로, 팬이 교체될 때
+   * 다시 발급받지 않는다. 이 값을 바꾸지 않는 한 LiveKitRoom의 token prop이 그대로 유지되어
+   * 재연결이 일어나지 않는다. 연결이 끊겨 재입장이 필요할 때만 갱신한다.
+   */
+  const [connectSessionId, setConnectSessionId] = useState(props.callSessionId)
+  /** 지금 진행 중인 통화 세션이다. 상태 폴링·남은 시간·종료 API가 이 값을 따른다. */
+  const [activeCallSessionId, setActiveCallSessionId] = useState(props.callSessionId)
+
+  // 주소의 세션이 바뀌면(팬 통화 진입 등) 두 값을 함께 맞춘다.
+  useEffect(() => {
+    setConnectSessionId(props.callSessionId)
+    setActiveCallSessionId(props.callSessionId)
+    setRecordingConsentGranted(authSession?.role !== 'FAN')
+  }, [authSession?.role, props.callSessionId])
 
   const loadConnectionInfo = useCallback(
     async (signal: AbortSignal) => {
@@ -43,29 +71,59 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         return
       }
 
-      if (requiresRecordingConsent && !recordingConsentGranted) {
-        setLoading(false)
-        return
-      }
-
-      if (!props.callSessionId) {
+      if (!connectSessionId) {
         setConnectionError('통화 연결에 필요한 callSessionId가 없습니다.')
         setLoading(false)
         return
       }
 
       setLoading(true)
+      setConnectionInfo(undefined)
+      setSessionStatus(undefined)
+      setRecordingEnabled(false)
+      setCallDurationSec(undefined)
       setConnectionError(undefined)
       setStatusError(undefined)
+      setRecordingPolicyError(undefined)
 
       try {
-        const authToken = authSession?.accessToken
+        const currentSession = getAuthSession()
+        const authToken = currentSession?.accessToken
         const [info, status] = await Promise.all([
-          issueLiveKitAccessToken(props.callSessionId, { authToken, signal }),
-          getCallSessionStatus(props.callSessionId, { authToken, signal }),
+          issueLiveKitAccessToken(connectSessionId, { authToken, signal }),
+          getCallSessionStatus(connectSessionId, { authToken, signal }),
         ])
-        setConnectionInfo(info)
+
+        // 녹화 여부와 통화 제한 시간은 통화 진입 시 서버 상세를 다시 읽어
+        // 오래된 화면 값을 쓰지 않는다. 상세 조회는 모든 역할에 열려 있다.
+        let shouldRecord = false
+        let durationSec: number | undefined
+        try {
+          const meeting = await fetchPublicFanMeetingDetail(
+            Number(props.meetingId),
+            authToken,
+            signal,
+          )
+          durationSec = meeting.meeting.operation.callDurationSec
+          shouldRecord =
+            currentSession?.role === 'FAN' && meeting.meeting.operation.recordingEnabled
+        } catch (error: unknown) {
+          if (error instanceof DOMException && error.name === 'AbortError') throw error
+          // 정책을 확인하지 못한 경우에는 개인정보 보호를 위해 녹화를 시작하지 않는다.
+          // 카운트다운은 서버가 보내는 남은 시간으로 계속 동작하므로 통화 자체는 막지 않는다.
+          if (currentSession?.role === 'FAN') {
+            setRecordingPolicyError('팬미팅 녹화 설정을 확인하지 못해 녹화를 시작하지 않았습니다.')
+          }
+        }
+
+        if (signal.aborted) return
+        setRecordingEnabled(shouldRecord)
+        setCallDurationSec(durationSec)
         setSessionStatus(status)
+        if (shouldRecord && !recordingConsentGranted) {
+          return
+        }
+        setConnectionInfo(info)
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return
@@ -83,12 +141,13 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         }
       }
     },
-    [authSession?.accessToken, isDesignPreview, props.callSessionId,
-      recordingConsentGranted, requiresRecordingConsent],
+    [connectSessionId, isDesignPreview, props.meetingId, recordingConsentGranted],
   )
 
   async function handleRecordingConsent() {
-    if (!props.callSessionId || !authSession?.accessToken) {
+    const sessionId = connectSessionId
+    const authToken = authSession?.accessToken
+    if (!sessionId || !authToken) {
       setConsentError('녹화 동의를 기록할 로그인 정보가 없습니다.')
       return
     }
@@ -96,7 +155,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     setConsentSubmitting(true)
     setConsentError(undefined)
     try {
-      await consentToRecording(props.callSessionId, authSession.accessToken)
+      await consentToRecording(sessionId, authToken)
       setRecordingConsentGranted(true)
     } catch (error: unknown) {
       setConsentError(
@@ -127,47 +186,120 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     })
   }, [connectionInfo, props.callSessionId])
 
-  useEffect(() => {
-    const callSessionId = props.callSessionId
+  /**
+   * 끊긴 연결을 새 토큰으로 다시 붙인다.
+   *
+   * 재입장 시점의 진행 중 세션으로 토큰을 발급받아야 하므로 connectSessionId를 현재 세션에 맞춘다.
+   * 두 값이 같아 상태가 바뀌지 않는 경우에도 retryCount로 재조회를 강제한다.
+   */
+  const handleReconnectNeeded = useCallback(() => {
+    setConnectSessionId(activeCallSessionId)
+    setRetryCount((count) => count + 1)
+  }, [activeCallSessionId])
 
-    if (isDesignPreview || !callSessionId || !connectionInfo) {
-      return
-    }
+  /**
+   * 호스트가 대기열의 현재 통화를 따라간다.
+   *
+   * 팬이 교체되면 진행 중인 통화 세션만 바꿔 끼우고 LiveKit 연결은 그대로 유지한다.
+   * 다음 팬이 아직 없으면 마지막 세션(ENDED)을 유지해 화면이 대기 상태로 남는다.
+   */
+  const followCurrentCall = useCallback(
+    async (signal: AbortSignal) => {
+      const authToken = getAuthSession()?.accessToken
+      if (!authToken) return
 
-    let active = true
-
-    const refreshStatus = async () => {
       try {
-        const status = await getCallSessionStatus(callSessionId, {
-          authToken: getAuthSession()?.accessToken,
-        })
-
-        if (active) {
-          setSessionStatus(status)
-          setStatusError(undefined)
-        }
+        const queue = await fetchMeetingQueue(props.meetingId, authToken, signal)
+        const nextCallSessionId = queue.currentCall?.callSessionId
+        if (nextCallSessionId) setActiveCallSessionId(String(nextCallSessionId))
       } catch (error: unknown) {
-        if (active) {
-          setStatusError(
-            error instanceof Error ? error.message : '통화 상태를 갱신하지 못했습니다.',
-          )
-        }
+        if (signal.aborted) return
+        // 팬미팅이 끝나 대기열이 정리되면 따라갈 통화가 없다. 오류로 다루지 않는다.
+        if (isQueueNotInitialized(error)) return
       }
-    }
+    },
+    [props.meetingId],
+  )
 
-    const intervalId = window.setInterval(() => void refreshStatus(), 5000)
+  usePolling(followCurrentCall, {
+    intervalMs: 3_000,
+    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo),
+  })
 
-    return () => {
-      active = false
-      window.clearInterval(intervalId)
+  // 통화 세션이 끝난 것과 팬미팅 전체가 끝난 것은 다르다. 호스트는 통화방에
+  // 남아 있으므로 팬미팅 상태를 별도로 확인해 전체 종료를 놓치지 않는다.
+  const loadMeetingStatus = useCallback(async (signal: AbortSignal) => {
+    if (!hostStaysConnected || meetingClosed) return
+
+    const authToken = getAuthSession()?.accessToken
+    if (!authToken) return
+
+    try {
+      const detail = await fetchPublicFanMeetingDetail(Number(props.meetingId), authToken, signal)
+      const status = detail.meeting.status
+      if (status === 'ENDED' || status === 'CANCELED') {
+        setMeetingClosed(status)
+      }
+    } catch {
+      // 일시적인 조회 실패는 통화 화면을 끊지 않고 다음 polling에서 재확인한다.
     }
-  }, [connectionInfo, isDesignPreview, props.callSessionId])
+  }, [hostStaysConnected, meetingClosed, props.meetingId])
+
+  usePolling(loadMeetingStatus, {
+    intervalMs: 3_000,
+    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo) && !meetingClosed,
+  })
+
+  useEffect(() => {
+    if (!meetingClosed) return
+
+    const timer = window.setTimeout(() => navigate('/', { replace: true }), 3_000)
+    return () => window.clearTimeout(timer)
+  }, [meetingClosed, navigate])
+
+  const refreshStatus = useCallback(
+    async (signal: AbortSignal) => {
+      if (!activeCallSessionId) return
+
+      try {
+        const status = await getCallSessionStatus(activeCallSessionId, {
+          authToken: getAuthSession()?.accessToken,
+          signal,
+        })
+        setSessionStatus(status)
+        setStatusError(undefined)
+      } catch (error: unknown) {
+        if (signal.aborted) return
+        setStatusError(
+          error instanceof Error ? error.message : '통화 상태를 갱신하지 못했습니다.',
+        )
+      }
+    },
+    [activeCallSessionId],
+  )
+
+  // usePolling은 직렬 폴링이라 느린 요청이 겹쳐 오래된 통화 상태가 최신 상태를 덮지 않는다.
+  // 차례가 바뀌면 activeCallSessionId가 변해 즉시 새 세션 상태를 읽는다.
+  usePolling(refreshStatus, {
+    intervalMs: 5_000,
+    enabled: !isDesignPreview && Boolean(activeCallSessionId) && Boolean(connectionInfo),
+  })
 
   if (isDesignPreview) {
     return <PreviewCallRoom {...props} />
   }
 
-  if (requiresRecordingConsent && !recordingConsentGranted) {
+  if (meetingClosed) {
+    return (
+      <div className="mx-auto grid max-w-3xl gap-6 py-10">
+        <AlertBanner title={meetingClosed === 'CANCELED' ? '팬미팅이 취소되었습니다' : '팬미팅이 종료되었습니다'} variant="info">
+          팬미팅이 종료되어 영상통화방을 나갑니다. 잠시 후 메인 화면으로 이동합니다.
+        </AlertBanner>
+      </div>
+    )
+  }
+
+  if (authSession?.role === 'FAN' && recordingEnabled && !recordingConsentGranted) {
     return (
       <div className="mx-auto grid max-w-2xl gap-6 py-10">
         <header>
@@ -175,12 +307,10 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
             영상통화 녹화에 동의해 주세요
           </h1>
+          <p className="mt-3 text-[var(--color-text-secondary)]">
+            팬미팅 다시보기를 제공하기 위해 양쪽 영상과 음성을 녹화합니다.
+          </p>
         </header>
-        <AlertBanner title="녹화 및 다시보기 안내" variant="info">
-          이 통화는 팬미팅 다시보기 제공을 위해 녹화됩니다. 녹화 파일은 통화가 끝난 뒤
-          서버에서 처리되며 보관 기간이 지나면 자동 삭제됩니다. 동의한 뒤 통화방에
-          연결됩니다.
-        </AlertBanner>
         {consentError ? (
           <AlertBanner title="녹화 동의를 기록하지 못했습니다" variant="error">
             {consentError}
@@ -241,7 +371,16 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       token={connectionInfo.accessToken}
       video={cameraId ? { deviceId: { exact: cameraId } } : true}
     >
-      <ConnectedCallRoom {...props} sessionStatus={sessionStatus} />
+      <ConnectedCallRoom
+        {...props}
+        callDurationSec={callDurationSec}
+        // 종료·남은 시간·요약이 모두 진행 중인 세션을 따라야 하므로 주소 값이 아닌 활성 세션을 넘긴다.
+        callSessionId={activeCallSessionId}
+        onReconnectNeeded={handleReconnectNeeded}
+        recordingEnabled={recordingEnabled}
+        recordingPolicyError={recordingPolicyError}
+        sessionStatus={sessionStatus}
+      />
       {connectionError ? (
         <div className="mt-4">
           <AlertBanner title="LiveKit 연결 오류" variant="error">

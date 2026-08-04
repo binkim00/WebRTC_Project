@@ -5,6 +5,9 @@ import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
+import com.ssafy.backend.notification.domain.Notification;
+import com.ssafy.backend.notification.domain.NotificationType;
+import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.dto.QueuePositionChangeRequest;
@@ -30,10 +33,12 @@ import java.util.Set;
 public class QueuePositionService {
     private static final Set<QueueEntryStatus> MOVABLE_STATUSES =
             Set.of(QueueEntryStatus.NOT_ENTERED, QueueEntryStatus.WAITING);
+    private static final String CHANGE_NOTIFICATION_TITLE = "대기 순번 변경";
 
     private final CurrentUserService currentUserService;
     private final MeetingAccessService meetingAccessService;
     private final QueueEntryRepository queueEntryRepository;
+    private final NotificationRepository notificationRepository;
     private final QueueRealtimeStore realtimeStore;
     private final Clock clock;
 
@@ -43,17 +48,20 @@ public class QueuePositionService {
      * @param currentUserService 현재 로그인 사용자 조회 서비스
      * @param meetingAccessService 팬미팅 운영 권한 검증 서비스
      * @param queueEntryRepository 대기열 항목 저장소
+     * @param notificationRepository 순번 변경 알림 저장소
      * @param realtimeStore Redis 실시간 대기열 저장소
      * @param clock 순서 변경 시각 기준 시계
      */
     public QueuePositionService(CurrentUserService currentUserService,
                                 MeetingAccessService meetingAccessService,
                                 QueueEntryRepository queueEntryRepository,
+                                NotificationRepository notificationRepository,
                                 QueueRealtimeStore realtimeStore,
                                 Clock clock) {
         this.currentUserService = currentUserService;
         this.meetingAccessService = meetingAccessService;
         this.queueEntryRepository = queueEntryRepository;
+        this.notificationRepository = notificationRepository;
         this.realtimeStore = realtimeStore;
         this.clock = clock;
     }
@@ -62,7 +70,7 @@ public class QueuePositionService {
      * 팬미팅 매니저가 지정한 참가자를 새 대기 순번으로 이동시킨다.
      *
      * @param entryId 이동할 대기열 항목 식별자
-     * @param request 이동할 새 대기 순번
+     * @param request 이동할 새 대기 순번과 팬에게 안내할 변경 사유
      * @param principal JWT 인증 사용자 정보
      * @return 이동 전후 순번과 반영 시각
      * @throws BusinessException 대기열 항목이 없거나 매니저 권한, 순번 범위, 상태 검증에 실패한 경우
@@ -76,7 +84,7 @@ public class QueuePositionService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.QUEUE_ENTRY_NOT_FOUND));
         Long meetingId = entry.getMeeting().getId();
         meetingAccessService.requireManager(meetingId, manager);
-        return moveEntry(meetingId, entryId, request.newPosition());
+        return moveEntry(meetingId, entryId, request.newPosition(), request.reason());
     }
 
     /**
@@ -86,14 +94,19 @@ public class QueuePositionService {
      * 순번은 유지된다. Redis Sorted Set을 Lua 스크립트로 먼저 재정렬하고 DB 반영이 실패하면
      * 이전 순번으로 되돌려 두 저장소의 순번을 일치시킨다.
      *
+     * <p>순번이 실제로 바뀐 참가자에게는 변경 사유를 안내 문구로 만들어 대기열 항목에 기록하고
+     * 알림도 함께 생성한다. 팬 화면은 순번만 보고는 변경 이유를 알 수 없기 때문이다.
+     *
      * @param meetingId 팬미팅 식별자
      * @param entryId 이동할 대기열 항목 식별자
      * @param requestedPosition 이동할 순번이며 {@code null}이면 대기열 마지막으로 이동한다
+     * @param reason 팬에게 안내할 변경 사유이며 비어 있으면 기본 안내 문구만 남긴다
      * @return 이동 전후 순번과 반영 시각
      * @throws BusinessException 대기열 미초기화, 순번 범위 초과 또는 이동 불가 상태인 경우
      */
     @Transactional
-    public QueuePositionChangeResponse moveEntry(Long meetingId, Long entryId, Integer requestedPosition) {
+    public QueuePositionChangeResponse moveEntry(Long meetingId, Long entryId,
+                                                 Integer requestedPosition, String reason) {
         if (!realtimeStore.isInitialized(meetingId)) {
             throw new BusinessException(ErrorCode.QUEUE_NOT_INITIALIZED);
         }
@@ -128,8 +141,10 @@ public class QueuePositionService {
             }
             throw new BusinessException(ErrorCode.QUEUE_STATE_CONFLICT);
         }
+        LocalDateTime changedAt = LocalDateTime.now(clock);
+        recordChanges(movableEntries, previousPositions, newPositions, target, reason, changedAt);
         return new QueuePositionChangeResponse(
-                previousPosition, slots.get(targetSlotIndex), LocalDateTime.now(clock));
+                previousPosition, slots.get(targetSlotIndex), changedAt);
     }
 
     /**
@@ -221,5 +236,70 @@ public class QueuePositionService {
             }
         }
         queueEntryRepository.flush();
+    }
+
+    /**
+     * 순번이 실제로 바뀐 항목에 변경 사유를 기록하고 해당 팬에게 보낼 알림을 만든다.
+     *
+     * <p>매니저가 직접 이동시킨 대상과 그 여파로 순번이 밀린 참가자의 안내 문구를 구분한다.
+     * 순번이 그대로인 참가자는 알릴 내용이 없으므로 건너뛴다.
+     *
+     * @param movableEntries 이동 가능한 대기열 항목
+     * @param previousPositions 대기열 항목 식별자별 이동 전 순번
+     * @param newPositions 대기열 항목 식별자별 이동 후 순번
+     * @param target 매니저가 이동을 요청한 대기열 항목
+     * @param reason 매니저가 입력한 변경 사유이며 비어 있을 수 있다
+     * @param changedAt 순번 변경이 반영된 시각
+     */
+    private void recordChanges(List<QueueEntry> movableEntries,
+                               Map<Long, Integer> previousPositions,
+                               Map<Long, Integer> newPositions,
+                               QueueEntry target,
+                               String reason,
+                               LocalDateTime changedAt) {
+        List<Notification> notifications = new ArrayList<>();
+        for (QueueEntry entry : movableEntries) {
+            int previousPosition = previousPositions.get(entry.getId());
+            int newPosition = newPositions.get(entry.getId());
+            if (previousPosition == newPosition) {
+                continue;
+            }
+            String message = changeMessage(
+                    entry.getId().equals(target.getId()), previousPosition, newPosition, reason);
+            entry.recordPositionChange(message, changedAt);
+            notifications.add(Notification.create(
+                    entry.getParticipant().getFan(),
+                    entry.getMeeting(),
+                    NotificationType.QUEUE_CHANGE_RESULT,
+                    CHANGE_NOTIFICATION_TITLE,
+                    message
+            ));
+        }
+        if (!notifications.isEmpty()) {
+            notificationRepository.saveAll(notifications);
+        }
+    }
+
+    /**
+     * 순번 변경을 팬이 이해할 수 있는 안내 문구로 만든다.
+     *
+     * @param moved 매니저가 직접 이동시킨 대상인지 여부
+     * @param previousPosition 이동 전 순번
+     * @param newPosition 이동 후 순번
+     * @param reason 매니저가 입력한 변경 사유이며 비어 있을 수 있다
+     * @return 대기 화면과 알림에 함께 사용할 안내 문구
+     */
+    private String changeMessage(boolean moved, int previousPosition, int newPosition,
+                                 String reason) {
+        StringBuilder message = new StringBuilder();
+        if (!moved) {
+            message.append("다른 참가자의 순서 조정으로 ");
+        }
+        message.append("대기 순번이 ").append(previousPosition).append("번에서 ")
+                .append(newPosition).append("번으로 변경되었습니다.");
+        if (reason != null && !reason.isBlank()) {
+            message.append(" 사유: ").append(reason.strip());
+        }
+        return message.toString();
     }
 }

@@ -13,6 +13,16 @@ if grep -Eiq '^RECORDING_EGRESS_ENABLED=(true|1|yes)[[:space:]]*$' "$ENV_FILE"; 
   exit 1
 fi
 
+# AI 에이전트는 Google STT 서비스 계정 키를 볼륨으로 받는다. 이 파일이 없으면 Docker 가
+# 마운트 지점을 빈 디렉터리로 만들어 버려서 컨테이너가 기동 직후 조용히 깨진다.
+# AI 키 배치 여부와 무관하게 나머지 서비스는 배포되어야 하므로, 없을 때는 대상에서만 뺀다.
+AI_CREDENTIALS="/home/ubuntu/docker/project/secrets/google-credentials.json"
+AI_AGENT="ai-agent"
+if [ ! -f "$AI_CREDENTIALS" ]; then
+  AI_AGENT=""
+  echo "[deploy] 경고: $AI_CREDENTIALS 가 없어 ai-agent 배포를 건너뜁니다." >&2
+fi
+
 # 필수 변수 치환과 최종 Compose 문법을 컨테이너 변경 전에 검증한다.
 docker compose \
   -p project \
@@ -20,17 +30,18 @@ docker compose \
   -f "$COMPOSE_FILE" \
   config --quiet
 
+# $AI_AGENT 는 값이 없으면 인자 자체가 사라져야 하므로 의도적으로 인용하지 않는다.
 docker compose \
   -p project \
   --env-file "$ENV_FILE" \
   -f "$COMPOSE_FILE" \
-  build --pull backend frontend
+  build --pull backend frontend $AI_AGENT
 
 docker compose \
   -p project \
   --env-file "$ENV_FILE" \
   -f "$COMPOSE_FILE" \
-  up -d mysql redis livekit backend frontend nginx
+  up -d mysql redis livekit backend frontend $AI_AGENT nginx
 
 # nginx 는 upstream 의 호스트명을 시작 시점에 한 번만 해석해 IP 를 캐시한다.
 # 위 up -d 로 backend·frontend 가 재생성되면 컨테이너 IP 가 바뀌는데, nginx 자신의

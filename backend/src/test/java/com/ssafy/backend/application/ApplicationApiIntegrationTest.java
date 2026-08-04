@@ -585,8 +585,9 @@ class ApplicationApiIntegrationTest {
         entityManager.createNativeQuery("""
                         insert into participants (
                             meeting_id, fan_id, application_id, status, assigned_order,
-                            created_at, updated_at
-                        ) values (?, ?, ?, 'READY', ?, current_timestamp, current_timestamp)
+                            participant_source, created_at, updated_at
+                        ) values (?, ?, ?, 'READY', ?, 'APPLICATION',
+                            current_timestamp, current_timestamp)
                         """)
                 .setParameter(1, meeting.getId())
                 .setParameter(2, application.getFan().getId())
@@ -599,12 +600,18 @@ class ApplicationApiIntegrationTest {
                 .getSingleResult()).longValue();
     }
 
-    /** 통합 테스트에 사용할 활성 사용자를 저장한다. */
+    /**
+     * 통합 테스트에 사용할 활성 사용자를 저장한다.
+     *
+     * <p>응모는 이메일 인증을 마친 계정만 할 수 있으므로 저장 시점에 인증 완료로 만든다.
+     */
     private User saveUser(String loginId, String nickname, UserRole role) {
-        return userRepository.saveAndFlush(User.createActive(
+        User user = User.createActive(
                 loginId, loginId + "@example.com", "encoded-password",
                 nickname, role, PreferredLanguage.KOREAN
-        ));
+        );
+        user.verifyEmail(LocalDateTime.now());
+        return userRepository.saveAndFlush(user);
     }
 
     /** 지정한 사용자를 인증 주체로 사용하는 요청 후처리기를 생성한다. */

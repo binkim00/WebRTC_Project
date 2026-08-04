@@ -10,6 +10,7 @@ final(concluded) STT 결과를 받아서:
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 
 import httpx
 from livekit import rtc
@@ -30,7 +31,7 @@ class SubtitleProcessor:
         local_participant: rtc.LocalParticipant,
         pool,
         spring_internal_url: str | None = None,
-        detect_fn: callable | None = None,         # async (text, lang) -> dict | None
+        detect_fn: Callable | None = None,         # async (text, lang) -> dict | None
         sequence_counters: dict,
     ):
         self.call_session_id = call_session_id

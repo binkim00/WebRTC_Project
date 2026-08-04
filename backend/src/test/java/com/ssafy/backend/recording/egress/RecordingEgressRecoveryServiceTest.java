@@ -63,6 +63,7 @@ class RecordingEgressRecoveryServiceTest {
         var active = LivekitEgress.EgressInfo.newBuilder()
                 .setEgressId("EG_recovered")
                 .setRoomName("room-1")
+                .setRoomComposite(roomComposite("/out/egress/2026/08/04/a.mp4"))
                 .setStartedAt(Instant.parse("2026-08-04T02:00:02Z").toEpochMilli()
                         * 1_000_000L)
                 .setStatus(LivekitEgress.EgressStatus.EGRESS_ACTIVE)
@@ -77,6 +78,37 @@ class RecordingEgressRecoveryServiceTest {
 
         verify(stateService).applyApiResult(10L, active);
         verify(client, never()).stop("EG_recovered");
+    }
+
+    @Test
+    void ignoresNewerEgressFromAnotherCallInSharedRoom() {
+        var context = context(null, RecordingStatus.STARTING);
+        var expected = LivekitEgress.EgressInfo.newBuilder()
+                .setEgressId("EG_expected")
+                .setRoomName("room-1")
+                .setRoomComposite(roomComposite("/out/egress/2026/08/04/a.mp4"))
+                .setStartedAt(Instant.parse("2026-08-04T02:00:02Z").toEpochMilli()
+                        * 1_000_000L)
+                .setStatus(LivekitEgress.EgressStatus.EGRESS_ACTIVE)
+                .build();
+        var otherCall = LivekitEgress.EgressInfo.newBuilder()
+                .setEgressId("EG_other")
+                .setRoomName("room-1")
+                .setRoomComposite(roomComposite("/out/egress/2026/08/04/other.mp4"))
+                .setStartedAt(Instant.parse("2026-08-04T02:00:05Z").toEpochMilli()
+                        * 1_000_000L)
+                .setStatus(LivekitEgress.EgressStatus.EGRESS_ACTIVE)
+                .build();
+        when(stateService.getRecoveryContext(10L)).thenReturn(context);
+        when(capacityGuard.claimOrRenew(10L)).thenReturn(true);
+        when(client.listByRoom("room-1")).thenReturn(List.of(expected, otherCall));
+        when(stateService.applyApiResult(10L, expected)).thenReturn(
+                new RecordingEgressStateService.ApplyResult(true, false, "EG_expected"));
+
+        service.recoverOne(10L);
+
+        verify(stateService).applyApiResult(10L, expected);
+        verify(stateService, never()).applyApiResult(10L, otherCall);
     }
 
     @Test
@@ -122,6 +154,17 @@ class RecordingEgressRecoveryServiceTest {
         return LivekitEgress.EgressInfo.newBuilder()
                 .setEgressId(egressId)
                 .setStatus(status)
+                .build();
+    }
+
+    private LivekitEgress.RoomCompositeEgressRequest roomComposite(String outputPath) {
+        LivekitEgress.EncodedFileOutput output = LivekitEgress.EncodedFileOutput.newBuilder()
+                .setFilepath(outputPath)
+                .build();
+        return LivekitEgress.RoomCompositeEgressRequest.newBuilder()
+                .setRoomName("room-1")
+                .setFile(output)
+                .addFileOutputs(output)
                 .build();
     }
 

@@ -9,7 +9,9 @@ package com.ssafy.backend.meeting.dto;
  *
  * @param applicationCount 취소를 제외한 응모 수
  * @param selectedCount 당첨 처리된 응모 수
- * @param participantCount 확정된 참가자 수
+ * @param participantCount 확정된 전체 참가자 수
+ * @param applicationParticipantCount 응모 추첨으로 확정된 참가자 수
+ * @param externalSelectionParticipantCount 외부 선별 명단으로 확정된 참가자 수
  * @param completedCallCount 정상 종료된 영상통화 수
  * @param noShowCount 호출에 응답하지 않아 노쇼로 처리된 대기열 항목 수
  * @param failedCallCount 연결에 실패한 영상통화 수
@@ -20,6 +22,8 @@ public record FanMeetingStatisticsResponse(
         long applicationCount,
         long selectedCount,
         long participantCount,
+        long applicationParticipantCount,
+        long externalSelectionParticipantCount,
         long completedCallCount,
         long noShowCount,
         long failedCallCount,

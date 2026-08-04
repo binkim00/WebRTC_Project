@@ -3,8 +3,8 @@
 ## 목표
 
 기존 브라우저 업로드 녹화와 조회·다운로드·7일 만료 정책을 유지하면서, 통화 세션별
-LiveKit Egress 작업을 시작부터 파일 제공까지 멱등하게 추적한다. 이 문서는 데이터 모델과
-상태 전이만 확정하며 LiveKit API 호출과 webhook 처리는 다음 구현 단계에서 진행한다.
+LiveKit Egress 작업을 시작부터 파일 제공까지 멱등하게 추적한다. 이 문서는 현재 구현된
+데이터 모델, 상태 전이, LiveKit API·webhook 연동과 복구 정책을 함께 설명한다.
 
 ## 현재 구조에서 재사용할 부분
 
@@ -88,8 +88,8 @@ LiveKit이 보내는 Egress webhook 이름은 `egress_started`, `egress_updated`
 4. `CallSession`이 실제 `ACTIVE` 상태
 
 `recordingEnabled`는 운영자 측 녹화 의사, `recordingConsentAt`은 팬의 동의로 사용한다.
-현재 참가자 엔티티에는 동의 시각 컬럼만 있고 이를 기록하는 도메인 메서드와 API가 없으므로
-Egress 연동 전에 동의 저장 경로를 추가해야 한다.
+팬은 통화 입장 전에 동의 API를 호출하며, 이미 동의한 통화에서는 재호출해도 같은 동의
+시각을 반환한다.
 
 Room은 팬미팅 전체에서 공유되므로 `room_finished`를 녹화 종료 기준으로 사용하면 안 된다.
 정상 종료, 시간 초과, 팬·인플루언서 이탈, 운영자 강제 종료 등 모든 경로가 모이는
@@ -140,21 +140,7 @@ Room은 팬미팅 전체에서 공유되므로 `room_finished`를 녹화 종료 
   선택한다. 따라서 기존 통화당 1개 unique 제약을 유지한다.
 - Egress가 `FAILED`인 통화에 브라우저 파일을 덮어쓰는 fallback은 첫 연동 범위에서 제외한다.
 
-## 다음 구현 단계 체크리스트
-
-1. `RecordingSource`와 `STARTING` 상태 및 엔티티 전이 메서드 추가
-2. 위 컬럼과 인덱스를 안전하게 추가하고 기존 행의 `source` backfill
-3. 참가자 녹화 동의 저장 메서드·API 추가
-4. Egress 시작·중지 클라이언트와 after-commit 실행 경계 구성
-5. 통화 활성화와 공통 종료 경로에 녹화 오케스트레이터 연결
-6. Egress webhook의 중복·역순 이벤트 처리와 복구 조회 구현
-7. 상태 전이, 중복 webhook, 시작 실패, 중지 실패, 백엔드 재시작 복구 테스트 추가
-
-운영 DB 스키마 적용과 운영 환경의 실제 Egress API 호출은 아직 수행하지 않는다.
-
-## 7단계 구현 상태
-
-다음 항목을 `lab2` 작업 트리에 구현했다.
+## 구현 상태
 
 - 기존 `Recording`에 Egress 출처·상태·작업 ID·Room·시각·실패 정보 필드 추가
 - `POST /api/v1/call-sessions/{callSessionId}/recordings/consent` 동의 API 추가
@@ -163,8 +149,10 @@ Room은 팬미팅 전체에서 공유되므로 `room_finished`를 녹화 종료 
 - `egress_started`, `egress_updated`, `egress_ended` webhook 상태 반영
 - DB 커밋 후 외부 API 호출 및 응답 저장용 `REQUIRES_NEW` 트랜잭션 경계
 - 중복·역순 상태 전이와 시작 응답 전 통화 종료 경합 처리
+- 완료 파일의 경로·존재·크기 검증 후 `AVAILABLE` 전환 및 7일 보관 정책 연결
+- 백엔드 재시작 시 `egressId` 또는 요청 출력 경로로 기존 작업을 복구
 - 운영 기능 플래그 `RECORDING_EGRESS_ENABLED` 추가, 기본값 `false`
 
-8단계 파일 저장 연동 전까지 `EGRESS_COMPLETE`는 `PROCESSING`과 Egress 종료 시각까지만
-저장한다. 실제 MP4 존재·경로·크기·길이를 검증해 `AVAILABLE`로 바꾸는 처리는 아직 하지
-않았으므로 기능 플래그를 켜면 안 된다.
+운영 DB의 신규 컬럼은 현재 프로젝트 정책대로 Hibernate `ddl-auto=update`가 적용한다.
+기능 플래그는 기본적으로 꺼져 있으며, 운영 전환은 Egress worker 상태와 저장 경로를 먼저
+검증한 뒤 runbook의 단계적 활성화 절차로 수행한다.

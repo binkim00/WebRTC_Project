@@ -1,3 +1,4 @@
+import { getAuthSession } from '../../api/auth'
 import { InfluencerFanListPage } from '../influencer/InfluencerFanListPage'
 
 /**
@@ -5,5 +6,6 @@ import { InfluencerFanListPage } from '../influencer/InfluencerFanListPage'
  * 매니저와 인플루언서가 같은 API와 UI를 공유하는 공통 화면이다.
  */
 export function FanMeetingParticipantsPage() {
-  return <InfluencerFanListPage />
+  // 공통 URL로 진입해도 실제 역할을 전달해 매니저를 인플루언서 전용 기록 경로로 보내지 않는다.
+  return <InfluencerFanListPage viewerRole={getAuthSession()?.role} />
 }

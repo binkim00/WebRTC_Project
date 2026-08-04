@@ -11,15 +11,18 @@ import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
+import { isEmailVerificationEnabled } from '../../config/features'
 import {
   AlertBanner,
   Avatar,
   Button,
   Card,
   CardContent,
+  EmailVerificationNotice,
   Select,
   Spinner,
   TextField,
+  WithdrawAccountSection,
 } from '../../components'
 
 // 백엔드 PreferredLanguage Enum(KOREAN, ENGLISH)과 동일한 값만 사용한다.
@@ -150,10 +153,28 @@ export function FanProfilePage() {
           {loadError}
         </AlertBanner>
       ) : null}
+      {/* 회원정보 수정과 이메일 인증 완료가 같은 배너를 쓰므로 제목은 중립적으로 둔다. */}
       {saveNotice ? (
-        <AlertBanner title="수정 완료" variant="success">
+        <AlertBanner title="처리 완료" variant="success">
           {saveNotice}
         </AlertBanner>
+      ) : null}
+
+      {/* 미인증이 확정된 경우에만 안내한다. 구버전 백엔드는 필드가 없어(undefined) 표시하지 않는다. */}
+      {isEmailVerificationEnabled && profile?.emailVerified === false ? (
+        <Card>
+          <CardContent>
+            <EmailVerificationNotice
+              email={profile.email}
+              onVerified={() => {
+                setProfile((current) =>
+                  current ? { ...current, emailVerified: true } : current,
+                )
+                setSaveNotice('이메일 인증이 완료되었어요. 이제 팬미팅 응모에 참여할 수 있습니다.')
+              }}
+            />
+          </CardContent>
+        </Card>
       ) : null}
 
       {isLoading ? (
@@ -327,17 +348,7 @@ export function FanProfilePage() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
-        {/* TODO: 회원 탈퇴 API가 아직 백엔드에 없어 비활성화 상태로 둡니다. */}
-        <button
-          className="cursor-not-allowed text-sm text-[var(--color-text-tertiary)] underline underline-offset-4"
-          disabled
-          title="회원탈퇴 기능은 준비 중입니다."
-          type="button"
-        >
-          회원탈퇴
-        </button>
-      </div>
+      <WithdrawAccountSection description="탈퇴하면 응모 내역과 팬미팅 참여 기록을 다시 볼 수 없습니다." />
     </div>
   )
 }

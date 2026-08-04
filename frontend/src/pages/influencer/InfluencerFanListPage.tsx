@@ -10,7 +10,7 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
-import { getAuthSession } from '../../api/auth'
+import { getAuthSession, type LoginRole } from '../../api/auth'
 import {
   fetchFanMemos,
   fetchMeetingDetail,
@@ -24,6 +24,7 @@ import {
   type QueueEntry,
   type QueueStatus,
 } from '../../api/fanMeetingParticipants'
+import { isQueueNotInitialized } from '../../api/queue'
 import {
   AlertBanner,
   Badge,
@@ -215,12 +216,22 @@ function errorMessage(error: unknown) {
   return '팬 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
 }
 
-export function InfluencerFanListPage() {
+export type InfluencerFanListPageProps = {
+  /** 공통 참가자 화면에서 전달하는 실제 조회자 역할이다. 미지정 시 로그인 세션을 사용한다. */
+  viewerRole?: LoginRole
+}
+
+export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps = {}) {
   const { fanMeetingId } = useParams<{ fanMeetingId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const isPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
-  const authToken = getAuthSession()?.accessToken
+  const authSession = getAuthSession()
+  const authToken = authSession?.accessToken
+  const effectiveRole = viewerRole ?? authSession?.role
+  // 팬 메모 API는 인플루언서 본인 범위이므로 매니저 화면에서는 호출하거나 링크하지 않는다.
+  const canUseFanRecords =
+    isPreview || effectiveRole === 'INFLUENCER' || effectiveRole === 'SOLO_INFLUENCER'
 
   const [meeting, setMeeting] = useState<MeetingDetail>()
   const [participants, setParticipants] = useState<FanMeetingParticipant[]>([])
@@ -277,22 +288,64 @@ export function InfluencerFanListPage() {
     setLoading(true)
     setLoadError(undefined)
 
-    void Promise.all([
-      fetchMeetingDetail(fanMeetingId, authToken, controller.signal),
-      fetchParticipants(
-        fanMeetingId,
-        { keyword, page: page - 1, size: PAGE_SIZE },
-        authToken,
-        controller.signal,
-      ),
-      fetchMeetingQueue(fanMeetingId, authToken, controller.signal),
-    ])
-      .then(([meetingResponse, participantResponse, queueResponse]) => {
+    void (async () => {
+      const [meetingResponse, firstParticipantPage, queueResponse] = await Promise.all([
+        fetchMeetingDetail(fanMeetingId, authToken, controller.signal),
+        fetchParticipants(
+          fanMeetingId,
+          { keyword, page: 0, size: 100 },
+          authToken,
+          controller.signal,
+        ),
+        // 대기열은 상태 필터를 보정하는 보조 정보일 뿐이다. 대기열을 아직 열지 않았거나
+        // 팬미팅이 종료되면 백엔드가 409 QUEUE_NOT_INITIALIZED를 반환하는데, 이때
+        // Promise.all이 함께 깨져 팬 목록 전체가 "불러오지 못했습니다"로 실패했다.
+        // 빈 대기열로 대체하면 참가자 API가 주는 queueStatus로 그대로 표시할 수 있다.
+        fetchMeetingQueue(fanMeetingId, authToken, controller.signal).catch(
+          (reason: unknown) => {
+            if (isQueueNotInitialized(reason)) return { entries: [] } as MeetingQueue
+            throw reason
+          },
+        ),
+      ])
+      const allParticipants = [...firstParticipantPage.content]
+
+      // 대기열 상태는 참가자 API의 서버 필터가 아니므로 전체 페이지를 합친 뒤 정확히 필터링한다.
+      for (let nextPage = 1; nextPage < firstParticipantPage.totalPages; nextPage += 1) {
+        const response = await fetchParticipants(
+          fanMeetingId,
+          { keyword, page: nextPage, size: 100 },
+          authToken,
+          controller.signal,
+        )
+        allParticipants.push(...response.content)
+      }
+
+      const queueStatusByParticipant = new Map(
+        queueResponse.entries.map((entry) => [entry.participantId, entry.status]),
+      )
+      const filteredParticipants = statusFilter === 'ALL'
+        ? allParticipants
+        : allParticipants.filter(
+            (participant) =>
+              (queueStatusByParticipant.get(participant.participantId) ??
+                participant.queueStatus) === statusFilter,
+          )
+      const pageStart = (page - 1) * PAGE_SIZE
+
+      return {
+        meetingResponse,
+        queueResponse,
+        filteredParticipants,
+        visibleParticipants: filteredParticipants.slice(pageStart, pageStart + PAGE_SIZE),
+      }
+    })()
+      .then(({ meetingResponse, queueResponse, filteredParticipants, visibleParticipants }) => {
         setMeeting(meetingResponse)
-        setParticipants(participantResponse.content)
+        setParticipants(visibleParticipants)
         setQueue(queueResponse)
-        setTotalElements(participantResponse.totalElements)
-        setTotalPages(participantResponse.totalPages)
+        setTotalElements(filteredParticipants.length)
+        setTotalPages(Math.max(1, Math.ceil(filteredParticipants.length / PAGE_SIZE)))
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) setLoadError(errorMessage(error))
@@ -302,7 +355,7 @@ export function InfluencerFanListPage() {
       })
 
     return () => controller.abort()
-  }, [authToken, fanMeetingId, isPreview, keyword, memoFilter, page])
+  }, [authToken, fanMeetingId, isPreview, keyword, memoFilter, page, statusFilter])
 
   const participantViews = useMemo<ParticipantView[]>(() => {
     const queueByParticipant = new Map(
@@ -360,7 +413,9 @@ export function InfluencerFanListPage() {
         authToken,
         controller.signal,
       ),
-      fetchFanMemos(selectedFanId, authToken, controller.signal),
+      canUseFanRecords
+        ? fetchFanMemos(selectedFanId, authToken, controller.signal)
+        : Promise.resolve({ content: [] as FanMemo[] }),
     ])
       .then(([participantDetail, memoResponse]) => {
         setSelectedParticipant((current) => ({
@@ -381,6 +436,7 @@ export function InfluencerFanListPage() {
     return () => controller.abort()
   }, [
     authToken,
+    canUseFanRecords,
     fanMeetingId,
     isPreview,
     selectedFanId,
@@ -396,6 +452,9 @@ export function InfluencerFanListPage() {
   const recentMemo = selectedMemos[0]
   const completedDeviceCheck =
     selectedParticipant?.cameraOk === true && selectedParticipant.microphoneOk === true
+  const deviceCheckAvailable =
+    selectedParticipant?.cameraOk !== undefined ||
+    selectedParticipant?.microphoneOk !== undefined
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -403,12 +462,38 @@ export function InfluencerFanListPage() {
     setKeyword(keywordInput)
   }
 
-  function openMemo() {
-    if (!fanMeetingId || !selectedParticipant) return
-    navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/fans/${selectedParticipant.fanId}/records?tab=memo`,
-    )
+  /**
+   * 팬 기록 화면 경로를 만든다.
+   *
+   * 통화 요약 조회에는 callSessionId가 필요한데 참가자 응답에는 없다.
+   * 지금 통화 중인 팬을 여는 경우에만 현재 세션을 쿼리로 넘겨 요약 탭이 동작하게 한다.
+   */
+  function recordsPath(participant: { participantId: string; fanId: string }) {
+    const callSessionId = participant.participantId === queue.currentCall?.participantId
+      ? queue.currentCall?.callSessionId
+      : undefined
+    const callSessionQuery = callSessionId
+      ? `&callSessionId=${encodeURIComponent(callSessionId)}`
+      : ''
+    return `/influencer/fan-meetings/${encodeURIComponent(fanMeetingId ?? '')}/fans/${encodeURIComponent(participant.fanId)}/records?tab=memo${callSessionQuery}`
   }
+
+  function openMemo() {
+    if (!canUseFanRecords || !fanMeetingId || !selectedParticipant) return
+    navigate(recordsPath(selectedParticipant))
+  }
+
+  const headerAction = effectiveRole === 'SOLO_INFLUENCER'
+    ? {
+        label: '운영 콘솔',
+        to: `/manager/fan-meetings/${encodeURIComponent(fanMeetingId ?? '')}/monitor`,
+      }
+    : effectiveRole === 'MANAGER'
+      ? {
+          label: '팬미팅 관리',
+          to: `/manager/fan-meetings/${encodeURIComponent(fanMeetingId ?? '')}`,
+        }
+      : { label: '인플루언서 보기', to: '/influencer/mypage/profile' }
 
   return (
     <div>
@@ -425,11 +510,11 @@ export function InfluencerFanListPage() {
           </p>
         </div>
         <Button
-          onClick={() => navigate('/influencer/mypage/profile')}
+          onClick={() => navigate(headerAction.to)}
           size="sm"
           variant="secondary"
         >
-          인플루언서 보기
+          {headerAction.label}
         </Button>
       </header>
 
@@ -444,7 +529,8 @@ export function InfluencerFanListPage() {
           ['팬미팅명', meeting?.title ?? '불러오는 중'],
           ['인플루언서', meeting?.influencer.influencerName ?? '불러오는 중'],
           ['진행 상태', meeting?.status === 'IN_PROGRESS' ? '● 진행 중' : meeting?.status ?? '확인 중'],
-          ['전체 참가자', `${meeting?.application?.capacity ?? totalElements ?? 0}명`],
+          // 모집 정원이 아닌 참가자 API의 실제 확정 인원을 보여준다.
+          ['전체 참가자', `${totalElements}명`],
         ].map(([label, value], index) => (
           <dl
             className={[
@@ -587,19 +673,24 @@ export function InfluencerFanListPage() {
                           >
                             {deviceIssue ? (
                               <WarningCircle aria-hidden size={17} weight="fill" />
-                            ) : (
+                            ) : participant.cameraOk === true &&
+                              participant.microphoneOk === true ? (
                               <CheckCircle aria-hidden size={17} weight="fill" />
+                            ) : (
+                              <span aria-hidden>—</span>
                             )}
                             {deviceIssue
                               ? '문제 있음'
                               : participant.cameraOk === true &&
                                   participant.microphoneOk === true
                                 ? '완료'
-                                : '확인 전'}
+                                : '정보 없음'}
                           </span>
                         </td>
                         <td className="px-5 py-4 font-semibold">
-                          {participant.hasMemo === true
+                          {!canUseFanRecords
+                            ? '인플루언서 전용'
+                            : participant.hasMemo === true
                             ? '있음'
                             : participant.hasMemo === false
                               ? '없음'
@@ -617,18 +708,18 @@ export function InfluencerFanListPage() {
                             >
                               상세 보기
                             </button>
-                            <button
-                              className="font-bold hover:text-[var(--color-primary-coral)] hover:underline"
-                              onClick={() => {
-                                setSelectedParticipant(participant)
-                                navigate(
-                                  `/influencer/fan-meetings/${fanMeetingId}/fans/${participant.fanId}/records?tab=memo`,
-                                )
-                              }}
-                              type="button"
-                            >
-                              메모 보기
-                            </button>
+                            {canUseFanRecords ? (
+                              <button
+                                className="font-bold hover:text-[var(--color-primary-coral)] hover:underline"
+                                onClick={() => {
+                                  setSelectedParticipant(participant)
+                                  navigate(recordsPath(participant))
+                                }}
+                                type="button"
+                              >
+                                메모 보기
+                              </button>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -687,7 +778,11 @@ export function InfluencerFanListPage() {
                     />
                     최근 메모
                   </h3>
-                  {detailLoading ? (
+                  {!canUseFanRecords ? (
+                    <p className="mt-4 text-sm leading-6 text-[var(--color-text-secondary)]">
+                      팬 메모는 담당 인플루언서와 솔로 인플루언서 계정에서만 확인할 수 있습니다.
+                    </p>
+                  ) : detailLoading ? (
                     <div className="mt-4">
                       <Spinner label="팬 메모를 불러오는 중" />
                     </div>
@@ -752,18 +847,26 @@ export function InfluencerFanListPage() {
                         <dd
                           className={[
                             'text-sm font-extrabold',
-                            item.ok
+                            item.ok === true
                               ? 'text-[var(--color-success)]'
-                              : 'text-[var(--color-warning)]',
+                              : item.ok === false
+                                ? 'text-[var(--color-warning)]'
+                                : 'text-[var(--color-text-tertiary)]',
                           ].join(' ')}
                         >
-                          {item.ok ? item.goodLabel : '확인 필요'}
+                          {item.ok === true
+                            ? item.goodLabel
+                            : item.ok === false
+                              ? '확인 필요'
+                              : '정보 없음'}
                         </dd>
                       </div>
                     ))}
                   </dl>
                   <p className="mt-4 text-xs leading-5 text-[var(--color-text-tertiary)]">
-                    {completedDeviceCheck
+                    {!deviceCheckAvailable
+                      ? '현재 서버 참가자 응답에 장비 점검 결과가 없어 대기열 접속 상태만 확인할 수 있습니다.'
+                      : completedDeviceCheck
                       ? '카메라와 마이크 점검이 완료되었습니다.'
                       : '장비 이상은 입장을 차단하지 않으며 운영자가 상태를 확인합니다.'}
                   </p>

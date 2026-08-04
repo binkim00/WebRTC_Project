@@ -203,6 +203,33 @@ class RecordingApiIntegrationTest {
                 .isNotNull();
     }
 
+    /** 새로고침 뒤 이미 시작된 통화에서도 기존 동의를 멱등하게 다시 확인할 수 있다. */
+    @Test
+    void returnsExistingConsentAfterCallStarts() throws Exception {
+        Fixture fixture = fixture("consent-refresh");
+
+        mockMvc.perform(post(consentPath(fixture.callSessionId()))
+                        .header("Authorization", bearer(fixture.fan())))
+                .andExpect(status().isOk());
+
+        CallSession callSession = callSessionRepository
+                .findAccessContextById(fixture.callSessionId()).orElseThrow();
+        LocalDateTime firstConsentAt = callSession.getQueueEntry().getParticipant()
+                .getRecordingConsentAt();
+        callSession.activate(LocalDateTime.now(), 300);
+        callSessionRepository.saveAndFlush(callSession);
+
+        mockMvc.perform(post(consentPath(fixture.callSessionId()))
+                        .header("Authorization", bearer(fixture.fan())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.consentedAt").exists());
+
+        CallSession reloaded = callSessionRepository
+                .findAccessContextById(fixture.callSessionId()).orElseThrow();
+        assertThat(reloaded.getQueueEntry().getParticipant().getRecordingConsentAt())
+                .isEqualTo(firstConsentAt);
+    }
+
     /** MP4 업로드가 허용되는지 검증한다. */
     @Test
     void uploadsMp4Recording() throws Exception {
@@ -658,7 +685,7 @@ class RecordingApiIntegrationTest {
         application.select(LocalDateTime.of(2026, 7, 21, 10, 0));
         applicationRepository.saveAndFlush(application);
         Participant participant = participantRepository.saveAndFlush(
-                Participant.create(meeting, fan, application, 1));
+                Participant.createFromApplication(meeting, fan, application, 1));
         QueueEntry queueEntry = queueEntryRepository.saveAndFlush(
                 QueueEntry.create(meeting, participant));
         CallSession callSession = callSessionRepository.saveAndFlush(

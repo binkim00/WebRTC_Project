@@ -5,16 +5,10 @@
  * 목록·상세·생성 화면이 모두 이 모듈의 판정 결과를 공유해 버튼 노출 기준을 통일한다.
  */
 
-/** 백엔드 `FanMeetingStatus`와 1:1로 대응하는 팬미팅 진행 상태다. */
-export type MeetingLifecycleStatus =
-  | 'DRAFT'
-  | 'PUBLISHED'
-  | 'APPLICATION_OPEN'
-  | 'APPLICATION_CLOSED'
-  | 'READY'
-  | 'LIVE'
-  | 'ENDED'
-  | 'CANCELED'
+import type { FanMeetingStatus } from '../../api/meetingManagement'
+
+/** API와 화면이 서로 다른 상태 유니온을 만들지 않도록 백엔드 응답 타입을 그대로 재사용한다. */
+export type MeetingLifecycleStatus = FanMeetingStatus
 
 /** 팬미팅 상태 코드를 화면용 한국어 라벨로 바꾼다. */
 export const meetingStatusLabels: Record<string, string> = {
@@ -104,6 +98,12 @@ export type MeetingActions = {
   canPublishResults: boolean
   canStart: boolean
   canEnd: boolean
+  /** 예약 일시와 관계없이 응모 접수를 즉시 열 수 있는지 여부다. */
+  canOpenApplicationsNow: boolean
+  /** 예약 마감 일시와 관계없이 응모 접수를 즉시 닫을 수 있는지 여부다. */
+  canCloseApplicationsNow: boolean
+  /** 예약 시작 일시 전이라도 논리적 선행 조건을 지키며 시작할 수 있는지 여부다. */
+  canStartNow: boolean
   /** 응모가 시작되어 대부분의 수정이 잠긴 상태인지 여부다. */
   applicationStarted: boolean
   /** 시작 버튼을 누를 수 없을 때 사용자에게 보여 줄 이유다. */
@@ -158,7 +158,8 @@ export function getAvailableActions(context: MeetingActionContext): MeetingActio
       ? null
       : new Date(scheduledStartAt.getTime() - (context.earlyStartMinutes ?? 30) * 60_000)
   const startTimeReached = earliestStartAt === null || now >= earliestStartAt
-  const canStart = status === 'READY' && participantCount > 0 && startTimeReached
+  const canStartNow = status === 'READY' && participantCount > 0
+  const canStart = canStartNow && startTimeReached
 
   let startBlockedReason: string | undefined
   if (status === 'READY' && !canStart) {
@@ -185,6 +186,10 @@ export function getAvailableActions(context: MeetingActionContext): MeetingActio
     canPublishResults: drawCompleted && !resultsPublished && status === 'APPLICATION_CLOSED',
     canStart,
     canEnd: status === 'LIVE',
+    // 수동 운영 전환은 시간만 우회한다. 상태 순서와 참가자 존재 조건은 그대로 지킨다.
+    canOpenApplicationsNow: status === 'PUBLISHED' && context.applicationEnabled === true,
+    canCloseApplicationsNow: status === 'APPLICATION_OPEN',
+    canStartNow,
     applicationStarted,
     startBlockedReason,
   }
@@ -257,19 +262,21 @@ export function getScheduleErrors(input: MeetingScheduleInput): string[] {
   return errors
 }
 
-/** 팬미팅 상세 화면의 탭 식별자다. */
+/** 팬미팅 상세 화면의 탭 식별자다. test-control은 시연·테스트 전용 탭이다. */
 export type MeetingDetailTab =
   | 'overview'
   | 'settings'
   | 'application-form'
   | 'applicants'
+  | 'test-control'
 
 /** 주소창의 `tab` 파라미터를 유효한 탭 값으로 정규화한다. */
 export function normalizeDetailTab(value: string | null): MeetingDetailTab {
   if (
     value === 'settings' ||
     value === 'application-form' ||
-    value === 'applicants'
+    value === 'applicants' ||
+    value === 'test-control'
   ) {
     return value
   }
