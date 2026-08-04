@@ -45,6 +45,7 @@ export function ConnectedCallRoom({
     recordingEnabled,
     recordingPolicyError,
     callDurationSec,
+    sidePanel,
 }: ConnectedCallRoomProps) {
   const navigate = useNavigate()
   const room = useRoomContext()
@@ -261,7 +262,30 @@ export function ConnectedCallRoom({
           description: '잠시만 기다려 주세요.',
           showLink: true,
         }
-      : undefined
+      : connectionState === ConnectionState.Disconnected && !departurePending
+        ? {
+            title: '연결이 끊어졌어요',
+            description: '현재 팬 정보는 그대로 유지됩니다.',
+            showLink: false,
+            actionLabel: '다시 연결',
+            // LiveKit 자동 복구가 끝내 실패한 상태라, 토큰 발급부터 다시 시작한다.
+            onAction: () => window.location.reload(),
+          }
+        : undefined
+
+  // dc.html의 device-error — 통화를 가리지 않고 상단 배너로 원인과 복구 행동을 준다.
+  const deviceAlert = mediaError
+    ? {
+        title: '장치를 확인해 주세요',
+        description: mediaError,
+        actionLabel: '장치 재확인',
+        onAction: () => {
+          setMediaError(undefined)
+          void localParticipant.setCameraEnabled(true).catch(() => undefined)
+          void localParticipant.setMicrophoneEnabled(true).catch(() => undefined)
+        },
+      }
+    : undefined
 
   const footNote = mediaError
     ? '장치 문제가 계속되면 팬미팅을 나간 뒤 장비 점검을 다시 진행해 주세요.'
@@ -301,7 +325,10 @@ export function ConnectedCallRoom({
   return (
     // 어두운 콘솔 — 헤더 아래를 통째로 다크 면으로 칠한다. (강도 1, 코랄 0회)
     <div className="-mx-3 -my-5 min-h-[calc(100dvh-var(--service-header-height))] bg-[var(--color-surface-dark)] px-4 pb-8 pt-[22px] sm:-mx-6 sm:px-6 lg:-mx-10 lg:-my-6 lg:px-10">
-      <div className="mx-auto grid w-full max-w-[1240px] gap-4">
+      <div
+        className={`mx-auto grid w-full items-start gap-[22px] ${sidePanel ? 'max-w-[1320px] min-[941px]:grid-cols-[minmax(0,1fr)_260px]' : 'max-w-[1240px]'}`}
+      >
+      <div className="grid min-w-0 gap-4">
       <RoomAudioRenderer />
       <CallStage
         cameraEnabled={isCameraEnabled}
@@ -309,6 +336,7 @@ export function ConnectedCallRoom({
         captionLines={captionLines}
         connected={isConnected}
         connectionLabel={connectionLabel}
+        deviceAlert={deviceAlert}
         localVideo={localVideo}
         mediaAction={mediaAction}
         microphoneEnabled={isMicrophoneEnabled}
@@ -322,17 +350,13 @@ export function ConnectedCallRoom({
         remoteVideo={remoteVideo}
         // 통화 시작 전에는 아직 줄어들 남은 시간이 없으므로 설정된 통화 시간임을 밝힌다.
         timeLabel={remaining.counting ? '남은 시간' : '통화 시간'}
+        // 종료 직전에는 타이머가 경고색으로 바뀌어 마무리를 준비하게 한다.
+        timeUrgent={remaining.counting && remaining.label <= '00:05'}
         timeValue={remaining.label}
       />
 
       {footNote ? (
         <p className="text-[15px] font-medium leading-[1.6] text-white/65">{footNote}</p>
-      ) : null}
-
-      {mediaError ? (
-        <AlertBanner title="장비 상태를 변경하지 못했습니다" variant="error">
-          {mediaError}
-        </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && recordingPolicyError ? (
@@ -388,6 +412,9 @@ export function ConnectedCallRoom({
         onOpenChange={setEndDialogOpen}
         open={endDialogOpen}
       />
+      </div>
+
+      {sidePanel}
       </div>
     </div>
   )

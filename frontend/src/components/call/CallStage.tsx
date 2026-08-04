@@ -12,6 +12,17 @@ export type CallStageOverlay = {
   title: string
   description: string
   showLink: boolean
+  /** 연결 종료처럼 사용자가 직접 복구해야 하는 상태의 행동 버튼이다. */
+  actionLabel?: string
+  onAction?: () => void
+}
+
+/** 통화를 유지한 채 상단에 띄우는 장치 이상 배너다. (device-error 상태) */
+export type CallStageDeviceAlert = {
+  title: string
+  description: string
+  actionLabel: string
+  onAction: () => void
 }
 
 export type CallStageProps = {
@@ -25,6 +36,8 @@ export type CallStageProps = {
   connected: boolean
   timeLabel: string
   timeValue: string
+  /** 종료가 임박하면 타이머를 경고색으로 바꾼다. */
+  timeUrgent?: boolean
   cameraEnabled: boolean
   microphoneEnabled: boolean
   captionEnabled: boolean
@@ -32,6 +45,7 @@ export type CallStageProps = {
   captionLines?: readonly CaptionLine[]
   mediaAction?: 'camera' | 'microphone'
   overlay?: CallStageOverlay
+  deviceAlert?: CallStageDeviceAlert
   onCameraToggle: () => void
   onMicrophoneToggle: () => void
   onCaptionToggle: () => void
@@ -53,12 +67,14 @@ export function CallStage({
   connected,
   timeLabel,
   timeValue,
+  timeUrgent,
   cameraEnabled,
   microphoneEnabled,
   captionEnabled,
   captionLines,
   mediaAction,
   overlay,
+  deviceAlert,
   onCameraToggle,
   onMicrophoneToggle,
   onCaptionToggle,
@@ -94,7 +110,12 @@ export function CallStage({
             <span className="whitespace-nowrap text-[13px] font-semibold text-white/75">
               {timeLabel}
             </span>
-            <strong className="text-2xl font-black leading-none tracking-[-0.035em] text-white tabular-nums">
+            <strong
+              className={cn(
+                'text-2xl font-black leading-none tracking-[-0.035em] tabular-nums',
+                timeUrgent ? 'text-[var(--color-warning-on-dark)]' : 'text-white',
+              )}
+            >
               {timeValue}
             </strong>
           </p>
@@ -133,6 +154,30 @@ export function CallStage({
           </p>
         </div>
       </div>
+
+      {/* 장치 이상 배너 — 통화를 가리지 않고 상단에 원인과 복구 행동을 띄운다. */}
+      {deviceAlert ? (
+        <div
+          className="absolute inset-x-[17px] top-[74px] z-20 flex flex-wrap items-center justify-between gap-4 rounded-lg bg-[var(--color-warning)]/95 px-[15px] py-[13px]"
+          role="alert"
+        >
+          <div className="min-w-0">
+            <strong className="block text-base font-extrabold text-white">
+              {deviceAlert.title}
+            </strong>
+            <span className="mt-1 block text-[15px] font-medium text-white/90">
+              {deviceAlert.description}
+            </span>
+          </div>
+          <button
+            className="mj-font-label min-h-11 flex-none rounded-lg border border-white/40 px-4 text-[15px] text-white transition-colors hover:bg-white/10"
+            onClick={deviceAlert.onAction}
+            type="button"
+          >
+            {deviceAlert.actionLabel}
+          </button>
+        </div>
+      ) : null}
 
       {/* 내 화면 PIP */}
       <figure
@@ -220,6 +265,15 @@ export function CallStage({
                 <i className="absolute right-0 top-1/2 size-3 -translate-y-1/2 rounded-full bg-[var(--color-focus-indigo)] motion-safe:animate-[mj-packet-right_2200ms_cubic-bezier(0.35,0,0.2,1)_both]" />
                 <i className="absolute left-1/2 top-1/2 size-[15px] rounded-full bg-[color-mix(in_srgb,var(--color-primary-coral-highlight)_50%,var(--color-focus-indigo))] opacity-0 motion-safe:animate-[mj-core-rhythm_2200ms_both] motion-reduce:-translate-x-1/2 motion-reduce:-translate-y-1/2 motion-reduce:opacity-100" />
               </div>
+            ) : null}
+            {overlay.actionLabel && overlay.onAction ? (
+              <button
+                className="mj-font-emphasis mt-5 min-h-[52px] rounded-[10px] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] px-[26px] text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                onClick={overlay.onAction}
+                type="button"
+              >
+                {overlay.actionLabel}
+              </button>
             ) : null}
           </div>
         </div>

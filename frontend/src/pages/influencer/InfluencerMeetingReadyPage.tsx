@@ -1,37 +1,20 @@
-import {
-  ArrowRight,
-  CalendarBlank,
-  Camera,
-  CheckCircle,
-  ListChecks,
-  Microphone,
-  NotePencil,
-  VideoCamera,
-  WarningCircle,
-} from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  AlertBanner,
-  Avatar,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  MediaDevicePreview,
-} from '../../components'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AlertBanner, MediaDevicePreview } from '../../components'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
 import { serverLocalDateTimeMs } from '../../api/meetingManagement'
 import {
   fetchFanMemos,
-  fetchMeetingDetail,
   fetchMeetingQueue,
   type FanMemo,
-  type MeetingDetail,
   type MeetingQueue,
 } from '../../api/fanMeetingParticipants'
+import {
+  fetchPublicFanMeetingDetail,
+  type PublicFanMeetingDetail,
+} from '../../api/fanMeetings'
+import { getMeetingNotice, getMeetingNotices } from '../../api/notices'
 import { useMediaDeviceCheck } from '../../hooks/useMediaDeviceCheck'
 
 type DeviceCheckResult = {
@@ -39,11 +22,6 @@ type DeviceCheckResult = {
   microphoneOk?: boolean
   speakerOk?: boolean
   networkOk?: boolean
-  checkedAt?: string
-  /** 장비 점검 화면에서 선택한 장치 ID. 준비실에서 같은 장치로 복원할 때 사용한다. */
-  cameraDeviceId?: string
-  microphoneDeviceId?: string
-  speakerDeviceId?: string
 }
 
 /** 장비 점검 페이지가 저장한 결과를 읽는다. 없으면 점검 전으로 간주한다. */
@@ -70,21 +48,19 @@ function isDeviceCheckPassed(result: DeviceCheckResult | null): boolean {
   )
 }
 
+function pad(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+/** 2026.07.28 20:00 — L0 날짜·시간 표기다. */
 function formatScheduledAt(value?: string) {
   if (!value) return '일정 확인 중'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+/** 90초 · 10분 30초 · 30분 — 개요 셀의 시간 표기다. */
 function formatDurationSec(totalSeconds: number) {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '—'
   const minutes = Math.floor(totalSeconds / 60)
@@ -97,35 +73,33 @@ function formatDurationSec(totalSeconds: number) {
 export function InfluencerMeetingReadyPage() {
   const navigate = useNavigate()
   const { fanMeetingId } = useParams()
-  const [meeting, setMeeting] = useState<MeetingDetail>()
+  const [detail, setDetail] = useState<PublicFanMeetingDetail>()
   const [queue, setQueue] = useState<MeetingQueue>()
   const [currentFanMemo, setCurrentFanMemo] = useState<FanMemo>()
+  const [notice, setNotice] = useState<{ title: string; body: string }>()
   const [error, setError] = useState<string>()
   const [now, setNow] = useState(() => Date.now())
 
   const deviceCheck = readDeviceCheck(fanMeetingId)
   const isDeviceChecked = isDeviceCheckPassed(deviceCheck)
 
-  // 준비실에서도 카메라 미리보기와 마이크 입력 상태를 실시간으로 보여주기 위해 장비 스트림을 연다.
+  // 대기실에서도 카메라 미리보기를 실시간으로 보여주기 위해 장비 스트림을 연다.
   const {
-    audioLevel,
     errorMessage: mediaErrorMessage,
     start: startMedia,
     status: mediaStatus,
     stream,
   } = useMediaDeviceCheck()
 
-  // 준비실 진입 시 카메라·마이크 권한을 요청하고 미리보기 스트림을 시작한다.
   useEffect(() => {
     void startMedia()
   }, [startMedia])
 
-  /** 현재 스트림에서 카메라 트랙이 정상 동작 중인지 확인한다. */
   const isCameraLive =
     stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false
-  /** 현재 스트림에서 마이크 트랙이 정상 동작 중인지 확인한다. */
-  const isMicrophoneLive =
-    stream?.getAudioTracks().some((track) => track.readyState === 'live') ?? false
+  // 권한 요청이 끝났는데 카메라가 살아있지 않으면 연결 이상으로 본다.
+  const cameraBroken =
+    mediaStatus !== 'idle' && mediaStatus !== 'requesting' && !isCameraLive
 
   useEffect(() => {
     if (!fanMeetingId) return
@@ -135,8 +109,12 @@ export function InfluencerMeetingReadyPage() {
 
     const controller = new AbortController()
 
-    void fetchMeetingDetail(fanMeetingId, session.accessToken, controller.signal)
-      .then(setMeeting)
+    void fetchPublicFanMeetingDetail(
+      Number(fanMeetingId),
+      session.accessToken,
+      controller.signal,
+    )
+      .then(setDetail)
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
         setError(
@@ -149,12 +127,35 @@ export function InfluencerMeetingReadyPage() {
     return () => controller.abort()
   }, [fanMeetingId])
 
+  // 운영 공지 최신 1건 — 시작 시간 변경 같은 안내를 입장 전에 보여 준다.
+  useEffect(() => {
+    if (!fanMeetingId) return
+
+    const controller = new AbortController()
+
+    void (async () => {
+      try {
+        const page = await getMeetingNotices(fanMeetingId, { page: 0, size: 1 }, controller.signal)
+        const summary = page.content[0]
+        if (!summary) return
+        const loaded = await getMeetingNotice(fanMeetingId, summary.noticeId, controller.signal)
+        if (!controller.signal.aborted) {
+          setNotice({ title: summary.title, body: loaded.content })
+        }
+      } catch {
+        // 공지는 보조 정보라 실패해도 대기실 이용을 막지 않는다.
+      }
+    })()
+
+    return () => controller.abort()
+  }, [fanMeetingId])
+
   const loadCurrentCall = useCallback(async (signal?: AbortSignal) => {
     if (!fanMeetingId) return
 
     const session = getAuthSession()
     if (!session || (session.role !== 'INFLUENCER' && session.role !== 'SOLO_INFLUENCER')) {
-      setError('인플루언서 계정으로 로그인한 뒤 준비실을 이용해 주세요.')
+      setError('인플루언서 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
       return
     }
 
@@ -179,9 +180,9 @@ export function InfluencerMeetingReadyPage() {
   /** 대기열 오픈 시각(밀리초). 상세 정보를 아직 불러오지 못했으면 undefined다. */
   const queueOpenAtMs = useMemo(() => {
     // 서버는 offset 없는 LocalDateTime을 보내므로 KST 기준으로 해석해야 한다.
-    const time = serverLocalDateTimeMs(meeting?.operation?.queueOpenAt)
+    const time = serverLocalDateTimeMs(detail?.meeting.operation.queueOpenAt ?? undefined)
     return Number.isFinite(time) ? time : undefined
-  }, [meeting?.operation?.queueOpenAt])
+  }, [detail?.meeting.operation.queueOpenAt])
 
   /** 대기열 오픈 전인지 여부. 오픈 시각 정보가 없으면 기존처럼 바로 폴링한다. */
   const isBeforeQueueOpen = queueOpenAtMs !== undefined && now < queueOpenAtMs
@@ -232,6 +233,9 @@ export function InfluencerMeetingReadyPage() {
   )
   // 모집 정원(capacity)이 아니라 실제 대기열 참가자 수를 진행률의 분모로 사용한다.
   const totalFanCount = entries.length
+  const progressPercent = totalFanCount > 0
+    ? Math.round((completedFanCount / totalFanCount) * 100)
+    : 0
 
   const currentFanName = queue?.currentCall?.nickname ?? currentEntry?.nickname
   const currentFanId = currentEntry?.fanId
@@ -251,34 +255,15 @@ export function InfluencerMeetingReadyPage() {
     void fetchFanMemos(currentFanId, session.accessToken, controller.signal)
       .then((response) => setCurrentFanMemo(response.content[0]))
       .catch(() => {
-        // 메모 조회 실패는 준비실 이용을 막지 않는다.
+        // 메모 조회 실패는 대기실 이용을 막지 않는다.
         if (!controller.signal.aborted) setCurrentFanMemo(undefined)
       })
 
     return () => controller.abort()
   }, [currentFanId])
 
-  const sessionDurationLabel = useMemo(() => {
-    const startedAt = queue?.currentCall?.startedAt
-    const endsAt = queue?.currentCall?.endsAt
-    if (!startedAt || !endsAt) return '—'
-
-    const diffSec = (new Date(endsAt).getTime() - new Date(startedAt).getTime()) / 1000
-    return Number.isFinite(diffSec) && diffSec > 0 ? formatDurationSec(diffSec) : '—'
-  }, [queue?.currentCall?.endsAt, queue?.currentCall?.startedAt])
-
-  const elapsedLabel = useMemo(() => {
-    const startedAt = queue?.currentCall?.startedAt
-    if (!startedAt) return '—'
-
-    const elapsedSec = (now - new Date(startedAt).getTime()) / 1000
-    return Number.isFinite(elapsedSec) && elapsedSec >= 0
-      ? formatDurationSec(elapsedSec)
-      : '—'
-  }, [now, queue?.currentCall?.startedAt])
-
   const handleOpenMemo = () => {
-    if (!fanMeetingId || !currentFanId) { return }
+    if (!fanMeetingId || !currentFanId) return
     // 통화 요약 조회에는 callSessionId가 필요한데 참가자 응답에는 없다.
     // 진행 중인 통화의 상대 팬을 여는 경우에만 현재 세션을 함께 넘겨 요약 탭이 동작하게 한다.
     const callSessionId = currentEntry?.participantId === queue?.currentCall?.participantId
@@ -288,368 +273,339 @@ export function InfluencerMeetingReadyPage() {
       ? `&callSessionId=${encodeURIComponent(callSessionId)}`
       : ''
     navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/fans/${currentFanId}/records?tab=memo${callSessionQuery}`
+      `/influencer/fan-meetings/${fanMeetingId}/fans/${currentFanId}/records?tab=memo${callSessionQuery}`,
     )
-  }
-
-  const handleOpenFanList = () => {
-    if (!fanMeetingId) { return }
-    navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/fans`
-    )
-  }
-
-  const handleOpenDeviceCheck = () => {
-    if (!fanMeetingId) { return }
-    navigate(`/influencer/fan-meetings/${fanMeetingId}/device-check`)
   }
 
   const handleEnterCall = () => {
-    if (!fanMeetingId) { return }
-    if (!isDeviceChecked || !queue?.currentCall) return
+    if (!fanMeetingId) return
+    if (!isDeviceChecked || cameraBroken || !queue?.currentCall) return
     navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`
+      `/influencer/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`,
     )
   }
 
+  const influencerName = detail?.influencer.name ?? ''
+  const callDurationSec = detail?.meeting.operation.callDurationSec
+  const perFanLabel = callDurationSec !== undefined ? formatDurationSec(callDurationSec) : '—'
+  const expectedTotalLabel =
+    callDurationSec !== undefined && totalFanCount > 0
+      ? formatDurationSec(callDurationSec * totalFanCount)
+      : '—'
+  // 정확한 누적 시간 API가 없어 완료 세션 × 1인당 시간 + 현재 세션 경과로 근사한다.
+  const elapsedApproxSec = useMemo(() => {
+    if (callDurationSec === undefined) return undefined
+    const currentStartedAt = queue?.currentCall?.startedAt
+    const currentElapsed = currentStartedAt
+      ? Math.max(0, (now - new Date(currentStartedAt).getTime()) / 1000)
+      : 0
+    return completedFanCount * callDurationSec + Math.min(currentElapsed, callDurationSec)
+  }, [callDurationSec, completedFanCount, now, queue?.currentCall?.startedAt])
+
+  // dc.html의 5상태(ready/connection/unchecked/no-fan/last)를 실제 상태에 대응시킨다.
+  const noFan = !queue?.currentCall
+  const isLastFan = Boolean(queue?.currentCall && !nextEntry)
+  const blocked = cameraBroken || !isDeviceChecked || noFan
+
+  const statusLine = cameraBroken
+    ? '카메라 연결 이상 · 입장 불가'
+    : !isDeviceChecked
+      ? '장비 점검 미완료 · 입장 불가'
+      : noFan
+        ? '대기 중 · 입장 가능한 팬 없음'
+        : isLastFan
+          ? '진행 중 · 마지막 팬'
+          : `진행 중 · ${currentEntry?.position ?? '-'}번째 팬`
+  const equipLabel = cameraBroken
+    ? '장비 상태 · 카메라 연결 이상'
+    : !isDeviceChecked
+      ? '장비 상태 · 점검 미완료'
+      : '장비 상태 · 점검 완료'
+  const ctaHelp = cameraBroken
+    ? '카메라 연결을 복구하면 입장할 수 있어요. 팬의 순번은 유지됩니다.'
+    : !isDeviceChecked
+      ? '장비 점검을 마치면 입장할 수 있어요.'
+      : noFan
+        ? '입장 가능한 팬이 없습니다. 다음 팬이 준비되면 입장할 수 있어요.'
+        : isLastFan
+          ? `입장하면 오늘의 마지막 통화가 시작됩니다. ${currentFanName ?? '팬'} 님과 ${perFanLabel}입니다.`
+          : `입장하면 ${currentFanName ?? '팬'} 님과의 ${perFanLabel} 통화가 시작됩니다.`
+
   return (
-    <div className="grid gap-8 pb-8">
+    <div>
       {/* 대기열 오픈 전에는 오류 대신 오픈 예정 안내를 표시한다 */}
       {isBeforeQueueOpen ? (
-        <AlertBanner title="대기열이 아직 열리지 않았습니다" variant="info">
-          {formatScheduledAt(meeting?.operation?.queueOpenAt)} 오픈 예정입니다. 오픈되면
-          자동으로 대기열 정보를 불러옵니다. 그동안 카메라와 마이크 상태를 점검해 주세요.
+        <AlertBanner className="mb-6" title="대기열이 아직 열리지 않았습니다" variant="info">
+          {formatScheduledAt(detail?.meeting.operation.queueOpenAt ?? undefined)} 오픈
+          예정입니다. 오픈되면 자동으로 대기열 정보를 불러옵니다. 그동안 카메라와 마이크
+          상태를 점검해 주세요.
         </AlertBanner>
       ) : error ? (
-        <AlertBanner title="통화 정보를 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mb-6" title="통화 정보를 확인할 수 없습니다" variant="error">
           {error}
         </AlertBanner>
       ) : null}
 
-      <header className="grid gap-3">
-        <h1 className="text-4xl font-black leading-tight tracking-[-0.04em]">
-          팬미팅 진행
-        </h1>
-        <p className="text-[var(--color-text-secondary)]">
-          화면과 팬 정보를 확인한 뒤 영상 통화에 입장하세요.
-        </p>
-      </header>
-
-      <Card className="overflow-hidden">
-        <div className="grid lg:grid-cols-[minmax(300px,1fr)_minmax(0,1.75fr)]">
-          <div className="grid gap-5 p-6 lg:border-r lg:border-[var(--color-divider)] lg:p-8">
-            <Badge className="w-fit" variant="primary">
-              {meeting?.status === 'LIVE' ? '진행 중' : '오늘 진행'}
-            </Badge>
-            <h2 className="text-3xl font-black tracking-[-0.04em]">
-              {meeting?.title ?? '팬미팅 정보를 불러오는 중'}
-            </h2>
-            <dl className="flex flex-wrap gap-x-10 gap-y-4">
-              <div>
-                <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                  인플루언서
-                </dt>
-                <dd className="mt-2 font-extrabold">
-                  {meeting?.influencer.influencerName ?? '확인 중'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                  진행 일시
-                </dt>
-                <dd className="mt-2 flex items-center gap-2 font-extrabold">
-                  <CalendarBlank aria-hidden size={20} weight="bold" />
-                  {formatScheduledAt(meeting?.scheduledStartAt)}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <dl className="grid border-t border-[var(--color-divider)] sm:grid-cols-3 lg:border-t-0">
-            <div className="grid content-center gap-3 p-6 sm:border-r sm:border-[var(--color-divider)] lg:p-8">
-              <dt className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                현재 통화 세션 시간
-              </dt>
-              <dd className="text-2xl font-black">{sessionDurationLabel}</dd>
-            </div>
-            <div className="grid content-center gap-3 border-t border-[var(--color-divider)] p-6 sm:border-r sm:border-t-0 lg:p-8">
-              <dt className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                완료 세션
-              </dt>
-              <dd className="text-2xl font-black">
-                {completedFanCount}
-                <span className="ml-1 text-base text-[var(--color-text-tertiary)]">
-                  /{totalFanCount}
-                </span>
-              </dd>
-            </div>
-            <div className="grid content-center gap-3 border-t border-[var(--color-divider)] p-6 sm:border-t-0 lg:p-8">
-              <dt className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                현재 통화 경과 시간
-              </dt>
-              <dd className="text-2xl font-black">{elapsedLabel}</dd>
-            </div>
-          </dl>
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <h1 className="text-[26px] font-black tracking-[-0.035em]">대기실</h1>
+          <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
+            화면과 팬 정보를 확인한 뒤 영상 통화에 입장하세요.
+          </p>
         </div>
-      </Card>
+        <p
+          className={`whitespace-nowrap text-sm font-bold ${blocked ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}
+        >
+          {statusLine}
+        </p>
+      </div>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_420px]">
-        <Card className="overflow-hidden">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="flex items-center gap-2 text-lg font-extrabold">
-              <VideoCamera aria-hidden size={22} weight="fill" />
+      <section
+        aria-label="팬미팅 개요"
+        className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] lg:grid-cols-[1.5fr_1fr_1fr_1fr]"
+      >
+        <div className="py-[18px] pr-6">
+          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">오늘 진행</p>
+          <p className="mt-1.5 truncate text-lg font-extrabold tracking-[-0.025em]">
+            {detail?.meeting.title ?? '팬미팅 정보를 불러오는 중'}
+          </p>
+          <p className="mt-1 text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
+            {influencerName ? `${influencerName} · ` : ''}
+            {formatScheduledAt(detail?.meeting.scheduledStartAt)}
+          </p>
+        </div>
+        <div className="border-l border-[var(--color-divider)] px-6 py-[18px]">
+          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">팬 1명당</p>
+          <p className="mt-1.5 text-xl font-extrabold tabular-nums">{perFanLabel}</p>
+        </div>
+        <div className="border-t border-[var(--color-divider)] py-[18px] pr-6 lg:border-l lg:border-t-0 lg:px-6">
+          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">예상 총 소요</p>
+          <p className="mt-1.5 text-xl font-extrabold tabular-nums">{expectedTotalLabel}</p>
+        </div>
+        <div className="border-l border-t border-[var(--color-divider)] px-6 py-[18px] lg:border-t-0">
+          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">현재까지 진행</p>
+          <p className="mt-1.5 text-xl font-extrabold tabular-nums">
+            {elapsedApproxSec !== undefined ? formatDurationSec(elapsedApproxSec) : '—'}
+          </p>
+        </div>
+      </section>
+
+      <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_424px] lg:gap-11">
+        <section aria-labelledby="ir-cam" className="min-w-0">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-lg font-extrabold tracking-[-0.028em]" id="ir-cam">
               현재 화면
             </h2>
-            <div className="flex items-center gap-3">
-              <span
-                className={[
-                  'inline-flex size-10 items-center justify-center rounded-[var(--radius-control)]',
-                  isDeviceChecked
-                    ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
-                    : 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]',
-                ].join(' ')}
-              >
-                {isDeviceChecked ? (
-                  <CheckCircle aria-hidden size={22} weight="fill" />
-                ) : (
-                  <WarningCircle aria-hidden size={22} weight="fill" />
-                )}
-              </span>
-              <span>
-                <span className="block text-xs font-semibold text-[var(--color-text-tertiary)]">
-                  장비 상태
-                </span>
-                <span className="mt-1 block font-extrabold">
-                  {isDeviceChecked ? '점검 완료' : '점검 필요'}
-                </span>
-              </span>
-              {isDeviceChecked ? null : (
-                <Button onClick={handleOpenDeviceCheck} size="sm" variant="secondary">
-                  장비 점검하기
-                </Button>
-              )}
-            </div>
-          </CardHeader>
+            <p
+              className={`text-sm font-bold ${cameraBroken || !isDeviceChecked ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}
+            >
+              {equipLabel}
+            </p>
+          </div>
 
-          {/* 준비실에서 다시 연 카메라 스트림을 실시간 미리보기로 표시한다 */}
-          <div className="relative">
+          <figure className="relative m-0 mt-3.5 overflow-hidden rounded-[10px] border border-[var(--color-divider)] bg-[var(--color-surface-muted)]">
             <MediaDevicePreview className="rounded-none shadow-none" stream={stream} />
             {stream ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-6 pt-16">
-                <p className="text-lg font-extrabold text-white">
-                  {meeting?.influencer.influencerName ?? ''}
-                </p>
-                <p className="mt-1 text-sm text-slate-300">카메라 미리보기</p>
+              <figcaption className="absolute bottom-3.5 left-3.5 flex items-center gap-2 rounded-lg bg-[rgb(23_24_29/72%)] px-3 py-[7px]">
+                <span className="text-sm font-bold text-white">{influencerName}</span>
+                <span className="text-[13px] font-medium text-white/75">카메라 미리보기</span>
+              </figcaption>
+            ) : null}
+            {cameraBroken ? (
+              <div
+                className="absolute inset-0 grid place-items-center bg-[rgb(23_24_29/62%)] p-6"
+                role="status"
+              >
+                <div className="max-w-[340px] rounded-[10px] bg-[var(--color-surface-panel)] p-[22px] text-center">
+                  <p className="text-[17px] font-extrabold tracking-[-0.028em] text-[var(--color-warning)]">
+                    카메라 연결을 확인해 주세요
+                  </p>
+                  <p className="mt-2 text-[15px] font-medium leading-[1.6] text-[var(--color-text-body)]">
+                    {mediaErrorMessage ??
+                      '화면 연결이 불안정합니다. 연결을 확인한 뒤 상태를 다시 확인해 주세요.'}
+                  </p>
+                  <button
+                    className="mj-font-label mt-4 flex min-h-[46px] w-full items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[15px] hover:border-[var(--color-text-muted)]"
+                    onClick={() => void startMedia()}
+                    type="button"
+                  >
+                    상태 재확인
+                  </button>
+                </div>
               </div>
             ) : null}
-          </div>
+          </figure>
 
-          {/* 카메라를 열지 못한 경우 원인을 안내한다 */}
-          {mediaErrorMessage ? (
-            <div className="border-t border-[var(--color-divider)] p-5 sm:p-6">
-              <AlertBanner title="카메라를 시작하지 못했습니다" variant="warning">
-                {mediaErrorMessage}
-              </AlertBanner>
-            </div>
+          {!isDeviceChecked ? (
+            <Link
+              className="mj-font-label mt-3.5 inline-flex min-h-11 items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-[18px] text-[15px] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+              to={`/influencer/fan-meetings/${fanMeetingId}/device-check`}
+            >
+              장비 점검하기
+            </Link>
           ) : null}
+        </section>
 
-          {/* 카메라·마이크 연결 상태와 마이크 입력 레벨을 표시한다 */}
-          <div className="grid gap-5 border-t border-[var(--color-divider)] p-5 sm:grid-cols-2 sm:p-6">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-page)] text-[var(--color-text-secondary)]">
-                <Camera aria-hidden size={21} weight="bold" />
-              </span>
-              <div>
-                <p className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                  카메라
-                </p>
-                <p
-                  className={[
-                    'mt-1 text-sm font-extrabold',
-                    isCameraLive
-                      ? 'text-[var(--color-success)]'
-                      : 'text-[var(--color-text-secondary)]',
-                  ].join(' ')}
-                >
-                  {isCameraLive
-                    ? '연결됨'
-                    : mediaStatus === 'requesting'
-                      ? '연결 중'
-                      : '확인 필요'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-page)] text-[var(--color-text-secondary)]">
-                <Microphone aria-hidden size={21} weight="bold" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                    마이크
-                  </p>
-                  <p
-                    className={[
-                      'text-sm font-extrabold',
-                      isMicrophoneLive
-                        ? 'text-[var(--color-success)]'
-                        : 'text-[var(--color-text-secondary)]',
-                    ].join(' ')}
-                  >
-                    {isMicrophoneLive
-                      ? audioLevel > 0.55
-                        ? '입력 좋음'
-                        : audioLevel > 0.15
-                          ? '입력 보통'
-                          : '입력 대기'
-                      : mediaStatus === 'requesting'
-                        ? '연결 중'
-                        : '확인 필요'}
-                  </p>
-                </div>
-                {/* 마이크 입력 크기를 실시간 막대로 시각화한다 */}
-                <div
-                  aria-label={`마이크 입력 ${Math.round(audioLevel * 100)}%`}
-                  className="mt-2 flex items-end gap-1"
-                >
-                  {Array.from({ length: 16 }, (_, index) => (
-                    <span
-                      aria-hidden
-                      className={
-                        index / 16 < audioLevel
-                          ? 'h-2 flex-1 rounded-sm bg-[var(--color-primary-coral)]'
-                          : 'h-1.5 flex-1 rounded-sm bg-[var(--color-divider)]'
-                      }
-                      key={index}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
+        <aside aria-label="팬 순서와 입장" className="min-w-0">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-[13px] font-bold text-[var(--color-text-muted)]">팬 진행 순서</p>
+            <Link
+              className="text-sm font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+              to={`/influencer/fan-meetings/${fanMeetingId}/fans`}
+            >
+              참가 팬
+            </Link>
           </div>
-        </Card>
+          <p className="mt-2 text-[15px] font-extrabold tabular-nums">
+            {completedFanCount}명 완료{' '}
+            <span className="font-medium text-[var(--color-text-muted)]">
+              {currentEntry ? `· 현재 ${currentEntry.position}번째 ` : ''}· 전체 {totalFanCount}명
+            </span>
+          </p>
+          <div
+            aria-label="팬미팅 진행률"
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={progressPercent}
+            className="mt-[9px] h-1 overflow-hidden rounded-sm bg-[var(--color-surface-muted)]"
+            role="progressbar"
+          >
+            <span
+              className="block h-full bg-[var(--color-primary-coral)]"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
 
-        <Card className="overflow-hidden">
-          <CardHeader className="flex items-center justify-between gap-4">
-            <h2 className="font-extrabold">팬 진행 순서</h2>
-            <p className="text-2xl font-black text-[var(--color-primary-coral)]">
-              {completedFanCount}
-              <span className="ml-1 text-sm text-[var(--color-text-tertiary)]">
-                / {totalFanCount}명
-              </span>
-            </p>
-          </CardHeader>
-
-          <CardContent className="grid gap-6">
-            {currentFanName ? (
-              <>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold text-[var(--color-primary-coral)]">
-                      현재 팬
-                    </p>
-                    <p className="mt-2 text-2xl font-black">{currentFanName}</p>
-                  </div>
-                  {currentEntry ? (
-                    <div className="text-right">
-                      <p className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                        현재 순번
-                      </p>
-                      <p className="mt-2 text-xl font-black text-[var(--color-primary-coral)]">
-                        {currentEntry.position}번째
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <Avatar
-                    className="size-16 rounded-[var(--radius-panel)]"
-                    name={currentFanName}
-                    size="lg"
+          {currentFanName ? (
+            <section
+              aria-labelledby="ir-cur"
+              className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px]"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[13px] font-bold text-[var(--color-primary-coral)]">현재 팬</p>
+                {currentEntry ? (
+                  <p className="text-sm font-bold tabular-nums text-[var(--color-text-muted)]">
+                    {currentEntry.position}번째
+                  </p>
+                ) : null}
+              </div>
+              <div className="mt-3 flex items-center gap-3.5">
+                {currentEntry?.profileImageUrl ? (
+                  <img
+                    alt={`현재 팬 ${currentFanName}`}
+                    className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+                    src={currentEntry.profileImageUrl}
                   />
-                  <dl className="flex gap-8">
-                    <div>
-                      <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                        최근 메모
-                      </dt>
-                      <dd className="mt-1 flex items-center gap-1.5 font-extrabold">
-                        <NotePencil aria-hidden size={18} weight="bold" />
-                        {currentFanMemo ? '있음' : '없음'}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-
-                <div className="rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="font-extrabold">기존 메모</p>
-                    <button
-                      className="inline-flex items-center gap-1.5 text-sm font-bold text-[var(--color-primary-coral)]"
-                      onClick={handleOpenMemo}
-                      type="button"
-                    >
-                      <NotePencil aria-hidden size={17} weight="bold" />
-                      메모 확인하기
-                    </button>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">
-                    {currentFanMemo?.content ?? '작성된 메모가 없습니다.'}
-                  </p>
-                </div>
-              </>
-            ) : (
-              <p className="py-4 text-sm text-[var(--color-text-secondary)]">
-                현재 통화 중인 팬이 없습니다. 팬을 호출하면 정보가 표시됩니다.
-              </p>
-            )}
-          </CardContent>
-
-          {nextEntry ? (
-            <div className="border-t border-[var(--color-divider)] p-5 sm:p-6">
-              <div className="flex items-center gap-4">
-                <Avatar name={nextEntry.nickname} size="lg" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                    다음 팬
-                  </p>
-                  <p className="mt-1 font-extrabold">{nextEntry.nickname}</p>
-                  <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                    {nextEntry.position}번째 순서
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="grid size-14 flex-none place-items-center rounded-lg bg-[var(--color-surface-muted)] text-lg font-extrabold text-[var(--color-text-muted)]"
+                  >
+                    {currentFanName.slice(0, 1)}
+                  </span>
+                )}
+                <div className="min-w-0">
+                  <h3 className="text-[21px] font-black tracking-[-0.032em]" id="ir-cur">
+                    {currentFanName}
+                  </h3>
+                  <p className="mt-1 text-sm font-medium text-[var(--color-text-muted)]">
+                    {currentFanMemo ? '메모 있음' : '메모 없음'}
                   </p>
                 </div>
               </div>
-            </div>
+
+              <div className="mt-4 rounded-lg bg-[var(--color-surface-subtle)] px-4 py-3.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-[13px] font-bold text-[var(--color-text-muted)]">기존 메모</p>
+                  <button
+                    className="text-sm font-bold hover:text-[var(--color-primary-coral)]"
+                    onClick={handleOpenMemo}
+                    type="button"
+                  >
+                    메모 확인하기
+                  </button>
+                </div>
+                <p className="mt-2 text-[15px] font-medium leading-[1.65] text-[var(--color-text-body)]">
+                  {currentFanMemo?.content ?? '작성된 메모가 없습니다.'}
+                </p>
+              </div>
+            </section>
+          ) : (
+            <section
+              aria-labelledby="ir-cur-empty"
+              className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px]"
+            >
+              <h3 className="text-lg font-extrabold tracking-[-0.028em]" id="ir-cur-empty">
+                아직 입장 가능한 팬이 없습니다
+              </h3>
+              <p className="mt-2 text-[15px] font-medium leading-[1.65] text-[var(--color-text-muted)]">
+                다음 팬이 준비되면 현재 팬 정보가 표시됩니다.
+              </p>
+            </section>
+          )}
+
+          <section
+            aria-labelledby="ir-next"
+            className="mt-[22px] border-t border-[var(--color-divider)] pt-5"
+          >
+            {nextEntry ? (
+              <div className="flex items-center gap-3">
+                <div
+                  aria-label={`다음 팬 ${nextEntry.nickname}`}
+                  className="grid size-10 flex-none place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[15px] font-extrabold text-[var(--color-text-muted)]"
+                  role="img"
+                >
+                  {nextEntry.nickname.slice(0, 1)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-bold text-[var(--color-text-muted)]">
+                    다음 팬 · {nextEntry.position}번째
+                  </p>
+                  <h3 className="mt-[3px] text-base font-extrabold tracking-[-0.025em]" id="ir-next">
+                    {nextEntry.nickname}
+                  </h3>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h3 className="text-base font-extrabold tracking-[-0.025em]" id="ir-next">
+                  마지막 팬입니다
+                </h3>
+                <p className="mt-1.5 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
+                  이번 통화가 오늘의 마지막 순서예요.
+                </p>
+              </div>
+            )}
+          </section>
+
+          {notice ? (
+            <p className="mt-[22px] border-t border-[var(--color-divider)] pt-[18px] text-sm font-medium leading-[1.65] text-[var(--color-text-muted)]">
+              <strong className="block font-bold text-[var(--color-text-primary)]">
+                {notice.title}
+              </strong>
+              {notice.body}
+            </p>
           ) : null}
 
-          <div className="grid gap-4 border-t border-[var(--color-divider)] p-5 sm:p-6">
-            <Button
-              leadingIcon={<ListChecks aria-hidden size={20} weight="bold" />}
-              onClick={handleOpenFanList}
-              trailingIcon={<ArrowRight aria-hidden size={18} weight="bold" />}
-              variant="secondary"
-            >
-              팬 리스트 확인하기
-            </Button>
-
-            {isDeviceChecked ? null : (
-              <AlertBanner title="장비 점검이 필요합니다" variant="warning">
-                영상 통화에 입장하기 전에 장비 점검을 완료해 주세요.
-              </AlertBanner>
-            )}
-
-            <Button
-              className="w-full shadow-[var(--shadow-final-cta)]"
-              disabled={!isDeviceChecked || !queue?.currentCall}
-              leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
-              onClick={handleEnterCall}
-              size="lg"
-            >
-              {queue?.currentCall ? '영상 통화 입장' : '팬 호출 대기 중'}
-            </Button>
-          </div>
-        </Card>
+          <button
+            className={`mj-font-emphasis mt-[22px] min-h-14 w-full rounded-[10px] border text-[17px] transition-colors ${
+              blocked
+                ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
+                : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:bg-[var(--color-primary-coral-hover)]'
+            }`}
+            disabled={blocked}
+            onClick={handleEnterCall}
+            type="button"
+          >
+            영상 통화 입장
+          </button>
+          <p
+            aria-live="polite"
+            className="mt-2.5 text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]"
+          >
+            {ctaHelp}
+          </p>
+        </aside>
       </div>
     </div>
   )

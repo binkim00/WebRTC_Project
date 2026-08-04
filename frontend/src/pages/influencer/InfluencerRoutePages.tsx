@@ -2,6 +2,7 @@ import { useParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/authSession'
 import { VideoCallRoom } from '../../components/call/VideoCallRoom'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { InfluencerCallSidePanel } from './InfluencerCallSidePanel'
 
 export function InfluencerMeetingCallPage() {
   const { fanMeetingId, callSessionId } = useParams()
@@ -35,6 +36,7 @@ export function InfluencerMeetingCallPage() {
       meetingId={fanMeetingId}
       participantLabel="팬 영상"
       screenId="ID-003"
+      sidePanel={<InfluencerCallSidePanel meetingId={fanMeetingId} />}
       forceEndOnLeave
     />
   )
