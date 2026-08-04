@@ -285,9 +285,14 @@ services:
     # 빌드 로그와 Jenkins JVM 시각이 함께 한국시간이 된다.
     environment:
       TZ: Asia/Seoul
+      # Nginx의 /jenkins/ 경로와 Jenkins context path를 일치시킨다.
+      JENKINS_OPTS: "--prefix=/jenkins"
+
+    # Jenkins UI는 Nginx가 같은 Docker 네트워크에서만 접근한다.
+    expose:
+      - "8080"
 
     ports:
-      - "8080:8080"
       - "50000:50000"
 
     volumes:
