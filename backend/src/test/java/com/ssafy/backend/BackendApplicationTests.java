@@ -47,6 +47,9 @@ class BackendApplicationTests {
     private UserRepository userRepository;
 
     @MockitoBean
+    private EmailVerificationTokenRepository emailVerificationTokenRepository;
+
+    @MockitoBean
     private FanMeetingRepository fanMeetingRepository;
 
     @MockitoBean
@@ -120,9 +123,6 @@ class BackendApplicationTests {
 
     @MockitoBean
     private AttachmentRepository attachmentRepository;
-
-    @MockitoBean
-    private EmailVerificationTokenRepository emailVerificationTokenRepository;
 
     /**
      * DB 자동 구성 없이도 Spring 애플리케이션 컨텍스트가 정상적으로 시작되는지 확인한다.

@@ -1,13 +1,16 @@
 package com.ssafy.backend.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 /**
- * 메일 링크에 담긴 인증 토큰으로 이메일 소유를 확인하는 요청이다.
+ * 메일로 받은 인증 토큰 확인 요청이다.
  *
- * @param token 인증 메일 링크의 token 쿼리 값
+ * @param token 인증 링크에 포함된 토큰 원문
  */
 public record EmailVerificationConfirmRequest(
-        @NotBlank String token
+        @NotBlank
+        @Size(max = 200)
+        String token
 ) {
 }

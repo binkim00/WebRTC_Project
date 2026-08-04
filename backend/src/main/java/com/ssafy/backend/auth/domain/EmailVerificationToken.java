@@ -12,6 +12,9 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -19,14 +22,19 @@ import java.util.Objects;
 /**
  * 이메일 소유 확인에 사용하는 단발성 인증 토큰이다.
  *
- * <p>원문 토큰은 메일로만 전달하고 DB에는 해시만 저장한다. DB가 유출되어도 저장된 값으로
- * 인증을 통과할 수 없어야 하기 때문이다.
+ * <p>메일로 보낸 토큰 원문은 저장하지 않고 HMAC-SHA-256 해시만 남긴다.
+ * DB가 유출되어도 저장된 해시로 인증 링크를 되돌려 만들 수 없어야 하기 때문이다.
  */
+@Getter
 @Entity
 @Table(
         name = "email_verification_tokens",
-        indexes = @Index(name = "idx_email_verification_tokens_user", columnList = "user_id")
+        indexes = @Index(
+                name = "idx_email_verification_tokens_user",
+                columnList = "user_id"
+        )
 )
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class EmailVerificationToken extends BaseTimeEntity {
 
     @Id
@@ -47,16 +55,12 @@ public class EmailVerificationToken extends BaseTimeEntity {
     @Column(name = "consumed_at")
     private LocalDateTime consumedAt;
 
-    /** JPA가 엔티티를 조회해 객체로 만들 때 사용하는 기본 생성자다. */
-    protected EmailVerificationToken() {
-    }
-
     /**
-     * 사용자에게 발급한 인증 토큰의 해시와 만료 시각을 기록한다.
+     * 사용자에게 발급한 인증 토큰의 해시와 만료 시각을 저장하는 엔티티를 생성한다.
      *
      * @param user 인증 대상 사용자
-     * @param tokenHash 원문 토큰의 해시
-     * @param expiresAt 인증 링크가 만료되는 시각
+     * @param tokenHash 토큰 원문의 HMAC-SHA-256 해시
+     * @param expiresAt 토큰 만료 시각
      * @return 아직 사용되지 않은 인증 토큰
      */
     public static EmailVerificationToken issue(User user, String tokenHash, LocalDateTime expiresAt) {
@@ -69,39 +73,25 @@ public class EmailVerificationToken extends BaseTimeEntity {
     }
 
     /**
-     * 토큰을 사용 완료 상태로 전환한다.
+     * 기준 시각에 이 토큰을 사용할 수 있는지 확인한다.
      *
-     * @param now 사용 시각
-     * @throws IllegalStateException 이미 사용했거나 만료된 토큰인 경우
+     * @param now 검증 기준 시각
+     * @return 아직 사용되지 않았고 만료되지 않았으면 {@code true}
      */
-    public void consume(LocalDateTime now) {
-        if (consumedAt != null) {
-            throw new IllegalStateException("이미 사용한 인증 토큰입니다.");
-        }
-        if (isExpired(now)) {
-            throw new IllegalStateException("만료된 인증 토큰입니다.");
-        }
-        this.consumedAt = now;
+    public boolean isUsable(LocalDateTime now) {
+        return consumedAt == null && now.isBefore(expiresAt);
     }
 
     /**
-     * 기준 시각에 만료된 토큰인지 확인한다.
+     * 토큰을 사용 완료로 표시해 같은 링크를 두 번 쓸 수 없게 한다.
      *
-     * @param now 비교 기준 시각
-     * @return 만료되었으면 true
+     * @param consumedAt 사용 처리 시각
+     * @throws IllegalStateException 이미 사용된 토큰인 경우
      */
-    public boolean isExpired(LocalDateTime now) {
-        return !now.isBefore(expiresAt);
+    public void consume(LocalDateTime consumedAt) {
+        if (this.consumedAt != null) {
+            throw new IllegalStateException("이미 사용된 인증 토큰입니다.");
+        }
+        this.consumedAt = Objects.requireNonNull(consumedAt);
     }
-
-    /** 데이터베이스가 생성한 토큰 식별자를 반환한다. */
-    public Long getId() { return id; }
-    /** 인증 대상 사용자를 반환한다. */
-    public User getUser() { return user; }
-    /** 저장된 토큰 해시를 반환한다. */
-    public String getTokenHash() { return tokenHash; }
-    /** 인증 링크 만료 시각을 반환한다. */
-    public LocalDateTime getExpiresAt() { return expiresAt; }
-    /** 토큰을 사용한 시각을 반환하며, 사용하지 않았으면 null이다. */
-    public LocalDateTime getConsumedAt() { return consumedAt; }
 }

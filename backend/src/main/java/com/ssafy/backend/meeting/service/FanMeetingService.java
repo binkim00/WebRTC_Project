@@ -4,6 +4,7 @@ import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
 import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
+import com.ssafy.backend.meeting.domain.ParticipantSelectionType;
 import com.ssafy.backend.meeting.dto.FanMeetingCreateRequest;
 import com.ssafy.backend.meeting.dto.FanMeetingCreateResponse;
 import com.ssafy.backend.meeting.exception.FanMeetingAccessDeniedException;
@@ -79,6 +80,7 @@ public class FanMeetingService {
 
         User creator = findActiveUser(authenticatedUser.userId());
         CreationContext context = resolveCreationContext(creator, request.influencerId());
+        validateParticipantSelection(request);
         validateSchedule(request);
 
         FanMeeting meeting = FanMeeting.create(
@@ -88,7 +90,8 @@ public class FanMeetingService {
                 request.title().trim(),
                 trimToNull(request.description()),
                 trimToNull(request.coverImageUrl()),
-                request.scheduledStartAt()
+                request.scheduledStartAt(),
+                request.resolvedParticipantSelectionType()
         );
         fanMeetingRepository.save(meeting);
 
@@ -193,6 +196,30 @@ public class FanMeetingService {
     }
 
     /**
+     * 참가자 선별 방식과 응모 사용 여부가 서로 맞는지 검증한다.
+     *
+     * <p>응모 방식은 응모를 반드시 사용하고, 외부 선별 방식은 응모를 사용하지 않는다.
+     * 두 방식을 섞어서 운영할 수 없으므로 생성 시점에 조합을 확정한다.
+     *
+     * @param request 팬미팅 생성 요청
+     * @throws InvalidFanMeetingRequestException 선별 방식과 응모 사용 여부가 맞지 않는 경우
+     */
+    private void validateParticipantSelection(FanMeetingCreateRequest request) {
+        ParticipantSelectionType selectionType = request.resolvedParticipantSelectionType();
+        boolean applicationEnabled = request.application().enabled();
+        if (selectionType == ParticipantSelectionType.APPLICATION && !applicationEnabled) {
+            throw new InvalidFanMeetingRequestException(
+                    "Application based meetings require enabled applications."
+            );
+        }
+        if (selectionType == ParticipantSelectionType.EXTERNAL_SELECTION && applicationEnabled) {
+            throw new InvalidFanMeetingRequestException(
+                    "External selection meetings must disable applications."
+            );
+        }
+    }
+
+    /**
      * 응모·대기실·팬미팅 일정과 운영 정책 값의 유효성을 검증한다.
      *
      * @param request 팬미팅 생성 요청
@@ -220,6 +247,21 @@ public class FanMeetingService {
                     || !application.resultAnnouncementAt().isBefore(scheduledStartAt))) {
                 throw new InvalidFanMeetingRequestException(
                         "The result announcement must be between application close and meeting start."
+                );
+            }
+        } else if (request.resolvedParticipantSelectionType()
+                == ParticipantSelectionType.EXTERNAL_SELECTION) {
+            // 외부 선별은 응모 일정을 쓰지 않지만 capacity는 등록 가능한 최대 인원으로 사용한다.
+            if (application.startAt() != null
+                    || application.endAt() != null
+                    || application.resultAnnouncementAt() != null) {
+                throw new InvalidFanMeetingRequestException(
+                        "External selection meetings must not include application dates."
+                );
+            }
+            if (application.capacity() <= 0) {
+                throw new InvalidFanMeetingRequestException(
+                        "External selection meetings require a positive capacity."
                 );
             }
         } else if (application.startAt() != null

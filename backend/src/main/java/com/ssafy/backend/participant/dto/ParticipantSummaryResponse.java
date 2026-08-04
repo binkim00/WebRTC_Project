@@ -1,6 +1,7 @@
 package com.ssafy.backend.participant.dto;
 
 import com.ssafy.backend.participant.domain.Participant;
+import com.ssafy.backend.participant.domain.ParticipantSource;
 import com.ssafy.backend.user.domain.User;
 
 /**
@@ -15,6 +16,7 @@ import com.ssafy.backend.user.domain.User;
  * @param callOrder 배정된 영상통화 순서
  * @param participantStatus 참가자 상태
  * @param queueStatus 현재 대기열 상태이며 대기열이 없으면 {@code null}
+ * @param participantSource 참가자가 확정된 경로이며 응모 추첨과 외부 선별을 구분한다
  */
 public record ParticipantSummaryResponse(
         Long participantId,
@@ -23,7 +25,8 @@ public record ParticipantSummaryResponse(
         String profileImageUrl,
         Integer callOrder,
         String participantStatus,
-        String queueStatus
+        String queueStatus,
+        ParticipantSource participantSource
 ) {
 
     /**
@@ -42,7 +45,8 @@ public record ParticipantSummaryResponse(
                 fan.getProfileImageUrl(),
                 participant.getAssignedOrder(),
                 participant.getStatus(),
-                queueStatus
+                queueStatus,
+                participant.getParticipantSource()
         );
     }
 }

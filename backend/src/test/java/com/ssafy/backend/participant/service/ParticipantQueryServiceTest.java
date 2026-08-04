@@ -8,6 +8,7 @@ import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.participant.domain.Participant;
+import com.ssafy.backend.participant.domain.ParticipantSource;
 import com.ssafy.backend.participant.dto.ParticipantSummaryResponse;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
 import com.ssafy.backend.queue.domain.QueueEntry;
@@ -83,11 +84,11 @@ class ParticipantQueryServiceTest {
         ));
 
         PageResponse<ParticipantSummaryResponse> response =
-                service.getParticipants(1L, null, null, 0, 20, MANAGER_PRINCIPAL);
+                service.getParticipants(1L, null, null, null, 0, 20, MANAGER_PRINCIPAL);
 
         assertThat(response.content()).hasSize(2);
         assertThat(response.content().get(0)).isEqualTo(new ParticipantSummaryResponse(
-                100L, 30L, "첫째팬", null, 1, "READY", "IN_CALL"));
+                100L, 30L, "첫째팬", null, 1, "READY", "IN_CALL", ParticipantSource.APPLICATION));
         assertThat(response.content().get(1).queueStatus()).isEqualTo("WAITING");
         assertThat(response.totalElements()).isEqualTo(2L);
         assertThat(response.page()).isZero();
@@ -105,7 +106,7 @@ class ParticipantQueryServiceTest {
                 .thenReturn(List.of(queueEntry(participant, QueueEntryStatus.DONE)));
 
         PageResponse<ParticipantSummaryResponse> response =
-                service.getParticipants(1L, null, null, 0, 20, MANAGER_PRINCIPAL);
+                service.getParticipants(1L, null, null, null, 0, 20, MANAGER_PRINCIPAL);
 
         assertThat(response.content().get(0).queueStatus()).isEqualTo("COMPLETED");
     }
@@ -121,7 +122,7 @@ class ParticipantQueryServiceTest {
                 .thenReturn(List.of());
 
         PageResponse<ParticipantSummaryResponse> response =
-                service.getParticipants(1L, null, null, 0, 20, MANAGER_PRINCIPAL);
+                service.getParticipants(1L, null, null, null, 0, 20, MANAGER_PRINCIPAL);
 
         assertThat(response.content().get(0).queueStatus()).isNull();
     }
@@ -133,7 +134,7 @@ class ParticipantQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         PageResponse<ParticipantSummaryResponse> response =
-                service.getParticipants(1L, null, null, 0, 20, MANAGER_PRINCIPAL);
+                service.getParticipants(1L, null, null, null, 0, 20, MANAGER_PRINCIPAL);
 
         assertThat(response.content()).isEmpty();
         assertThat(response.totalElements()).isZero();
@@ -149,7 +150,7 @@ class ParticipantQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         PageResponse<ParticipantSummaryResponse> response =
-                service.getParticipants(1L, null, "없는닉네임", 0, 20, MANAGER_PRINCIPAL);
+                service.getParticipants(1L, null, "없는닉네임", null, 0, 20, MANAGER_PRINCIPAL);
 
         assertThat(response.content()).isEmpty();
         assertThat(response.totalPages()).isZero();
@@ -162,7 +163,7 @@ class ParticipantQueryServiceTest {
                 any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 6), 0));
 
-        service.getParticipants(1L, "  READY  ", "   ", 0, 6, MANAGER_PRINCIPAL);
+        service.getParticipants(1L, "  READY  ", "   ", null, 0, 6, MANAGER_PRINCIPAL);
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(participantRepository)
@@ -179,7 +180,7 @@ class ParticipantQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
 
         for (int size : new int[]{1, 6, 100}) {
-            service.getParticipants(1L, null, null, 0, size, MANAGER_PRINCIPAL);
+            service.getParticipants(1L, null, null, null, 0, size, MANAGER_PRINCIPAL);
             verify(participantRepository).searchByMeeting(eq(1L), eq(""), eq(""),
                     eq(PageRequest.of(0, size)));
         }
@@ -188,7 +189,7 @@ class ParticipantQueryServiceTest {
     /** 음수 페이지 번호를 잘못된 요청으로 거부하는지 검증한다. */
     @Test
     void rejectsNegativePage() {
-        assertThatThrownBy(() -> service.getParticipants(1L, null, null, -1, 20, MANAGER_PRINCIPAL))
+        assertThatThrownBy(() -> service.getParticipants(1L, null, null, null, -1, 20, MANAGER_PRINCIPAL))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
@@ -197,11 +198,11 @@ class ParticipantQueryServiceTest {
     /** 허용 범위를 벗어난 페이지 크기를 잘못된 요청으로 거부하는지 검증한다. */
     @Test
     void rejectsOutOfRangePageSize() {
-        assertThatThrownBy(() -> service.getParticipants(1L, null, null, 0, 101, MANAGER_PRINCIPAL))
+        assertThatThrownBy(() -> service.getParticipants(1L, null, null, null, 0, 101, MANAGER_PRINCIPAL))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
-        assertThatThrownBy(() -> service.getParticipants(1L, null, null, 0, 0, MANAGER_PRINCIPAL))
+        assertThatThrownBy(() -> service.getParticipants(1L, null, null, null, 0, 0, MANAGER_PRINCIPAL))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
@@ -214,7 +215,7 @@ class ParticipantQueryServiceTest {
         when(meetingAccessService.requireOperator(1L, manager))
                 .thenThrow(new BusinessException(ErrorCode.ACCESS_DENIED));
 
-        assertThatThrownBy(() -> service.getParticipants(1L, null, null, 0, 20, MANAGER_PRINCIPAL))
+        assertThatThrownBy(() -> service.getParticipants(1L, null, null, null, 0, 20, MANAGER_PRINCIPAL))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
@@ -227,7 +228,7 @@ class ParticipantQueryServiceTest {
         when(meetingAccessService.requireOperator(1L, manager))
                 .thenThrow(new BusinessException(ErrorCode.FAN_MEETING_NOT_FOUND));
 
-        assertThatThrownBy(() -> service.getParticipants(1L, null, null, 0, 20, MANAGER_PRINCIPAL))
+        assertThatThrownBy(() -> service.getParticipants(1L, null, null, null, 0, 20, MANAGER_PRINCIPAL))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.FAN_MEETING_NOT_FOUND);
@@ -247,7 +248,7 @@ class ParticipantQueryServiceTest {
                 service.getParticipant(1L, 100L, MANAGER_PRINCIPAL);
 
         assertThat(response).isEqualTo(new ParticipantSummaryResponse(
-                100L, 30L, "첫째팬", null, 3, "READY", "CALLED"));
+                100L, 30L, "첫째팬", null, 3, "READY", "CALLED", ParticipantSource.APPLICATION));
     }
 
     /** 다른 팬미팅의 참가자 식별자로 상세 조회하면 거부되는지 검증한다. */
