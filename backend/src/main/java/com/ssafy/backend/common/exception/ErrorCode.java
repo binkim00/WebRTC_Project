@@ -22,6 +22,7 @@ public enum ErrorCode {
     FAN_MEETING_NOT_FOUND(HttpStatus.NOT_FOUND, "팬미팅을 찾을 수 없습니다."),
     FAN_MEETING_STATE_CONFLICT(HttpStatus.CONFLICT, "현재 팬미팅 상태에서는 요청을 처리할 수 없습니다."),
     FAN_MEETING_START_NOT_ALLOWED(HttpStatus.CONFLICT, "아직 팬미팅을 시작할 수 없습니다."),
+    FAN_MEETING_ALREADY_ENDED(HttpStatus.CONFLICT, "이미 종료된 팬미팅입니다."),
     APPLICATION_SETTING_NOT_FOUND(HttpStatus.CONFLICT, "응모 설정이 없습니다."),
     OPERATION_SETTING_NOT_FOUND(HttpStatus.CONFLICT, "운영 설정이 없습니다."),
     PARTICIPANT_NOT_FOUND(HttpStatus.FORBIDDEN, "팬미팅 참가자가 아닙니다."),
@@ -120,6 +121,14 @@ public enum ErrorCode {
     USER_ALREADY_WITHDRAWN(HttpStatus.CONFLICT, "이미 탈퇴한 계정입니다."),
     USER_WITHDRAW_MEETING_IN_PROGRESS(HttpStatus.CONFLICT, "진행 중이거나 예정된 팬미팅이 있어 탈퇴할 수 없습니다."),
     LAST_ADMIN_WITHDRAW_NOT_ALLOWED(HttpStatus.CONFLICT, "마지막 관리자 계정은 탈퇴할 수 없습니다."),
+
+    // 이메일 인증·기기 토큰 (다계정 대량 응모 억제)
+    EMAIL_VERIFICATION_REQUIRED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다."),
+    EMAIL_VERIFICATION_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "만료되었거나 이미 사용한 인증 링크입니다."),
+    EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "이미 인증이 완료된 이메일입니다."),
+    EMAIL_VERIFICATION_SEND_FAILED(HttpStatus.BAD_GATEWAY, "인증 메일을 발송하지 못했습니다."),
+    DEVICE_DUPLICATE_APPLICATION(HttpStatus.CONFLICT, "같은 기기에서 이미 다른 계정으로 응모했습니다."),
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
 
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 

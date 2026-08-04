@@ -6,6 +6,7 @@ import com.ssafy.backend.application.domain.ApplicationForm;
 import com.ssafy.backend.application.domain.ApplicationQuestion;
 import com.ssafy.backend.application.domain.ApplicationQuestionType;
 import com.ssafy.backend.application.domain.ApplicationStatus;
+import com.ssafy.backend.application.domain.DeviceDuplicatePolicy;
 import com.ssafy.backend.application.dto.ApplicationSubmitRequest;
 import com.ssafy.backend.application.dto.ApplicationSubmitResponse;
 import com.ssafy.backend.application.dto.ApplicationWithdrawResponse;
@@ -14,9 +15,11 @@ import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.auth.service.DeviceTokenService;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
+import com.ssafy.backend.common.support.RequestRateLimiter;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
@@ -28,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -37,6 +41,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -54,6 +60,8 @@ class ApplicationServiceTest {
     private ApplicationFormRepository applicationFormRepository;
     private ApplicationQuestionRepository applicationQuestionRepository;
     private ApplicationAnswerRepository applicationAnswerRepository;
+    private DeviceTokenService deviceTokenService;
+    private RequestRateLimiter rateLimiter;
     private ApplicationService applicationService;
     private AuthenticatedUser principal;
     private User fan;
@@ -69,6 +77,8 @@ class ApplicationServiceTest {
         applicationFormRepository = mock(ApplicationFormRepository.class);
         applicationQuestionRepository = mock(ApplicationQuestionRepository.class);
         applicationAnswerRepository = mock(ApplicationAnswerRepository.class);
+        deviceTokenService = mock(DeviceTokenService.class);
+        rateLimiter = mock(RequestRateLimiter.class);
         applicationService = new ApplicationService(
                 currentUserService,
                 fanMeetingRepository,
@@ -77,8 +87,17 @@ class ApplicationServiceTest {
                 applicationFormRepository,
                 applicationQuestionRepository,
                 applicationAnswerRepository,
-                Clock.fixed(NOW, SEOUL)
+                deviceTokenService,
+                rateLimiter,
+                Clock.fixed(NOW, SEOUL),
+                false,
+                DeviceDuplicatePolicy.FLAG,
+                5,
+                60L
         );
+        // 요청 제한기 mock 의 boolean 기본값은 false 라 스텁하지 않으면 모든 응모가 429 로 막힌다.
+        when(rateLimiter.tryConsume(anyString(), anyString(), anyInt(), any(Duration.class)))
+                .thenReturn(true);
         principal = new AuthenticatedUser(1L, UserRole.FAN);
         fan = user(1L, UserRole.FAN);
         meeting = openMeeting();
@@ -108,7 +127,7 @@ class ApplicationServiceTest {
         });
 
         ApplicationSubmitResponse response = applicationService.submit(
-                10L, request(List.of()), principal
+                10L, request(List.of()), principal, null
         );
 
         assertThat(response.applicationId()).isEqualTo(100L);
@@ -148,7 +167,8 @@ class ApplicationServiceTest {
         ApplicationSubmitResponse response = applicationService.submit(
                 10L,
                 request(List.of(new ApplicationSubmitRequest.AnswerRequest(200L, "새 답변"))),
-                principal
+                principal,
+                null
         );
 
         assertThat(response.applicationId()).isEqualTo(100L);
@@ -171,7 +191,7 @@ class ApplicationServiceTest {
                 .thenReturn(Optional.of(submittedApplication(100L)));
 
         assertThatThrownBy(() -> applicationService.submit(
-                10L, request(List.of()), principal
+                10L, request(List.of()), principal, null
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(ErrorCode.APPLICATION_ALREADY_SUBMITTED));
@@ -189,7 +209,7 @@ class ApplicationServiceTest {
                 .thenReturn(List.of(requiredQuestion));
 
         assertThatThrownBy(() -> applicationService.submit(
-                10L, request(List.of()), principal
+                10L, request(List.of()), principal, null
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(ErrorCode.APPLICATION_ANSWER_INVALID));
@@ -202,7 +222,7 @@ class ApplicationServiceTest {
     void rejectsMissingPersonalInformationConsent() {
         ApplicationSubmitRequest request = new ApplicationSubmitRequest(false, List.of());
 
-        assertThatThrownBy(() -> applicationService.submit(10L, request, principal))
+        assertThatThrownBy(() -> applicationService.submit(10L, request, principal, null))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.APPLICATION_CONSENT_REQUIRED));

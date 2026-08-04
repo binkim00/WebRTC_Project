@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
  * @param calledAt 마지막 호출 시각
  * @param callSessionId 입장 또는 재접속할 통화 세션 식별자
  * @param canEnterCall 현재 통화 화면에 입장할 수 있는지 여부
+ * @param lastChangeReason 운영자 순서 조정으로 순번이 바뀐 최근 사유이며 조정 이력이 없으면 null
+ * @param lastChangedAt 최근 순번 조정이 반영된 시각이며 조정 이력이 없으면 null
  */
 public record QueueSnapshotResponse(
         Long queueEntryId,
@@ -26,6 +28,8 @@ public record QueueSnapshotResponse(
         int callAttemptCount,
         LocalDateTime calledAt,
         Long callSessionId,
-        boolean canEnterCall
+        boolean canEnterCall,
+        String lastChangeReason,
+        LocalDateTime lastChangedAt
 ) {
 }

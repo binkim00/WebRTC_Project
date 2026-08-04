@@ -2,6 +2,7 @@ package com.ssafy.backend.application.service;
 
 import com.ssafy.backend.application.domain.Application;
 import com.ssafy.backend.application.domain.ApplicationStatus;
+import com.ssafy.backend.application.domain.DeviceDuplicatePolicy;
 import com.ssafy.backend.application.dto.ApplicationSubmitRequest;
 import com.ssafy.backend.application.dto.DrawResultResponse;
 import com.ssafy.backend.application.dto.ResultPublishResponse;
@@ -10,9 +11,11 @@ import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.auth.service.DeviceTokenService;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
+import com.ssafy.backend.common.support.RequestRateLimiter;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
@@ -35,6 +38,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -46,7 +50,9 @@ import java.util.Random;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -439,6 +445,10 @@ class ApplicationDrawServiceTest {
         User latecomerFan = activeFan(99L);
         when(fanUserService.requireActiveUser(latecomer)).thenReturn(latecomerFan);
         when(meetingRepository.findById(MEETING_ID)).thenReturn(Optional.of(meeting));
+        RequestRateLimiter rateLimiter = mock(RequestRateLimiter.class);
+        // 요청 제한기 mock 의 boolean 기본값은 false 라 스텁하지 않으면 응모 기간 검사에 도달하지 못한다.
+        when(rateLimiter.tryConsume(anyString(), anyString(), anyInt(), any(Duration.class)))
+                .thenReturn(true);
         ApplicationService applicationService = new ApplicationService(
                 fanUserService,
                 meetingRepository,
@@ -447,11 +457,17 @@ class ApplicationDrawServiceTest {
                 mock(ApplicationFormRepository.class),
                 mock(ApplicationQuestionRepository.class),
                 mock(ApplicationAnswerRepository.class),
-                Clock.fixed(NOW, SEOUL)
+                mock(DeviceTokenService.class),
+                rateLimiter,
+                Clock.fixed(NOW, SEOUL),
+                false,
+                DeviceDuplicatePolicy.FLAG,
+                5,
+                60L
         );
 
         assertThatThrownBy(() -> applicationService.submit(
-                MEETING_ID, new ApplicationSubmitRequest(true, List.of()), latecomer
+                MEETING_ID, new ApplicationSubmitRequest(true, List.of()), latecomer, null
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(ErrorCode.APPLICATION_PERIOD_CLOSED));

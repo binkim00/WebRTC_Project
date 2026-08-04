@@ -5,6 +5,7 @@ import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
+import com.ssafy.backend.notification.repository.NotificationRepository;
 import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
@@ -68,7 +69,7 @@ class QueuePositionServiceRedisConsistencyTest {
         when(meetingAccessService.requireManager(MEETING_ID, manager))
                 .thenReturn(mock(FanMeeting.class));
         service = new QueuePositionService(currentUserService, meetingAccessService,
-                entryRepository, realtimeStore,
+                entryRepository, mock(NotificationRepository.class), realtimeStore,
                 Clock.fixed(NOW.atZone(ZoneId.systemDefault()).toInstant(),
                         ZoneId.systemDefault()));
     }
@@ -94,7 +95,7 @@ class QueuePositionServiceRedisConsistencyTest {
         givenInitializedQueue(entries);
 
         QueuePositionChangeResponse response =
-                service.changePosition(14L, new QueuePositionChangeRequest(2), PRINCIPAL);
+                service.changePosition(14L, new QueuePositionChangeRequest(2, null), PRINCIPAL);
 
         assertThat(response.previousPosition()).isEqualTo(4);
         assertThat(response.newPosition()).isEqualTo(2);
@@ -111,7 +112,7 @@ class QueuePositionServiceRedisConsistencyTest {
                 waitingEntry(11L, 1), waitingEntry(12L, 2), waitingEntry(13L, 3));
         givenInitializedQueue(entries);
 
-        QueuePositionChangeResponse response = service.moveEntry(MEETING_ID, 11L, null);
+        QueuePositionChangeResponse response = service.moveEntry(MEETING_ID, 11L, null, null);
 
         assertThat(response.newPosition()).isEqualTo(3);
         assertRedisMatchesEntries(entries);
@@ -128,7 +129,7 @@ class QueuePositionServiceRedisConsistencyTest {
         List<QueueEntry> entries = List.of(done, inCall, waitingThird, waitingFourth);
         givenInitializedQueue(entries);
 
-        service.changePosition(14L, new QueuePositionChangeRequest(3), PRINCIPAL);
+        service.changePosition(14L, new QueuePositionChangeRequest(3, null), PRINCIPAL);
 
         assertRedisMatchesEntries(entries);
         assertThat(realtimeStore.getPosition(MEETING_ID, 11L)).isEqualTo(1);
@@ -151,7 +152,7 @@ class QueuePositionServiceRedisConsistencyTest {
         doThrow(new IllegalStateException("DB 반영 실패")).when(entryRepository).flush();
 
         assertThatThrownBy(() ->
-                service.changePosition(13L, new QueuePositionChangeRequest(1), PRINCIPAL))
+                service.changePosition(13L, new QueuePositionChangeRequest(1, null), PRINCIPAL))
                 .isInstanceOf(BusinessException.class);
 
         assertThat(realtimeStore.getPosition(MEETING_ID, 11L)).isEqualTo(1);
@@ -209,6 +210,7 @@ class QueuePositionServiceRedisConsistencyTest {
         when(meeting.getId()).thenReturn(MEETING_ID);
         Participant participant = mock(Participant.class);
         when(participant.getAssignedOrder()).thenReturn(position);
+        when(participant.getFan()).thenReturn(mock(User.class));
         QueueEntry queueEntry = QueueEntry.create(meeting, participant);
         ReflectionTestUtils.setField(queueEntry, "id", entryId);
         ReflectionTestUtils.setField(queueEntry, "status", status);

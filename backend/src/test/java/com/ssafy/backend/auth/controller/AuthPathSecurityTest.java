@@ -5,6 +5,7 @@ import com.ssafy.backend.auth.jwt.JwtAuthenticationFilter;
 import com.ssafy.backend.auth.jwt.JwtTokenProvider;
 import com.ssafy.backend.auth.jwt.RevokedAccessTokenStore;
 import com.ssafy.backend.auth.jwt.TokenSessionStore;
+import com.ssafy.backend.auth.service.DeviceTokenService;
 import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
@@ -52,6 +53,9 @@ class AuthPathSecurityTest {
 
     @MockitoBean
     private RefreshTokenService refreshTokenService;
+
+    @MockitoBean
+    private DeviceTokenService deviceTokenService;
 
     @MockitoBean
     private JwtTokenProvider jwtTokenProvider;

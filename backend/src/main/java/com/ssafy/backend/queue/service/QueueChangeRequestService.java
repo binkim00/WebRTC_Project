@@ -33,6 +33,7 @@ import java.time.LocalDateTime;
 @Service
 public class QueueChangeRequestService {
     private static final int MAX_PAGE_SIZE = 100;
+    private static final String APPROVED_CHANGE_REASON = "요청하신 순서 변경이 승인되었습니다.";
 
     private final CurrentUserService currentUserService;
     private final MeetingAccessService meetingAccessService;
@@ -160,8 +161,8 @@ public class QueueChangeRequestService {
                     changeRequest.getId(), changeRequest.getStatus(), previousPosition,
                     null, processedAt);
         }
-        QueuePositionChangeResponse moved =
-                positionService.moveEntry(meetingId, entry.getId(), request.newPosition());
+        QueuePositionChangeResponse moved = positionService.moveEntry(
+                meetingId, entry.getId(), request.newPosition(), APPROVED_CHANGE_REASON);
         approve(changeRequest, manager, moved.newPosition(), processedAt);
         return new QueueChangeRequestDecisionResponse(
                 changeRequest.getId(), changeRequest.getStatus(), moved.previousPosition(),

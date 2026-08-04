@@ -5,9 +5,11 @@ import com.ssafy.backend.application.dto.ApplicationSubmitResponse;
 import com.ssafy.backend.application.dto.ApplicationWithdrawResponse;
 import com.ssafy.backend.application.service.ApplicationService;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.auth.service.DeviceTokenService;
 import com.ssafy.backend.common.api.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,18 +36,24 @@ public class ApplicationController {
     /**
      * 팬의 최초 응모 또는 취소 후 재응모를 접수한다.
      *
+     * <p>기기 토큰은 브라우저가 자동으로 보내는 HttpOnly 쿠키에서만 읽는다. 프론트가 값을 만들어
+     * 헤더로 보내게 하면 임의 값으로 위조할 수 있어 중복 탐지가 무력화된다.
+     *
      * @param meetingId 응모 대상 팬미팅 식별자
      * @param request 개인정보 동의와 질문 답변
      * @param principal JWT 인증 사용자 정보
+     * @param deviceToken 기기 토큰 쿠키 값이며 쿠키가 없으면 {@code null}
      * @return 공통 성공 형식으로 감싼 응모 접수 결과
      */
     @PostMapping
     public ApiResponse<ApplicationSubmitResponse> submit(
             @PathVariable Long meetingId,
             @Valid @RequestBody ApplicationSubmitRequest request,
-            @AuthenticationPrincipal AuthenticatedUser principal
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @CookieValue(value = DeviceTokenService.COOKIE_NAME, required = false) String deviceToken
     ) {
-        return ApiResponse.success(applicationService.submit(meetingId, request, principal));
+        return ApiResponse.success(
+                applicationService.submit(meetingId, request, principal, deviceToken));
     }
 
     /**

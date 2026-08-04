@@ -11,6 +11,8 @@ import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
 import livekit.LivekitWebhook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -24,6 +26,8 @@ import java.util.Map;
  */
 @Service
 public class LiveKitWebhookService {
+
+    private static final Logger log = LoggerFactory.getLogger(LiveKitWebhookService.class);
 
     private static final String PARTICIPANT_JOINED = "participant_joined";
     private static final String PARTICIPANT_LEFT = "participant_left";
@@ -71,20 +75,46 @@ public class LiveKitWebhookService {
             throw new BusinessException(ErrorCode.INVALID_LIVEKIT_WEBHOOK);
         }
         if (!realtimeStore.claimWebhookEvent(eventId)) {
+            log.debug("이미 처리한 LiveKit webhook을 건너뜁니다. eventId={} event={}",
+                    eventId, event.getEvent());
             return;
         }
 
         try {
             if (PARTICIPANT_JOINED.equals(event.getEvent())) {
+                logParticipantEvent(event);
                 handleParticipantJoined(event);
             } else if (PARTICIPANT_LEFT.equals(event.getEvent())
                     || PARTICIPANT_CONNECTION_ABORTED.equals(event.getEvent())) {
+                logParticipantEvent(event);
                 handleParticipantDisconnected(event);
             }
         } catch (RuntimeException exception) {
             realtimeStore.releaseWebhookEvent(eventId);
             throw exception;
         }
+    }
+
+    /**
+     * 통화 연결 실패를 추적할 수 있도록 참가자 이벤트의 식별 정보를 남긴다.
+     *
+     * <p>이벤트 도착 순서와 토큰 attribute 유무는 통화가 시작되지 않는 원인을 가르는데, 기록이
+     * 없으면 사후에 확인할 방법이 없어 입장·퇴장 이벤트에 한해 남긴다. {@code role}이 비어 있으면
+     * LiveKit이 attribute를 함께 보내지 않은 경우다.
+     *
+     * @param event 처리 직전의 참가자 입장 또는 퇴장 webhook 이벤트
+     */
+    private void logParticipantEvent(LivekitWebhook.WebhookEvent event) {
+        Map<String, String> attributes = event.hasParticipant()
+                ? event.getParticipant().getAttributesMap()
+                : Map.of();
+        log.info("LiveKit 참가자 이벤트 event={} eventId={} room={} identity={} role={} callSessionId={}",
+                event.getEvent(),
+                event.getId(),
+                event.hasRoom() ? event.getRoom().getName() : null,
+                event.hasParticipant() ? event.getParticipant().getIdentity() : null,
+                attributes.get(ROLE_ATTRIBUTE),
+                attributes.get(CALL_SESSION_ID_ATTRIBUTE));
     }
 
     /**

@@ -6,6 +6,8 @@ import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
+import com.ssafy.backend.meeting.domain.FanMeeting;
+import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
@@ -289,18 +291,105 @@ class QueueQueryServiceTest {
                 .containsExactly("CALLED");
     }
 
+    /**
+     * 팬미팅 종료로 실시간 상태가 정리되면 권위 있는 DB 상태로 종료 스냅샷을 반환하는지 검증한다.
+     *
+     * <p>통화를 마치지 못한 채 대기 중이던 참가자도 종료를 인지할 수 있어야 한다.
+     */
+    @Test
+    void returnsCompletedSnapshotWhenRealtimeStateCleared() {
+        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        QueueEntryRepository entryRepository = mock(QueueEntryRepository.class);
+        CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
+        MeetingOperationSettingRepository settingRepository =
+                mock(MeetingOperationSettingRepository.class);
+        QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        MeetingAccessService meetingAccessService = mock(MeetingAccessService.class);
+        QueueQueryService service = new QueueQueryService(
+                currentUserService, entryRepository, callSessionRepository,
+                settingRepository, realtimeStore, meetingAccessService);
+        User fan = mock(User.class);
+        QueueEntry entry = mock(QueueEntry.class);
+        when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(fan);
+        when(fan.getId()).thenReturn(10L);
+        when(entryRepository.findByMeeting_IdAndParticipant_Fan_Id(1L, 10L))
+                .thenReturn(Optional.of(entry));
+        when(entry.getId()).thenReturn(7L);
+        when(entry.getStatus()).thenReturn(QueueEntryStatus.REMOVED);
+        when(entry.getQueuePosition()).thenReturn(4);
+        when(entry.getLastChangeReason()).thenReturn("대기 순번이 5번에서 4번으로 변경되었습니다.");
+        when(realtimeStore.isInitialized(1L)).thenReturn(false);
+
+        QueueSnapshotResponse response = service.getMySnapshot(1L, PRINCIPAL);
+
+        assertThat(response.displayStatus()).isEqualTo(QueueDisplayStatus.COMPLETED);
+        assertThat(response.position()).isEqualTo(4);
+        assertThat(response.aheadCount()).isZero();
+        assertThat(response.callSessionId()).isNull();
+        assertThat(response.canEnterCall()).isFalse();
+        assertThat(response.lastChangeReason())
+                .isEqualTo("대기 순번이 5번에서 4번으로 변경되었습니다.");
+    }
+
+    /** 아직 대기 중인 참가자는 실시간 상태가 없으면 미초기화 오류를 그대로 받는지 검증한다. */
+    @Test
+    void rejectsSnapshotWhenRealtimeStateMissingButEntryStillWaiting() {
+        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        QueueEntryRepository entryRepository = mock(QueueEntryRepository.class);
+        CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
+        MeetingOperationSettingRepository settingRepository =
+                mock(MeetingOperationSettingRepository.class);
+        QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        MeetingAccessService meetingAccessService = mock(MeetingAccessService.class);
+        QueueQueryService service = new QueueQueryService(
+                currentUserService, entryRepository, callSessionRepository,
+                settingRepository, realtimeStore, meetingAccessService);
+        User fan = mock(User.class);
+        QueueEntry entry = mock(QueueEntry.class);
+        when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(fan);
+        when(fan.getId()).thenReturn(10L);
+        when(entryRepository.findByMeeting_IdAndParticipant_Fan_Id(1L, 10L))
+                .thenReturn(Optional.of(entry));
+        when(entry.getStatus()).thenReturn(QueueEntryStatus.WAITING);
+        when(realtimeStore.isInitialized(1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getMySnapshot(1L, PRINCIPAL))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.QUEUE_NOT_INITIALIZED));
+    }
+
     /** 대기열이 초기화되지 않은 팬미팅의 운영자 조회를 차단하는지 검증한다. */
     @Test
     void rejectsManagementQueueWhenQueueNotInitialized() {
         ManagementFixture fixture = new ManagementFixture();
         User operator = mock(User.class);
+        FanMeeting meeting = meetingWithStatus(FanMeetingStatus.LIVE);
         when(fixture.currentUserService.requireActiveUser(OPERATOR_PRINCIPAL)).thenReturn(operator);
+        when(fixture.meetingAccessService.requireOperator(1L, operator)).thenReturn(meeting);
         when(fixture.realtimeStore.isInitialized(1L)).thenReturn(false);
 
         assertThatThrownBy(() -> fixture.service.getManagementQueue(1L, OPERATOR_PRINCIPAL))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.QUEUE_NOT_INITIALIZED));
+        verifyNoInteractions(fixture.entryRepository);
+    }
+
+    /** 종료된 팬미팅의 운영자 조회는 미초기화가 아니라 종료 오류로 구분해 알리는지 검증한다. */
+    @Test
+    void reportsManagementQueueAsAlreadyEndedWhenMeetingFinished() {
+        ManagementFixture fixture = new ManagementFixture();
+        User operator = mock(User.class);
+        FanMeeting meeting = meetingWithStatus(FanMeetingStatus.ENDED);
+        when(fixture.currentUserService.requireActiveUser(OPERATOR_PRINCIPAL)).thenReturn(operator);
+        when(fixture.meetingAccessService.requireOperator(1L, operator)).thenReturn(meeting);
+        when(fixture.realtimeStore.isInitialized(1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> fixture.service.getManagementQueue(1L, OPERATOR_PRINCIPAL))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.FAN_MEETING_ALREADY_ENDED));
         verifyNoInteractions(fixture.entryRepository);
     }
 
@@ -318,6 +407,18 @@ class QueueQueryServiceTest {
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.ACCESS_DENIED));
         verifyNoInteractions(fixture.entryRepository);
+    }
+
+    /**
+     * 지정한 진행 상태만 설정된 팬미팅 mock을 만든다.
+     *
+     * @param status 팬미팅 진행 상태
+     * @return 상태만 설정된 팬미팅 mock
+     */
+    private FanMeeting meetingWithStatus(FanMeetingStatus status) {
+        FanMeeting meeting = mock(FanMeeting.class);
+        when(meeting.getStatus()).thenReturn(status);
+        return meeting;
     }
 
     /**
