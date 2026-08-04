@@ -22,7 +22,7 @@ class FanMeetingStatisticsControllerTest {
         FanMeetingStatisticsService service = mock(FanMeetingStatisticsService.class);
         FanMeetingStatisticsController controller = new FanMeetingStatisticsController(service);
         FanMeetingStatisticsResponse expected =
-                new FanMeetingStatisticsResponse(42L, 10L, 9L, 8L, 1L, 0L, 120L, 960L);
+                new FanMeetingStatisticsResponse(42L, 10L, 9L, 7L, 2L, 8L, 1L, 0L, 120L, 960L);
         when(service.getStatistics(10L, MANAGER)).thenReturn(expected);
 
         ApiResponse<FanMeetingStatisticsResponse> response =

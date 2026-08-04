@@ -196,7 +196,11 @@ public class ApplicationQueryService {
     public ApplicationStatisticsResponse getStatistics(
             Long meetingId, AuthenticatedUser principal
     ) {
-        requireOperatorMeeting(meetingId, principal);
+        FanMeeting meeting = requireOperatorMeeting(meetingId, principal);
+        // 응모가 없는 팬미팅에서 0으로 채운 통계를 돌려주면 운영자가 집계 오류로 오해한다.
+        if (meeting.isExternalSelection()) {
+            throw new BusinessException(ErrorCode.APPLICATION_NOT_SUPPORTED);
+        }
         return new ApplicationStatisticsResponse(
                 applicationRepository.countByMeeting_IdAndStatusNot(meetingId, EXCLUDED_STATUS),
                 applicationRepository.countByMeeting_IdAndStatus(

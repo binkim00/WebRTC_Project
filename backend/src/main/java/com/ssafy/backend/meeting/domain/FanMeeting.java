@@ -60,6 +60,15 @@ public class FanMeeting extends BaseTimeEntity {
     @Column(name = "status", nullable = false, length = 30)
     private FanMeetingStatus status;
 
+    /**
+     * 참가자를 정하는 방식이며 생성 후에는 변경할 수 없다.
+     *
+     * <p>기존 팬미팅은 모두 응모 방식이므로 스키마 기본값도 {@code APPLICATION}이다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "participant_selection_type", nullable = false, length = 30)
+    private ParticipantSelectionType participantSelectionType = ParticipantSelectionType.APPLICATION;
+
     @Column(name = "scheduled_start_at", nullable = false)
     private LocalDateTime scheduledStartAt;
 
@@ -88,6 +97,7 @@ public class FanMeeting extends BaseTimeEntity {
      * @param description 팬미팅 설명
      * @param coverImageUrl 커버 이미지 URL
      * @param scheduledStartAt 예정 시작 시각
+     * @param participantSelectionType 참가자 선별 방식
      */
     private FanMeeting(Organization organization,
                        User manager,
@@ -95,7 +105,8 @@ public class FanMeeting extends BaseTimeEntity {
                        String title,
                        String description,
                        String coverImageUrl,
-                       LocalDateTime scheduledStartAt) {
+                       LocalDateTime scheduledStartAt,
+                       ParticipantSelectionType participantSelectionType) {
         this.organization = organization;
         this.manager = manager;
         this.influencer = Objects.requireNonNull(influencer);
@@ -104,6 +115,7 @@ public class FanMeeting extends BaseTimeEntity {
         this.coverImageUrl = coverImageUrl;
         this.status = FanMeetingStatus.DRAFT;
         this.scheduledStartAt = Objects.requireNonNull(scheduledStartAt);
+        this.participantSelectionType = Objects.requireNonNull(participantSelectionType);
     }
 
     /** 테스트용 상태 변경이다. */
@@ -113,8 +125,11 @@ public class FanMeeting extends BaseTimeEntity {
     }
 
     /**
-     * 공개 전 초안 상태의 팬미팅을 생성한다.
+     * 응모 방식으로 공개 전 초안 상태의 팬미팅을 생성한다.
      * 조직과 매니저는 1인 인플루언서가 생성하는 경우 null일 수 있다.
+     *
+     * <p>선별 방식을 지정하지 않은 기존 호출은 모두 응모 방식이므로
+     * {@link ParticipantSelectionType#APPLICATION}으로 생성한다.
      */
     public static FanMeeting create(Organization organization,
                                     User manager,
@@ -123,10 +138,47 @@ public class FanMeeting extends BaseTimeEntity {
                                     String description,
                                     String coverImageUrl,
                                     LocalDateTime scheduledStartAt) {
+        return create(
+                organization, manager, influencer, title,
+                description, coverImageUrl, scheduledStartAt,
+                ParticipantSelectionType.APPLICATION
+        );
+    }
+
+    /**
+     * 참가자 선별 방식을 지정해 공개 전 초안 상태의 팬미팅을 생성한다.
+     *
+     * @param organization 소속 조직이며 1인 인플루언서 팬미팅이면 null
+     * @param manager 담당 매니저이며 1인 인플루언서 팬미팅이면 null
+     * @param influencer 팬미팅을 진행할 인플루언서
+     * @param title 팬미팅 제목
+     * @param description 팬미팅 설명
+     * @param coverImageUrl 커버 이미지 URL
+     * @param scheduledStartAt 예정 시작 시각
+     * @param participantSelectionType 참가자 선별 방식
+     * @return 초안 상태로 생성된 팬미팅
+     */
+    public static FanMeeting create(Organization organization,
+                                    User manager,
+                                    User influencer,
+                                    String title,
+                                    String description,
+                                    String coverImageUrl,
+                                    LocalDateTime scheduledStartAt,
+                                    ParticipantSelectionType participantSelectionType) {
         return new FanMeeting(
                 organization, manager, influencer, title,
-                description, coverImageUrl, scheduledStartAt
+                description, coverImageUrl, scheduledStartAt, participantSelectionType
         );
+    }
+
+    /**
+     * 외부 선별 방식으로 참가자를 정하는 팬미팅인지 확인한다.
+     *
+     * @return 외부 선별 방식이면 true
+     */
+    public boolean isExternalSelection() {
+        return participantSelectionType == ParticipantSelectionType.EXTERNAL_SELECTION;
     }
 
     /**
@@ -207,9 +259,18 @@ public class FanMeeting extends BaseTimeEntity {
         this.status = FanMeetingStatus.APPLICATION_CLOSED;
     }
 
-    /** 참가자 선정과 운영 준비가 끝난 팬미팅을 시작 대기 상태로 전환한다. */
+    /**
+     * 참가자 선정과 운영 준비가 끝난 팬미팅을 시작 대기 상태로 전환한다.
+     *
+     * <p>응모 방식은 추첨이 끝난 응모 마감 상태에서만 준비 완료로 넘어간다. 외부 선별 방식은
+     * 응모 단계를 거치지 않고 공개 상태에서 명단을 확정하므로 공개 상태에서도 허용한다.
+     *
+     * @throws IllegalStateException 선별 방식에 맞는 상태가 아닌 경우
+     */
     public void markReady() {
-        if (status != FanMeetingStatus.APPLICATION_CLOSED) {
+        boolean externalSelectionReady =
+                isExternalSelection() && status == FanMeetingStatus.PUBLISHED;
+        if (status != FanMeetingStatus.APPLICATION_CLOSED && !externalSelectionReady) {
             throw new IllegalStateException("응모가 마감된 팬미팅만 준비 완료 처리할 수 있습니다.");
         }
         this.status = FanMeetingStatus.READY;

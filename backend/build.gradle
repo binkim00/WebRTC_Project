@@ -21,7 +21,7 @@ repositories {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	// 이메일 인증 메일 발송에 사용하는 JavaMailSender 자동 구성을 제공한다.
+	// 이메일 인증 메일을 실제 발송하는 delivery=smtp 구현에 필요한 JavaMailSender 를 제공한다.
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.security:spring-security-oauth2-jose'

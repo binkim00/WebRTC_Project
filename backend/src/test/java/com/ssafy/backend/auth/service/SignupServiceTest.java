@@ -3,7 +3,6 @@ package com.ssafy.backend.auth.service;
 import com.ssafy.backend.auth.dto.SignupRequest;
 import com.ssafy.backend.auth.exception.DuplicateEmailException;
 import com.ssafy.backend.auth.exception.DuplicateLoginIdException;
-import com.ssafy.backend.common.support.RequestRateLimiter;
 import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
@@ -16,20 +15,12 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.time.Duration;
-
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 class SignupServiceTest {
-
-    private static final String CLIENT_IP = "203.0.113.10";
-
     private UserRepository userRepository;
     private PasswordEncoder passwordEncoder;
-    private RequestRateLimiter rateLimiter;
     private SignupService signupService;
 
     /** 각 테스트가 독립적으로 실행되도록 저장소와 암호화기 mock을 새로 구성한다. */
@@ -37,11 +28,7 @@ class SignupServiceTest {
     void setUp() {
         userRepository = mock(UserRepository.class);
         passwordEncoder = mock(PasswordEncoder.class);
-        rateLimiter = mock(RequestRateLimiter.class);
-        signupService = new SignupService(userRepository, passwordEncoder, rateLimiter, 5, 600L);
-        // 요청 제한기 mock 의 boolean 기본값은 false 라 스텁하지 않으면 모든 가입이 429 로 막힌다.
-        when(rateLimiter.tryConsume(anyString(), anyString(), anyInt(), any(Duration.class)))
-                .thenReturn(true);
+        signupService = new SignupService(userRepository, passwordEncoder);
     }
 
     /** 일반 가입이 허용된 역할별로 사용자 정보와 서버 기본값이 올바르게 저장되는지 확인한다. */
@@ -52,7 +39,7 @@ class SignupServiceTest {
         when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        signupService.signup(request, CLIENT_IP);
+        signupService.signup(request);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
@@ -74,7 +61,7 @@ class SignupServiceTest {
     void rejectsDuplicateLoginIdBeforeEncodingOrSaving() {
         when(userRepository.existsByLoginId("login-user")).thenReturn(true);
 
-        assertThatThrownBy(() -> signupService.signup(request(UserRole.FAN), CLIENT_IP))
+        assertThatThrownBy(() -> signupService.signup(request(UserRole.FAN)))
                 .isInstanceOf(DuplicateLoginIdException.class);
         verifyNoInteractions(passwordEncoder);
         verify(userRepository, never()).save(any());
@@ -85,7 +72,7 @@ class SignupServiceTest {
     void rejectsDuplicateEmailBeforeEncodingOrSaving() {
         when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
 
-        assertThatThrownBy(() -> signupService.signup(request(UserRole.FAN), CLIENT_IP))
+        assertThatThrownBy(() -> signupService.signup(request(UserRole.FAN)))
                 .isInstanceOf(DuplicateEmailException.class);
         verifyNoInteractions(passwordEncoder);
         verify(userRepository, never()).save(any());

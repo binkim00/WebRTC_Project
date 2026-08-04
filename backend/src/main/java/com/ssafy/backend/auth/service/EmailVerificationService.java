@@ -1,110 +1,84 @@
 package com.ssafy.backend.auth.service;
 
 import com.ssafy.backend.auth.domain.EmailVerificationToken;
-import com.ssafy.backend.auth.dto.EmailVerificationConfirmResponse;
+import com.ssafy.backend.auth.dto.EmailVerificationConfirmRequest;
 import com.ssafy.backend.auth.dto.EmailVerificationSendResponse;
+import com.ssafy.backend.auth.dto.EmailVerificationStatusResponse;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.auth.repository.EmailVerificationTokenRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
-import com.ssafy.backend.common.support.RequestRateLimiter;
+import com.ssafy.backend.common.security.HmacTokenHasher;
 import com.ssafy.backend.user.domain.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Base64;
-import java.util.HexFormat;
+import java.util.Optional;
 
 /**
- * 이메일 소유 확인용 인증 메일 발송과 링크 검증을 처리한다.
+ * 이메일 소유 확인을 위한 인증 메일 발송과 토큰 검증을 처리한다.
  *
- * <p>원문 토큰은 메일로만 전달하고 저장은 해시로만 한다. 토큰이 256비트 난수라 사전 대입이
- * 불가능하므로 별도 비밀값 없이 SHA-256으로 충분하다. 추측 가능한 짧은 코드를 쓰지 않는 이유도 같다.
+ * <p>토큰 원문은 메일로만 전달하고 DB에는 HMAC-SHA-256 해시만 남긴다.
+ * 하나의 토큰은 한 번만 사용할 수 있고, 새 메일을 보내면 이전 링크는 즉시 무효가 된다.
  */
 @Service
 public class EmailVerificationService {
 
-    /** 재발송 최소 간격을 관리하는 제한 이름이다. */
-    private static final String COOLDOWN_SCOPE = "email-verify:cooldown";
-    /** 사용자별 발송 횟수 상한을 관리하는 제한 이름이다. */
-    private static final String SEND_SCOPE = "email-verify:send";
-    /** 토큰 확인 시도 횟수 상한을 관리하는 제한 이름이다. */
-    private static final String CONFIRM_SCOPE = "email-verify:confirm";
-    /** 인증 토큰 엔트로피이며 256비트를 사용한다. */
-    private static final int TOKEN_BYTE_LENGTH = 32;
+    /** 인증 토큰 난수 길이이며 문서 기준인 256비트를 사용한다. */
+    private static final int TOKEN_BYTES = 32;
 
     private final CurrentUserService currentUserService;
     private final EmailVerificationTokenRepository tokenRepository;
-    private final EmailVerificationMailSender mailSender;
-    private final RequestRateLimiter rateLimiter;
+    private final EmailVerificationSender sender;
+    private final EmailVerificationRateLimiter rateLimiter;
+    private final EmailVerificationPolicy policy;
+    private final HmacTokenHasher tokenHasher;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Clock clock;
-    private final Duration ttl;
-    private final Duration resendCooldown;
-    private final int sendLimitCount;
-    private final Duration sendLimitWindow;
-    private final int confirmLimitCount;
-    private final Duration confirmLimitWindow;
 
     /**
-     * 인증 메일 발송과 검증에 필요한 저장소, 발송기, 요청 제한기와 정책 값을 주입받는다.
+     * 인증 메일 발송과 토큰 검증에 필요한 협력 객체와 해시 비밀값을 주입받는다.
      *
-     * @param currentUserService 인증 사용자를 활성 사용자로 조회하는 서비스
-     * @param tokenRepository 인증 토큰 저장소
-     * @param mailSender 인증 메일 발송기
-     * @param rateLimiter 요청 제한기
-     * @param clock 현재 시각 공급자
-     * @param ttlSeconds 인증 링크 유효 시간(초)
-     * @param resendCooldownSeconds 재발송 최소 간격(초)
-     * @param sendLimitCount 구간당 발송 허용 횟수
-     * @param sendLimitWindowSeconds 발송 횟수를 집계할 구간(초)
-     * @param confirmLimitCount 구간당 확인 허용 횟수
-     * @param confirmLimitWindowSeconds 확인 횟수를 집계할 구간(초)
+     * @param currentUserService 현재 사용자 조회 서비스
+     * @param tokenRepository 이메일 인증 토큰 저장소
+     * @param sender 인증 메일 발송 구현
+     * @param rateLimiter 발송·확인 빈도 제한
+     * @param policy 유효 시간과 링크 구성 정책
+     * @param hmacSecret 토큰 해시에 사용할 비밀값이며 미설정 시 JWT 비밀값을 사용한다
+     * @param clock 발송·만료 시각 계산용 시계
      */
     public EmailVerificationService(
             CurrentUserService currentUserService,
             EmailVerificationTokenRepository tokenRepository,
-            EmailVerificationMailSender mailSender,
-            RequestRateLimiter rateLimiter,
-            Clock clock,
-            @Value("${app.email-verification.ttl-seconds}") long ttlSeconds,
-            @Value("${app.email-verification.resend-cooldown-seconds}") long resendCooldownSeconds,
-            @Value("${app.email-verification.send-limit-count}") int sendLimitCount,
-            @Value("${app.email-verification.send-limit-window-seconds}") long sendLimitWindowSeconds,
-            @Value("${app.email-verification.confirm-limit-count}") int confirmLimitCount,
-            @Value("${app.email-verification.confirm-limit-window-seconds}") long confirmLimitWindowSeconds
+            EmailVerificationSender sender,
+            EmailVerificationRateLimiter rateLimiter,
+            EmailVerificationPolicy policy,
+            @Value("${app.email-verification.token-secret:${jwt.secret}}") String hmacSecret,
+            Clock clock
     ) {
         this.currentUserService = currentUserService;
         this.tokenRepository = tokenRepository;
-        this.mailSender = mailSender;
+        this.sender = sender;
         this.rateLimiter = rateLimiter;
+        this.policy = policy;
+        this.tokenHasher = new HmacTokenHasher(hmacSecret);
         this.clock = clock;
-        this.ttl = Duration.ofSeconds(ttlSeconds);
-        this.resendCooldown = Duration.ofSeconds(resendCooldownSeconds);
-        this.sendLimitCount = sendLimitCount;
-        this.sendLimitWindow = Duration.ofSeconds(sendLimitWindowSeconds);
-        this.confirmLimitCount = confirmLimitCount;
-        this.confirmLimitWindow = Duration.ofSeconds(confirmLimitWindowSeconds);
     }
 
     /**
-     * 현재 로그인 사용자의 이메일로 인증 메일을 발송한다.
+     * 현재 로그인한 사용자의 이메일로 인증 링크를 발송한다.
      *
-     * <p>이전에 보낸 링크는 무효화해 항상 마지막 메일 하나만 유효하게 둔다.
-     * 발송이 실패하면 트랜잭션이 되돌아가 토큰도 남지 않는다.
+     * <p>재발송 요청도 같은 흐름을 사용하며, 발송할 때마다 이전 링크를 무효화한다.
      *
      * @param principal JWT 인증 사용자 정보
-     * @return 발송 주소와 만료·재발송 가능 시각
-     * @throws BusinessException 이미 인증된 계정이거나 발송 제한에 걸린 경우
+     * @return 만료 시각과 다음 재발송 가능 시각
+     * @throws BusinessException 이미 인증했거나 발송 빈도 제한에 걸린 경우
      */
     @Transactional
     public EmailVerificationSendResponse send(AuthenticatedUser principal) {
@@ -112,91 +86,97 @@ public class EmailVerificationService {
         if (user.isEmailVerified()) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
         }
-
-        String userKey = String.valueOf(user.getId());
-        if (!rateLimiter.tryConsume(SEND_SCOPE, userKey, sendLimitCount, sendLimitWindow)) {
-            throw new BusinessException(
-                    ErrorCode.TOO_MANY_REQUESTS, rateLimiter.retryAfterSeconds(SEND_SCOPE, userKey));
-        }
-        if (!rateLimiter.tryStartCooldown(COOLDOWN_SCOPE, userKey, resendCooldown)) {
-            throw new BusinessException(
-                    ErrorCode.TOO_MANY_REQUESTS, rateLimiter.retryAfterSeconds(COOLDOWN_SCOPE, userKey));
+        if (!rateLimiter.canSend(user.getId())) {
+            throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
+        // 동시에 살아 있는 링크가 하나만 되도록 이전 발급분을 먼저 사용 완료로 만든다.
         tokenRepository.consumeAllByUserId(user.getId(), now);
 
         String rawToken = generateToken();
-        LocalDateTime expiresAt = now.plus(ttl);
-        tokenRepository.save(EmailVerificationToken.issue(user, hash(rawToken), expiresAt));
-        mailSender.send(user.getEmail(), user.getNickname(), rawToken, ttl.toMinutes());
+        LocalDateTime expiresAt = now.plus(policy.tokenTtl());
+        tokenRepository.save(EmailVerificationToken.issue(user, tokenHasher.hash(rawToken), expiresAt));
 
-        return new EmailVerificationSendResponse(
-                user.getEmail(), expiresAt, now.plus(resendCooldown));
+        sender.send(user, policy.verificationLink(rawToken), expiresAt);
+        rateLimiter.recordSend(user.getId());
+
+        return EmailVerificationSendResponse.of(
+                user.getEmail(),
+                expiresAt,
+                now.plus(rateLimiter.resendCooldown()),
+                // 운영에서는 절대 채우지 않으며 개발 프로파일에서만 수동 테스트용으로 노출한다.
+                policy.exposeToken() ? rawToken : null
+        );
     }
 
     /**
-     * 메일 링크의 토큰을 검증하고 이메일 인증을 완료한다.
+     * 메일로 받은 토큰을 검증하고 사용자의 이메일 인증을 완료한다.
      *
-     * <p>메일을 다른 브라우저나 기기에서 열 수 있어 로그인 상태를 요구하지 않는다.
-     * 대신 토큰 자체가 소유 증명이므로 만료와 재사용을 엄격히 막는다.
-     *
-     * @param rawToken 메일 링크에 담긴 원문 토큰
-     * @param clientIp 확인 시도 횟수를 제한할 요청자 IP
-     * @return 인증을 마친 사용자 정보
-     * @throws BusinessException 토큰이 없거나 만료·사용 완료 상태이거나 시도 제한에 걸린 경우
+     * @param principal JWT 인증 사용자 정보
+     * @param request 인증 토큰 원문
+     * @return 인증 완료 후 상태
+     * @throws BusinessException 토큰이 유효하지 않거나 확인 시도 제한에 걸린 경우
      */
     @Transactional
-    public EmailVerificationConfirmResponse confirm(String rawToken, String clientIp) {
-        if (!rateLimiter.tryConsume(CONFIRM_SCOPE, clientIp, confirmLimitCount, confirmLimitWindow)) {
-            throw new BusinessException(
-                    ErrorCode.TOO_MANY_REQUESTS, rateLimiter.retryAfterSeconds(CONFIRM_SCOPE, clientIp));
+    public EmailVerificationStatusResponse confirm(
+            AuthenticatedUser principal, EmailVerificationConfirmRequest request
+    ) {
+        User user = currentUserService.requireActiveUser(principal);
+        if (user.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+        if (!rateLimiter.canConfirm(user.getId())) {
+            throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
         }
 
-        EmailVerificationToken token = tokenRepository.findByTokenHash(hash(rawToken))
-                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID));
         LocalDateTime now = LocalDateTime.now(clock);
-        User user = token.getUser();
+        EmailVerificationToken token = findUsableToken(request.token().trim(), user, now);
 
-        try {
-            token.consume(now);
-            user.verifyEmail(now);
-        } catch (IllegalStateException exception) {
-            // 이미 인증을 마친 사용자가 같은 링크를 다시 열었을 때와 만료·재사용을 함께 처리한다.
-            if (user.isEmailVerified() && token.getConsumedAt() != null) {
-                throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
-            }
+        token.consume(now);
+        user.verifyEmail(now);
+        rateLimiter.clear(user.getId());
+        return EmailVerificationStatusResponse.from(user);
+    }
+
+    /**
+     * 현재 로그인한 사용자의 이메일 인증 상태를 조회한다.
+     *
+     * @param principal JWT 인증 사용자 정보
+     * @return 이메일 인증 상태
+     */
+    @Transactional(readOnly = true)
+    public EmailVerificationStatusResponse status(AuthenticatedUser principal) {
+        return EmailVerificationStatusResponse.from(currentUserService.requireActiveUser(principal));
+    }
+
+    /**
+     * 토큰 해시로 사용 가능한 인증 토큰을 찾고, 실패는 모두 같은 오류로 응답한다.
+     *
+     * <p>만료·사용 완료·소유자 불일치를 구분해 알려 주면 다른 계정의 토큰 상태를 탐색할 수 있어
+     * 실패 사유를 하나로 합치고 실패 횟수만 누적한다.
+     *
+     * @param rawToken 검증할 토큰 원문
+     * @param user 토큰을 사용하려는 사용자
+     * @param now 검증 기준 시각
+     * @return 사용 가능한 인증 토큰
+     * @throws BusinessException 토큰이 없거나 사용할 수 없는 경우
+     */
+    private EmailVerificationToken findUsableToken(String rawToken, User user, LocalDateTime now) {
+        Optional<EmailVerificationToken> found = tokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
+                .filter(token -> token.getUser().getId().equals(user.getId()))
+                .filter(token -> token.isUsable(now));
+        if (found.isEmpty()) {
+            rateLimiter.recordConfirmFailure(user.getId());
             throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
         }
-
-        // 인증을 마치면 남은 링크도 쓸 수 없도록 정리하고 재발송 쿨다운을 풀어 준다.
-        rateLimiter.clear(COOLDOWN_SCOPE, String.valueOf(user.getId()));
-        return EmailVerificationConfirmResponse.from(user);
+        return found.get();
     }
 
-    /**
-     * 추측할 수 없는 URL 안전 인증 토큰을 생성한다.
-     *
-     * @return 패딩 없는 Base64 URL 인코딩 토큰
-     */
+    /** URL에 그대로 실을 수 있는 256비트 난수 토큰을 생성한다. */
     private String generateToken() {
-        byte[] bytes = new byte[TOKEN_BYTE_LENGTH];
-        secureRandom.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    /**
-     * 저장과 비교에 사용할 토큰 해시를 만든다.
-     *
-     * @param rawToken 원문 토큰
-     * @return 16진수로 표현한 SHA-256 해시
-     */
-    private String hash(String rawToken) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(rawToken.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 algorithm is not available.", exception);
-        }
+        byte[] token = new byte[TOKEN_BYTES];
+        secureRandom.nextBytes(token);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(token);
     }
 }

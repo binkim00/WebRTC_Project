@@ -81,6 +81,9 @@ class FanMeetingQueueSecurityTest {
     private MockMvc mockMvc;
 
     @MockitoBean
+    private EmailVerificationTokenRepository emailVerificationTokenRepository;
+
+    @MockitoBean
     private QueueCommandService commandService;
 
     @MockitoBean
@@ -169,9 +172,6 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private AiCallSummaryRepository aiCallSummaryRepository;
-
-    @MockitoBean
-    private EmailVerificationTokenRepository emailVerificationTokenRepository;
 
     /** 인증 정보가 없어도 공개 팬미팅 목록 API에 접근할 수 있는지 검증한다. */
     @Test

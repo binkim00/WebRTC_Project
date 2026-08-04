@@ -77,13 +77,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/test-token").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/webhook").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
-                        // 이메일 인증 확인은 메일 링크를 다른 브라우저나 기기에서 열 수 있어 비로그인도 허용한다.
-                        // 토큰 자체가 메일함 소유 증명이며 만료·재사용 검증은 서비스 계층이 수행한다.
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/email-verifications/confirm")
-                                .permitAll()
-                        // 발송과 재발송은 현재 로그인 사용자의 이메일을 대상으로 하므로 인증이 필요하다.
+                        // 이메일 인증 (AUTH-005~008)
+                        // 자기 계정의 메일함만 확인하는 흐름이라 역할 제한 없이 로그인만 요구한다.
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/email-verifications",
-                                "/api/v1/auth/email-verifications/resend").authenticated()
+                                "/api/v1/auth/email-verifications/resend",
+                                "/api/v1/auth/email-verifications/confirm").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/email-verifications")
+                                .authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/v1/influencers/*/follow")
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/influencers/*/follow")
@@ -94,6 +94,11 @@ public class SecurityConfig {
                                 .hasAnyRole("INFLUENCER", "SOLO_INFLUENCER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/organizations/*/members")
                                 .hasRole("ADMIN")
+                        // 외부 선별 참가자 명단 CSV 양식은 팬미팅 식별자가 없는 공통 경로라
+                        // 아래 팬미팅 상세 permitAll 규칙보다 먼저 등록해야 가려지지 않는다.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/fan-meetings/external-participants/csv-template")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings",
                                 "/api/v1/fan-meetings/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/queue/enter")
@@ -161,6 +166,15 @@ public class SecurityConfig {
                         // 팬미팅 결과 통계 (STAT-001)
                         .requestMatchers(HttpMethod.GET, "/api/v1/fan-meetings/*/statistics")
                                 .hasAnyRole("INFLUENCER", "MANAGER", "SOLO_INFLUENCER", "ADMIN")
+                        // 통계 CSV 내보내기는 운영 산출물이라 소유 운영자로만 제한한다.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/fan-meetings/*/statistics/export.csv")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        // 외부 선별 참가자 명단 CSV 미리보기·확정
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/fan-meetings/*/external-participants/csv/preview",
+                                "/api/v1/fan-meetings/*/external-participants/csv/confirm")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
 
                         // 공지·커뮤니티 조회 (POST-001, POST-002, COMMENT-001)
                         .requestMatchers(HttpMethod.GET, "/api/v1/service-notices",

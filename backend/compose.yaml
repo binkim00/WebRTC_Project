@@ -20,8 +20,8 @@ services:
     ports:
       - '6379:6379'
 
-  # 로컬에서 인증 메일을 실제로 외부에 보내지 않고 가로채 확인하는 SMTP 서버다.
-  # 발송 확인은 http://localhost:8025 웹 UI 에서 한다.
+  # 로컬에서 인증 메일을 외부로 보내지 않고 가로채 확인하는 SMTP 서버다.
+  # EMAIL_VERIFY_DELIVERY=smtp 로 두고 http://localhost:8025 에서 수신을 확인한다.
   mailpit:
     image: 'axllent/mailpit:latest'
     environment:
