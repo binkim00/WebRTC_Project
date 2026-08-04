@@ -30,12 +30,12 @@ export function InfluencerMeetingCallPage() {
   return (
     <VideoCallRoom
       callSessionId={callSessionId}
-      // 혼자 운영하는 계정은 다음 팬을 호출할 운영 콘솔로 복귀한다.
-      // 소속 인플루언서는 매니저 콘솔에 접근할 수 없으므로 준비실로 보낸다.
-      // (이전에는 마이페이지로 보내 대기열도, 다음 팬 입장 수단도, 종료 수단도 없는 곳에 떨어졌다.)
+      // '진행 종료하고 나가기'는 더 이상 통화를 진행하지 않겠다는 뜻이므로 메인으로 보낸다.
+      // 혼자 운영하는 계정만 남은 팬을 계속 호출할 운영 콘솔이 있어 그곳으로 복귀한다.
+      // (소속 인플루언서는 매니저 콘솔에 접근할 수 없다.)
       endTo={isSoloInfluencer
         ? `/manager/fan-meetings/${encodeURIComponent(fanMeetingId)}/monitor`
-        : `/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/ready`}
+        : '/'}
       meetingId={fanMeetingId}
       participantLabel="팬 영상"
       screenId="ID-003"
