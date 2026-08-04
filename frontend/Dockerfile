@@ -7,6 +7,8 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+ARG VITE_RECORDING_EGRESS_ENABLED=false
+ENV VITE_RECORDING_EGRESS_ENABLED=${VITE_RECORDING_EGRESS_ENABLED}
 RUN npm run build
 
 # 2단계: 정적 파일 제공

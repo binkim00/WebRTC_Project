@@ -70,7 +70,7 @@ export function ConnectedCallRoom({
 
   // 팬 역할만 통화 녹화를 수행한다. (백엔드 업로드 권한도 FAN 전용)
   const [authSession] = useState(() => getAuthSession())
-  const browserRecordingEnabled = import.meta.env.VITE_RECORDING_MODE !== 'egress'
+  const browserRecordingEnabled = import.meta.env.VITE_RECORDING_EGRESS_ENABLED !== 'true'
   const { stopAndUpload } = useCallRecording({
     enabled: browserRecordingEnabled && authSession?.role === 'FAN' && isConnected,
     callSessionId,

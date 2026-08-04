@@ -163,6 +163,9 @@ services:
     build:
       context: ../../frontend
       dockerfile: Dockerfile
+      args:
+        # 백엔드 Egress 기능 플래그와 같은 값으로 빌드해 이중 녹화를 방지한다.
+        VITE_RECORDING_EGRESS_ENABLED: ${RECORDING_EGRESS_ENABLED:-false}
 
     image: melly-frontend:local
     container_name: frontend
