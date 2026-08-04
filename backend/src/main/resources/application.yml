@@ -49,6 +49,8 @@ app:
   application:
     # 응모 전 이메일 인증을 강제한다. 현재 배포 환경에서는 임시로 비활성화한다.
     email-verification-required: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:false}
+    # 동일 기기 다계정 응모 처리 정책이다. FLAG는 표시만, BLOCK은 409로 거부한다.
+    device-duplicate-policy: ${APPLICATION_DEVICE_DUPLICATE_POLICY:FLAG}
 
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
@@ -89,12 +91,6 @@ app:
     max-age-days: ${DEVICE_TOKEN_MAX_AGE_DAYS:90}
     # 기기 토큰 해시용 비밀값이며 지정하지 않으면 JWT 비밀값을 사용한다.
     secret: ${DEVICE_TOKEN_SECRET:${jwt.secret}}
-
-  application:
-    # 응모 전 이메일 인증을 강제한다. 기존 회원 인증 유도 기간에만 잠시 false로 둔다.
-    email-verification-required: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:true}
-    # 동일 기기 다계정 응모 처리 정책이다. FLAG는 표시만, BLOCK은 409로 거부한다.
-    device-duplicate-policy: ${APPLICATION_DEVICE_DUPLICATE_POLICY:FLAG}
 
   organization:
     invitation-ttl-seconds: ${ORGANIZATION_INVITATION_TTL_SECONDS:86400}
