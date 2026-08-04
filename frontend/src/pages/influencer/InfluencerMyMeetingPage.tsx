@@ -1,61 +1,248 @@
-import { CalendarBlank, VideoCamera } from '@phosphor-icons/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertBanner, Badge, Button, Card } from '../../components'
+import { publishApplicationResults } from '../../api/applications'
 import { ApiError } from '../../api/ApiError'
-import { getAuthSession } from '../../api/authSession'
-import { fetchMyMeetings, type ManagerMeetingSummary } from '../../api/managerMeetings'
+import {
+  getAuthSession,
+  type LoginRole,
+} from '../../api/authSession'
+import {
+  fetchMeetingQueue,
+  type MeetingQueue,
+} from '../../api/fanMeetingParticipants'
+import {
+  fetchPublicFanMeetingDetail,
+  type PublicFanMeetingDetail,
+} from '../../api/fanMeetings'
+import {
+  fetchMyMeetings,
+  type ManagerMeetingSummary,
+} from '../../api/managerMeetings'
+import { Button, Dialog } from '../../components'
+import { meetingStatusLabel } from '../manager/meetingLifecycle'
+import {
+  getDashboardMeetingAction,
+  selectRecentMeeting,
+  type DashboardMeetingAction,
+  type InfluencerDashboardRole,
+} from './influencerMeetingDashboard'
 
-/** 팬미팅 시작 일시가 오늘(로컬 기준)인지 확인한다. */
-function isScheduledToday(value: string): boolean {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return false
-
-  const today = new Date()
-  return (
-    date.getFullYear() === today.getFullYear() &&
-    date.getMonth() === today.getMonth() &&
-    date.getDate() === today.getDate()
-  )
+export type InfluencerMyMeetingPageProps = {
+  role?: LoginRole
 }
 
-/** 팬미팅 시작 일시를 "2026. 07. 31. 19:00" 형태로 표시한다. */
-function formatScheduledAt(value: string): string {
+type TodayInsight = {
+  detail?: PublicFanMeetingDetail
+  queue?: MeetingQueue
+}
+
+type TodayStat = {
+  label: string
+  value: string
+}
+
+function formatClock(value?: string | null): string {
+  if (!value) return '미정'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-
   return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   }).format(date)
 }
 
-/** 인플루언서가 오늘 진행할 팬미팅을 확인하고 장비 점검으로 이동하는 페이지다. */
-export function InfluencerMyMeetingPage() {
+function formatDuration(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
+  const seconds = safeSeconds % 60
+
+  if (hours > 0) return `${hours}시간 ${minutes}분`
+  if (minutes > 0) return `${minutes}분 ${seconds}초`
+  return `${seconds}초`
+}
+
+function timeUntil(value: string, now: Date): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '시간 확인 필요'
+  const seconds = Math.floor((date.getTime() - now.getTime()) / 1000)
+  return seconds <= 0 ? '곧 시작' : formatDuration(seconds)
+}
+
+function statusTextClass(status?: string): string {
+  if (status === 'LIVE') return 'text-[var(--color-success)]'
+  if (status === 'APPLICATION_CLOSED') return 'text-[var(--color-warning)]'
+  if (status === 'CANCELED') return 'text-[var(--color-error)]'
+  return 'text-[var(--color-primary-coral)]'
+}
+
+function recentMeetingCopy(
+  meeting: ManagerMeetingSummary,
+  insight: TodayInsight,
+  now: Date,
+): { tag: string; description?: string; note?: string; stats: TodayStat[] } {
+  const callDuration = insight.detail?.meeting.operation.callDurationSec
+
+  if (meeting.status === 'LIVE') {
+    const completed = insight.queue?.entries.filter(
+      (entry) => entry.status === 'COMPLETED',
+    ).length ?? 0
+    const total = insight.queue?.entries.length || meeting.participantCount
+    const currentFan = insight.queue?.currentCall?.nickname
+    const startedAt = new Date(meeting.scheduledStartAt).getTime()
+    const elapsed = Number.isNaN(startedAt)
+      ? '확인 중'
+      : formatDuration((now.getTime() - startedAt) / 1000)
+
+    return {
+      tag: '지금 진행 중',
+      description: currentFan
+        ? `${currentFan} 님과의 통화를 진행하고 있어요.`
+        : '현재 팬과의 통화를 진행하고 있어요.',
+      note: '통화 중에는 운영 화면을 볼 수 없습니다. 노쇼와 순서 변경은 통화 화면 안에서 처리합니다.',
+      stats: [
+        { label: '완료', value: `${completed} / ${total}명` },
+        { label: '1인 통화', value: callDuration ? `${callDuration}초` : '확인 중' },
+        { label: '경과', value: elapsed },
+      ],
+    }
+  }
+
+  if (meeting.status === 'READY') {
+    return {
+      tag: '진행 예정',
+      description: `${formatClock(meeting.scheduledStartAt)}에 시작합니다. 시작 전 장비를 점검해 주세요.`,
+      note: '장비 점검을 마치면 시작 시간에 첫 번째 팬과 연결됩니다.',
+      stats: [
+        { label: '확정 참가자', value: `${meeting.participantCount}명` },
+        { label: '1인 통화', value: callDuration ? `${callDuration}초` : '확인 중' },
+        { label: '시작까지', value: timeUntil(meeting.scheduledStartAt, now) },
+      ],
+    }
+  }
+
+  if (meeting.status === 'APPLICATION_CLOSED' && meeting.participantCount > 0) {
+    return {
+      tag: '확인할 일',
+      description: '추첨이 끝났습니다. 결과를 발표하면 응모자 전원에게 알림이 갑니다.',
+      note: '발표 후에는 당첨 명단을 바꿀 수 없습니다.',
+      stats: [
+        { label: '응모', value: `${meeting.applicationCount}명` },
+        { label: '당첨', value: `${meeting.participantCount}명` },
+        {
+          label: '발표 예정',
+          value: formatClock(insight.detail?.meeting.application.resultAnnouncementAt),
+        },
+      ],
+    }
+  }
+
+  return {
+    tag: meetingStatusLabel(meeting.status),
+    stats: [
+      { label: '응모', value: `${meeting.applicationCount}명` },
+      { label: '확정 참가자', value: `${meeting.participantCount}명` },
+      { label: '시작', value: formatClock(meeting.scheduledStartAt) },
+    ],
+  }
+}
+
+function DashboardSkeleton() {
+  return (
+    <div aria-label="내 팬미팅을 불러오는 중" aria-live="polite" className="grid gap-5">
+      <div className="h-5 w-28 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)]" />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid gap-4">
+          <div className="h-10 w-3/4 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)]" />
+          <div className="h-6 w-2/3 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)]" />
+          <div className="h-24 rounded-[var(--radius-panel)] bg-[var(--color-surface-muted)]" />
+        </div>
+        <div className="h-44 rounded-[var(--radius-panel)] bg-[var(--color-surface-muted)]" />
+      </div>
+    </div>
+  )
+}
+
+type ActionButtonProps = {
+  action: DashboardMeetingAction
+  meeting: ManagerMeetingSummary
+  onNavigate: (to: string) => void
+  onPublishResults: (meeting: ManagerMeetingSummary) => void
+  size?: 'md' | 'lg'
+}
+
+function ActionButton({
+  action,
+  meeting,
+  onNavigate,
+  onPublishResults,
+  size = 'md',
+}: ActionButtonProps) {
+  if (action.kind === 'disabled') {
+    return (
+      <div className="grid gap-2">
+        <Button disabled size={size}>{action.label}</Button>
+        <p className="text-sm font-medium leading-relaxed text-[var(--color-text-muted)]">
+          {action.reason}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <Button
+      onClick={() =>
+        action.kind === 'navigate'
+          ? onNavigate(action.to)
+          : onPublishResults(meeting)
+      }
+      size={size}
+    >
+      {action.label}
+    </Button>
+  )
+}
+
+/** 최근 팬미팅 한 건의 다음 행동을 역할에 맞게 보여 주는 대시보드다. */
+export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps = {}) {
   const navigate = useNavigate()
-  const [meetingSummaries, setMeetingSummaries] = useState<ManagerMeetingSummary[]>([])
+  const [meetings, setMeetings] = useState<ManagerMeetingSummary[]>([])
+  const [todayInsight, setTodayInsight] = useState<TodayInsight>({})
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(true)
-
-  // 내 팬미팅 전체 페이지에서 오늘 진행할 팬미팅을 찾는다. 첫 페이지만 조회하면 오래된 계정의 일정이 누락될 수 있다.
+  const [publishing, setPublishing] = useState(false)
+  const [publishTarget, setPublishTarget] = useState<ManagerMeetingSummary>()
+  const [reloadKey, setReloadKey] = useState(0)
+  const [now, setNow] = useState(() => new Date())
+  const session = getAuthSession()
+  const effectiveRole = role ?? session?.role
+  const dashboardRole: InfluencerDashboardRole | undefined =
+    effectiveRole === 'INFLUENCER' || effectiveRole === 'SOLO_INFLUENCER'
+      ? effectiveRole
+      : undefined
+  const isSolo = dashboardRole === 'SOLO_INFLUENCER'
+  const recentMeeting = useMemo(
+    () => selectRecentMeeting(meetings, now),
+    [meetings, now],
+  )
   useEffect(() => {
     const controller = new AbortController()
-    const session = getAuthSession()
+    const currentSession = getAuthSession()
 
-    if (!session || (session.role !== 'INFLUENCER' && session.role !== 'SOLO_INFLUENCER')) {
+    if (!currentSession || !dashboardRole) {
       setError('인플루언서 계정으로 로그인해 주세요.')
       setLoading(false)
       return () => controller.abort()
     }
 
+    setLoading(true)
+    setError(undefined)
+
     void (async () => {
       const firstPage = await fetchMyMeetings(
         { page: 0, size: 50 },
-        session.accessToken,
+        currentSession.accessToken,
         controller.signal,
       )
       const allMeetings = [...firstPage.content]
@@ -63,34 +250,44 @@ export function InfluencerMyMeetingPage() {
       for (let page = 1; page < firstPage.totalPages; page += 1) {
         const nextPage = await fetchMyMeetings(
           { page, size: 50 },
-          session.accessToken,
+          currentSession.accessToken,
           controller.signal,
         )
         allMeetings.push(...nextPage.content)
       }
 
-      return allMeetings
-    })()
-      .then((allMeetings) => {
-        const activeMeetings = allMeetings
-          .filter(
-            (item) =>
-              item.status === 'LIVE' ||
-              (item.status !== 'ENDED' &&
-                item.status !== 'CANCELED' &&
-                isScheduledToday(item.scheduledStartAt)),
-          )
-          .sort((left, right) => {
-            if (left.status === 'LIVE' && right.status !== 'LIVE') return -1
-            if (right.status === 'LIVE' && left.status !== 'LIVE') return 1
-            return (
-              new Date(left.scheduledStartAt).getTime() -
-              new Date(right.scheduledStartAt).getTime()
-            )
-          })
+      const recent = selectRecentMeeting(allMeetings)
+      if (!recent) return { allMeetings, insight: {} as TodayInsight }
 
-        setMeetingSummaries(activeMeetings)
-        setError(activeMeetings.length > 0 ? undefined : '오늘 진행할 팬미팅이 없습니다.')
+      const numericMeetingId = Number(recent.meetingId)
+      const [detailResult, queueResult] = await Promise.allSettled([
+        Number.isFinite(numericMeetingId)
+          ? fetchPublicFanMeetingDetail(
+              numericMeetingId,
+              currentSession.accessToken,
+              controller.signal,
+            )
+          : Promise.reject(new TypeError('팬미팅 식별자가 올바르지 않습니다.')),
+        fetchMeetingQueue(
+          recent.meetingId,
+          currentSession.accessToken,
+          controller.signal,
+        ),
+      ])
+
+      return {
+        allMeetings,
+        insight: {
+          detail: detailResult.status === 'fulfilled' ? detailResult.value : undefined,
+          queue: queueResult.status === 'fulfilled' ? queueResult.value : undefined,
+        },
+      }
+    })()
+      .then(({ allMeetings, insight }) => {
+        if (controller.signal.aborted) return
+        setNow(new Date())
+        setMeetings(allMeetings)
+        setTodayInsight(insight)
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
@@ -105,80 +302,205 @@ export function InfluencerMyMeetingPage() {
       })
 
     return () => controller.abort()
-  }, [])
+  }, [dashboardRole, reloadKey])
 
-  /** 오늘의 팬미팅 장비 점검 화면으로 이동한다. */
-  function handleOpenDeviceCheck(meetingSummary: ManagerMeetingSummary) {
-    navigate(`/influencer/fan-meetings/${meetingSummary.meetingId}/device-check`)
+  async function handlePublishResults() {
+    const currentSession = getAuthSession()
+    if (!publishTarget || !currentSession) return
+
+    setPublishing(true)
+    setError(undefined)
+    try {
+      await publishApplicationResults(
+        publishTarget.meetingId,
+        currentSession.accessToken,
+      )
+      setPublishTarget(undefined)
+      setReloadKey((value) => value + 1)
+    } catch (reason) {
+      setPublishTarget(undefined)
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : '응모 결과를 발표하지 못했습니다.',
+      )
+    } finally {
+      setPublishing(false)
+    }
   }
 
+  const primaryAction =
+    recentMeeting && dashboardRole
+      ? getDashboardMeetingAction(recentMeeting, dashboardRole)
+      : undefined
+  const copy = recentMeeting ? recentMeetingCopy(recentMeeting, todayInsight, now) : undefined
+
   return (
-    <div className="grid gap-12 pb-8">
-      {error ? (
-        <AlertBanner title="팬미팅을 선택할 수 없습니다" variant="error">
-          {error}
-        </AlertBanner>
-      ) : null}
+    <div className="pb-8">
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="min-w-0">
+          <h1 className="mj-font-title text-[clamp(1.75rem,3vw,2.25rem)] leading-tight tracking-[-0.04em] text-[var(--color-text-primary)]">
+            내 팬미팅
+          </h1>
+          <p className="mt-2 text-base font-medium text-[var(--color-text-muted)]">
+            가장 가까운 팬미팅 한 건입니다.
+          </p>
+        </div>
+        {isSolo ? (
+          <Button
+            onClick={() => navigate('/manager/fan-meetings/new')}
+            variant="outline"
+          >
+            새 팬미팅 만들기
+          </Button>
+        ) : null}
+      </div>
 
-      <header className="grid gap-3">
-        <h1 className="text-4xl font-black leading-tight tracking-[-0.04em]">
-          나의 팬미팅
-        </h1>
-        <p className="text-[var(--color-text-secondary)]">
-          오늘 진행할 팬미팅을 확인하고 장비 점검 후 입장하세요.
-        </p>
-      </header>
-
-      {/* 오늘의 팬미팅: 팬미팅명과 시작 일시, 장비 점검 이동 버튼만 표시한다 */}
-      <section aria-labelledby="today-meeting-title" className="grid gap-5">
-        <h2
-          className="text-2xl font-extrabold tracking-[-0.025em]"
-          id="today-meeting-title"
-        >
-          오늘의 팬미팅
-        </h2>
-
+      <section
+        aria-labelledby="today-meeting-title"
+        className="mt-8 border-t border-[var(--color-divider)] pt-7"
+      >
         {loading ? (
-          <Card className="p-8 text-center text-[var(--color-text-secondary)]">
-            오늘의 팬미팅을 불러오는 중입니다.
-          </Card>
-        ) : meetingSummaries.length > 0 ? (
-          meetingSummaries.map((meetingSummary) => (
-            <Card className="overflow-hidden" key={meetingSummary.meetingId}>
-              <div className="grid gap-8 p-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center lg:p-8">
-                <div className="grid gap-5">
-                  <Badge
-                    className="w-fit"
-                    variant={meetingSummary.status === 'LIVE' ? 'primary' : 'success'}
-                  >
-                    {meetingSummary.status === 'LIVE' ? '진행 중' : '오늘 진행'}
-                  </Badge>
-                  <h3 className="text-3xl font-black tracking-[-0.04em]">
-                    {meetingSummary.title}
-                  </h3>
-                  <p className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)]">
-                    <CalendarBlank aria-hidden size={20} weight="bold" />
-                    {formatScheduledAt(meetingSummary.scheduledStartAt)}
-                  </p>
-                </div>
+          <DashboardSkeleton />
+        ) : error ? (
+          <div>
+            <h2
+              className="text-2xl font-black tracking-[-0.038em] text-[var(--color-text-primary)]"
+              id="today-meeting-title"
+            >
+              팬미팅 정보를 표시할 수 없어요
+            </h2>
+            <p className="mt-3 max-w-[48ch] text-base font-medium leading-relaxed text-[var(--color-text-body)]">
+              잠시 후 페이지를 새로고침해 주세요.
+            </p>
+          </div>
+        ) : recentMeeting && copy && primaryAction ? (
+          <>
+            <p
+              className={`text-sm font-extrabold ${statusTextClass(recentMeeting.status)}`}
+              role="status"
+            >
+              {copy.tag}
+            </p>
 
-                <Button
-                  className="w-full shadow-[var(--shadow-final-cta)] sm:w-auto"
-                  leadingIcon={<VideoCamera aria-hidden size={21} weight="bold" />}
-                  onClick={() => handleOpenDeviceCheck(meetingSummary)}
-                  size="lg"
+            <div className="mt-4 grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-11">
+              <div className="min-w-0">
+                <h2
+                  className="mj-font-title text-[clamp(1.75rem,4vw,2.375rem)] leading-[1.16] tracking-[-0.045em] text-[var(--color-text-primary)]"
+                  id="today-meeting-title"
                 >
-                  장비 점검 후 입장
+                  {recentMeeting.title}
+                </h2>
+                {copy.description ? (
+                  <p className="mt-3 max-w-[48ch] text-base font-medium leading-relaxed text-[var(--color-text-body)]">
+                    {copy.description}
+                  </p>
+                ) : null}
+
+                <dl className="mt-7 grid grid-cols-1 border-t border-[var(--color-divider)] sm:grid-cols-3">
+                  {copy.stats.map((stat) => (
+                    <div
+                      className="border-b border-[var(--color-divider)] py-4 sm:border-b-0 sm:border-l sm:px-6 sm:first:border-l-0 sm:first:pl-0"
+                      key={stat.label}
+                    >
+                      <dt className="text-sm font-bold text-[var(--color-text-muted)]">
+                        {stat.label}
+                      </dt>
+                      <dd className="mt-2 text-2xl font-black tabular-nums tracking-[-0.035em] text-[var(--color-text-primary)]">
+                        {stat.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+
+                {copy.note ? (
+                  <p className="mt-5 max-w-[56ch] text-base font-medium leading-relaxed text-[var(--color-text-muted)]">
+                    {copy.note}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="grid content-start gap-2.5">
+                <ActionButton
+                  action={primaryAction}
+                  meeting={recentMeeting}
+                  onNavigate={navigate}
+                  onPublishResults={setPublishTarget}
+                  size="lg"
+                />
+                <Button
+                  onClick={() => navigate(`/fan-meetings/${encodeURIComponent(recentMeeting.meetingId)}/fans`)}
+                  variant="outline"
+                >
+                  참가 팬
+                </Button>
+                <Button
+                  onClick={() =>
+                    navigate(
+                      isSolo
+                        ? `/manager/fan-meetings/${encodeURIComponent(recentMeeting.meetingId)}`
+                        : `/influencer/fan-meetings/${encodeURIComponent(recentMeeting.meetingId)}/ready`,
+                    )
+                  }
+                  variant="outline"
+                >
+                  상세 열기
                 </Button>
               </div>
-            </Card>
-          ))
+            </div>
+          </>
         ) : (
-          <Card className="p-8 text-center text-[var(--color-text-secondary)]">
-            오늘 진행할 팬미팅이 없습니다.
-          </Card>
+          <div>
+            <h2
+              className="text-2xl font-black tracking-[-0.038em] text-[var(--color-text-primary)]"
+              id="today-meeting-title"
+            >
+              등록된 팬미팅이 없어요
+            </h2>
+            <p className="mt-3 max-w-[48ch] text-base font-medium leading-relaxed text-[var(--color-text-body)]">
+              새 팬미팅을 만들거나 지난 기록을 확인해 보세요.
+            </p>
+          </div>
         )}
       </section>
+
+      <p className="mt-9 border-t border-[var(--color-divider)] pt-6">
+        <Button
+          onClick={() => navigate('/influencer/mypage/fan-meetings')}
+          variant="text"
+        >
+          지난 팬미팅 보기
+        </Button>
+      </p>
+
+      <Dialog
+        description="발표하면 응모자 전원에게 알림이 가며, 당첨 명단은 변경할 수 없습니다."
+        footer={
+          <>
+            <Button
+              disabled={publishing}
+              onClick={() => setPublishTarget(undefined)}
+              variant="outline"
+            >
+              취소
+            </Button>
+            <Button loading={publishing} onClick={() => void handlePublishResults()}>
+              결과 발표
+            </Button>
+          </>
+        }
+        onOpenChange={(open) => {
+          if (!open && !publishing) setPublishTarget(undefined)
+        }}
+        open={Boolean(publishTarget)}
+        title="응모 결과를 발표할까요?"
+      >
+        {publishing ? (
+          <p className="text-sm font-medium text-[var(--color-text-muted)]" role="status">
+            결과를 발표하는 동안 창을 닫을 수 없습니다.
+          </p>
+        ) : null}
+      </Dialog>
     </div>
   )
 }
