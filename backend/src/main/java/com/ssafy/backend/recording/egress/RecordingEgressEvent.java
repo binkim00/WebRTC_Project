@@ -10,4 +10,7 @@ public sealed interface RecordingEgressEvent {
 
     record StopRequested(Long recordingId) implements RecordingEgressEvent {
     }
+
+    record CapacityReleaseRequested(Long recordingId) implements RecordingEgressEvent {
+    }
 }

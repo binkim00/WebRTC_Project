@@ -95,6 +95,11 @@ app:
       enabled: ${RECORDING_EGRESS_ENABLED:false}
       output-root: ${RECORDING_EGRESS_OUTPUT_ROOT:/out}
       layout: ${RECORDING_EGRESS_LAYOUT:grid}
+      max-concurrent: ${RECORDING_EGRESS_MAX_CONCURRENT:1}
+      capacity-lease-seconds: ${RECORDING_EGRESS_CAPACITY_LEASE_SECONDS:7200}
+      recovery-check-delay-ms: ${RECORDING_EGRESS_RECOVERY_CHECK_DELAY_MS:30000}
+      recovery-stale-seconds: ${RECORDING_EGRESS_RECOVERY_STALE_SECONDS:60}
+      recovery-batch-size: ${RECORDING_EGRESS_RECOVERY_BATCH_SIZE:20}
 
 jwt:
   secret: ${JWT_SECRET}

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import retrofit2.Response;
 
 import java.io.IOException;
+import java.util.List;
 
 /** LiveKit Java SDK의 Egress 시작·중지 호출과 응답 검증을 한곳에 모은다. */
 @Component
@@ -47,6 +48,33 @@ public class LiveKitEgressClient {
         } catch (IOException exception) {
             throw new RecordingEgressException(
                     "EGRESS_STOP_IO_ERROR", "Egress 중지 요청에 실패했습니다.", exception);
+        }
+    }
+
+    /** Returns the current or terminal Egress result for one job ID. */
+    public List<LivekitEgress.EgressInfo> listByEgressId(String egressId) {
+        return list(null, egressId, null);
+    }
+
+    /** Returns Egress jobs associated with a room, used to recover a lost start response. */
+    public List<LivekitEgress.EgressInfo> listByRoom(String roomName) {
+        return list(roomName, null, null);
+    }
+
+    private List<LivekitEgress.EgressInfo> list(
+            String roomName, String egressId, Boolean active) {
+        try {
+            Response<List<LivekitEgress.EgressInfo>> response = client
+                    .listEgress(roomName, egressId, active).execute();
+            if (!response.isSuccessful() || response.body() == null) {
+                throw new RecordingEgressException(
+                        "EGRESS_LIST_REJECTED",
+                        "LiveKit Egress lookup failed. httpStatus=" + response.code());
+            }
+            return response.body();
+        } catch (IOException exception) {
+            throw new RecordingEgressException(
+                    "EGRESS_LIST_IO_ERROR", "LiveKit Egress lookup failed.", exception);
         }
     }
 

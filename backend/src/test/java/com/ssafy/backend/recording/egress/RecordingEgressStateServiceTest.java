@@ -10,6 +10,7 @@ import com.ssafy.backend.recording.storage.RecordingFileStorage;
 import livekit.LivekitEgress;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -38,7 +39,9 @@ class RecordingEgressStateServiceTest {
                 fileStorage,
                 new RecordingStorageProperties("build/test-recordings", 7, 600, 600_000,
                         2_147_483_648L),
-                new RecordingEgressProperties(true, "/out", "grid"),
+                new RecordingEgressProperties(true, "/out", "grid",
+                        1, 7200, 30000, 60, 20),
+                mock(ApplicationEventPublisher.class),
                 CLOCK);
     }
 

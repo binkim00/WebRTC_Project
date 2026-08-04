@@ -14,14 +14,17 @@ class RecordingEgressRunnerTest {
 
     private LiveKitEgressClient client;
     private RecordingEgressStateService stateService;
+    private RecordingEgressCapacityGuard capacityGuard;
     private RecordingEgressRunner runner;
 
     @BeforeEach
     void setUp() {
         client = mock(LiveKitEgressClient.class);
         stateService = mock(RecordingEgressStateService.class);
+        capacityGuard = mock(RecordingEgressCapacityGuard.class);
+        when(capacityGuard.claimOrRenew(10L)).thenReturn(true);
         runner = new RecordingEgressRunner(client, stateService,
-                new RecordingEgressProperties(true, "/out/", "grid"));
+                properties(), capacityGuard);
     }
 
     /** 시작 응답 전에 통화가 끝났다면 ID 수신 직후 같은 Egress를 중지하는지 검증한다. */
@@ -58,5 +61,25 @@ class RecordingEgressRunnerTest {
         runner.start(new RecordingEgressEvent.StartRequested(10L));
 
         verify(stateService).failStart(10L, "EGRESS_START_REJECTED", "rejected");
+    }
+
+    @Test
+    void rejectsSecondRecordingWhenCapacityIsFull() {
+        var context = new RecordingEgressStateService.StartContext(
+                10L, "room-1", "egress/2026/08/04/a.mp4");
+        when(stateService.getStartContext(10L)).thenReturn(context);
+        when(capacityGuard.claimOrRenew(10L)).thenReturn(false);
+
+        runner.start(new RecordingEgressEvent.StartRequested(10L));
+
+        verify(stateService).failStart(10L, "EGRESS_CONCURRENCY_LIMIT",
+                "No Egress capacity slot is available.");
+        verify(client, times(0)).startRoomComposite(
+                "room-1", "/out/egress/2026/08/04/a.mp4", "grid");
+    }
+
+    private RecordingEgressProperties properties() {
+        return new RecordingEgressProperties(true, "/out/", "grid",
+                1, 7200, 30000, 60, 20);
     }
 }

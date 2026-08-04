@@ -2,6 +2,7 @@ package com.ssafy.backend.recording.repository;
 
 import com.ssafy.backend.recording.domain.Recording;
 import com.ssafy.backend.recording.domain.RecordingStatus;
+import com.ssafy.backend.recording.domain.RecordingSource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -110,4 +111,18 @@ public interface RecordingRepository extends JpaRepository<Recording, Long> {
     List<Long> findExpiredIds(@Param("status") RecordingStatus status,
                               @Param("now") LocalDateTime now,
                               Pageable pageable);
+
+    /** Finds stale non-terminal Egress rows that may have missed an API response or webhook. */
+    @Query("""
+            select r.id from Recording r
+            where r.source = :source
+              and r.status in :statuses
+              and r.updatedAt < :cutoff
+            order by r.updatedAt asc
+            """)
+    List<Long> findEgressRecoveryCandidateIds(
+            @Param("source") RecordingSource source,
+            @Param("statuses") List<RecordingStatus> statuses,
+            @Param("cutoff") LocalDateTime cutoff,
+            Pageable pageable);
 }

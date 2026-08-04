@@ -8,6 +8,7 @@ import com.ssafy.backend.recording.repository.RecordingRepository;
 import com.ssafy.backend.recording.storage.RecordingFileStorage;
 import livekit.LivekitEgress;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
@@ -25,17 +26,20 @@ public class RecordingEgressStateService {
     private final RecordingFileStorage fileStorage;
     private final RecordingStorageProperties storageProperties;
     private final RecordingEgressProperties egressProperties;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public RecordingEgressStateService(RecordingRepository recordingRepository,
                                        RecordingFileStorage fileStorage,
                                        RecordingStorageProperties storageProperties,
                                        RecordingEgressProperties egressProperties,
+                                       ApplicationEventPublisher eventPublisher,
                                        Clock clock) {
         this.recordingRepository = recordingRepository;
         this.fileStorage = fileStorage;
         this.storageProperties = storageProperties;
         this.egressProperties = egressProperties;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -72,6 +76,7 @@ public class RecordingEgressStateService {
             return ApplyResult.ignored();
         }
         apply(recording, info);
+        publishCapacityReleaseIfTerminal(recording);
         boolean stopImmediately = recording.getStatus() == RecordingStatus.PROCESSING
                 && recording.getEgressId() != null
                 && (info.getStatus() == LivekitEgress.EgressStatus.EGRESS_STARTING
@@ -91,6 +96,7 @@ public class RecordingEgressStateService {
             return ApplyResult.ignored();
         }
         apply(recording, info);
+        publishCapacityReleaseIfTerminal(recording);
         return new ApplyResult(true, false, recording.getEgressId());
     }
 
@@ -98,8 +104,39 @@ public class RecordingEgressStateService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void failStart(Long recordingId, String failureCode, String failureMessage) {
         recordingRepository.findByIdForUpdate(recordingId)
-                .ifPresent(recording -> recording.markFailed(
-                        failureCode, failureMessage, LocalDateTime.now(clock)));
+                .ifPresent(recording -> {
+                    recording.markFailed(failureCode, failureMessage, LocalDateTime.now(clock));
+                    publishCapacityReleaseIfTerminal(recording);
+                });
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void failRecovery(Long recordingId, String failureCode, String failureMessage) {
+        recordingRepository.findByIdForUpdate(recordingId)
+                .ifPresent(recording -> {
+                    if (!recording.isTerminal()) {
+                        recording.markFailed(failureCode, failureMessage, LocalDateTime.now(clock));
+                    }
+                    publishCapacityReleaseIfTerminal(recording);
+                });
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public RecoveryContext getRecoveryContext(Long recordingId) {
+        Recording recording = recordingRepository.findById(recordingId).orElse(null);
+        if (recording == null || recording.isTerminal()) {
+            return null;
+        }
+        return new RecoveryContext(recording.getId(), recording.getEgressId(),
+                recording.getRoomName(), recording.getStorageKey(), recording.getStatus(),
+                recording.getRequestedAt());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void prepareRecoveryStop(Long recordingId) {
+        recordingRepository.findByIdForUpdate(recordingId)
+                .filter(recording -> !recording.isTerminal())
+                .ifPresent(Recording::markProcessing);
     }
 
     private void apply(Recording recording, LivekitEgress.EgressInfo info) {
@@ -118,6 +155,13 @@ public class RecordingEgressStateService {
             case UNRECOGNIZED -> recording.markFailed(
                     "EGRESS_STATUS_UNRECOGNIZED", "알 수 없는 Egress 상태입니다.",
                     LocalDateTime.now(clock));
+        }
+    }
+
+    private void publishCapacityReleaseIfTerminal(Recording recording) {
+        if (recording.isTerminal()) {
+            eventPublisher.publishEvent(
+                    new RecordingEgressEvent.CapacityReleaseRequested(recording.getId()));
         }
     }
 
@@ -201,6 +245,11 @@ public class RecordingEgressStateService {
     }
 
     public record StopContext(Long recordingId, String egressId) {
+    }
+
+    public record RecoveryContext(Long recordingId, String egressId, String roomName,
+                                  String storageKey, RecordingStatus status,
+                                  LocalDateTime requestedAt) {
     }
 
     public record ApplyResult(boolean applied, boolean stopImmediately, String egressId) {

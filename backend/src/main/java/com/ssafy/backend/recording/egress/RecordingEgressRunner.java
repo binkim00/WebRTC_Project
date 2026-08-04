@@ -17,13 +17,16 @@ public class RecordingEgressRunner {
     private final LiveKitEgressClient client;
     private final RecordingEgressStateService stateService;
     private final RecordingEgressProperties properties;
+    private final RecordingEgressCapacityGuard capacityGuard;
 
     public RecordingEgressRunner(LiveKitEgressClient client,
                                  RecordingEgressStateService stateService,
-                                 RecordingEgressProperties properties) {
+                                 RecordingEgressProperties properties,
+                                 RecordingEgressCapacityGuard capacityGuard) {
         this.client = client;
         this.stateService = stateService;
         this.properties = properties;
+        this.capacityGuard = capacityGuard;
     }
 
     /** STARTING 행이 커밋된 뒤 Room Composite를 시작한다. */
@@ -32,6 +35,19 @@ public class RecordingEgressRunner {
         RecordingEgressStateService.StartContext context =
                 stateService.getStartContext(event.recordingId());
         if (context == null) {
+            return;
+        }
+        try {
+            if (!capacityGuard.claimOrRenew(context.recordingId())) {
+                stateService.failStart(context.recordingId(), "EGRESS_CONCURRENCY_LIMIT",
+                        "No Egress capacity slot is available.");
+                return;
+            }
+        } catch (RuntimeException exception) {
+            stateService.failStart(context.recordingId(), "EGRESS_CAPACITY_GUARD_UNAVAILABLE",
+                    exception.getMessage());
+            log.warn("Egress capacity guard is unavailable. recordingId={}",
+                    context.recordingId(), exception);
             return;
         }
         try {
