@@ -60,8 +60,8 @@ export function Button({
   variant = 'primary',
   size = 'md',
   loading = false,
-  leadingIcon,
-  trailingIcon,
+  leadingIcon: _leadingIcon,
+  trailingIcon: _trailingIcon,
   className,
   children,
   disabled,
@@ -81,11 +81,8 @@ export function Button({
           aria-hidden="true"
           className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
         />
-      ) : (
-        leadingIcon
-      )}
+      ) : null}
       <span>{children}</span>
-      {loading ? null : trailingIcon}
     </button>
   )
 }

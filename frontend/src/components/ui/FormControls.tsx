@@ -33,7 +33,7 @@ function FieldFrame({
   reserveMessageSpace,
 }: FieldFrameProps) {
   return (
-    <div className={cn('grid gap-[var(--space-field-gap)] text-left', className)}>
+    <div className={cn('grid content-start gap-[var(--space-field-gap)] text-left', className)}>
       <label
         className="mj-font-label text-sm text-[var(--color-text-primary)]"
         htmlFor={id}
@@ -312,7 +312,7 @@ export function Checkbox({
           aria-describedby={cn(ariaDescribedBy, descriptionId, errorId) || undefined}
           aria-invalid={Boolean(error)}
           className={cn(
-            'mt-0.5 size-5 shrink-0 rounded-[6px] border-[var(--color-border-control)] accent-[var(--color-primary-coral)]',
+            'mt-0.5 size-5 shrink-0 rounded-[var(--radius-control)] border-[var(--color-border-control)] accent-[var(--color-primary-coral)]',
             'focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]',
             'disabled:cursor-not-allowed',
             className,
@@ -469,6 +469,7 @@ export function Switch({
   ...props
 }: SwitchProps) {
   const switchId = useId()
+  const [motionKey, setMotionKey] = useState(0)
 
   return (
     <div className="flex items-start justify-between gap-4">
@@ -505,7 +506,10 @@ export function Switch({
           className,
         )}
         disabled={disabled}
-        onClick={() => onCheckedChange?.(!checked)}
+        onClick={() => {
+          setMotionKey((value) => value + 1)
+          onCheckedChange?.(!checked)
+        }}
         role="switch"
         type="button"
         {...props}
@@ -513,10 +517,18 @@ export function Switch({
         <span
           aria-hidden="true"
           className={cn(
-            'absolute top-0.5 size-5 rounded-full bg-[var(--color-surface-panel)] shadow transition-transform motion-reduce:transition-none',
-            checked ? 'left-5.5' : 'left-0.5',
+            'absolute left-0.5 top-0.5 size-5 transition-transform motion-reduce:transition-none',
+            checked ? 'translate-x-5' : 'translate-x-0',
           )}
-        />
+        >
+          <span
+            className={cn(
+              'block size-full rounded-full bg-[var(--color-surface-panel)] shadow',
+              motionKey > 0 && 'mj-switch-jelly',
+            )}
+            key={motionKey}
+          />
+        </span>
       </button>
     </div>
   )

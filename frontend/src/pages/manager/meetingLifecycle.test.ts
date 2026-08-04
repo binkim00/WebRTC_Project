@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getAvailableActions } from './meetingLifecycle'
+import { getAvailableActions, normalizeDetailTab } from './meetingLifecycle'
 
 const NOW = new Date('2026-08-03T12:00:00.000Z')
 
@@ -101,5 +101,11 @@ describe('getAvailableActions - 수동 상태 전환', () => {
     expect(actions.canOpenApplicationsNow).toBe(false)
     expect(actions.canCloseApplicationsNow).toBe(false)
     expect(actions.canStartNow).toBe(false)
+  })
+})
+
+describe('normalizeDetailTab', () => {
+  it('연결되지 않은 응모자 관리 탭 요청은 개요로 보낸다', () => {
+    expect(normalizeDetailTab('applicants')).toBe('overview')
   })
 })

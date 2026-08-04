@@ -267,7 +267,6 @@ export type MeetingDetailTab =
   | 'overview'
   | 'settings'
   | 'application-form'
-  | 'applicants'
   | 'test-control'
 
 /** 주소창의 `tab` 파라미터를 유효한 탭 값으로 정규화한다. */
@@ -275,7 +274,6 @@ export function normalizeDetailTab(value: string | null): MeetingDetailTab {
   if (
     value === 'settings' ||
     value === 'application-form' ||
-    value === 'applicants' ||
     value === 'test-control'
   ) {
     return value

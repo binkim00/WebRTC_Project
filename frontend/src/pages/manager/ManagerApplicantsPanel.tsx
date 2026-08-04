@@ -1,75 +1,73 @@
-import { CaretDown, CaretUp } from '@phosphor-icons/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
   getApplicants,
   getApplicationStatistics,
   type ApplicantListResponse,
+  type ApplicantResponse,
   type ApplicationStatisticsResponse,
   type ApplicationStatus,
 } from '../../api/applications'
 import { getAuthSession } from '../../api/authSession'
-import {
-  AlertBanner,
-  Badge,
-  Button,
-  Card,
-  Pagination,
-  Select,
-  Spinner,
-  TextField,
-} from '../../components'
-import { formatDateTime, toErrorMessage } from './meetingLifecycle'
+import { AlertBanner, Button, Pagination, Spinner, TextField } from '../../components'
+import { toErrorMessage } from './meetingLifecycle'
 
-/** 응모 상태 코드를 화면용 한국어 라벨로 바꾼다. */
-const applicationStatusLabels: Record<ApplicationStatus, string> = {
-  SUBMITTED: '응모 완료',
-  WITHDRAWN: '응모 철회',
-  SELECTED: '당첨',
-  NOT_SELECTED: '미당첨',
+const applicationStatusContent: Record<
+  ApplicationStatus,
+  { label: string; className: string }
+> = {
+  SUBMITTED: { label: '미검토', className: 'text-[var(--color-text-secondary)]' },
+  WITHDRAWN: { label: '응모 철회', className: 'text-[var(--color-text-secondary)]' },
+  SELECTED: { label: '선정', className: 'text-[var(--color-success)]' },
+  NOT_SELECTED: { label: '미선정', className: 'text-[var(--color-error)]' },
 }
 
-/** 응모 상태에 맞는 배지 색상을 고른다. */
-function applicationStatusBadge(
-  status: ApplicationStatus,
-): 'primary' | 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'SELECTED') return 'success'
-  if (status === 'NOT_SELECTED') return 'danger'
-  if (status === 'WITHDRAWN') return 'neutral'
-  return 'primary'
+function firstAnswer(applicant?: ApplicantResponse): string {
+  return applicant?.answers[0]?.answerText ?? '-'
 }
 
-/**
- * 팬미팅의 응모 현황 통계와 응모자별 제출 답변을 조회한다.
- *
- * 추첨과 결과 발표 버튼은 상태 판정을 가진 상세 화면(개요 탭)에 두고, 여기서는 조회만 담당한다.
- * `refreshToken` 값이 바뀌면 추첨 직후처럼 외부 변경을 반영해 다시 조회한다.
- */
+/** 실제 응모·추첨 API를 프로토타입의 목록과 상세 분할 화면으로 표시한다. */
 export function ManagerApplicantsPanel({
   meetingId,
+  meetingTitle,
+  capacity,
+  canDraw,
+  canPublishResults,
+  drawCompleted,
+  meetingStatus,
+  onDraw,
+  onPublishResults,
   refreshToken = 0,
 }: {
   meetingId: string
+  meetingTitle: string
+  capacity: number
+  canDraw: boolean
+  canPublishResults: boolean
+  drawCompleted: boolean
+  meetingStatus: string
+  onDraw: () => void
+  onPublishResults: () => void
   refreshToken?: number
 }) {
   const [stats, setStats] = useState<ApplicationStatisticsResponse>()
   const [list, setList] = useState<ApplicantListResponse>()
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | ''>('')
   const [keyword, setKeyword] = useState('')
   const [appliedKeyword, setAppliedKeyword] = useState('')
   const [page, setPage] = useState(0)
-  const [expandedId, setExpandedId] = useState<number>()
+  const [selectedId, setSelectedId] = useState<number>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
 
   const loadApplicants = useCallback(async () => {
     const token = getAuthSession()?.accessToken
     if (!meetingId) {
-      setError('팬미팅 식별자가 없습니다.')
+      setError('팬미팅 정보를 확인할 수 없습니다.')
       setLoading(false)
       return
     }
     if (!token) {
-      setError('응모자 목록을 조회하려면 먼저 로그인해 주세요.')
+      setError('응모자 목록을 확인하려면 먼저 로그인해 주세요.')
       setLoading(false)
       return
     }
@@ -80,7 +78,7 @@ export function ManagerApplicantsPanel({
         getApplicants(
           meetingId,
           {
-            applicationStatus: statusFilter ? (statusFilter as ApplicationStatus) : undefined,
+            applicationStatus: statusFilter || undefined,
             keyword: appliedKeyword || undefined,
             page,
             size: 10,
@@ -103,135 +101,269 @@ export function ManagerApplicantsPanel({
     void loadApplicants()
   }, [loadApplicants, refreshToken])
 
+  const selectedApplicant =
+    list?.content.find((applicant) => applicant.applicationId === selectedId) ??
+    list?.content[0]
+  const selectedStatus = selectedApplicant
+    ? applicationStatusContent[selectedApplicant.applicationStatus]
+    : undefined
+  const unreviewedCount = stats?.submittedCount ?? 0
+  const headLine = drawCompleted
+    ? canPublishResults
+      ? '선정 완료 · 확정 대기'
+      : '선정 확정 완료'
+    : `선정 전 ${unreviewedCount}명`
+  const headColor = drawCompleted
+    ? 'text-[var(--color-success)]'
+    : 'text-[var(--color-warning)]'
+  const hasApplications = (stats?.totalApplications ?? 0) > 0
+  const canRunDraw = canDraw && hasApplications
+
+  const drawDisabledReason = drawCompleted
+    ? '랜덤 선정이 이미 완료되었습니다.'
+    : !hasApplications
+      ? '응모자가 없어 랜덤 선정을 진행할 수 없습니다.'
+    : meetingStatus !== 'APPLICATION_CLOSED'
+      ? '응모가 마감된 뒤 랜덤 선정을 진행할 수 있습니다.'
+      : '지금은 랜덤 선정을 진행할 수 없습니다.'
+  const confirmHint = canPublishResults
+    ? '확정하면 되돌릴 수 없고 선정 결과가 응모자에게 발송됩니다.'
+    : drawCompleted
+      ? '선정 결과가 이미 확정되었습니다.'
+      : '랜덤 선정을 먼저 완료해야 선정 결과를 확정할 수 있습니다.'
+
+  function applyStatusFilter(next: ApplicationStatus | '') {
+    setStatusFilter(next)
+    setPage(0)
+    setSelectedId(undefined)
+  }
+
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAppliedKeyword(keyword.trim())
+    setPage(0)
+    setSelectedId(undefined)
+  }
+
   return (
-    <div className="grid gap-5">
-      {error ? <AlertBanner title="응모자 조회 실패" variant="error">{error}</AlertBanner> : null}
+    <div className="grid gap-6">
+      {error ? (
+        <AlertBanner title="응모자 목록을 불러오지 못했습니다" variant="error">
+          {error}
+        </AlertBanner>
+      ) : null}
 
-      <Card className="p-6">
-        <div className="flex flex-wrap gap-8">
-          <div>
-            <p className="text-xs text-[var(--color-text-secondary)]">전체 응모</p>
-            <strong className="text-2xl">{stats?.totalApplications ?? '-'}명</strong>
-          </div>
-          <div>
-            <p className="text-xs text-[var(--color-text-secondary)]">응모 완료</p>
-            <strong className="text-2xl">{stats?.submittedCount ?? '-'}명</strong>
-          </div>
-          <div>
-            <p className="text-xs text-[var(--color-text-secondary)]">당첨</p>
-            <strong className="text-2xl text-[var(--color-primary-coral)]">{stats?.selectedCount ?? '-'}명</strong>
-          </div>
-          <div>
-            <p className="text-xs text-[var(--color-text-secondary)]">미당첨</p>
-            <strong className="text-2xl">{stats?.notSelectedCount ?? '-'}명</strong>
-          </div>
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <h2 className="text-2xl font-black tracking-[-0.035em]">응모자 관리</h2>
+          <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
+            {meetingTitle} · 모집 {capacity}명
+          </p>
         </div>
-      </Card>
+        <p className={`whitespace-nowrap text-sm font-bold ${headColor}`}>
+          {headLine}
+        </p>
+      </div>
 
-      <Card className="overflow-hidden">
-        <form
-          className="flex flex-wrap items-end gap-2 border-b border-[var(--color-divider)] p-6"
-          onSubmit={(event) => {
-            event.preventDefault()
-            setPage(0)
-            setAppliedKeyword(keyword.trim())
-          }}
-        >
-          <Select
-            containerClassName="w-40"
-            label="응모 상태"
-            onChange={(event) => {
-              setPage(0)
-              setStatusFilter(event.target.value)
-            }}
-            options={[
-              { value: '', label: '전체' },
-              { value: 'SUBMITTED', label: '응모 완료' },
-              { value: 'SELECTED', label: '당첨' },
-              { value: 'NOT_SELECTED', label: '미당첨' },
-              { value: 'WITHDRAWN', label: '응모 철회' },
-            ]}
-            value={statusFilter}
-          />
-          <TextField
-            containerClassName="min-w-[220px] flex-1"
-            label="닉네임 검색"
-            onChange={(event) => setKeyword(event.target.value)}
-            placeholder="닉네임을 입력하세요"
-            value={keyword}
-          />
-          <Button type="submit" variant="secondary">검색</Button>
-        </form>
+      <section
+        aria-label="선정 현황"
+        className="grid grid-cols-2 border-y border-[var(--color-divider)] sm:grid-cols-4"
+      >
+        <MetricFilter
+          active={statusFilter === ''}
+          label="전체 응모"
+          onClick={() => applyStatusFilter('')}
+          value={stats?.totalApplications}
+        />
+        <MetricFilter
+          active={statusFilter === 'SELECTED'}
+          className="border-l border-[var(--color-divider)]"
+          label="선정"
+          onClick={() => applyStatusFilter('SELECTED')}
+          tone="success"
+          value={stats?.selectedCount}
+        />
+        <MetricFilter
+          active={statusFilter === 'NOT_SELECTED'}
+          className="border-t border-[var(--color-divider)] sm:border-l sm:border-t-0"
+          label="미선정"
+          onClick={() => applyStatusFilter('NOT_SELECTED')}
+          tone="error"
+          value={stats?.notSelectedCount}
+        />
+        <MetricFilter
+          active={statusFilter === 'SUBMITTED'}
+          className="border-l border-t border-[var(--color-divider)] sm:border-t-0"
+          label="미검토"
+          onClick={() => applyStatusFilter('SUBMITTED')}
+          value={stats?.submittedCount}
+        />
+      </section>
 
-        {loading ? (
-          <div className="flex min-h-[240px] items-center justify-center">
-            <Spinner label="응모자 목록을 불러오는 중" />
-          </div>
-        ) : !list || list.content.length === 0 ? (
-          <div className="p-10 text-center text-[var(--color-text-secondary)]">
-            조건에 맞는 응모자가 없습니다.
-          </div>
-        ) : (
-          <>
-            <div className="divide-y divide-[var(--color-divider)]">
-              {list.content.map((applicant) => {
-                const expanded = expandedId === applicant.applicationId
+      <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
+        <div className="min-w-0">
+          <form className="flex items-end gap-3" onSubmit={handleSearch} role="search">
+            <TextField
+              containerClassName="min-w-0 flex-1"
+              label="응모자 검색"
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="닉네임"
+              type="search"
+              value={keyword}
+            />
+            <Button
+              disabled={!canRunDraw}
+              onClick={onDraw}
+              title={!canRunDraw ? drawDisabledReason : undefined}
+              type="button"
+              variant="outline"
+            >
+              랜덤 선정
+            </Button>
+          </form>
+          {!canRunDraw ? (
+            <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
+              {drawDisabledReason}
+            </p>
+          ) : null}
+
+          {loading ? (
+            <div className="flex min-h-[240px] items-center justify-center">
+              <Spinner label="응모자 목록을 불러오는 중" />
+            </div>
+          ) : (
+            <div className="mt-5" role="table" aria-label="응모자 목록">
+              <div
+                className="hidden grid-cols-[150px_minmax(0,1fr)_90px] gap-4 border-b border-[var(--color-border-control)] pb-3 sm:grid"
+                role="row"
+              >
+                <span className="text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">닉네임</span>
+                <span className="text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">질문 답변</span>
+                <span className="text-right text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">상태</span>
+              </div>
+              {list?.content.map((applicant) => {
+                const status = applicationStatusContent[applicant.applicationStatus]
+                const selected = selectedApplicant?.applicationId === applicant.applicationId
                 return (
-                  <div key={applicant.applicationId}>
-                    <button
-                      className={`grid w-full gap-3 p-5 text-left transition hover:bg-[var(--color-surface-page)] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center ${expanded ? 'bg-[var(--color-primary-coral-soft)]' : ''}`}
-                      onClick={() => setExpandedId(expanded ? undefined : applicant.applicationId)}
-                      type="button"
-                    >
-                      {applicant.profileImageUrl ? (
-                        <img alt="" className="size-10 rounded-full object-cover" src={applicant.profileImageUrl} />
-                      ) : (
-                        <span className="flex size-10 items-center justify-center rounded-full bg-[var(--color-primary-coral-soft)] font-bold text-[var(--color-primary-coral)]">
-                          {applicant.nickname.slice(0, 1)}
-                        </span>
-                      )}
-                      <div className="min-w-0">
-                        <strong>{applicant.nickname}</strong>
-                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                          응모일 {formatDateTime(applicant.submittedAt)}
-                        </p>
-                      </div>
-                      <Badge variant={applicationStatusBadge(applicant.applicationStatus)}>
-                        {applicationStatusLabels[applicant.applicationStatus]}
-                      </Badge>
-                      <span className="text-[var(--color-text-tertiary)]">
-                        {expanded ? <CaretUp size={17} /> : <CaretDown size={17} />}
-                      </span>
-                    </button>
-                    {expanded ? (
-                      <div className="grid gap-4 border-t border-dashed border-[var(--color-divider)] bg-[var(--color-surface-page)] p-5">
-                        {applicant.answers.length === 0 ? (
-                          <p className="text-sm text-[var(--color-text-secondary)]">제출된 답변이 없습니다.</p>
-                        ) : (
-                          applicant.answers.map((answer) => (
-                            <div key={answer.questionId}>
-                              <p className="text-xs font-bold text-[var(--color-text-secondary)]">{answer.questionText}</p>
-                              <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{answer.answerText}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
+                  <button
+                    aria-current={selected ? 'true' : undefined}
+                    className={`grid w-full gap-2 border-b border-[var(--color-border-row)] px-2 py-4 text-left transition-colors hover:bg-[var(--color-surface-page)] sm:grid-cols-[150px_minmax(0,1fr)_90px] sm:items-center sm:gap-4 ${selected ? 'bg-[var(--color-surface-page)]' : ''}`}
+                    key={applicant.applicationId}
+                    onClick={() => setSelectedId(applicant.applicationId)}
+                    role="row"
+                    type="button"
+                  >
+                    <span className={`text-base ${selected ? 'font-extrabold' : 'font-semibold'}`} role="cell">
+                      {applicant.nickname}
+                    </span>
+                    <span className="truncate text-sm font-medium text-[var(--color-text-secondary)]" role="cell">
+                      {firstAnswer(applicant)}
+                    </span>
+                    <span className={`whitespace-nowrap text-right text-sm font-extrabold ${status.className}`} role="cell">
+                      {status.label}
+                    </span>
+                  </button>
                 )
               })}
             </div>
-            {list.totalPages > 1 ? (
-              <Pagination
-                className="border-t border-[var(--color-divider)] py-4"
-                currentPage={page + 1}
-                onPageChange={(next) => setPage(next - 1)}
-                totalPages={list.totalPages}
-              />
-            ) : null}
-          </>
-        )}
-      </Card>
+          )}
+
+          <Pagination
+            className="mt-6"
+            currentPage={page + 1}
+            onPageChange={(next) => {
+              setPage(next - 1)
+              setSelectedId(undefined)
+            }}
+            totalPages={Math.max(1, list?.totalPages ?? 1)}
+          />
+        </div>
+
+        <aside
+          aria-label="응모자 상세"
+          className="min-w-0 rounded-[var(--radius-control)] border border-[var(--color-divider)] p-5"
+        >
+          <p className="text-sm font-bold text-[var(--color-text-secondary)]">응모자 상세</p>
+          <div className="mt-2 flex items-baseline justify-between gap-3">
+            <h3 className="text-xl font-black tracking-[-0.032em]">
+              {selectedApplicant?.nickname ?? '-'}
+            </h3>
+            <span className={`whitespace-nowrap text-sm font-extrabold ${selectedStatus?.className ?? 'text-[var(--color-text-secondary)]'}`}>
+              {selectedStatus?.label ?? '-'}
+            </span>
+          </div>
+
+          <section className="mt-5 border-t border-[var(--color-divider)] pt-4">
+            <h4 className="text-sm font-extrabold">질문 답변</h4>
+            <div className="mt-3 grid gap-4">
+              {selectedApplicant?.answers.length ? (
+                selectedApplicant.answers.map((answer) => (
+                  <div key={answer.questionId}>
+                    <p className="text-sm font-bold text-[var(--color-text-secondary)]">
+                      {answer.questionText}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-base font-medium leading-7 text-[var(--color-text-body)]">
+                      {answer.answerText}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-base font-medium text-[var(--color-text-body)]">-</p>
+              )}
+            </div>
+          </section>
+
+          <div className="mt-5 border-t border-[var(--color-divider)] pt-5">
+            <Button
+              className="w-full"
+              disabled={!canPublishResults}
+              onClick={onPublishResults}
+              title={!canPublishResults ? confirmHint : undefined}
+            >
+              {drawCompleted && !canPublishResults ? '선정 확정 완료' : '선정 확정'}
+            </Button>
+            <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
+              {confirmHint}
+            </p>
+          </div>
+        </aside>
+      </div>
     </div>
+  )
+}
+
+function MetricFilter({
+  label,
+  value,
+  active,
+  onClick,
+  className = '',
+  tone = 'default',
+}: {
+  label: string
+  value?: number
+  active: boolean
+  onClick: () => void
+  className?: string
+  tone?: 'default' | 'success' | 'error'
+}) {
+  const valueClass = tone === 'success'
+    ? 'text-[var(--color-success)]'
+    : tone === 'error'
+      ? 'text-[var(--color-error)]'
+      : 'text-[var(--color-text-primary)]'
+
+  return (
+    <button
+      aria-pressed={active}
+      className={`min-w-0 px-5 py-4 text-left transition-colors hover:bg-[var(--color-surface-page)] ${active ? 'bg-[var(--color-surface-page)]' : ''} ${className}`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="block text-sm font-bold text-[var(--color-text-secondary)]">{label}</span>
+      <span className={`mt-2 block text-2xl font-black tabular-nums ${valueClass}`}>
+        {value == null ? '-' : `${value}명`}
+      </span>
+    </button>
   )
 }
