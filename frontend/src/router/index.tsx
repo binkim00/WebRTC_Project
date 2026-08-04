@@ -27,7 +27,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        lazy: lazyPage(() => import('../pages/common/CommonRoutePages'), 'HomePage'),
+        lazy: lazyPage(() => import('../pages/common/LandingPage'), 'LandingPage'),
       },
       {
         path: 'examples/yestalgia-home',
