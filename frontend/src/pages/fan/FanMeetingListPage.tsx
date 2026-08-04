@@ -39,6 +39,7 @@ type FanMeetingListStatus = 'upcoming' | 'completed'
 type FanMeetingListItem = {
   application: MyApplicationSummaryResponse
   detail?: PublicFanMeetingDetail
+  detailNotFound?: boolean
   listStatus: FanMeetingListStatus
   recording?: RecordingSummaryResponse
 }
@@ -81,7 +82,8 @@ function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean 
   return (
     detail?.meeting.status === 'READY' ||
     detail?.meeting.status === 'LIVE' ||
-    detail?.meeting.status === 'ENDED'
+    detail?.meeting.status === 'ENDED' ||
+    detail?.meeting.status === 'CANCELED'
   )
 }
 
@@ -173,6 +175,14 @@ export function FanMeetingListPage() {
               } catch (error: unknown) {
                 if (controller.signal.aborted) throw error
                 detailFailureCount += 1
+                const detailNotFound = error instanceof ApiError && error.status === 404
+                return {
+                  application,
+                  detail,
+                  recording: recordingByMeetingId.get(application.meetingId),
+                  detailNotFound,
+                  listStatus: 'completed',
+                }
               }
 
               const recording = recordingByMeetingId.get(application.meetingId)
@@ -180,6 +190,7 @@ export function FanMeetingListPage() {
                 application,
                 detail,
                 recording,
+                detailNotFound: false,
                 // 상세 조회 실패 시에도 서버에 녹화가 있으면 완료 내역으로 안전하게 분류한다.
                 listStatus:
                   isCompletedStatus(detail?.meeting.status) || recording
@@ -199,8 +210,14 @@ export function FanMeetingListPage() {
               .join(' '),
           )
         }
-        // 결과 공개 전 SELECTED 응모는 예정 팬미팅으로 보이지 않게 한다.
-        setItems(enrichedItems.filter((item) => isResultPublished(item.detail)))
+        // 결과 공개 전 응모는 숨기되, 상세 조회 장애는 녹화가 있으면 완료 내역으로 보존한다.
+        setItems(
+          enrichedItems.filter((item) =>
+            item.detail
+              ? isResultPublished(item.detail)
+              : !item.detailNotFound && Boolean(item.recording),
+          ),
+        )
       } catch (error: unknown) {
         if (controller.signal.aborted) return
         setListError(

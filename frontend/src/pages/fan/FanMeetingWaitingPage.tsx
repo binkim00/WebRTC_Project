@@ -13,7 +13,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
 import { fetchMeetingDetail, type MeetingDetail } from '../../api/fanMeetingParticipants'
-import { getMyQueue, type QueueSnapshotResponse } from '../../api/queue'
+import {
+  getMyQueue,
+  isQueueNotInitialized,
+  type QueueSnapshotResponse,
+} from '../../api/queue'
 import { createQueueChangeRequest } from '../../api/queueManagement'
 import { usePolling } from '../../hooks/usePolling'
 
@@ -177,6 +181,11 @@ export function FanMeetingWaitingPage() {
       }
     } catch (reason) {
       if (signal?.aborted) return
+      if (isQueueNotInitialized(reason)) {
+        setQueueSnapshot(undefined)
+        setQueueError('팬미팅이 종료되었거나 아직 대기열을 열지 않았습니다.')
+        return
+      }
       setQueueError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message

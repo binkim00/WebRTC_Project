@@ -448,18 +448,6 @@ export function ManagerMeetingMonitorPage() {
       return
     }
 
-    // 순번이 실제로 바뀐 모든 참가자에게 알림이 생성되므로, 매니저가
-    // 팬에게 전달할 사유를 함께 입력할 수 있게 한다. 취소하면 변경도 취소한다.
-    const reason = window.prompt(
-      '순번 변경 사유를 입력해 주세요. (선택, 최대 200자)',
-      '',
-    )
-    if (reason === null) return
-    if (reason.trim().length > 200) {
-      setError('순번 변경 사유는 200자 이내로 입력해 주세요.')
-      return
-    }
-
     if (isPreview) return
 
     const token = getAuthSession()?.accessToken
@@ -471,7 +459,7 @@ export function ManagerMeetingMonitorPage() {
     setBusyEntryId(entry.queueEntryId)
     setError(undefined)
     try {
-      await changeQueuePosition(entry.queueEntryId, newPosition, token, reason)
+      await changeQueuePosition(entry.queueEntryId, newPosition, token)
       await loadQueue()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '대기열 순서 변경에 실패했습니다.')
@@ -484,13 +472,14 @@ export function ManagerMeetingMonitorPage() {
   async function decideRequest(request: QueueChangeRequestSummaryResponse, decision: 'APPROVED' | 'REJECTED') {
     if (busyEntryId !== undefined || requestBusyId !== undefined) return
 
-    let rejectionReason: string | undefined
+    // 거절 사유는 받지 않는다. 백엔드 DTO가 rejectionReason을 받기는 하지만
+    // "현재 스키마에는 저장하지 않는다"고 명시되어 있어 값이 그대로 버려지고,
+    // 팬에게 전달할 알림 경로도 아직 없다. 사유를 물으면 전달된다고 오해하게 되므로
+    // 백엔드가 저장·알림을 지원할 때까지 승인과 같은 확인만 받는다.
     if (decision === 'APPROVED') {
       if (!window.confirm(`${request.nickname}님의 순서 변경 요청을 승인할까요? 승인하면 대기열 마지막 순서로 이동합니다.`)) return
-    } else {
-      const input = window.prompt('거절 사유를 입력해 주세요. (선택)', '')
-      if (input === null) return
-      rejectionReason = input.trim() || undefined
+    } else if (!window.confirm(`${request.nickname}님의 순서 변경 요청을 거절할까요?`)) {
+      return
     }
 
     const token = getAuthSession()?.accessToken
@@ -502,7 +491,7 @@ export function ManagerMeetingMonitorPage() {
     setRequestBusyId(request.requestId)
     setError(undefined)
     try {
-      await decideQueueChangeRequest(request.requestId, { decision, rejectionReason }, token)
+      await decideQueueChangeRequest(request.requestId, { decision }, token)
       await Promise.all([loadQueue(), loadChangeRequests()])
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '순서 변경 요청 처리에 실패했습니다.')
