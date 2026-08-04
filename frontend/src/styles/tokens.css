@@ -22,7 +22,7 @@
   --input-padding-inline: 14px;
 
   /* Radius */
-  --radius-control: 10px;
+  --radius-control: 8px;
   --radius-panel: 12px;
 
   /* Spacing */
@@ -34,7 +34,9 @@
 
   /* 1. Light surfaces */
   --color-surface-panel: #ffffff;
-  --color-surface-page: #f7f8fa;
+  --color-surface-page: var(--color-surface-panel);
+  /* L0 배경 3단의 가운데 값이다. 본문 안에서 옅게 구분되는 정보 면에 쓴다. */
+  --color-surface-subtle: #f7f8fa;
   --color-surface-muted: #e9eaee;
 
   /* 2. Brand coral */

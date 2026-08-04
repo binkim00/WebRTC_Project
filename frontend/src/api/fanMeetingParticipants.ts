@@ -422,11 +422,13 @@ export async function fetchFanMemos(
   fanId: string,
   authToken: string,
   signal?: AbortSignal,
+  /** 최근 메모만 필요한 화면은 기본값을 쓰고, 회차 목록이 필요한 화면은 크게 요청한다. */
+  size = 5,
 ): Promise<FanMemoPage> {
   const data = await apiRequest<unknown>(
-    `/api/v1/influencers/me/fans/${encodeURIComponent(fanId)}/memos?page=0&size=5`,
+    `/api/v1/influencers/me/fans/${encodeURIComponent(fanId)}/memos?page=0&size=${size}`,
     { authToken, signal },
   )
 
-  return parsePage(data, parseMemo, 5)
+  return parsePage(data, parseMemo, size)
 }

@@ -80,7 +80,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'fan/mypage/profile',
-        lazy: lazyPage(() => import('../pages/fan/FanProfilePage'), 'FanProfilePage'),
+        lazy: lazyPage(() => import('../pages/common/MyPage'), 'MyPage'),
       },
       {
         path: 'fan/mypage/applications',
@@ -197,10 +197,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'influencer/mypage/profile',
-        lazy: lazyPage(
-          () => import('../pages/influencer/InfluencerProfilePage'),
-          'InfluencerProfilePage',
-        ),
+        lazy: lazyPage(() => import('../pages/common/MyPage'), 'MyPage'),
       },
       {
         path: 'influencer/mypage/fan-meetings',
@@ -346,7 +343,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'events/:eventId/applications',
-            element: <LegacyEventRedirect tab="applicants" />,
+            element: <LegacyEventRedirect />,
           },
           {
             path: 'fan-meetings',
@@ -421,10 +418,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'mypage',
-            lazy: lazyPage(
-              () => import('../pages/manager/ManagerRoutePages'),
-              'ManagerMyPage',
-            ),
+            lazy: lazyPage(() => import('../pages/common/MyPage'), 'MyPage'),
           },
           {
             path: 'organization',
