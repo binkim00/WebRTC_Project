@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
+import { isEmailVerificationEnabled } from '../../config/features'
 import {
   AlertBanner,
   Avatar,
@@ -160,7 +161,7 @@ export function FanProfilePage() {
       ) : null}
 
       {/* 미인증이 확정된 경우에만 안내한다. 구버전 백엔드는 필드가 없어(undefined) 표시하지 않는다. */}
-      {profile?.emailVerified === false ? (
+      {isEmailVerificationEnabled && profile?.emailVerified === false ? (
         <Card>
           <CardContent>
             <EmailVerificationNotice

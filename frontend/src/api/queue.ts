@@ -27,6 +27,10 @@ export type QueueSnapshotResponse = {
   calledAt: string | null
   callSessionId: number | null
   canEnterCall: boolean
+  /** 운영자 순번 조정으로 변경된 경우 팬에게 표시할 최근 사유다. */
+  lastChangeReason?: string | null
+  /** 최근 순번 조정이 반영된 시각이다. */
+  lastChangedAt?: string | null
 }
 
 function isQueueEnterResponse(value: unknown): value is QueueEnterResponse {
@@ -53,6 +57,8 @@ function isQueueSnapshotResponse(value: unknown): value is QueueSnapshotResponse
 
   const response = value as Record<string, unknown>
 
+  // lastChangeReason/lastChangedAt은 수정사항 API가 추가한 필드지만,
+  // 구버전 backend와도 잠시 호환할 수 있도록 누락(undefined)도 허용한다.
   return (
     typeof response.queueEntryId === 'number' &&
     typeof response.position === 'number' &&
@@ -62,7 +68,9 @@ function isQueueSnapshotResponse(value: unknown): value is QueueSnapshotResponse
     typeof response.callAttemptCount === 'number' &&
     (typeof response.calledAt === 'string' || response.calledAt === null) &&
     (typeof response.callSessionId === 'number' || response.callSessionId === null) &&
-    typeof response.canEnterCall === 'boolean'
+    typeof response.canEnterCall === 'boolean' &&
+    (typeof response.lastChangeReason === 'string' || response.lastChangeReason === null || response.lastChangeReason === undefined) &&
+    (typeof response.lastChangedAt === 'string' || response.lastChangedAt === null || response.lastChangedAt === undefined)
   )
 }
 
@@ -152,7 +160,16 @@ export function interpretQueueEnterError(
  * 빈 대기열로 취급해야 한다.
  */
 export function isQueueNotInitialized(error: unknown): boolean {
-  return error instanceof ApiError && error.code === 'QUEUE_NOT_INITIALIZED'
+  if (!(error instanceof ApiError)) return false
+
+  // 종료된 팬미팅은 backend가 FAN_MEETING_ALREADY_ENDED로 명확히 알려 주지만,
+  // 구버전에서는 QUEUE_NOT_INITIALIZED 또는 메시지만 내려올 수 있다.
+  // 세 경우 모두 운영 화면에서는 장애가 아닌 '대기열을 더 조회할 수 없음'으로 처리한다.
+  return (
+    error.code === 'QUEUE_NOT_INITIALIZED' ||
+    error.code === 'FAN_MEETING_ALREADY_ENDED' ||
+    (error.status === 409 && error.message.includes('대기열이 없습니다'))
+  )
 }
 
 export async function getMyQueue(

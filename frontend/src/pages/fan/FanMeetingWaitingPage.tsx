@@ -453,6 +453,18 @@ export function FanMeetingWaitingPage() {
               </ul>
             </AlertBanner>
 
+            {/* backend가 순번 변경 대상별로 저장한 안내 문구를 대기 화면에도 표시한다. */}
+            {queueSnapshot?.lastChangeReason ? (
+              <AlertBanner title="대기 순번이 변경되었습니다" variant="info">
+                <p>{queueSnapshot.lastChangeReason}</p>
+                {queueSnapshot.lastChangedAt ? (
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                    반영 시각: {new Date(queueSnapshot.lastChangedAt).toLocaleString('ko-KR')}
+                  </p>
+                ) : null}
+              </AlertBanner>
+            ) : null}
+
             <section className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] p-5">
               <div>
                 <h3 className="font-bold">순서 변경 요청</h3>

@@ -174,6 +174,9 @@ export function ManagerMeetingMonitorPage() {
         setQueue({ entries: [] })
         setError(undefined)
         setQueueUnavailable(true)
+        if (reason instanceof ApiError && reason.code === 'FAN_MEETING_ALREADY_ENDED') {
+          setMeetingStatus('ENDED')
+        }
         return
       }
       setQueueUnavailable(false)
@@ -414,7 +417,17 @@ export function ManagerMeetingMonitorPage() {
           ? '대기열 오픈 시각이 아직 지나지 않아 팬이 대기실에 입장할 수 없습니다. ‘대기열 지금 오픈’을 눌러 주세요.'
           : undefined,
       )
-      await Promise.all([loadQueue(), loadMeetingStatus()])
+      if (action === 'end') {
+        // 종료 처리로 백엔드가 Redis 대기열을 삭제하므로, 종료 직후 대기열을
+        // 다시 조회하면 QUEUE_NOT_INITIALIZED가 반환된다. 이를 운영 오류로
+        // 표시하지 않고 종료된 팬미팅의 정상 상태로 즉시 반영한다.
+        setQueue({ entries: [] })
+        setQueueUnavailable(true)
+        setError(undefined)
+        await loadMeetingStatus()
+      } else {
+        await Promise.all([loadQueue(), loadMeetingStatus()])
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '팬미팅 상태 변경에 실패했습니다.')
     } finally {
@@ -435,6 +448,18 @@ export function ManagerMeetingMonitorPage() {
       return
     }
 
+    // 순번이 실제로 바뀐 모든 참가자에게 알림이 생성되므로, 매니저가
+    // 팬에게 전달할 사유를 함께 입력할 수 있게 한다. 취소하면 변경도 취소한다.
+    const reason = window.prompt(
+      '순번 변경 사유를 입력해 주세요. (선택, 최대 200자)',
+      '',
+    )
+    if (reason === null) return
+    if (reason.trim().length > 200) {
+      setError('순번 변경 사유는 200자 이내로 입력해 주세요.')
+      return
+    }
+
     if (isPreview) return
 
     const token = getAuthSession()?.accessToken
@@ -446,7 +471,7 @@ export function ManagerMeetingMonitorPage() {
     setBusyEntryId(entry.queueEntryId)
     setError(undefined)
     try {
-      await changeQueuePosition(entry.queueEntryId, newPosition, token)
+      await changeQueuePosition(entry.queueEntryId, newPosition, token, reason)
       await loadQueue()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '대기열 순서 변경에 실패했습니다.')

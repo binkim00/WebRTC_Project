@@ -1,6 +1,6 @@
 import { LiveKitRoom } from '@livekit/components-react'
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import {
   getCallSessionStatus,
@@ -34,6 +34,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   const [callDurationSec, setCallDurationSec] = useState<number>()
   const [retryCount, setRetryCount] = useState(0)
   const [loading, setLoading] = useState(!isDesignPreview)
+  const [meetingClosed, setMeetingClosed] = useState<'ENDED' | 'CANCELED'>()
+  const navigate = useNavigate()
 
   const hostStaysConnected = props.hostStaysConnected ?? false
 
@@ -176,6 +178,37 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo),
   })
 
+  // 통화 세션이 끝난 것과 팬미팅 전체가 끝난 것은 다르다. 호스트는 통화방에
+  // 남아 있으므로 팬미팅 상태를 별도로 확인해 전체 종료를 놓치지 않는다.
+  const loadMeetingStatus = useCallback(async (signal: AbortSignal) => {
+    if (!hostStaysConnected || meetingClosed) return
+
+    const authToken = getAuthSession()?.accessToken
+    if (!authToken) return
+
+    try {
+      const detail = await fetchPublicFanMeetingDetail(Number(props.meetingId), authToken, signal)
+      const status = detail.meeting.status
+      if (status === 'ENDED' || status === 'CANCELED') {
+        setMeetingClosed(status)
+      }
+    } catch {
+      // 일시적인 조회 실패는 통화 화면을 끊지 않고 다음 polling에서 재확인한다.
+    }
+  }, [hostStaysConnected, meetingClosed, props.meetingId])
+
+  usePolling(loadMeetingStatus, {
+    intervalMs: 3_000,
+    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo) && !meetingClosed,
+  })
+
+  useEffect(() => {
+    if (!meetingClosed) return
+
+    const timer = window.setTimeout(() => navigate('/', { replace: true }), 3_000)
+    return () => window.clearTimeout(timer)
+  }, [meetingClosed, navigate])
+
   const refreshStatus = useCallback(
     async (signal: AbortSignal) => {
       if (!activeCallSessionId) return
@@ -206,6 +239,16 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
   if (isDesignPreview) {
     return <PreviewCallRoom {...props} />
+  }
+
+  if (meetingClosed) {
+    return (
+      <div className="mx-auto grid max-w-3xl gap-6 py-10">
+        <AlertBanner title={meetingClosed === 'CANCELED' ? '팬미팅이 취소되었습니다' : '팬미팅이 종료되었습니다'} variant="info">
+          팬미팅이 종료되어 영상통화방을 나갑니다. 잠시 후 메인 화면으로 이동합니다.
+        </AlertBanner>
+      </div>
+    )
   }
 
   if (!connectionInfo || !sessionStatus) {
