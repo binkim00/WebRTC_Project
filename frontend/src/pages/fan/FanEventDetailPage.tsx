@@ -20,6 +20,7 @@ import {
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import { getMyProfile } from '../../api/users'
+import { isEmailVerificationEnabled } from '../../config/features'
 import {
   AlertBanner,
   Badge,
@@ -508,7 +509,7 @@ export function FanEventDetailPage() {
         <aside>
           <Card>
             {/* 응모 가능 기간에 미인증이 확인된 팬에게는 폼 대신 인증 안내를 보여 준다. */}
-            {emailVerified === false && viewer.canApply ? (
+            {isEmailVerificationEnabled && emailVerified === false && viewer.canApply ? (
               <CardContent className="grid gap-5">
                 {submitError ? (
                   <AlertBanner title="응모 불가" variant="error">{submitError}</AlertBanner>

@@ -30,14 +30,19 @@ export function InfluencerMeetingCallPage() {
   return (
     <VideoCallRoom
       callSessionId={callSessionId}
-      // 혼자 운영하는 계정은 통화가 끝난 뒤 이력 화면이 아니라 다음 팬을 호출할 운영 콘솔로 복귀한다.
+      // 혼자 운영하는 계정은 다음 팬을 호출할 운영 콘솔로 복귀한다.
+      // 소속 인플루언서는 매니저 콘솔에 접근할 수 없으므로 준비실로 보낸다.
+      // (이전에는 마이페이지로 보내 대기열도, 다음 팬 입장 수단도, 종료 수단도 없는 곳에 떨어졌다.)
       endTo={isSoloInfluencer
         ? `/manager/fan-meetings/${encodeURIComponent(fanMeetingId)}/monitor`
-        : '/influencer/mypage/fan-meetings'}
+        : `/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/ready`}
       meetingId={fanMeetingId}
       participantLabel="팬 영상"
       screenId="ID-003"
       forceEndOnLeave
+      // 팬미팅 LiveKit Room은 팬미팅당 하나이므로, 팬이 교체될 때 방을 나가지 않고 머문다.
+      // (이전에는 통화 세션이 끝날 때마다 방을 나가고 화면을 이탈해 차례마다 튕겨 나갔다.)
+      hostStaysConnected
     />
   )
 }

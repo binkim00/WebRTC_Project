@@ -15,6 +15,7 @@ import { ApiError } from '../../api/ApiError'
 import { fetchMeetingDetail, type MeetingDetail } from '../../api/fanMeetingParticipants'
 import { getMyQueue, type QueueSnapshotResponse } from '../../api/queue'
 import { createQueueChangeRequest } from '../../api/queueManagement'
+import { usePolling } from '../../hooks/usePolling'
 
 /** DeviceCheckPage가 sessionStorage에 저장하는 장비 점검 기록이다. */
 type DeviceCheckRecord = {
@@ -191,24 +192,9 @@ export function FanMeetingWaitingPage() {
     return () => controller.abort()
   }, [loadMeetingInfo])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    let active = true
-    let timer: number | undefined
-
-    // 이전 요청이 끝난 뒤 다음 요청을 예약해 느린 네트워크에서 응답 순서가 뒤집히지 않게 한다.
-    const poll = async () => {
-      await loadQueueState(controller.signal)
-      if (active) timer = window.setTimeout(() => void poll(), 3_000)
-    }
-    void poll()
-
-    return () => {
-      active = false
-      controller.abort()
-      if (timer !== undefined) window.clearTimeout(timer)
-    }
-  }, [loadQueueState])
+  // 대기 순번은 실시간성이 중요하므로 3초마다 갱신한다.
+  // usePolling은 직렬 폴링이라 느린 네트워크에서도 응답 순서가 뒤집히지 않는다.
+  usePolling(loadQueueState, { intervalMs: 3_000 })
 
   const currentPosition = queueSnapshot?.position ?? 0
   const estimatedWaitMinutes = Math.ceil((queueSnapshot?.estimatedWaitSec ?? 0) / 60)
@@ -466,6 +452,18 @@ export function FanMeetingWaitingPage() {
                 <li>재호출 후에도 입장하지 않으면 참여가 종료될 수 있습니다.</li>
               </ul>
             </AlertBanner>
+
+            {/* backend가 순번 변경 대상별로 저장한 안내 문구를 대기 화면에도 표시한다. */}
+            {queueSnapshot?.lastChangeReason ? (
+              <AlertBanner title="대기 순번이 변경되었습니다" variant="info">
+                <p>{queueSnapshot.lastChangeReason}</p>
+                {queueSnapshot.lastChangedAt ? (
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                    반영 시각: {new Date(queueSnapshot.lastChangedAt).toLocaleString('ko-KR')}
+                  </p>
+                ) : null}
+              </AlertBanner>
+            ) : null}
 
             <section className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] p-5">
               <div>
