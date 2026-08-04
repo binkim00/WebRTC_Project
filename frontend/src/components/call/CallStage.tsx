@@ -12,6 +12,12 @@ import {
 import type { ReactNode } from 'react'
 import { cn } from '../ui/cn'
 
+/** 화자 이름이 붙은 자막 한 줄이다. */
+export type CaptionLine = {
+  speaker: string
+  text: string
+}
+
 export type CallStageProps = {
   remoteVideo: ReactNode
   localVideo: ReactNode
@@ -24,8 +30,8 @@ export type CallStageProps = {
   cameraEnabled: boolean
   microphoneEnabled: boolean
   captionEnabled: boolean
-  captionSpeaker?: string
-  captionText?: string
+  /** 오래된 순서로 정렬된 최근 자막이며 마지막 줄이 현재 발화다. */
+  captionLines?: readonly CaptionLine[]
   mediaAction?: 'camera' | 'microphone'
   onCameraToggle: () => void
   onMicrophoneToggle: () => void
@@ -84,8 +90,7 @@ export function CallStage({
   cameraEnabled,
   microphoneEnabled,
   captionEnabled,
-  captionSpeaker,
-  captionText,
+  captionLines,
   mediaAction,
   onCameraToggle,
   onMicrophoneToggle,
@@ -195,12 +200,27 @@ export function CallStage({
           <div
             aria-live="polite"
             className={cn(
-              'min-h-12 min-w-0 max-w-[840px] flex-1 rounded-xl bg-[rgb(34_27_30/86%)] px-4 py-3 text-center text-sm text-white shadow-lg backdrop-blur-md sm:text-base',
+              'grid min-h-12 min-w-0 max-w-[840px] flex-1 gap-1 rounded-xl bg-[rgb(34_27_30/86%)] px-4 py-3 text-center text-sm text-white shadow-lg backdrop-blur-md sm:text-base',
               !captionEnabled && 'invisible',
             )}
           >
-            {captionSpeaker ? <strong className="mr-2 text-[#ffd6d2]">{captionSpeaker}</strong> : null}
-            <span>{captionText || '자막 데이터 연결을 기다리고 있습니다.'}</span>
+            {captionLines?.length ? (
+              captionLines.map((line, index) => (
+                <p
+                  className={cn(
+                    // 지나간 대사는 흐리게 남겨 현재 발화가 어느 줄인지 위치와 명도로 함께 구분한다.
+                    index === captionLines.length - 1 ? 'text-white' : 'text-white/55',
+                  )}
+                  // 자막은 갱신되며 내용이 바뀌므로 배열 순서가 아니라 발화 내용으로 식별한다.
+                  key={`${line.speaker}:${line.text}`}
+                >
+                  <strong className="mr-2 text-[#ffd6d2]">{line.speaker}</strong>
+                  <span>{line.text}</span>
+                </p>
+              ))
+            ) : (
+              <p>자막 데이터 연결을 기다리고 있습니다.</p>
+            )}
           </div>
         </div>
 

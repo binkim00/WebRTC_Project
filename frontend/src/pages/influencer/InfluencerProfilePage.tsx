@@ -256,13 +256,15 @@ export function InfluencerProfilePage() {
               >
                 회원정보 수정
               </Button>
-              {/* TODO: 비밀번호 변경 화면 연결 */}
+              {/* 백엔드에 비밀번호 재설정 계약이 없어 무동작 버튼 대신 지원 상태를 명확히 표시한다. */}
               <Button
+                disabled
                 leadingIcon={<Key aria-hidden size={17} weight="bold" />}
                 size="sm"
+                title="비밀번호 변경 API가 제공되면 사용할 수 있습니다."
                 variant="secondary"
               >
-                비밀번호 변경
+                비밀번호 변경 준비 중
               </Button>
             </div>
           </CardContent>

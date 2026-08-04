@@ -1,3 +1,4 @@
+import { ApiError } from './ApiError'
 import { apiRequest } from './client'
 
 type ApiEnvelope<T> = {
@@ -82,6 +83,59 @@ export async function enterQueue(
   }
 
   return response.data
+}
+
+/**
+ * 대기실 입장 실패 원인을 화면이 그대로 쓸 수 있는 형태로 해석한다.
+ *
+ * 백엔드는 "이미 입장함", "오픈 전", "대기열 미초기화", "참가자 없음"을 모두 409로 반환한다.
+ * 상태 코드만 보고 전부 재입장으로 처리하면 실제로 막힌 팬을 순번이 뜨지 않는 대기실로 보내
+ * 원인이 화면에서 사라지므로, ErrorCode 이름으로 구분한다.
+ *
+ * @param error 대기실 입장 요청에서 발생한 오류
+ * @returns alreadyEntered가 true면 대기실로 이동해도 되고, 아니면 message를 그대로 보여 준다
+ */
+export function interpretQueueEnterError(
+  error: unknown,
+): { alreadyEntered: boolean; message: string } {
+  if (!(error instanceof ApiError)) {
+    return {
+      alreadyEntered: false,
+      message:
+        error instanceof TypeError
+          ? error.message
+          : '대기실에 입장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    }
+  }
+
+  switch (error.code) {
+    case 'QUEUE_ENTRY_ALREADY_ENTERED':
+      return { alreadyEntered: true, message: error.message }
+    case 'WAITING_ROOM_NOT_OPEN':
+      return {
+        alreadyEntered: false,
+        message:
+          '아직 대기실이 열리지 않았습니다. 운영자가 대기열을 열면 바로 입장할 수 있습니다.',
+      }
+    case 'QUEUE_NOT_INITIALIZED':
+      return {
+        alreadyEntered: false,
+        message: '대기열이 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.',
+      }
+    case 'NO_PARTICIPANTS':
+      return {
+        alreadyEntered: false,
+        message: '확정된 참가자가 없어 대기열을 열 수 없습니다. 운영자에게 문의해 주세요.',
+      }
+    case 'PARTICIPANT_NOT_FOUND':
+      return {
+        alreadyEntered: false,
+        message: '확정 참가자로 등록된 팬만 대기실에 입장할 수 있습니다.',
+      }
+    default:
+      // 상태 코드만 아는 새 오류는 재입장으로 단정하지 않고 서버 메시지를 그대로 보여 준다.
+      return { alreadyEntered: false, message: error.message }
+  }
 }
 
 export async function getMyQueue(

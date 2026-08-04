@@ -19,6 +19,7 @@ import {
   endFanMeeting,
   patchFanMeeting,
   startFanMeeting,
+  transitionFanMeetingImmediately,
   type FanMeetingStatus,
   type FanMeetingTestControlRequest,
   type FanMeetingUpdateRequest,
@@ -53,14 +54,36 @@ import {
   type MeetingDetailTab,
 } from './meetingLifecycle'
 
+/**
+ * 위험한 테스트 제어는 개발 서버에서도 명시적으로 켠 경우에만 노출한다.
+ * 운영자가 사용하는 즉시 전환은 개요 탭의 제한된 순방향 액션으로 별도 제공한다.
+ */
+const TEST_CONTROL_ENABLED =
+  import.meta.env.DEV && import.meta.env.VITE_ENABLE_TEST_CONTROLS === 'true'
+
 /** 상세 화면 상단에 표시할 탭 목록이다. */
 const TABS: readonly { id: MeetingDetailTab; label: string }[] = [
   { id: 'overview', label: '개요' },
   { id: 'settings', label: '설정' },
   { id: 'application-form', label: '응모 폼' },
   { id: 'applicants', label: '응모자' },
-  { id: 'test-control', label: '테스트 제어' },
+  ...(TEST_CONTROL_ENABLED
+    ? [{ id: 'test-control' as const, label: '테스트 제어' }]
+    : []),
 ]
+
+/** 상세 화면에서 실행할 수 있는 정상 액션과 제한된 즉시 전환 명령이다. */
+type MeetingOperationAction =
+  | 'publish'
+  | 'cancel'
+  | 'delete'
+  | 'start'
+  | 'end'
+  | 'draw'
+  | 'publishResults'
+  | 'openApplicationsNow'
+  | 'closeApplicationsNow'
+  | 'startNow'
 
 /** 테스트 제어에서 강제로 지정할 수 있는 상태 목록이다. */
 const TEST_CONTROL_STATUS_OPTIONS: readonly { value: FanMeetingStatus; label: string }[] = [
@@ -220,7 +243,11 @@ function toSettingsForm(detail: PublicFanMeetingDetail): SettingsForm {
 export function ManagerMeetingDetailPage() {
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = normalizeDetailTab(searchParams.get('tab'))
+  const requestedTab = normalizeDetailTab(searchParams.get('tab'))
+  // 주소를 직접 입력해도 운영 빌드에서는 테스트 패널에 접근할 수 없다.
+  const tab = requestedTab === 'test-control' && !TEST_CONTROL_ENABLED
+    ? 'overview'
+    : requestedTab
 
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
   const [participantCount, setParticipantCount] = useState(0)
@@ -231,6 +258,7 @@ export function ManagerMeetingDetailPage() {
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
   const [applicantsRefresh, setApplicantsRefresh] = useState(0)
+  const [actionNow, setActionNow] = useState(() => new Date())
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!meetingId) {
@@ -278,6 +306,12 @@ export function ManagerMeetingDetailPage() {
     return () => controller.abort()
   }, [load])
 
+  useEffect(() => {
+    // 마감·조기 시작 경계가 지나면 새로고침하지 않아도 버튼 상태를 다시 계산한다.
+    const timer = window.setInterval(() => setActionNow(new Date()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   const actions = useMemo(
     () =>
       getAvailableActions({
@@ -289,14 +323,13 @@ export function ManagerMeetingDetailPage() {
         earlyStartMinutes: detail?.meeting.operation.earlyStartMinutes,
         participantCount,
         drawCompleted,
+        now: actionNow,
       }),
-    [detail, drawCompleted, participantCount],
+    [actionNow, detail, drawCompleted, participantCount],
   )
 
   /** 확인을 받은 뒤 상태 전환 API를 실행하고 화면 값을 다시 읽는다. */
-  async function runAction(
-    action: 'publish' | 'cancel' | 'delete' | 'start' | 'end' | 'draw' | 'publishResults',
-  ) {
+  async function runAction(action: MeetingOperationAction) {
     const confirmTexts: Record<typeof action, string> = {
       publish: '팬미팅을 발행할까요? 발행하면 팬에게 공개됩니다.',
       cancel: '팬미팅을 취소할까요? 취소하면 되돌릴 수 없습니다.',
@@ -305,6 +338,12 @@ export function ManagerMeetingDetailPage() {
       end: '팬미팅을 종료할까요? 진행 중인 통화가 모두 종료됩니다.',
       draw: '응모자 중에서 당첨자를 추첨할까요? 추첨 후에는 다시 실행할 수 없습니다.',
       publishResults: '응모 결과를 발표할까요? 모든 응모자에게 알림이 전송됩니다.',
+      openApplicationsNow:
+        '응모 접수를 지금 시작할까요? 응모 시작 시각이 현재로 변경되며, 이미 지난 마감 시각은 기존 응모 기간만큼 연장됩니다.',
+      closeApplicationsNow:
+        '응모 접수를 지금 마감할까요? 응모 마감 시각이 현재로 변경되며 이후에는 새 응모를 받을 수 없습니다.',
+      startNow:
+        '팬미팅을 지금 시작할까요? 예정 시작 시각이 현재로 변경되고 확정 참가자에게 즉시 영향을 줍니다.',
     }
     if (!window.confirm(confirmTexts[action])) return
 
@@ -339,10 +378,36 @@ export function ManagerMeetingDetailPage() {
           `추첨을 완료했습니다. 당첨 ${result.selectedCount}명 · 미당첨 ${result.notSelectedCount}명 · 참가자 ${result.participantCount}명`,
         )
         setApplicantsRefresh((value) => value + 1)
-      } else {
+      } else if (action === 'publishResults') {
         const result = await publishApplicationResults(meetingId, token)
         setMessage(`응모 결과를 발표했습니다. 알림 ${result.notificationCount}건을 전송했습니다.`)
         setApplicantsRefresh((value) => value + 1)
+      } else {
+        const currentStatus = detail?.meeting.status
+        if (!currentStatus) throw new TypeError('현재 팬미팅 상태를 확인할 수 없습니다.')
+
+        const targetStatus = action === 'openApplicationsNow'
+          ? 'APPLICATION_OPEN'
+          : action === 'closeApplicationsNow'
+            ? 'APPLICATION_CLOSED'
+            : 'LIVE'
+        await transitionFanMeetingImmediately(
+          meetingId,
+          currentStatus,
+          targetStatus,
+          token,
+          {
+            applicationStartAt: detail.meeting.application.startAt,
+            applicationEndAt: detail.meeting.application.endAt,
+          },
+        )
+        setMessage(
+          action === 'openApplicationsNow'
+            ? '응모 접수를 즉시 시작하고 응모 시작 시각을 현재로 갱신했습니다.'
+            : action === 'closeApplicationsNow'
+              ? '응모 접수를 즉시 마감하고 응모 마감 시각을 현재로 갱신했습니다.'
+              : '팬미팅을 즉시 시작하고 예정 시작 시각을 현재로 갱신했습니다.',
+        )
       }
       await load()
     } catch (cause) {
@@ -455,7 +520,7 @@ export function ManagerMeetingDetailPage() {
         <ManagerApplicantsPanel meetingId={meetingId} refreshToken={applicantsRefresh} />
       ) : null}
 
-      {tab === 'test-control' ? (
+      {TEST_CONTROL_ENABLED && tab === 'test-control' ? (
         <TestControlPanel detail={detail} meetingId={meetingId} onApplied={() => void load()} />
       ) : null}
     </div>
@@ -478,9 +543,7 @@ function OverviewPanel({
   meetingId: string
   participantCount: number
   drawCompleted: boolean
-  onAction: (
-    action: 'publish' | 'cancel' | 'delete' | 'start' | 'end' | 'draw' | 'publishResults',
-  ) => void
+  onAction: (action: MeetingOperationAction) => void
 }) {
   const { meeting } = detail
   const encodedId = encodeURIComponent(meetingId)
@@ -519,6 +582,37 @@ function OverviewPanel({
             ) : null}
           </div>
         </div>
+        {(actions.canOpenApplicationsNow ||
+          actions.canCloseApplicationsNow ||
+          (actions.canStartNow && !actions.canStart)) ? (
+          <div className="mt-5 rounded-[var(--radius-control)] border border-[var(--color-warning-border)] bg-[var(--color-warning-soft)] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <strong className="text-sm text-[var(--color-warning)]">예약 시간 전 수동 운영</strong>
+                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+                  서버의 기간 검증과 실제 시작 기록을 일치시키기 위해 해당 예약 시각도 현재로 갱신됩니다.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {actions.canOpenApplicationsNow ? (
+                  <Button disabled={busy} onClick={() => onAction('openApplicationsNow')} size="sm" variant="secondary">
+                    응모 지금 시작
+                  </Button>
+                ) : null}
+                {actions.canCloseApplicationsNow ? (
+                  <Button disabled={busy} onClick={() => onAction('closeApplicationsNow')} size="sm" variant="secondary">
+                    응모 지금 마감
+                  </Button>
+                ) : null}
+                {actions.canStartNow && !actions.canStart ? (
+                  <Button disabled={busy} onClick={() => onAction('startNow')} size="sm">
+                    일정 전에 팬미팅 시작
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
         {actions.startBlockedReason ? (
           <p className="mt-4 text-sm text-[var(--color-text-secondary)]">{actions.startBlockedReason}</p>
         ) : null}
@@ -579,7 +673,6 @@ function OverviewPanel({
           <QuickLink label="공지 관리" to={`/manager/fan-meetings/${encodedId}/notices`} />
           <QuickLink label="실시간 운영 모니터" to={`/manager/fan-meetings/${encodedId}/monitor`} />
           <QuickLink label="결과 통계" to={`/manager/fan-meetings/${encodedId}/statistics`} />
-          <QuickLink label="커뮤니티" to={`/manager/fan-meetings/${encodedId}/community`} />
         </CardContent>
       </Card>
     </div>
@@ -1027,7 +1120,8 @@ function TestControlPanel({
   onApplied: () => void
 }) {
   const [form, setForm] = useState<TestControlForm>(() => toTestControlForm(detail))
-  const [autoSchedule, setAutoSchedule] = useState(true)
+  // 상태만 확인하려는 테스트에서 기존 행사 일정을 실수로 덮어쓰지 않도록 기본값은 꺼 둔다.
+  const [autoSchedule, setAutoSchedule] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()

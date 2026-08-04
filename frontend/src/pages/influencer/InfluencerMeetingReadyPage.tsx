@@ -23,6 +23,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
+import { serverLocalDateTimeMs } from '../../api/meetingManagement'
 import {
   fetchFanMemos,
   fetchMeetingDetail,
@@ -177,10 +178,9 @@ export function InfluencerMeetingReadyPage() {
 
   /** 대기열 오픈 시각(밀리초). 상세 정보를 아직 불러오지 못했으면 undefined다. */
   const queueOpenAtMs = useMemo(() => {
-    const raw = meeting?.operation?.queueOpenAt
-    if (!raw) return undefined
-    const time = new Date(raw).getTime()
-    return Number.isNaN(time) ? undefined : time
+    // 서버는 offset 없는 LocalDateTime을 보내므로 KST 기준으로 해석해야 한다.
+    const time = serverLocalDateTimeMs(meeting?.operation?.queueOpenAt)
+    return Number.isFinite(time) ? time : undefined
   }, [meeting?.operation?.queueOpenAt])
 
   /** 대기열 오픈 전인지 여부. 오픈 시각 정보가 없으면 기존처럼 바로 폴링한다. */
@@ -230,7 +230,8 @@ export function InfluencerMeetingReadyPage() {
     () => entries.filter((entry) => entry.status === 'COMPLETED').length,
     [entries],
   )
-  const totalFanCount = meeting?.application?.capacity ?? entries.length
+  // 모집 정원(capacity)이 아니라 실제 대기열 참가자 수를 진행률의 분모로 사용한다.
+  const totalFanCount = entries.length
 
   const currentFanName = queue?.currentCall?.nickname ?? currentEntry?.nickname
   const currentFanId = currentEntry?.fanId

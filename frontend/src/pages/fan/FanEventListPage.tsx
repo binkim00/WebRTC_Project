@@ -32,8 +32,6 @@ const meetingStatusOptions = [
   { label: '전체', value: 'all' },
   { label: '모집 예정', value: 'PUBLISHED' },
   { label: '모집 중', value: 'APPLICATION_OPEN' },
-  { label: '모집 마감', value: 'CLOSED' },
-  { label: '결과 발표', value: 'READY' },
 ]
 
 const applicationStatusContent: Record<
@@ -58,26 +56,17 @@ const initialFilters: EventFilters = {
 const promotionMeetingStatuses = [
   'PUBLISHED',
   'APPLICATION_OPEN',
-  'APPLICATION_CLOSED',
-  'READY',
-  'LIVE',
-  'ENDED',
 ] as const satisfies readonly PublicFanMeetingStatus[]
 
 type RecruitmentStatusFilter =
   | 'PUBLISHED'
   | 'APPLICATION_OPEN'
-  | 'CLOSED'
-  | 'READY'
 
 function matchesRecruitmentStatus(
   meetingStatus: PublicFanMeetingStatus,
   filter?: RecruitmentStatusFilter,
 ): boolean {
   if (!filter) return true
-  if (filter === 'CLOSED') {
-    return ['APPLICATION_CLOSED', 'LIVE', 'ENDED'].includes(meetingStatus)
-  }
   return meetingStatus === filter
 }
 
@@ -98,7 +87,9 @@ function formatDateTime(value: string): string {
 
 function formatDate(value: string | null): string {
   if (!value) return '-'
-  return formatDateTime(value).split(' ')[0]
+  const formatted = formatDateTime(value)
+  // 비정상 날짜 문자열에는 공백이 없을 수 있으므로 원문 정규화 결과를 안전하게 사용한다.
+  return formatted.split(' ')[0] ?? formatted
 }
 
 export function FanEventListPage() {
@@ -128,9 +119,7 @@ export function FanEventListPage() {
         const nextMeetings = meetingPage.content
           .filter(
             (meeting) =>
-              promotionMeetingStatuses.includes(
-                meeting.status,
-              ) &&
+              promotionMeetingStatuses.some((status) => status === meeting.status) &&
               matchesRecruitmentStatus(meeting.status, filters.status),
           )
           .sort(

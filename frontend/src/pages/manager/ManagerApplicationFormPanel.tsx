@@ -29,6 +29,8 @@ const QUESTION_TYPE_OPTIONS = [
 
 /** 백엔드가 허용하는 응모 질문 최대 개수다. */
 const MAX_QUESTIONS = 10
+const MAX_FORM_DESCRIPTION_LENGTH = 2_000
+const MAX_QUESTION_TEXT_LENGTH = 500
 
 /** 응모 폼 편집기에서 사용하는 로컬 질문 상태다. */
 type EditableFormQuestion = {
@@ -91,6 +93,8 @@ export function ManagerApplicationFormPanel({
       if (target < 0 || target >= items.length) return items
       const next = items.slice()
       const [picked] = next.splice(index, 1)
+      // noUncheckedIndexedAccess에서도 범위를 벗어난 항목을 재삽입하지 않도록 방어한다.
+      if (!picked) return items
       next.splice(target, 0, picked)
       return next
     })
@@ -112,6 +116,14 @@ export function ManagerApplicationFormPanel({
     }
     if (questions.some((question) => !question.questionText.trim())) {
       setError('모든 질문 내용을 입력해 주세요.')
+      return
+    }
+    if (formDescription.trim().length > MAX_FORM_DESCRIPTION_LENGTH) {
+      setError(`응모 안내 문구는 ${MAX_FORM_DESCRIPTION_LENGTH}자 이내로 입력해 주세요.`)
+      return
+    }
+    if (questions.some((question) => question.questionText.trim().length > MAX_QUESTION_TEXT_LENGTH)) {
+      setError(`질문 내용은 항목당 ${MAX_QUESTION_TEXT_LENGTH}자 이내로 입력해 주세요.`)
       return
     }
     if (questions.length > MAX_QUESTIONS) {
@@ -172,6 +184,7 @@ export function ManagerApplicationFormPanel({
           <Textarea
             disabled={!editable}
             label="응모 폼 안내 문구"
+            maxLength={MAX_FORM_DESCRIPTION_LENGTH}
             onChange={(event) => setFormDescription(event.target.value)}
             placeholder="응모자에게 보여 줄 안내 문구를 입력해 주세요."
             rows={3}
@@ -212,6 +225,7 @@ export function ManagerApplicationFormPanel({
                     <TextField
                       disabled={!editable}
                       label="질문 내용"
+                      maxLength={MAX_QUESTION_TEXT_LENGTH}
                       onChange={(event) => updateQuestion(question.key, { questionText: event.target.value })}
                       placeholder="예: 이번 팬미팅에서 가장 나누고 싶은 이야기는 무엇인가요?"
                       required

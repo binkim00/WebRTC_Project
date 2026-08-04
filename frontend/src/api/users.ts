@@ -14,6 +14,13 @@ export type UserProfile = {
   profileImageUrl: string | null
   role: LoginRole
   preferredLanguage: string
+  /**
+   * 이메일 인증 완료 여부다.
+   *
+   * 이메일 인증 기능이 아직 배포되지 않은 백엔드(lab 리버트 상태)는 이 필드를 내려주지
+   * 않으므로 선택 필드로 두고, undefined면 화면에서 인증 안내를 켜지 않는다.
+   */
+  emailVerified?: boolean
 }
 
 export type UpdateUserProfileRequest = {
@@ -54,7 +61,9 @@ function isUserProfile(value: unknown): value is UserProfile {
     typeof value.nickname === 'string' &&
     isNullableString(value.profileImageUrl) &&
     isLoginRole(value.role) &&
-    typeof value.preferredLanguage === 'string'
+    typeof value.preferredLanguage === 'string' &&
+    // 구버전 백엔드는 필드 자체가 없으므로 undefined도 허용한다.
+    (value.emailVerified === undefined || typeof value.emailVerified === 'boolean')
   )
 }
 
