@@ -29,9 +29,9 @@ export function InfluencerMeetingCallPage() {
   return (
     <VideoCallRoom
       callSessionId={callSessionId}
-      // 혼자 운영하는 계정은 통화가 끝난 뒤 이력 화면이 아니라 다음 팬을 호출할 운영 콘솔로 복귀한다.
+      // 혼자 운영하는 계정은 통화가 끝난 뒤 이력 화면이 아니라 다음 팬을 호출할 대기실로 복귀한다.
       endTo={isSoloInfluencer
-        ? `/manager/fan-meetings/${encodeURIComponent(fanMeetingId)}/monitor`
+        ? `/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/ready`
         : '/influencer/mypage/fan-meetings'}
       meetingId={fanMeetingId}
       participantLabel="팬 영상"

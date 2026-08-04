@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertBanner, MediaDevicePreview } from '../../components'
+import { AlertBanner, Button, Dialog, MediaDevicePreview } from '../../components'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
-import { serverLocalDateTimeMs } from '../../api/meetingManagement'
+import { openWaitingRoomImmediately, serverLocalDateTimeMs } from '../../api/meetingManagement'
 import {
+  callQueueEntry,
   fetchFanMemos,
   fetchMeetingQueue,
   type FanMemo,
@@ -79,6 +80,13 @@ export function InfluencerMeetingReadyPage() {
   const [notice, setNotice] = useState<{ title: string; body: string }>()
   const [error, setError] = useState<string>()
   const [now, setNow] = useState(() => Date.now())
+  const [openQueueConfirm, setOpenQueueConfirm] = useState(false)
+  const [openingQueue, setOpeningQueue] = useState(false)
+  const [openQueueError, setOpenQueueError] = useState<string>()
+  const [callingNext, setCallingNext] = useState(false)
+  const [callError, setCallError] = useState<string>()
+  // 1인 운영자는 통화 중 운영 콘솔을 볼 수 없으므로 대기열 오픈도 대기실에서 처리한다.
+  const isSolo = getAuthSession()?.role === 'SOLO_INFLUENCER'
 
   const deviceCheck = readDeviceCheck(fanMeetingId)
   const isDeviceChecked = isDeviceCheckPassed(deviceCheck)
@@ -277,12 +285,60 @@ export function InfluencerMeetingReadyPage() {
     )
   }
 
+  /** 대기실 오픈 시각을 현재로 당긴 뒤 상세를 다시 불러와 폴링을 시작시킨다. */
+  async function handleOpenQueueNow() {
+    const session = getAuthSession()
+    if (!fanMeetingId || !session || openingQueue) return
+
+    setOpeningQueue(true)
+    setOpenQueueError(undefined)
+    try {
+      await openWaitingRoomImmediately(fanMeetingId, session.accessToken)
+      const refreshed = await fetchPublicFanMeetingDetail(
+        Number(fanMeetingId),
+        session.accessToken,
+      )
+      setDetail(refreshed)
+      setOpenQueueConfirm(false)
+    } catch (reason) {
+      setOpenQueueError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : '대기열을 열지 못했습니다. 잠시 후 다시 시도해 주세요.',
+      )
+    } finally {
+      setOpeningQueue(false)
+    }
+  }
+
   const handleEnterCall = () => {
     if (!fanMeetingId) return
     if (!isDeviceChecked || cameraBroken || !queue?.currentCall) return
     navigate(
       `/influencer/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`,
     )
+  }
+
+  /** 다음 대기 팬을 호출하고, 직접 통화하는 1인 운영자이므로 바로 통화 화면으로 들어간다. */
+  async function handleCallNext(target: { queueEntryId: string; nickname: string }) {
+    const session = getAuthSession()
+    if (!fanMeetingId || !session || callingNext) return
+
+    setCallingNext(true)
+    setCallError(undefined)
+    try {
+      const response = await callQueueEntry(target.queueEntryId, session.accessToken)
+      navigate(
+        `/influencer/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(response.callSessionId)}`,
+      )
+    } catch (reason) {
+      setCallError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : `${target.nickname} 님을 호출하지 못했습니다. 잠시 후 다시 시도해 주세요.`,
+      )
+      setCallingNext(false)
+    }
   }
 
   const influencerName = detail?.influencer.name ?? ''
@@ -306,6 +362,20 @@ export function InfluencerMeetingReadyPage() {
   const noFan = !queue?.currentCall
   const isLastFan = Boolean(queue?.currentCall && !nextEntry)
   const blocked = cameraBroken || !isDeviceChecked || noFan
+
+  // 1인 운영자는 대기 팬을 대기실에서 직접 호출한다. 호출 API가 팬미팅 상태를 검사하지
+  // 않으므로 조기 세션 생성을 막기 위해 LIVE를 프론트에서 확인한다. (운영 콘솔과 동일 규칙)
+  const meetingLive = detail?.meeting.status === 'LIVE'
+  const callableEntry =
+    isSolo && noFan && nextEntry?.status === 'WAITING' ? nextEntry : undefined
+  const callBlocked = cameraBroken || !isDeviceChecked || !meetingLive
+  const callHelp = cameraBroken
+    ? '카메라 연결을 복구하면 호출할 수 있어요. 팬의 순번은 유지됩니다.'
+    : !isDeviceChecked
+      ? '장비 점검을 마치면 호출할 수 있어요.'
+      : !meetingLive
+        ? '팬미팅을 시작한 뒤에 팬을 호출할 수 있어요.'
+        : `호출하면 ${callableEntry?.nickname ?? '다음 팬'} 님에게 입장 안내가 가고 바로 통화 화면으로 이동합니다.`
 
   const statusLine = cameraBroken
     ? '카메라 연결 이상 · 입장 불가'
@@ -335,11 +405,32 @@ export function InfluencerMeetingReadyPage() {
     <div>
       {/* 대기열 오픈 전에는 오류 대신 오픈 예정 안내를 표시한다 */}
       {isBeforeQueueOpen ? (
-        <AlertBanner className="mb-6" title="대기열이 아직 열리지 않았습니다" variant="info">
-          {formatScheduledAt(detail?.meeting.operation.queueOpenAt ?? undefined)} 오픈
-          예정입니다. 오픈되면 자동으로 대기열 정보를 불러옵니다. 그동안 카메라와 마이크
-          상태를 점검해 주세요.
-        </AlertBanner>
+        <div className="mb-6 grid gap-3">
+          <AlertBanner title="대기열이 아직 열리지 않았습니다" variant="info">
+            {formatScheduledAt(detail?.meeting.operation.queueOpenAt ?? undefined)} 오픈
+            예정입니다. 오픈되면 자동으로 대기열 정보를 불러옵니다. 그동안 카메라와 마이크
+            상태를 점검해 주세요.
+          </AlertBanner>
+          {isSolo ? (
+            <div>
+              <button
+                className="mj-font-label inline-flex min-h-11 items-center rounded-[var(--radius-control)] border border-[var(--color-primary-coral)] bg-[var(--color-surface-panel)] px-[18px] text-[15px] text-[var(--color-primary-coral)] transition-colors hover:bg-[var(--color-primary-coral)] hover:text-white"
+                onClick={() => {
+                  setOpenQueueError(undefined)
+                  setOpenQueueConfirm(true)
+                }}
+                type="button"
+              >
+                대기열 지금 오픈
+              </button>
+              {openQueueError ? (
+                <p className="mt-2 text-sm font-medium text-[var(--color-error)]" role="alert">
+                  {openQueueError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       ) : error ? (
         <AlertBanner className="mb-6" title="통화 정보를 확인할 수 없습니다" variant="error">
           {error}
@@ -587,26 +678,85 @@ export function InfluencerMeetingReadyPage() {
             </p>
           ) : null}
 
-          <button
-            className={`mj-font-emphasis mt-[22px] min-h-14 w-full rounded-[10px] border text-[17px] transition-colors ${
-              blocked
-                ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
-                : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:bg-[var(--color-primary-coral-hover)]'
-            }`}
-            disabled={blocked}
-            onClick={handleEnterCall}
-            type="button"
-          >
-            영상 통화 입장
-          </button>
-          <p
-            aria-live="polite"
-            className="mt-2.5 text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]"
-          >
-            {ctaHelp}
-          </p>
+          {callableEntry ? (
+            <>
+              <button
+                className={`mj-font-emphasis mt-[22px] min-h-14 w-full rounded-[10px] border text-[17px] transition-colors ${
+                  callBlocked || callingNext
+                    ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
+                    : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:bg-[var(--color-primary-coral-hover)]'
+                }`}
+                disabled={callBlocked || callingNext}
+                onClick={() => void handleCallNext(callableEntry)}
+                type="button"
+              >
+                {callingNext ? '호출 중…' : '다음 팬 호출'}
+              </button>
+              <p
+                aria-live="polite"
+                className="mt-2.5 text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]"
+              >
+                {callHelp}
+              </p>
+              {callError ? (
+                <p className="mt-2 text-sm font-medium text-[var(--color-error)]" role="alert">
+                  {callError}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <button
+                className={`mj-font-emphasis mt-[22px] min-h-14 w-full rounded-[10px] border text-[17px] transition-colors ${
+                  blocked
+                    ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
+                    : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:bg-[var(--color-primary-coral-hover)]'
+                }`}
+                disabled={blocked}
+                onClick={handleEnterCall}
+                type="button"
+              >
+                영상 통화 입장
+              </button>
+              <p
+                aria-live="polite"
+                className="mt-2.5 text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]"
+              >
+                {ctaHelp}
+              </p>
+            </>
+          )}
         </aside>
       </div>
+
+      <Dialog
+        description="당첨된 팬이 장비 점검 후 대기실에서 기다릴 수 있습니다. 오픈한 대기열은 다시 닫을 수 없습니다."
+        footer={
+          <>
+            <Button
+              disabled={openingQueue}
+              onClick={() => setOpenQueueConfirm(false)}
+              variant="secondary"
+            >
+              취소
+            </Button>
+            <Button loading={openingQueue} onClick={() => void handleOpenQueueNow()}>
+              지금 오픈
+            </Button>
+          </>
+        }
+        onOpenChange={(open) => {
+          if (!open && !openingQueue) setOpenQueueConfirm(false)
+        }}
+        open={openQueueConfirm}
+        title="대기열을 지금 오픈할까요?"
+      >
+        {openQueueError ? (
+          <AlertBanner title="대기열을 열지 못했습니다" variant="error">
+            {openQueueError}
+          </AlertBanner>
+        ) : null}
+      </Dialog>
     </div>
   )
 }

@@ -108,6 +108,15 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
     setOpsError(undefined)
     try {
       await markQueueEntryNoShow(currentEntry.queueEntryId, token)
+      // 화면 이동만으로는 서버 세션이 정리되지 않으므로 통화도 명시적으로 종료한다.
+      const sessionId = queue?.currentCall?.callSessionId
+      if (sessionId) {
+        try {
+          await forceEndCallSession(sessionId, { reason: '노쇼 처리' }, { authToken: token })
+        } catch {
+          // 노쇼 처리와 함께 서버가 세션을 이미 정리한 경우다.
+        }
+      }
       setConfirm(undefined)
       returnToReady()
     } catch (reason) {
@@ -136,7 +145,10 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
           { authToken: token },
         )
       }
-      await changeQueuePosition(currentEntry.queueEntryId, entries.length, token)
+      // 다음 팬이 없으면 옮길 자리도 없으므로 통화 종료만으로 마무리한다.
+      if (nextEntry) {
+        await changeQueuePosition(currentEntry.queueEntryId, entries.length, token)
+      }
       setConfirm(undefined)
       returnToReady()
     } catch (reason) {
@@ -260,11 +272,6 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
               다음 팬으로 넘기기
             </button>
           </div>
-          {!currentEntry ? (
-            <p className="mt-2 text-sm font-medium text-white/65">
-              통화 중인 팬이 있을 때 사용할 수 있어요.
-            </p>
-          ) : null}
         </section>
       ) : null}
 
@@ -273,8 +280,8 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
           confirm === 'noshow'
             ? `통화가 즉시 종료되고 ${currentFanName ?? '현재 팬'} 님은 대기열에서 빠집니다. 기록에 노쇼로 남으며 되돌릴 수 없습니다.`
             : nextEntry
-              ? `지금 통화를 끝냅니다. ${currentFanName ?? '현재 팬'} 님은 대기열 마지막으로 이동하고, 다음 호출은 대기실에서 진행합니다.`
-              : `지금 통화를 끝냅니다. ${currentFanName ?? '현재 팬'} 님은 대기열 마지막으로 이동합니다.`
+              ? `지금 통화를 끝내고 ${nextEntry.position}번째 ${nextEntry.nickname} 님과의 연결을 대기실에서 이어갑니다. ${currentFanName ?? '현재 팬'} 님은 대기열 마지막으로 이동합니다.`
+              : `대기열에 다음 팬이 없어 지금 통화를 끝내는 것으로 오늘 진행이 마무리됩니다.`
         }
         footer={
           <>
@@ -300,21 +307,23 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
             : '다음 팬으로 넘길까요?'
         }
       >
-        <div className="grid gap-3">
-          {confirm === 'noshow' ? (
-            <p
-              className="rounded-lg bg-[var(--color-error-soft)] px-[15px] py-[13px] text-[15px] font-bold leading-[1.55] text-[var(--color-error)]"
-              role="alert"
-            >
-              이 작업은 취소할 수 없습니다.
-            </p>
-          ) : null}
-          {opsError ? (
-            <AlertBanner title="처리하지 못했습니다" variant="error">
-              {opsError}
-            </AlertBanner>
-          ) : null}
-        </div>
+        {confirm === 'noshow' || opsError ? (
+          <div className="grid gap-3">
+            {confirm === 'noshow' ? (
+              <p
+                className="rounded-lg bg-[var(--color-error-soft)] px-[15px] py-[13px] text-[15px] font-bold leading-[1.55] text-[var(--color-error)]"
+                role="alert"
+              >
+                이 작업은 취소할 수 없습니다.
+              </p>
+            ) : null}
+            {opsError ? (
+              <AlertBanner title="처리하지 못했습니다" variant="error">
+                {opsError}
+              </AlertBanner>
+            ) : null}
+          </div>
+        ) : null}
       </Dialog>
     </aside>
   )
