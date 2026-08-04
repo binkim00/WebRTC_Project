@@ -77,6 +77,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/test-token").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/livekit/webhook").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").authenticated()
+                        // 이메일 인증 확인은 메일 링크를 다른 브라우저나 기기에서 열 수 있어 비로그인도 허용한다.
+                        // 토큰 자체가 메일함 소유 증명이며 만료·재사용 검증은 서비스 계층이 수행한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/email-verifications/confirm")
+                                .permitAll()
+                        // 발송과 재발송은 현재 로그인 사용자의 이메일을 대상으로 하므로 인증이 필요하다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/email-verifications",
+                                "/api/v1/auth/email-verifications/resend").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/v1/influencers/*/follow")
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/influencers/*/follow")

@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "users")
@@ -59,6 +60,10 @@ public class User extends BaseTimeEntity {
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 
+    /** 이메일 소유 확인을 마친 시각이며, null이면 미인증 상태라 응모할 수 없다. */
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
     /** JPA가 엔티티를 조회해 객체로 만들 때 사용하는 기본 생성자다. */
     protected User() {
     }
@@ -77,6 +82,8 @@ public class User extends BaseTimeEntity {
         this.profileImageUrl = null;
         this.lastLoginAt = null;
         this.withdrawnAt = null;
+        // 가입 직후에는 메일함 소유를 확인하지 않았으므로 미인증 상태로 시작한다.
+        this.emailVerifiedAt = null;
     }
 
     /** 신규 회원을 ACTIVE 상태와 빈 프로필 이미지로 생성한다. */
@@ -95,7 +102,28 @@ public class User extends BaseTimeEntity {
     }
 
     /**
+     * 이메일 소유 확인이 끝난 시각을 기록한다.
+     *
+     * @param verifiedAt 인증이 완료된 시각
+     * @throws IllegalStateException 이미 인증이 완료된 경우
+     */
+    public void verifyEmail(LocalDateTime verifiedAt) {
+        if (this.emailVerifiedAt != null) {
+            throw new IllegalStateException("이미 인증이 완료된 이메일입니다.");
+        }
+        this.emailVerifiedAt = Objects.requireNonNull(verifiedAt);
+    }
+
+    /** 이메일 소유 확인을 마친 계정인지 반환한다. */
+    public boolean isEmailVerified() {
+        return emailVerifiedAt != null;
+    }
+
+    /**
      * 전달된 값만 회원의 수정 가능한 프로필 정보에 반영한다.
+     *
+     * <p>이메일이 실제로 바뀌면 새 주소의 소유를 확인하지 않은 상태이므로 인증을 초기화한다.
+     * 이 처리가 없으면 인증을 마친 계정이 이메일만 갈아 끼워 응모 게이트를 통과할 수 있다.
      *
      * @param nickname 변경할 닉네임, 변경하지 않으면 {@code null}
      * @param email 변경할 이메일, 변경하지 않으면 {@code null}
@@ -108,6 +136,9 @@ public class User extends BaseTimeEntity {
             this.nickname = nickname;
         }
         if (email != null) {
+            if (!email.equals(this.email)) {
+                this.emailVerifiedAt = null;
+            }
             this.email = email;
         }
         if (profileImageUrl != null) {
@@ -139,6 +170,8 @@ public class User extends BaseTimeEntity {
         // BCrypt 형식이 아니므로 어떤 비밀번호로도 매칭되지 않는다.
         this.password = WITHDRAWN_PASSWORD;
         this.profileImageUrl = null;
+        // 이메일이 실제로 수신할 수 없는 주소로 바뀌므로 인증 상태를 남겨 두지 않는다.
+        this.emailVerifiedAt = null;
     }
 
     /** 데이터베이스가 생성한 사용자 식별자를 반환한다. */
@@ -163,4 +196,6 @@ public class User extends BaseTimeEntity {
     public LocalDateTime getLastLoginAt() { return lastLoginAt; }
     /** 탈퇴 시각을 반환하며, 탈퇴하지 않은 계정은 null이다. */
     public LocalDateTime getWithdrawnAt() { return withdrawnAt; }
+    /** 이메일 인증 완료 시각을 반환하며, 미인증 계정은 null이다. */
+    public LocalDateTime getEmailVerifiedAt() { return emailVerifiedAt; }
 }

@@ -59,13 +59,17 @@ class UserControllerTest {
     void returnsMyProfileWithoutSensitiveFields() throws Exception {
         when(userProfileService.getMyProfile(PRINCIPAL)).thenReturn(new MyProfileResponse(
                 1L, "fan01", "fan@example.com", "fan", null,
-                UserRole.FAN, PreferredLanguage.KOREAN));
+                UserRole.FAN, PreferredLanguage.KOREAN,
+                true, LocalDateTime.of(2026, 8, 4, 9, 0)));
 
         mockMvc.perform(get("/api/v1/users/me"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.loginId").value("fan01"))
                 .andExpect(jsonPath("$.data.role").value("FAN"))
+                // 프론트가 인증 안내 노출을 결정할 수 있도록 인증 상태를 함께 내려준다.
+                .andExpect(jsonPath("$.data.emailVerified").value(true))
+                .andExpect(jsonPath("$.data.emailVerifiedAt").value("2026-08-04T09:00:00"))
                 .andExpect(jsonPath("$.data.password").doesNotExist())
                 .andExpect(jsonPath("$.data.status").doesNotExist())
                 .andExpect(jsonPath("$.data.lastLoginAt").doesNotExist())

@@ -19,3 +19,13 @@ services:
       - 'TZ=Asia/Seoul'
     ports:
       - '6379:6379'
+
+  # 로컬에서 인증 메일을 실제로 외부에 보내지 않고 가로채 확인하는 SMTP 서버다.
+  # 발송 확인은 http://localhost:8025 웹 UI 에서 한다.
+  mailpit:
+    image: 'axllent/mailpit:latest'
+    environment:
+      - 'TZ=Asia/Seoul'
+    ports:
+      - '1025:1025'
+      - '8025:8025'

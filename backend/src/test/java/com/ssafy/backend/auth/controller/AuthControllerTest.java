@@ -10,6 +10,7 @@ import com.ssafy.backend.auth.exception.AccountUnavailableException;
 import com.ssafy.backend.auth.exception.InvalidCredentialsException;
 import com.ssafy.backend.auth.exception.InvalidRefreshTokenException;
 import com.ssafy.backend.auth.exception.TooManyLoginAttemptsException;
+import com.ssafy.backend.auth.service.DeviceTokenService;
 import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
@@ -25,6 +26,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -43,8 +45,12 @@ class AuthControllerTest {
         loginService = mock(LoginService.class);
         logoutService = mock(LogoutService.class);
         refreshTokenService = mock(RefreshTokenService.class);
+        // 쿠키 속성 검증은 DeviceTokenServiceTest 가 담당하므로 여기서는 실제 구현을 그대로 쓴다.
+        DeviceTokenService deviceTokenService =
+                new DeviceTokenService("test-device-secret", 7776000L, false, "Lax");
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new AuthController(signupService, loginService, logoutService, refreshTokenService))
+                        new AuthController(signupService, loginService, logoutService,
+                                refreshTokenService, deviceTokenService))
                 .setControllerAdvice(new AuthExceptionHandler())
                 .build();
     }
@@ -171,7 +177,7 @@ class AuthControllerTest {
     /** 정상 가입 요청이 HTTP 201과 명세에 정의된 응답 필드만 반환하는지 확인한다. */
     @Test
     void returnsCreatedResponseWithFinalContract() throws Exception {
-        when(signupService.signup(any())).thenReturn(new SignupResponse(
+        when(signupService.signup(any(), anyString())).thenReturn(new SignupResponse(
                 1L, UserRole.FAN, LocalDateTime.of(2026, 7, 23, 10, 0)
         ));
 
@@ -186,21 +192,21 @@ class AuthControllerTest {
     /** 중복 로그인 ID 예외가 HTTP 409로 변환되는지 확인한다. */
     @Test
     void returnsConflictForDuplicateLoginId() throws Exception {
-        when(signupService.signup(any())).thenThrow(new DuplicateLoginIdException());
+        when(signupService.signup(any(), anyString())).thenThrow(new DuplicateLoginIdException());
         mockMvc.perform(validSignup("FAN")).andExpect(status().isConflict());
     }
 
     /** 중복 이메일 예외가 HTTP 409로 변환되는지 확인한다. */
     @Test
     void returnsConflictForDuplicateEmail() throws Exception {
-        when(signupService.signup(any())).thenThrow(new DuplicateEmailException());
+        when(signupService.signup(any(), anyString())).thenThrow(new DuplicateEmailException());
         mockMvc.perform(validSignup("FAN")).andExpect(status().isConflict());
     }
 
     /** 동시 요청으로 발생할 수 있는 DB UNIQUE 예외가 공통 HTTP 409 응답으로 변환되는지 확인한다. */
     @Test
     void returnsConflictWhenDatabaseUniqueConstraintIsViolated() throws Exception {
-        when(signupService.signup(any())).thenThrow(new DataIntegrityViolationException("unique constraint"));
+        when(signupService.signup(any(), anyString())).thenThrow(new DataIntegrityViolationException("unique constraint"));
 
         mockMvc.perform(validSignup("FAN"))
                 .andExpect(status().isConflict())

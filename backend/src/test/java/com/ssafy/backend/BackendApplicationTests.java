@@ -6,6 +6,7 @@ import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
+import com.ssafy.backend.auth.repository.EmailVerificationTokenRepository;
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.device.repository.DeviceCheckRepository;
 import com.ssafy.backend.influencer.repository.FanMemoRepository;
@@ -119,6 +120,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private AttachmentRepository attachmentRepository;
+
+    @MockitoBean
+    private EmailVerificationTokenRepository emailVerificationTokenRepository;
 
     /**
      * DB 자동 구성 없이도 Spring 애플리케이션 컨텍스트가 정상적으로 시작되는지 확인한다.

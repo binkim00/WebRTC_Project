@@ -11,6 +11,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -32,6 +33,12 @@ import java.util.Objects;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_applications_meeting_fan",
                 columnNames = {"meeting_id", "fan_id"}
+        ),
+        // 같은 팬미팅에서 같은 기기로 응모한 다른 계정을 찾는 조회에 사용한다.
+        // 공용 PC의 정상 사용자를 막지 않으려면 UNIQUE 가 아니라 인덱스여야 한다.
+        indexes = @Index(
+                name = "idx_applications_meeting_device",
+                columnList = "meeting_id, device_hash"
         )
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -67,6 +74,14 @@ public class Application extends BaseTimeEntity {
     private LocalDateTime withdrawnAt;
 
     /**
+     * 응모 시점 기기 토큰의 HMAC-SHA-256 해시다.
+     *
+     * <p>기기 쿠키가 없거나 차단된 브라우저에서도 응모는 가능해야 하므로 nullable 이다.
+     */
+    @Column(name = "device_hash", length = 64)
+    private String deviceHash;
+
+    /**
      * 팬의 최초 응모를 접수 상태로 생성한다.
      *
      * @param meeting 응모 대상 팬미팅
@@ -95,6 +110,17 @@ public class Application extends BaseTimeEntity {
         this.submittedAt = submittedAt;
         this.resultDecidedAt = null;
         this.withdrawnAt = null;
+    }
+
+    /**
+     * 응모 시점의 기기 토큰 해시를 기록한다.
+     *
+     * <p>최초 응모와 재응모 모두 그 시점의 기기를 남겨야 하므로 상태 전이와 분리해 호출한다.
+     *
+     * @param deviceHash 기기 토큰 해시이며 쿠키가 없으면 {@code null}
+     */
+    public void recordDeviceHash(String deviceHash) {
+        this.deviceHash = deviceHash;
     }
 
     /**
