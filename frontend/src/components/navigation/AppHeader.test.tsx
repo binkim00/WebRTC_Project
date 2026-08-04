@@ -10,7 +10,7 @@ afterEach(cleanup)
 
 const expectedNavigation = {
   FAN: [
-    { label: '팬미팅', to: '/fan/events' },
+    { label: '이벤트', to: '/fan/events' },
     { label: '마이페이지', to: '/fan/mypage/profile' },
     { label: '알림', to: '/notifications' },
   ],

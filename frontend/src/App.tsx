@@ -197,6 +197,8 @@ function App() {
     >
       {isEditorialExamplePage ? null : <AppHeader
         {...headerNavigationProps}
+        // 통화 중에는 알림으로 이탈하지 않도록 벨을 숨긴다. (handoff 7b)
+        hideNotifications={isCallPage}
         ariaLabel="주요 화면"
         centerContent={
           isDeviceCheckPage ? (

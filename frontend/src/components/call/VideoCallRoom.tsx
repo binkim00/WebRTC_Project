@@ -1,6 +1,5 @@
 import { LiveKitRoom } from '@livekit/components-react'
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import {
   getCallSessionStatus,
@@ -13,14 +12,11 @@ import { Badge } from '../data-display'
 import { AlertBanner } from '../feedback'
 import { Button } from '../ui/Button'
 import { ConnectedCallRoom } from './ConnectedCallRoom'
-import { PreviewCallRoom } from './PreviewCallRoom'
 import type { VideoCallRoomProps } from './types'
 
 export type { VideoCallRoomProps } from './types'
 
 export function VideoCallRoom(props: VideoCallRoomProps) {
-  const [searchParams] = useSearchParams()
-  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
   const [connectionInfo, setConnectionInfo] = useState<LiveKitAccessTokenResponse>()
   const [sessionStatus, setSessionStatus] = useState<CallSessionStatusResponse>()
   const [connectionError, setConnectionError] = useState<string>()
@@ -30,14 +26,10 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   // 통화 시작 전에는 서버의 남은 시간이 0이라 카운트다운 대기 값으로 쓸 설정 값이 필요하다.
   const [callDurationSec, setCallDurationSec] = useState<number>()
   const [retryCount, setRetryCount] = useState(0)
-  const [loading, setLoading] = useState(!isDesignPreview)
+  const [loading, setLoading] = useState(true)
 
   const loadConnectionInfo = useCallback(
     async (signal: AbortSignal) => {
-      if (isDesignPreview) {
-        return
-      }
-
       if (!props.callSessionId) {
         setConnectionError('통화 연결에 필요한 callSessionId가 없습니다.')
         setLoading(false)
@@ -105,7 +97,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         }
       }
     },
-    [isDesignPreview, props.callSessionId, props.meetingId],
+    [props.callSessionId, props.meetingId],
   )
 
   useEffect(() => {
@@ -117,7 +109,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   useEffect(() => {
     const callSessionId = props.callSessionId
 
-    if (isDesignPreview || !callSessionId || !connectionInfo) {
+    if (!callSessionId || !connectionInfo) {
       return
     }
 
@@ -155,11 +147,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       controller.abort()
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [connectionInfo, isDesignPreview, props.callSessionId])
-
-  if (isDesignPreview) {
-    return <PreviewCallRoom {...props} />
-  }
+  }, [connectionInfo, props.callSessionId])
 
   if (!connectionInfo || !sessionStatus) {
     return (

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { cn } from '../ui/cn'
+import { NotificationBell } from './NotificationBell'
 
 export type NavigationItem = {
   label: ReactNode
@@ -65,7 +66,18 @@ export function TopNavigation({
   }
 
   const navigationLinks = (mobile = false) =>
-    items.map((item) => (
+    items.map((item) => {
+      // 알림 항목은 데스크톱에서 화면 이동 대신 벨+드롭다운 패널로 동작한다.
+      // 좁은 화면 메뉴에서는 패널을 겹칠 자리가 없어 기존 전체 화면 링크를 유지한다.
+      if (item.to === '/notifications' && !mobile) {
+        return (
+          <span className="flex items-center" key="desktop-notification-bell">
+            <NotificationBell />
+          </span>
+        )
+      }
+
+      return (
       <NavLink
         className={({ isActive }) =>
           cn(
@@ -87,7 +99,8 @@ export function TopNavigation({
       >
         {item.label}
       </NavLink>
-    ))
+      )
+    })
 
   return (
     <header
@@ -107,18 +120,18 @@ export function TopNavigation({
           {brand}
         </Link>
         {centerContent ? (
-          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center md:flex">
+          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center lg:flex">
             {centerContent}
           </div>
         ) : (
-          <nav aria-label={ariaLabel} className="hidden h-full items-stretch gap-8 md:flex lg:gap-10">
+          <nav aria-label={ariaLabel} className="hidden h-full items-stretch gap-10 lg:flex">
             {navigationLinks()}
           </nav>
         )}
-        {actions ? <div className="hidden shrink-0 items-center gap-2 md:flex">{actions}</div> : null}
+        {actions ? <div className="hidden shrink-0 items-center gap-2 lg:flex">{actions}</div> : null}
         {hasMobileMenu ? (
           <details
-            className="relative md:hidden"
+            className="relative lg:hidden"
             onKeyDown={handleMobileMenuKeyDown}
             onToggle={(event) => setMobileMenuOpen(event.currentTarget.open)}
             open={mobileMenuOpen}

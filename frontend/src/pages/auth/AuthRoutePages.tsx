@@ -17,6 +17,7 @@ import {
   type SignupRole,
 } from '../../api/auth'
 import { maskEmail } from '../../api/emailVerifications'
+import { isEmailVerificationEnabled } from '../../config/features'
 import {
   AlertBanner,
   Button,
@@ -300,7 +301,7 @@ export function SignupPage() {
         replace: true,
         state: {
           notice:
-            request.role === 'FAN'
+            request.role === 'FAN' && isEmailVerificationEnabled
               ? `가입이 완료되었어요. 팬미팅 응모에 이메일 인증이 필요한 경우, 로그인 후 마이페이지에서 ${maskEmail(request.email)} 주소로 인증 메일을 보낼 수 있어요.`
               : '가입이 완료되었어요. 로그인해 주세요.',
         },

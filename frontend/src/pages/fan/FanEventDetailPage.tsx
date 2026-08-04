@@ -1,12 +1,5 @@
-import {
-  CalendarBlank,
-  CalendarDots,
-  Clock,
-  ImageSquare,
-  UsersThree,
-} from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
   getApplicationForm,
@@ -20,13 +13,11 @@ import {
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import { getMyProfile } from '../../api/users'
+import { isEmailVerificationEnabled } from '../../config/features'
 import {
   AlertBanner,
-  Badge,
   Button,
-  Card,
-  CardContent,
-  Checkbox,
+  Dialog,
   EmailVerificationNotice,
   Spinner,
   TextField,
@@ -43,44 +34,35 @@ const agreementItems = [
 
 type AgreementId = (typeof agreementItems)[number]['id']
 
+function pad(part: number) {
+  return String(part).padStart(2, '0')
+}
+
+/** 2026.08.02 19:00 */
 function formatDateTime(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hour = String(date.getHours()).padStart(2, '0')
-  const minute = String(date.getMinutes()).padStart(2, '0')
-
-  return `${year}.${month}.${day} ${hour}:${minute}`
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-function formatApplicationPeriod(
-  startAt: string | null,
-  endAt: string | null,
-): string {
-  if (!startAt || !endAt) return '-'
-  return `${formatDateTime(startAt)} - ${formatDateTime(endAt)}`
+/** 07.27 18:00 — 같은 해 안의 가까운 일정에 쓰는 짧은 표기다. */
+function formatShortDateTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-
-  if (minutes === 0) return `${remainingSeconds}초`
-  if (remainingSeconds === 0) return `${minutes}분`
-  return `${minutes}분 ${remainingSeconds}초`
+/** 07.25 — 배지의 마감 표기다. */
+function formatMonthDay(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
 
-function getApplyButtonLabel(detail: PublicFanMeetingDetail): string {
-  if (detail.viewer.applicationStatus === 'SUBMITTED') return '응모 완료'
-  if (detail.viewer.applicationStatus === 'SELECTED') return '당첨'
-  if (detail.viewer.applicationStatus === 'NOT_SELECTED') return '미당첨'
-  if (!detail.meeting.application.enabled) return '응모 없음'
-  if (!detail.viewer.canApply) return '응모 기간이 아닙니다'
-  if (detail.viewer.applicationStatus === 'WITHDRAWN') return '다시 응모하기'
-  return '응모하기'
+/** 1:1 영상통화 02:00 표기용 mm:ss다. */
+function formatCallDuration(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds))
+  return `${pad(Math.floor(safe / 60))}:${pad(safe % 60)}`
 }
 
 /**
@@ -97,6 +79,55 @@ function canWithdrawApplication(detail: PublicFanMeetingDetail): boolean {
 
   const now = Date.now()
   return now >= new Date(startAt).getTime() && now < new Date(endAt).getTime()
+}
+
+/** 이미지와 정보 열이 만나는 경계 굴절이다. 데스크톱은 수직, ≤1080px에서는 하단 수평으로 회전한다. */
+function HeroSeam({ glowOpacity, lineOpacity, animate }: {
+  glowOpacity: number
+  lineOpacity: number
+  animate: boolean
+}) {
+  return (
+    <>
+      {/* ≥1081px — 수직 경계 (우측 88px 번짐 + 3px 선) */}
+      <span
+        aria-hidden="true"
+        className={`mj-seam-glow absolute inset-y-0 right-0 hidden w-[88px] transition-opacity duration-[420ms] min-[1081px]:block ${animate ? 'motion-safe:animate-[mj-seam-shift_1400ms_cubic-bezier(0.16,1,0.3,1)_both]' : ''}`}
+        style={{
+          opacity: glowOpacity,
+          background:
+            'linear-gradient(90deg, rgba(232,97,92,0) 0%, rgba(232,97,92,0.16) 62%, rgba(217,66,63,0.34) 100%)',
+        }}
+      />
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 right-0 hidden w-[3px] transition-opacity duration-[420ms] min-[1081px]:block"
+        style={{
+          opacity: lineOpacity,
+          background:
+            'linear-gradient(180deg, rgba(232,97,92,0.25) 0%, rgba(217,66,63,0.95) 42%, rgba(232,97,92,0.35) 100%)',
+        }}
+      />
+      {/* ≤1080px — 수평 경계 (하단 72px 번짐 + 4px 선). 단일 열에서는 굴절 모션을 정지한다. */}
+      <span
+        aria-hidden="true"
+        className="mj-seam-glow absolute inset-x-0 bottom-0 h-[72px] min-[1081px]:hidden"
+        style={{
+          opacity: glowOpacity,
+          background: 'linear-gradient(180deg, rgba(232,97,92,0) 0%, rgba(217,66,63,0.3) 100%)',
+        }}
+      />
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 bottom-0 h-[4px] min-[1081px]:hidden"
+        style={{
+          opacity: lineOpacity,
+          background:
+            'linear-gradient(90deg, rgba(232,97,92,0) 0%, rgba(217,66,63,0.95) 50%, rgba(232,97,92,0) 100%)',
+        }}
+      />
+    </>
+  )
 }
 
 export function FanEventDetailPage() {
@@ -116,15 +147,16 @@ export function FanEventDetailPage() {
   const [formError, setFormError] = useState<string>()
   const [formReloadKey, setFormReloadKey] = useState(0)
   const [answers, setAnswers] = useState<Record<number, string>>({})
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string>()
-  const [submitMessage, setSubmitMessage] = useState<string>()
   // undefined는 판단 불가(비로그인·구버전 백엔드·조회 실패)를 뜻하며 이때는 게이트를 켜지 않는다.
   const [emailVerified, setEmailVerified] = useState<boolean>()
   const [viewerEmail, setViewerEmail] = useState<string>()
 
-  // 응모 전 이메일 인증 게이트에 쓸 내 프로필을 읽는다. 팬 세션일 때만 의미가 있다.
+  // 응모 전 이메일 인증 게이트에 쓸 내 프로필을 읽는다. 팬 세션이고 인증 기능이 켜져 있을 때만 의미가 있다.
   useEffect(() => {
+    if (!isEmailVerificationEnabled) return
     const session = getAuthSession()
     if (session?.role !== 'FAN') return
 
@@ -183,11 +215,7 @@ export function FanEventDetailPage() {
     setLoading(true)
     setError(undefined)
 
-    void fetchPublicFanMeetingDetail(
-      meetingId,
-      authToken,
-      controller.signal,
-    )
+    void fetchPublicFanMeetingDetail(meetingId, authToken, controller.signal)
       .then(setDetail)
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
@@ -203,10 +231,6 @@ export function FanEventDetailPage() {
 
     return () => controller.abort()
   }, [meetingId, validMeetingId])
-
-  function handleAgreementChange(id: AgreementId, checked: boolean) {
-    setAgreements((current) => ({ ...current, [id]: checked }))
-  }
 
   /** 상세를 다시 불러와 viewer 응모 상태를 최신으로 맞춘다. */
   async function reloadDetail() {
@@ -242,7 +266,6 @@ export function FanEventDetailPage() {
 
     setSubmitting(true)
     setSubmitError(undefined)
-    setSubmitMessage(undefined)
     try {
       await submitApplication(
         meetingId,
@@ -259,7 +282,6 @@ export function FanEventDetailPage() {
         },
         token,
       )
-      setSubmitMessage('응모가 완료되었습니다. 결과 발표를 기다려 주세요.')
       await reloadDetail()
     } catch (reason) {
       if (reason instanceof ApiError) {
@@ -301,12 +323,10 @@ export function FanEventDetailPage() {
 
     setSubmitting(true)
     setSubmitError(undefined)
-    setSubmitMessage(undefined)
     try {
       await withdrawApplication(meetingId, token)
       setAnswers({})
       setAgreements({ privacy: false, recording: false, participation: false })
-      setSubmitMessage('응모를 취소했습니다.')
       await reloadDetail()
     } catch (reason) {
       if (reason instanceof ApiError) {
@@ -334,10 +354,21 @@ export function FanEventDetailPage() {
     )
   }
 
+  // dc.html의 로딩 스켈레톤 — 히어로 밴드 자리 그대로 회색 블록을 놓는다.
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Spinner label="이벤트 상세 정보를 불러오는 중" size="lg" />
+      <div
+        aria-busy="true"
+        aria-label="이벤트 상세 정보를 불러오는 중"
+        className="-mx-4 -mt-8 grid h-[640px] sm:-mx-6 lg:-mx-10 lg:-mt-10 min-[1081px]:grid-cols-[1fr_400px]"
+      >
+        <div className="bg-[var(--color-surface-muted)]" />
+        <div className="hidden content-start gap-4 py-11 pl-9 min-[1081px]:grid">
+          <div className="h-[22px] w-[130px] rounded-md bg-[var(--color-surface-muted)]" />
+          <div className="h-11 w-[88%] rounded-lg bg-[var(--color-surface-muted)]" />
+          <div className="h-11 w-[56%] rounded-lg bg-[var(--color-surface-muted)]" />
+          <div className="mt-5 h-[200px] rounded-lg bg-[var(--color-surface-muted)]" />
+        </div>
       </div>
     )
   }
@@ -356,188 +387,130 @@ export function FanEventDetailPage() {
     (item) => item.id !== 'recording' || meeting.operation.recordingEnabled,
   )
   const allAgreed = visibleAgreementItems.every((item) => agreements[item.id])
-  const canSubmitApplication =
-    viewer.canApply && allAgreed && !formLoading && !formError
   const canWithdraw = canWithdrawApplication(detail)
+  const applicationEndAt = meeting.application.endAt
+  const resultAt = meeting.application.resultAnnouncementAt
+
+  // dc.html의 4상태(open/applied/closed/error)에 실제 데이터를 대응시킨다.
+  const isApplied = viewer.applicationStatus === 'SUBMITTED'
+  const panel: 'applied' | 'error' | 'open' | 'closed' | 'none' = !meeting.application.enabled
+    ? 'none'
+    : isApplied
+      ? 'applied'
+      : submitError
+        ? 'error'
+        : meeting.status === 'APPLICATION_OPEN' || meeting.status === 'PUBLISHED'
+          ? 'open'
+          : 'closed'
+  const showEmailGate =
+    isEmailVerificationEnabled && panel === 'open' && emailVerified === false && viewer.canApply
+
+  const ctaDisabled = !viewer.canApply || !allAgreed || formLoading || Boolean(formError) || submitting
+  // 비활성 사유를 우선순위대로 하나만 보여 준다. aria-live로 상태 변화를 함께 알린다.
+  const helperText = !viewer.canApply
+    ? '응모 기간이 아닙니다.'
+    : formLoading
+      ? '응모 질문을 불러오는 중입니다.'
+      : formError
+        ? '응모 질문을 확인한 뒤 다시 시도해 주세요.'
+        : allAgreed
+          ? '필수 동의를 모두 완료했어요.'
+          : `필수 항목 ${visibleAgreementItems.length}개에 모두 동의해야 응모할 수 있어요.`
+
+  const badge =
+    panel === 'applied'
+      ? { label: '응모 완료', coral: true }
+      : panel === 'closed'
+        ? { label: '모집 마감', coral: false }
+        : meeting.status === 'APPLICATION_OPEN' && applicationEndAt
+          ? { label: `모집 중 · ${formatMonthDay(applicationEndAt)}까지`, coral: true }
+          : { label: fanMeetingStatusContent[meeting.status].label, coral: true }
+
+  const seam =
+    panel === 'closed'
+      ? { glow: 0.16, line: 0.3, animate: false }
+      : panel === 'applied'
+        ? { glow: 0.92, line: 0.9, animate: true }
+        : { glow: 0.55, line: 0.9, animate: false }
+
   const descriptionParagraphs = (meeting.description ?? '')
     .split(/\r?\n/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean)
+
   const participationConditions = [
-    `팬 1명당 통화 시간은 ${formatDuration(meeting.operation.callDurationSec)}입니다.`,
-    `팬미팅 시작 ${meeting.operation.earlyStartMinutes}분 전부터 입장을 준비해 주세요.`,
-    '입장 전에 카메라와 마이크 장비 점검을 완료해 주세요.',
+    '본인 명의 계정 및 장비 점검 완료',
+    '팬미팅 시작 전 대기실 입장',
   ]
-  const notices = [
+  const cautions = [
     meeting.operation.recordingEnabled
-      ? '영상통화는 서비스 제공 및 다시보기를 위해 녹화됩니다.'
-      : '이 팬미팅은 영상통화를 녹화하지 않습니다.',
-    meeting.operation.translationEnabled
-      ? '영상통화 중 번역 기능을 사용할 수 있습니다.'
-      : '이 팬미팅은 번역 기능을 제공하지 않습니다.',
-    `연결이 끊기면 ${meeting.operation.reconnectGraceSec}초 안에 재접속해 주세요.`,
+      ? '녹화 영상은 팬미팅 후 5일 동안 보관됩니다'
+      : '이 팬미팅은 영상통화를 녹화하지 않습니다',
+    '부적절한 상황 발생 시 운영자 조치가 있을 수 있습니다',
   ]
+
+  const questions = [...(applicationForm?.questions ?? [])].sort(
+    (a, b) => a.displayOrder - b.displayOrder,
+  )
 
   return (
-    <div className="grid gap-10">
-      <section className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
-        {meeting.coverImageUrl ? (
-          <img
-            alt={`${meeting.title} 대표 이미지`}
-            className="aspect-[16/10] w-full rounded-[var(--radius-panel)] object-cover shadow-[var(--shadow-panel)]"
-            src={meeting.coverImageUrl}
-          />
-        ) : (
-          <div className="flex aspect-[16/10] w-full items-center justify-center rounded-[var(--radius-panel)] bg-[var(--color-surface-panel)] text-[var(--color-text-tertiary)] shadow-[var(--shadow-panel)]">
-            <ImageSquare aria-hidden size={52} weight="duotone" />
-            <span className="sr-only">등록된 대표 이미지가 없습니다</span>
-          </div>
-        )}
-
-        <div className="grid content-start gap-8 py-5">
-          <div className="grid gap-5">
-            <Badge
-              className="w-fit"
-              variant={fanMeetingStatusContent[meeting.status].variant}
+    <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
+      <section
+        aria-label="이벤트 개요 및 응모"
+        className="grid items-stretch border-b border-[var(--color-divider)] min-[1081px]:grid-cols-[minmax(0,1fr)_444px]"
+      >
+        <div className="relative min-h-[min(52vw,420px)] overflow-hidden bg-[var(--color-surface-muted)] min-[1081px]:min-h-[640px]">
+          {meeting.coverImageUrl ? (
+            <img
+              alt={`${meeting.title} 대표 이미지`}
+              className={`absolute inset-0 size-full object-cover ${panel === 'closed' ? 'saturate-[0.68] brightness-[1.03]' : ''}`}
+              src={meeting.coverImageUrl}
+            />
+          ) : (
+            <div
+              aria-label="대표 이미지가 등록되지 않은 이벤트"
+              className="absolute inset-0 grid place-items-center"
+              role="img"
             >
-              {fanMeetingStatusContent[meeting.status].label}
-            </Badge>
-            <div>
-              <h1 className="text-3xl font-black tracking-[-0.04em]">
-                {meeting.title}
-              </h1>
-              <p className="mt-3 text-sm font-semibold text-[var(--color-text-secondary)]">
-                인플루언서 {influencer.name}
-              </p>
-            </div>
-          </div>
-
-          <dl className="grid gap-6 border-t border-[var(--color-divider)] pt-8 sm:grid-cols-2">
-            <div className="flex items-start gap-3">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)]">
-                <CalendarBlank aria-hidden size={22} weight="duotone" />
+              <span className="text-sm font-semibold text-[var(--color-text-muted)]">
+                이미지 없음
               </span>
-              <div>
-                <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                  팬미팅 일정
-                </dt>
-                <dd className="mt-1 text-sm font-bold">
-                  {formatDateTime(meeting.scheduledStartAt)}
-                </dd>
-              </div>
             </div>
-
-            <div className="flex items-start gap-3">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)]">
-                <Clock aria-hidden size={22} weight="duotone" />
-              </span>
-              <div>
-                <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                  통화 시간
-                </dt>
-                <dd className="mt-1 text-sm font-bold">
-                  {formatDuration(meeting.operation.callDurationSec)}
-                </dd>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)]">
-                <CalendarDots aria-hidden size={22} weight="duotone" />
-              </span>
-              <div>
-                <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                  응모 기간
-                </dt>
-                <dd className="mt-1 text-sm font-bold">
-                  {formatApplicationPeriod(
-                    meeting.application.startAt,
-                    meeting.application.endAt,
-                  )}
-                </dd>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)]">
-                <UsersThree aria-hidden size={22} weight="duotone" />
-              </span>
-              <div>
-                <dt className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                  모집 인원
-                </dt>
-                <dd className="mt-1 text-sm font-bold">
-                  {meeting.application.capacity}명
-                </dd>
-              </div>
-            </div>
-          </dl>
+          )}
+          <HeroSeam animate={seam.animate} glowOpacity={seam.glow} lineOpacity={seam.line} />
         </div>
-      </section>
 
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
-        <article className="grid gap-8">
-          <section className="border-b border-[var(--color-divider)] pb-8">
-            <h2 className="text-2xl font-black tracking-[-0.03em]">상세 소개</h2>
-            <div className="mt-5 grid gap-3 text-sm leading-7 text-[var(--color-text-secondary)]">
-              {descriptionParagraphs.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
-              ))}
+        <div className="flex flex-col px-5 pb-8 pt-[26px] sm:px-[26px] sm:pb-9 sm:pt-[30px] min-[1081px]:pb-11 min-[1081px]:pl-10 min-[1081px]:pr-11 min-[1081px]:pt-[46px]">
+          <p
+            className={`text-sm font-bold ${badge.coral ? 'text-[var(--color-primary-coral)]' : 'text-[var(--color-text-muted)]'}`}
+          >
+            {badge.label}
+          </p>
+          <h1 className="mt-3.5 text-[clamp(30px,3vw,40px)] font-black leading-[1.14] tracking-[-0.048em] [text-wrap:balance]">
+            {meeting.title}
+          </h1>
+          <p className="mt-4 text-[17px] font-semibold text-[var(--color-text-body)]">
+            인플루언서 {influencer.name}
+          </p>
+          <p className="mt-1.5 text-[17px] font-medium tabular-nums text-[var(--color-text-muted)]">
+            {formatDateTime(meeting.scheduledStartAt)} · 1:1 영상통화{' '}
+            {formatCallDuration(meeting.operation.callDurationSec)}
+          </p>
+
+          {showEmailGate ? (
+            <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]">
+              <EmailVerificationNotice
+                email={viewerEmail}
+                onVerified={() => {
+                  setEmailVerified(true)
+                  setSubmitError(undefined)
+                }}
+              />
             </div>
-          </section>
-
-          <section className="border-b border-[var(--color-divider)] pb-8">
-            <h2 className="text-2xl font-black tracking-[-0.03em]">참여 조건</h2>
-            <ul className="mt-5 grid list-disc gap-3 pl-5 text-sm leading-7 text-[var(--color-text-secondary)]">
-              {participationConditions.map((condition) => (
-                <li key={condition}>{condition}</li>
-              ))}
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-black tracking-[-0.03em]">유의사항</h2>
-            <ul className="mt-5 grid list-disc gap-3 pl-5 text-sm leading-7 text-[var(--color-text-secondary)]">
-              {notices.map((notice) => (
-                <li key={notice}>{notice}</li>
-              ))}
-            </ul>
-          </section>
-        </article>
-
-        <aside>
-          <Card>
-            {/* 응모 가능 기간에 미인증이 확인된 팬에게는 폼 대신 인증 안내를 보여 준다. */}
-            {emailVerified === false && viewer.canApply ? (
-              <CardContent className="grid gap-5">
-                {submitError ? (
-                  <AlertBanner title="응모 불가" variant="error">{submitError}</AlertBanner>
-                ) : null}
-                <EmailVerificationNotice
-                  email={viewerEmail}
-                  onVerified={() => {
-                    setEmailVerified(true)
-                    setSubmitError(undefined)
-                    setSubmitMessage('이메일 인증이 완료되었어요. 이제 응모할 수 있습니다.')
-                  }}
-                />
-              </CardContent>
-            ) : (
-            <CardContent className="grid gap-5">
-              <h2 className="text-2xl font-black tracking-[-0.03em]">응모 동의</h2>
-              <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
-                아래 필수 항목을 모두 확인해 주세요.
-              </p>
-
-              {formLoading ? (
-                <div className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
-                  <Spinner label="응모 질문을 불러오는 중" size="sm" />
-                  <span>응모 질문을 불러오는 중입니다.</span>
-                </div>
-              ) : null}
-
+          ) : panel === 'open' ? (
+            <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]">
               {formError ? (
-                <AlertBanner title="응모 질문을 불러오지 못했습니다" variant="error">
+                <AlertBanner className="mb-5" title="응모 질문을 불러오지 못했습니다" variant="error">
                   <p>{formError}</p>
                   <Button
                     className="mt-3"
@@ -548,92 +521,253 @@ export function FanEventDetailPage() {
                     질문 다시 불러오기
                   </Button>
                 </AlertBanner>
-              ) : null}
-
-              {!formLoading && !formError && applicationForm && applicationForm.questions.length > 0 ? (
-                <div className="grid gap-4">
-                  {applicationForm.formDescription ? (
-                    <p className="text-sm leading-6 text-[var(--color-text-secondary)]">{applicationForm.formDescription}</p>
+              ) : formLoading ? (
+                <div className="mb-5 flex items-center gap-3 text-sm text-[var(--color-text-muted)]">
+                  <Spinner label="응모 질문을 불러오는 중" size="sm" />
+                  <span>응모 질문을 불러오는 중입니다.</span>
+                </div>
+              ) : questions.length > 0 ? (
+                <div className="mb-6 grid gap-4">
+                  {applicationForm?.formDescription ? (
+                    <p className="text-sm leading-6 text-[var(--color-text-muted)]">
+                      {applicationForm.formDescription}
+                    </p>
                   ) : null}
-                  {[...applicationForm.questions]
-                    .sort((a, b) => a.displayOrder - b.displayOrder)
-                    .map((question) =>
-                      question.questionType === 'LONG_TEXT' ? (
-                        <Textarea
-                          disabled={!viewer.canApply}
-                          key={question.questionId}
-                          label={`${question.questionText}${question.required ? ' (필수)' : ''}`}
-                          rows={4}
-                          value={answers[question.questionId] ?? ''}
-                          onChange={(event) => setAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))}
-                        />
-                      ) : (
-                        <TextField
-                          disabled={!viewer.canApply}
-                          key={question.questionId}
-                          label={`${question.questionText}${question.required ? ' (필수)' : ''}`}
-                          value={answers[question.questionId] ?? ''}
-                          onChange={(event) => setAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))}
-                        />
-                      ),
-                    )}
+                  {questions.map((question) =>
+                    question.questionType === 'LONG_TEXT' ? (
+                      <Textarea
+                        disabled={!viewer.canApply}
+                        key={question.questionId}
+                        label={`${question.questionText}${question.required ? ' (필수)' : ''}`}
+                        rows={4}
+                        value={answers[question.questionId] ?? ''}
+                        onChange={(event) =>
+                          setAnswers((current) => ({
+                            ...current,
+                            [question.questionId]: event.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <TextField
+                        disabled={!viewer.canApply}
+                        key={question.questionId}
+                        label={`${question.questionText}${question.required ? ' (필수)' : ''}`}
+                        value={answers[question.questionId] ?? ''}
+                        onChange={(event) =>
+                          setAnswers((current) => ({
+                            ...current,
+                            [question.questionId]: event.target.value,
+                          }))
+                        }
+                      />
+                    ),
+                  )}
                 </div>
               ) : null}
 
-              <div className="grid gap-3">
-                {visibleAgreementItems.map((item) => (
-                  <div
-                    className="rounded-[var(--radius-control)] border border-[var(--color-border-control)] p-4"
+              <h2 className="text-[17px] font-extrabold tracking-[-0.03em]">응모 동의</h2>
+              <div className="mt-2.5">
+                {visibleAgreementItems.map((item, index) => (
+                  <label
+                    className={`flex min-h-[50px] cursor-pointer items-center gap-3 ${index < visibleAgreementItems.length - 1 ? 'border-b border-[var(--color-border-row)]' : ''}`}
                     key={item.id}
                   >
-                    <Checkbox
+                    <input
                       checked={agreements[item.id]}
+                      className="m-0 size-[21px] flex-none cursor-pointer accent-[var(--color-primary-coral)]"
                       disabled={!viewer.canApply}
-                      label={item.label}
                       onChange={(event) =>
-                        handleAgreementChange(item.id, event.target.checked)
+                        setAgreements((current) => ({
+                          ...current,
+                          [item.id]: event.target.checked,
+                        }))
                       }
+                      type="checkbox"
                     />
-                  </div>
+                    <span className="text-base font-semibold">{item.label}</span>
+                    <span className="ml-auto text-[13px] font-semibold text-[var(--color-text-muted)]">
+                      필수
+                    </span>
+                  </label>
                 ))}
               </div>
-
-              <p className="text-xs leading-5 text-[var(--color-text-secondary)]">
-                모든 항목에 동의해야 응모할 수 있어요.
-              </p>
-
-              {submitError ? (
-                <AlertBanner title="요청 실패" variant="error">{submitError}</AlertBanner>
-              ) : null}
-              {submitMessage ? (
-                <AlertBanner title="처리 완료" variant="success">{submitMessage}</AlertBanner>
-              ) : null}
-
-              <Button
-                className="w-full"
-                disabled={!canSubmitApplication || submitting}
-                loading={submitting}
-                size="lg"
-                onClick={() => void handleSubmitApplication()}
+              <button
+                className={`mj-font-emphasis mt-[22px] min-h-14 w-full rounded-[10px] border text-[17px] transition-[background-color,transform] duration-150 motion-reduce:transition-none ${
+                  ctaDisabled
+                    ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
+                    : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:-translate-y-px hover:bg-[var(--color-primary-coral-hover)] active:translate-y-px motion-reduce:transform-none'
+                }`}
+                disabled={ctaDisabled}
+                onClick={() => setConfirmOpen(true)}
+                type="button"
               >
-                {getApplyButtonLabel(detail)}
-              </Button>
-
+                응모하기
+              </button>
+              <p
+                aria-live="polite"
+                className="mt-3 text-sm font-semibold leading-[1.55] text-[var(--color-text-muted)]"
+              >
+                {helperText}
+              </p>
+            </div>
+          ) : panel === 'applied' ? (
+            <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px] motion-safe:animate-[mj-settle-in_420ms_cubic-bezier(0.16,1,0.3,1)_both]">
+              <h2 className="text-2xl font-black tracking-[-0.038em] text-[var(--color-primary-coral)]">
+                응모가 접수됐어요
+              </h2>
+              <p className="mt-3 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
+                {resultAt
+                  ? `결과는 ${formatShortDateTime(resultAt)}에 발표됩니다. 진행 상태는 마이페이지 응모 내역에서 볼 수 있어요.`
+                  : '진행 상태는 마이페이지 응모 내역에서 볼 수 있어요.'}
+              </p>
+              {applicationEndAt ? (
+                <>
+                  <p className="mt-[18px] text-sm font-bold text-[var(--color-text-muted)]">
+                    취소 가능 기한
+                  </p>
+                  <p className="mt-[5px] text-[17px] font-extrabold tabular-nums">
+                    {formatDateTime(applicationEndAt)}
+                  </p>
+                </>
+              ) : null}
+              <Link
+                className="mj-font-emphasis mt-6 flex min-h-[54px] items-center justify-center rounded-[10px] bg-[var(--color-primary-coral)] text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                to="/fan/mypage/applications"
+              >
+                마이페이지 응모 내역
+              </Link>
               {canWithdraw ? (
-                <Button
-                  className="w-full"
+                <button
+                  className="mj-font-label mt-1.5 min-h-11 w-full text-[15px] text-[var(--color-text-muted)] hover:text-[var(--color-primary-coral)]"
                   disabled={submitting}
                   onClick={() => void handleWithdrawApplication()}
-                  variant="secondary"
+                  type="button"
                 >
                   응모 취소
-                </Button>
+                </button>
               ) : null}
-            </CardContent>
-            )}
-          </Card>
-        </aside>
+            </div>
+          ) : panel === 'error' ? (
+            <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]" role="alert">
+              <h2 className="text-2xl font-black tracking-[-0.038em] text-[var(--color-error)]">
+                응모를 완료하지 못했어요
+              </h2>
+              <p className="mt-3 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
+                {submitError}
+              </p>
+              <button
+                className="mj-font-emphasis mt-6 min-h-14 w-full rounded-[10px] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-[17px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={submitting}
+                onClick={() => void handleSubmitApplication()}
+                type="button"
+              >
+                다시 응모하기
+              </button>
+            </div>
+          ) : panel === 'closed' ? (
+            <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]">
+              <h2 className="text-2xl font-black tracking-[-0.038em]">모집이 마감됐어요</h2>
+              <p className="mt-3 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
+                이번 팬미팅의 응모는 종료되었습니다.
+              </p>
+              <button
+                className="mj-font-emphasis mt-6 min-h-14 w-full cursor-not-allowed rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[17px] text-[var(--color-text-muted)]"
+                disabled
+                type="button"
+              >
+                모집 마감
+              </button>
+              <Link
+                className="mj-font-label mt-4 block text-center text-[15px] text-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral-hover)]"
+                to="/fan/events"
+              >
+                다음 팬미팅 보기
+              </Link>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] pt-14 min-[1081px]:w-[min(100%-88px,1240px)]">
+        <div className="grid items-start gap-10 lg:grid-cols-[1fr_460px] lg:gap-[72px]">
+          <section>
+            <h2 className="text-[22px] font-extrabold tracking-[-0.032em]">이번 팬미팅은</h2>
+            <div className="mt-4 grid gap-3">
+              {descriptionParagraphs.map((paragraph) => (
+                <p
+                  className="max-w-[56ch] text-lg font-medium leading-[1.8] text-[var(--color-text-body)] [text-wrap:pretty]"
+                  key={paragraph}
+                >
+                  {paragraph}
+                </p>
+              ))}
+            </div>
+          </section>
+          <section aria-label="응모 일정">
+            <div className="border-t-2 border-[var(--color-text-primary)] pt-[18px]">
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">응모 마감</p>
+              <p className="mt-1.5 text-[26px] font-black tracking-[-0.035em] tabular-nums">
+                {applicationEndAt ? formatDateTime(applicationEndAt) : '-'}
+              </p>
+            </div>
+            <div className="mt-[22px] border-t border-[var(--color-divider)] pt-[18px]">
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">결과 발표</p>
+              <p className="mt-1.5 text-[26px] font-black tracking-[-0.035em] tabular-nums">
+                {resultAt ? formatDateTime(resultAt) : '-'}
+              </p>
+            </div>
+            <p className="mt-[22px] border-t border-[var(--color-divider)] pt-4 text-base font-medium tabular-nums text-[var(--color-text-muted)]">
+              {meeting.application.capacity}명 모집
+            </p>
+          </section>
+        </div>
+
+        <div className="mt-14 grid items-start gap-10 border-t border-[var(--color-divider)] pt-9 lg:grid-cols-[1fr_460px] lg:gap-[72px]">
+          <section>
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">참여 조건</h2>
+            <ul className="mt-3 list-disc pl-[18px] text-base font-medium leading-[1.85] text-[var(--color-text-muted)]">
+              {participationConditions.map((condition) => (
+                <li key={condition}>{condition}</li>
+              ))}
+            </ul>
+          </section>
+          <section>
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">유의사항</h2>
+            <ul className="mt-3 list-disc pl-[18px] text-base font-medium leading-[1.85] text-[var(--color-text-muted)]">
+              {cautions.map((caution) => (
+                <li key={caution}>{caution}</li>
+              ))}
+            </ul>
+          </section>
+        </div>
       </div>
+
+      <Dialog
+        description={
+          applicationEndAt
+            ? `${formatShortDateTime(applicationEndAt)}까지 마이페이지에서 취소할 수 있어요.`
+            : undefined
+        }
+        footer={
+          <>
+            <Button disabled={submitting} onClick={() => setConfirmOpen(false)} variant="secondary">
+              취소
+            </Button>
+            <Button
+              loading={submitting}
+              onClick={() => {
+                void handleSubmitApplication().finally(() => setConfirmOpen(false))
+              }}
+            >
+              확인
+            </Button>
+          </>
+        }
+        onOpenChange={setConfirmOpen}
+        open={confirmOpen}
+        title="이 팬미팅에 응모할까요?"
+      />
     </div>
   )
 }

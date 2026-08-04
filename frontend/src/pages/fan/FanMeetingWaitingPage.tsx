@@ -1,61 +1,66 @@
-import {
-  BellRinging,
-  Check,
-  HourglassMedium,
-  ListNumbers,
-  UsersThree,
-  WifiHigh,
-  Wrench,
-} from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertBanner, Badge, Button, Card, Dialog, Textarea } from '../../components'
 import { useNavigate, useParams } from 'react-router-dom'
+import { AlertBanner, Button, Dialog, Textarea } from '../../components'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
-import { fetchMeetingDetail, type MeetingDetail } from '../../api/fanMeetingParticipants'
-import { getMyQueue, type QueueSnapshotResponse } from '../../api/queue'
+import {
+  fetchPublicFanMeetingDetail,
+  type PublicFanMeetingDetail,
+} from '../../api/fanMeetings'
+import { enterQueue, getMyQueue, type QueueSnapshotResponse } from '../../api/queue'
+import { getMeetingNotice, getMeetingNotices } from '../../api/notices'
 import { createQueueChangeRequest } from '../../api/queueManagement'
 
-/** DeviceCheckPage가 sessionStorage에 저장하는 장비 점검 기록이다. */
-type DeviceCheckRecord = {
-  cameraOk: boolean
-  microphoneOk: boolean
-  speakerOk: boolean | null
-  networkOk: boolean
-  checkedAt: string
+/** 호출 후 입장할 수 있는 시간(초)이다. 정책 문구(30초)와 같은 값을 쓴다. */
+const CALL_WINDOW_SEC = 30
+/** 호출 만료 후 대기열에 다시 등록할 수 있는 시간(초)이다. 정책 문구(5분)와 같은 값을 쓴다. */
+const REENTER_WINDOW_SEC = 5 * 60
+const MAX_CHANGE_REASON_LENGTH = 500
+const MEMO_MAX_LENGTH = 200
+
+type WaitingPhase = 'waiting' | 'called' | 'expired' | 'disconnected'
+
+type NoticeItem = {
+  noticeId: number
+  title: string
+  body: string
+  when: string
+  urgent: boolean
 }
 
-function readDeviceCheckRecord(meetingId: string): DeviceCheckRecord | null {
+/** DeviceCheckPage가 sessionStorage에 저장하는 장비 점검 기록이다. */
+function readDeviceChecked(meetingId: string): boolean | undefined {
   try {
     const serialized = window.sessionStorage.getItem(`melly-device-check:${meetingId}`)
-    if (!serialized) return null
-
-    const parsed: unknown = JSON.parse(serialized)
-    if (typeof parsed !== 'object' || parsed === null) return null
-
-    const record = parsed as Record<string, unknown>
-    if (
-      typeof record.cameraOk !== 'boolean' ||
-      typeof record.microphoneOk !== 'boolean' ||
-      typeof record.networkOk !== 'boolean' ||
-      typeof record.checkedAt !== 'string'
-    ) {
-      return null
-    }
-
-    return {
-      cameraOk: record.cameraOk,
-      microphoneOk: record.microphoneOk,
-      speakerOk: typeof record.speakerOk === 'boolean' ? record.speakerOk : null,
-      networkOk: record.networkOk,
-      checkedAt: record.checkedAt,
-    }
+    if (!serialized) return undefined
+    const record: unknown = JSON.parse(serialized)
+    if (typeof record !== 'object' || record === null) return undefined
+    const parsed = record as Record<string, unknown>
+    return parsed.cameraOk === true && parsed.microphoneOk === true
   } catch {
-    return null
+    return undefined
   }
 }
 
-const MAX_CHANGE_REASON_LENGTH = 500
+function memoStorageKey(meetingId: string) {
+  return `melly-fan-note:${meetingId}`
+}
+
+function pad(part: number) {
+  return String(part).padStart(2, '0')
+}
+
+/** 00:27 형태의 카운트다운 표기다. */
+function formatCountdown(totalSec: number): string {
+  const safe = Math.max(0, totalSec)
+  return `${pad(Math.floor(safe / 60))}:${pad(safe % 60)}`
+}
+
+function formatNoticeAt(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())} 게시`
+}
 
 /**
  * 이미 허용된 브라우저 기능만 사용해 호출을 보조한다.
@@ -109,20 +114,36 @@ function notifyFanCall(meetingTitle: string) {
 export function FanMeetingWaitingPage() {
   const { fanMeetingId } = useParams()
   const navigate = useNavigate()
-  const [meetingInfo, setMeetingInfo] = useState<MeetingDetail>()
+  const [detail, setDetail] = useState<PublicFanMeetingDetail>()
   const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshotResponse>()
+  const [notices, setNotices] = useState<NoticeItem[]>([])
+  const [noticeTotal, setNoticeTotal] = useState(0)
   const [meetingError, setMeetingError] = useState<string>()
   const [queueError, setQueueError] = useState<string>()
+  const [online, setOnline] = useState(() => navigator.onLine)
+  const [pollBroken, setPollBroken] = useState(false)
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
+  const [reentering, setReentering] = useState(false)
+
+  const [memo, setMemo] = useState(() =>
+    fanMeetingId
+      ? (window.sessionStorage.getItem(memoStorageKey(fanMeetingId)) ?? '')
+      : '',
+  )
+  const [memoEditing, setMemoEditing] = useState(false)
+
   const [changeDialogOpen, setChangeDialogOpen] = useState(false)
   const [changeReason, setChangeReason] = useState('')
   const [isRequestingChange, setIsRequestingChange] = useState(false)
   const [changeRequested, setChangeRequested] = useState(false)
   const [changeError, setChangeError] = useState<string>()
+
   const originalDocumentTitleRef = useRef(document.title)
   const callAnnouncedRef = useRef(false)
+  const pollFailCountRef = useRef(0)
 
-  const deviceCheck = useMemo(
-    () => (fanMeetingId ? readDeviceCheckRecord(fanMeetingId) : null),
+  const deviceChecked = useMemo(
+    () => (fanMeetingId ? readDeviceChecked(fanMeetingId) : undefined),
     [fanMeetingId],
   )
 
@@ -136,12 +157,12 @@ export function FanMeetingWaitingPage() {
     }
 
     try {
-      const nextMeetingInfo = await fetchMeetingDetail(
-        fanMeetingId,
+      const nextDetail = await fetchPublicFanMeetingDetail(
+        Number(fanMeetingId),
         session.accessToken,
         signal,
       )
-      setMeetingInfo(nextMeetingInfo)
+      setDetail(nextDetail)
       setMeetingError(undefined)
     } catch (reason) {
       if (signal?.aborted) return
@@ -163,19 +184,20 @@ export function FanMeetingWaitingPage() {
     }
 
     try {
-      const nextQueueSnapshot = await getMyQueue(
-        fanMeetingId,
-        session.accessToken,
-        signal,
-      )
+      const nextQueueSnapshot = await getMyQueue(fanMeetingId, session.accessToken, signal)
       setQueueSnapshot(nextQueueSnapshot)
       setQueueError(undefined)
+      pollFailCountRef.current = 0
+      setPollBroken(false)
 
       if (nextQueueSnapshot.displayStatus === 'COMPLETED') {
         navigate(`/fan/fan-meetings/${fanMeetingId}/complete`, { replace: true })
       }
     } catch (reason) {
       if (signal?.aborted) return
+      // 일시적 실패 한 번으로 화면을 바꾸지 않고, 연속 실패가 쌓이면 재연결 상태로 전환한다.
+      pollFailCountRef.current += 1
+      if (pollFailCountRef.current >= 2) setPollBroken(true)
       setQueueError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
@@ -187,7 +209,6 @@ export function FanMeetingWaitingPage() {
   useEffect(() => {
     const controller = new AbortController()
     void loadMeetingInfo(controller.signal)
-
     return () => controller.abort()
   }, [loadMeetingInfo])
 
@@ -210,27 +231,96 @@ export function FanMeetingWaitingPage() {
     }
   }, [loadQueueState])
 
-  const currentPosition = queueSnapshot?.position ?? 0
-  const estimatedWaitMinutes = Math.ceil((queueSnapshot?.estimatedWaitSec ?? 0) / 60)
-  const isCalled = Boolean(queueSnapshot?.canEnterCall && queueSnapshot.callSessionId)
-  const isCallInProgress = queueSnapshot?.displayStatus === 'IN_CALL'
-  const queueStatusLabel = isCalled
-    ? '호출됨'
-    : isCallInProgress
-      ? '통화 진행 중'
-      : queueSnapshot
-        ? '대기 중'
-        : '상태 확인 중'
-  // 장비 점검 기록이 없으면 미확인 상태로 표시한다.
-  const connectionHealthy = deviceCheck ? deviceCheck.networkOk : undefined
-  const deviceChecked = deviceCheck
-    ? deviceCheck.cameraOk && deviceCheck.microphoneOk
-    : undefined
-  const trimmedChangeReason = changeReason.trim()
-  const error = meetingError ?? queueError
+  // 운영 공지 — 게시된 공지만 내려오는 공개 API를 쓰고, 본문은 상세에서 보강한다.
+  useEffect(() => {
+    if (!fanMeetingId) return
+
+    const controller = new AbortController()
+
+    void (async () => {
+      try {
+        const page = await getMeetingNotices(
+          fanMeetingId,
+          { page: 0, size: 2 },
+          controller.signal,
+        )
+        const items = await Promise.all(
+          page.content.map(async (summary) => {
+            const noticeDetail = await getMeetingNotice(
+              fanMeetingId,
+              summary.noticeId,
+              controller.signal,
+            )
+            return {
+              noticeId: summary.noticeId,
+              title: summary.title,
+              body: noticeDetail.content,
+              when: formatNoticeAt(summary.createdAt),
+              urgent: summary.pinned,
+            }
+          }),
+        )
+        if (!controller.signal.aborted) {
+          setNotices(items)
+          setNoticeTotal(page.totalElements)
+        }
+      } catch {
+        // 공지는 보조 정보이므로 실패해도 대기실 자체는 유지한다.
+      }
+    })()
+
+    return () => controller.abort()
+  }, [fanMeetingId])
 
   useEffect(() => {
-    const meetingTitle = meetingInfo?.title ?? '팬미팅'
+    const handleOnline = () => setOnline(true)
+    const handleOffline = () => setOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // 호출 카운트다운과 재등록 카운트다운은 초 단위로 흘러야 하므로 1초 틱을 돌린다.
+  const calledAt = queueSnapshot?.calledAt ?? null
+  useEffect(() => {
+    if (!calledAt) return
+    const timer = window.setInterval(
+      () => setNowSec(Math.floor(Date.now() / 1000)),
+      1_000,
+    )
+    setNowSec(Math.floor(Date.now() / 1000))
+    return () => window.clearInterval(timer)
+  }, [calledAt])
+
+  const calledAtSec = calledAt ? Math.floor(new Date(calledAt).getTime() / 1000) : null
+  const callRemainSec =
+    calledAtSec !== null ? calledAtSec + CALL_WINDOW_SEC - nowSec : null
+  const canEnter = Boolean(queueSnapshot?.canEnterCall && queueSnapshot.callSessionId)
+
+  const phase: WaitingPhase =
+    !online || pollBroken
+      ? 'disconnected'
+      : canEnter && callRemainSec !== null && callRemainSec > 0
+        ? 'called'
+        : calledAtSec !== null &&
+            callRemainSec !== null &&
+            callRemainSec <= 0 &&
+            queueSnapshot?.displayStatus === 'WAITING'
+          ? 'expired'
+          : 'waiting'
+  const isCalled = phase === 'called'
+  const isWarn = phase === 'expired' || phase === 'disconnected'
+
+  const reenterRemainSec =
+    phase === 'expired' && calledAtSec !== null
+      ? Math.max(0, calledAtSec + CALL_WINDOW_SEC + REENTER_WINDOW_SEC - nowSec)
+      : null
+
+  useEffect(() => {
+    const meetingTitle = detail?.meeting.title ?? '팬미팅'
 
     if (isCalled) {
       document.title = `[호출] ${meetingTitle} | ${originalDocumentTitleRef.current}`
@@ -243,7 +333,7 @@ export function FanMeetingWaitingPage() {
 
     callAnnouncedRef.current = false
     document.title = originalDocumentTitleRef.current
-  }, [isCalled, meetingInfo?.title])
+  }, [detail?.meeting.title, isCalled])
 
   useEffect(() => {
     return () => {
@@ -255,6 +345,97 @@ export function FanMeetingWaitingPage() {
     return null
   }
 
+  const influencerName = detail?.influencer.name ?? '인플루언서'
+  const position = queueSnapshot?.position
+  const ahead = queueSnapshot?.aheadCount ?? 0
+  const estimatedWaitMinutes = Math.ceil((queueSnapshot?.estimatedWaitSec ?? 0) / 60)
+
+  // dc.html의 상태별 문구 표를 실제 상태에 대응시킨다.
+  const stateContent = {
+    waiting: {
+      title: '호출을 기다려 주세요',
+      desc: '내 차례가 되면 이 화면에서 바로 알려드릴게요. 창을 열어둔 채로 기다려 주세요.',
+      helper: '현재 순번을 유지하고 있습니다.',
+      cta: '호출 대기 중',
+      disabled: true,
+    },
+    called: {
+      title: `${influencerName}님이 기다리고 있어요`,
+      desc: '지금 입장하면 바로 영상통화가 연결됩니다.',
+      helper: `${position ?? '-'}번째 · 연결 상태 정상`,
+      cta: '지금 입장',
+      disabled: false,
+    },
+    expired: {
+      title: '입장 시간이 지났어요',
+      desc: '응답 시간이 지나 이번 호출이 취소되었습니다. 5분 안에 다시 등록하면 대기열로 돌아갈 수 있어요.',
+      helper: `재등록 가능 시간 ${formatCountdown(reenterRemainSec ?? 0)}`,
+      cta: '대기열 재등록',
+      disabled: reentering,
+    },
+    disconnected: {
+      title: '연결을 복구하고 있어요',
+      desc: '네트워크 연결이 잠시 끊어졌습니다. 대기 순번은 그대로 유지됩니다.',
+      helper: '같은 순번으로 재연결을 시도하고 있어요.',
+      cta: '다시 연결',
+      disabled: false,
+    },
+  }[phase]
+
+  const statusLine = `${
+    phase === 'disconnected' ? '재연결 중' : phase === 'expired' ? '호출 만료' : '연결 상태 정상'
+  } · 장비 점검 ${deviceChecked === undefined ? '미확인' : deviceChecked ? '완료' : '미완료'}`
+
+  const motifPct = isCalled
+    ? 100
+    : position && position > 1
+      ? Math.round(
+          ((position - 1 - Math.min(ahead, position - 1)) / (position - 1)) * 76,
+        ) + 12
+      : 12
+  const etaText = isCalled
+    ? '지금'
+    : ahead > 0
+      ? `약 ${Math.max(estimatedWaitMinutes, 1)}분`
+      : '1분 이내'
+
+  function handleCtaClick() {
+    if (phase === 'called') {
+      if (!queueSnapshot?.callSessionId) return
+      navigate(
+        `/fan/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(String(queueSnapshot.callSessionId))}`,
+      )
+      return
+    }
+    if (phase === 'expired') {
+      const session = getAuthSession()
+      if (!session) return
+      setReentering(true)
+      void enterQueue(fanMeetingId ?? '', session.accessToken)
+        .catch(() => undefined)
+        .then(() => loadQueueState())
+        .finally(() => setReentering(false))
+      return
+    }
+    if (phase === 'disconnected') {
+      pollFailCountRef.current = 0
+      setPollBroken(false)
+      void loadMeetingInfo()
+      void loadQueueState()
+    }
+  }
+
+  function toggleMemoEdit() {
+    if (memoEditing) {
+      try {
+        window.sessionStorage.setItem(memoStorageKey(fanMeetingId ?? ''), memo)
+      } catch {
+        // 저장 공간 문제로 실패해도 화면의 메모는 유지된다.
+      }
+    }
+    setMemoEditing((editing) => !editing)
+  }
+
   async function handleChangeRequestSubmit() {
     if (isRequestingChange || !queueSnapshot) return
 
@@ -264,12 +445,12 @@ export function FanMeetingWaitingPage() {
       return
     }
 
-    if (!trimmedChangeReason) {
+    const trimmed = changeReason.trim()
+    if (!trimmed) {
       setChangeError('요청 사유를 입력해 주세요.')
       return
     }
-
-    if (trimmedChangeReason.length > MAX_CHANGE_REASON_LENGTH) {
+    if (trimmed.length > MAX_CHANGE_REASON_LENGTH) {
       setChangeError(`요청 사유는 ${MAX_CHANGE_REASON_LENGTH}자 이하로 입력해 주세요.`)
       return
     }
@@ -278,11 +459,7 @@ export function FanMeetingWaitingPage() {
     setChangeError(undefined)
 
     try {
-      await createQueueChangeRequest(
-        queueSnapshot.queueEntryId,
-        trimmedChangeReason,
-        session.accessToken,
-      )
+      await createQueueChangeRequest(queueSnapshot.queueEntryId, trimmed, session.accessToken)
       setChangeRequested(true)
       setChangeDialogOpen(false)
       setChangeReason('')
@@ -299,250 +476,299 @@ export function FanMeetingWaitingPage() {
     }
   }
 
-  const handleEnterCall = () => {
-    if (!queueSnapshot?.canEnterCall || !queueSnapshot.callSessionId) return
-    navigate(
-      `/fan/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(String(queueSnapshot.callSessionId))}`,
-    )
-  }
+  const urgentNotice = notices.some((notice) => notice.urgent)
+  const error = meetingError ?? (phase === 'disconnected' ? undefined : queueError)
 
   return (
-    <div className="grid gap-6 pb-8">
-      {error ? (
-        <AlertBanner title="대기실 정보를 확인할 수 없습니다" variant="error">
-          <p>{error}</p>
-          <Button
-            className="mt-3"
-            onClick={() => {
-              void loadMeetingInfo()
-              void loadQueueState()
-            }}
-            size="sm"
-            variant="secondary"
-          >
-            다시 확인
-          </Button>
-        </AlertBanner>
-      ) : null}
-
+    <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
       {/* 호출 전환을 색상에 의존하지 않고 스크린 리더에도 즉시 알린다. */}
       <p aria-atomic="true" aria-live="assertive" className="sr-only">
         {isCalled ? '팬미팅에 호출되었습니다. 지금 입장해 주세요.' : '팬미팅 호출 대기 중입니다.'}
       </p>
 
-      <Card className="overflow-hidden">
-        <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div>
-            <h1 className="text-2xl font-black tracking-[-0.035em] sm:text-3xl">
-              {meetingInfo?.title ?? '팬미팅 대기실'}
-            </h1>
-            <p className="mt-2 text-sm font-semibold text-[var(--color-text-secondary)]">
-              인플루언서 {meetingInfo?.influencer.influencerName ?? '확인 중'}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <p className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)]">
-              <WifiHigh
-                aria-hidden
-                className={
-                  connectionHealthy
-                    ? 'text-[var(--color-success)]'
-                    : 'text-[var(--color-warning)]'
-                }
-                size={21}
-                weight="bold"
-              />
-              연결 상태
-              <strong
-                className={
-                  connectionHealthy
-                    ? 'text-[var(--color-success)]'
-                    : 'text-[var(--color-warning)]'
-                }
-              >
-                {connectionHealthy === undefined
-                  ? '미확인'
-                  : connectionHealthy
-                    ? '정상'
-                    : '확인 필요'}
-              </strong>
-            </p>
-            <p className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)]">
-              <Wrench
-                aria-hidden
-                className={
-                  deviceChecked
-                    ? 'text-[var(--color-success)]'
-                    : 'text-[var(--color-warning)]'
-                }
-                size={21}
-                weight="bold"
-              />
-              장비 상태
-              <strong
-                className={
-                  deviceChecked
-                    ? 'text-[var(--color-success)]'
-                    : 'text-[var(--color-warning)]'
-                }
-              >
-                {deviceChecked === undefined
-                  ? '미확인'
-                  : deviceChecked
-                    ? '점검 완료'
-                    : '점검 필요'}
-              </strong>
-            </p>
-            <Badge variant={isCalled ? 'primary' : isCallInProgress ? 'warning' : 'success'}>
-              {queueStatusLabel}
-            </Badge>
-          </div>
+      {error ? (
+        <div className="mx-auto w-[min(100%-40px,1240px)] pt-6">
+          <AlertBanner title="대기실 정보를 확인할 수 없습니다" variant="error">
+            <p>{error}</p>
+            <Button
+              className="mt-3"
+              onClick={() => {
+                void loadMeetingInfo()
+                void loadQueueState()
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              다시 확인
+            </Button>
+          </AlertBanner>
         </div>
-      </Card>
+      ) : null}
 
-      <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Card className="overflow-hidden">
-          <div className="grid gap-8 p-5 sm:p-7 lg:p-8">
-            <header className="flex flex-wrap items-start justify-between gap-4">
+      <section
+        aria-label="대기 상태"
+        className="grid grid-cols-1 items-stretch border-b border-[var(--color-divider)] transition-[grid-template-columns] duration-[640ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none min-[1081px]:grid-cols-[var(--wait-cols)]"
+        style={{ '--wait-cols': isCalled ? 'minmax(0,1fr) 384px' : 'minmax(0,1fr) 484px' } as React.CSSProperties}
+      >
+        <div
+          className="relative min-h-[min(52vw,420px)] overflow-hidden bg-[var(--color-surface-muted)] transition-[min-height] duration-[640ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none min-[1081px]:min-h-[var(--wait-img-h)]"
+          style={{ '--wait-img-h': isCalled ? '620px' : '540px' } as React.CSSProperties}
+        >
+          {detail?.meeting.coverImageUrl ? (
+            <img
+              alt={`팬미팅을 준비하고 있는 ${influencerName}`}
+              className="absolute inset-0 size-full object-cover"
+              src={detail.meeting.coverImageUrl}
+            />
+          ) : (
+            <div
+              aria-label="대표 이미지가 등록되지 않은 팬미팅"
+              className="absolute inset-0 grid place-items-center"
+              role="img"
+            >
+              <span className="text-sm font-semibold text-[var(--color-text-muted)]">
+                이미지 없음
+              </span>
+            </div>
+          )}
+          {/* 호출 시 이미지 위 코랄 스크림이 짙어진다. (handoff 젤리 규칙 2) */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 transition-[background] duration-500"
+            style={{
+              background: `linear-gradient(180deg, rgba(23,24,29,0) 46%, rgba(217,66,63,${isCalled ? 0.46 : 0.12}) 100%)`,
+            }}
+          />
+          <span
+            aria-hidden="true"
+            className={`mj-seam-glow absolute inset-y-0 right-0 hidden w-[88px] transition-opacity duration-[420ms] min-[1081px]:block ${isCalled ? 'motion-safe:animate-[mj-seam-shift_3.2s_ease-in-out_infinite]' : ''}`}
+            style={{
+              opacity: isCalled ? 0.95 : isWarn ? 0.26 : 0.55,
+              background:
+                'linear-gradient(90deg, rgba(232,97,92,0) 0%, rgba(232,97,92,0.16) 62%, rgba(217,66,63,0.34) 100%)',
+            }}
+          />
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 right-0 hidden w-[3px] transition-opacity duration-[420ms] min-[1081px]:block"
+            style={{
+              opacity: isWarn ? 0.4 : 0.9,
+              background:
+                'linear-gradient(180deg, rgba(232,97,92,0.25) 0%, rgba(217,66,63,0.95) 42%, rgba(232,97,92,0.35) 100%)',
+            }}
+          />
+          <span
+            aria-hidden="true"
+            className="mj-seam-glow absolute inset-x-0 bottom-0 h-[72px] min-[1081px]:hidden"
+            style={{
+              opacity: isCalled ? 0.95 : isWarn ? 0.26 : 0.55,
+              background: 'linear-gradient(180deg, rgba(232,97,92,0) 0%, rgba(217,66,63,0.3) 100%)',
+            }}
+          />
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 bottom-0 h-[4px] min-[1081px]:hidden"
+            style={{
+              opacity: isWarn ? 0.4 : 0.9,
+              background:
+                'linear-gradient(90deg, rgba(232,97,92,0) 0%, rgba(217,66,63,0.95) 50%, rgba(232,97,92,0) 100%)',
+            }}
+          />
+          {isCalled && callRemainSec !== null ? (
+            <div className="absolute inset-0 grid place-items-center text-center motion-safe:animate-[mj-lift_460ms_cubic-bezier(0.16,1,0.3,1)_both]">
               <div>
-                <h2 className="text-2xl font-black tracking-[-0.035em] sm:text-3xl">
-                  내 차례를 기다리고 있어요
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">
-                  대기 위치가 변경되면 이 화면에 바로 반영됩니다.
+                <p className="text-[15px] font-bold text-white/95 [text-shadow:0_1px_14px_rgb(23_24_29_/_60%)]">
+                  남은 입장 시간
                 </p>
+                <strong className="mt-2 block text-[clamp(48px,6.4vw,80px)] font-black leading-none tracking-[-0.05em] text-white tabular-nums [text-shadow:0_2px_26px_rgb(23_24_29_/_66%)]">
+                  {formatCountdown(callRemainSec)}
+                </strong>
               </div>
-              <Badge className="gap-1.5" variant="neutral">
-                {queueSnapshot ? `${queueSnapshot.position}번 배정` : '순번 확인 중'}
-              </Badge>
-            </header>
+            </div>
+          ) : null}
+        </div>
 
-            <dl className="grid border-y border-[var(--color-divider)] sm:grid-cols-3">
-              <div className="grid content-center gap-4 py-6 sm:border-r sm:border-[var(--color-divider)] sm:px-5 lg:py-8">
-                <dt className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-tertiary)]">
-                  <ListNumbers aria-hidden size={22} weight="bold" />
-                  배정 순번
-                </dt>
-                <dd className="text-4xl font-black tracking-[-0.04em] text-[var(--color-text-primary)]">
-                  {queueSnapshot ? `${queueSnapshot.position}번` : '-'}
-                </dd>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  현재 서버에 반영된 내 순번이에요
-                </p>
-              </div>
+        <div className="flex flex-col overflow-hidden px-5 pb-8 pt-[26px] sm:px-[26px] sm:pb-9 sm:pt-[30px] min-[1081px]:pb-11 min-[1081px]:pl-10 min-[1081px]:pr-11 min-[1081px]:pt-[46px]">
+          <p
+            className={`text-sm font-bold ${isWarn ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}
+          >
+            {statusLine}
+          </p>
+          <h1
+            className={`mt-3.5 font-black leading-[1.16] tracking-[-0.045em] transition-[font-size] duration-[400ms] motion-reduce:transition-none [text-wrap:balance] ${isCalled ? 'text-[38px]' : 'text-[30px]'}`}
+          >
+            {stateContent.title}
+          </h1>
+          <p className="mt-3.5 text-[17px] font-medium leading-[1.7] text-[var(--color-text-body)]">
+            {stateContent.desc}
+          </p>
 
-              <div className="grid content-center gap-4 border-t border-[var(--color-divider)] py-6 sm:border-r sm:border-t-0 sm:border-[var(--color-divider)] sm:px-5 lg:py-8">
-                <dt className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-tertiary)]">
-                  <UsersThree aria-hidden size={22} weight="bold" />
-                  현재 대기 위치
-                </dt>
-                <dd className="text-4xl font-black tracking-[-0.04em] text-[var(--color-primary-coral)]">
-                  {queueSnapshot ? `${currentPosition}번째` : '-'}
-                </dd>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  앞에 {queueSnapshot?.aheadCount ?? '-'}명이 기다리고 있어요
-                </p>
-              </div>
+          <button
+            className={`mj-font-emphasis mt-[26px] min-h-14 w-full rounded-[10px] border text-[17px] transition-[background-color,transform] duration-150 motion-reduce:transition-none ${
+              stateContent.disabled
+                ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
+                : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:-translate-y-px hover:bg-[var(--color-primary-coral-hover)] active:translate-y-px motion-reduce:transform-none'
+            }`}
+            disabled={stateContent.disabled}
+            onClick={handleCtaClick}
+            type="button"
+          >
+            {stateContent.cta}
+          </button>
+          <p aria-live="polite" className="mt-3 text-[15px] font-semibold text-[var(--color-text-muted)]">
+            {stateContent.helper}
+          </p>
 
-              <div className="grid content-center gap-4 border-t border-[var(--color-divider)] py-6 sm:border-t-0 sm:px-5 lg:py-8">
-                <dt className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-tertiary)]">
-                  <HourglassMedium aria-hidden size={22} weight="bold" />
-                  예상 대기시간
-                </dt>
-                <dd className="text-4xl font-black tracking-[-0.04em]">
-                  {queueSnapshot ? `약 ${estimatedWaitMinutes}분` : '-'}
-                </dd>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  진행 상황에 따라 달라질 수 있어요
-                </p>
-              </div>
-            </dl>
-
-            <AlertBanner title="대기 중 유의사항" variant="warning">
-              <ul className="grid gap-1.5 leading-6">
-                <li>대기 순서와 예상 시간은 진행 상황에 따라 변경될 수 있습니다.</li>
-                <li>호출되면 ‘팬미팅 입장’ 버튼이 활성화됩니다.</li>
-                <li>재호출 후에도 입장하지 않으면 참여가 종료될 수 있습니다.</li>
-              </ul>
-            </AlertBanner>
-
-            <section className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] p-5">
+          <div className="mt-[30px] border-t border-[var(--color-divider)] pt-6">
+            <div className="flex items-end justify-between gap-4">
               <div>
-                <h3 className="font-bold">순서 변경 요청</h3>
-                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                  지금 통화가 어려우면 순서를 뒤로 미뤄 달라고 요청할 수 있어요.
+                <p className="text-sm font-bold text-[var(--color-text-muted)]">내 순번</p>
+                <p className="mt-1.5 text-[34px] font-black leading-none tracking-[-0.04em] tabular-nums">
+                  {position !== undefined ? `${position}번째` : '-'}
                 </p>
-                {changeError && !changeDialogOpen ? (
-                  <p className="mt-2 text-sm font-semibold text-[var(--color-error)]">
-                    {changeError}
-                  </p>
-                ) : null}
               </div>
-              {changeRequested ? (
-                <Badge variant="success">요청 접수됨</Badge>
+              {/* 대기 진행 모티프 — 앞 인원이 줄어들 때만 차오르는 액체 인디케이터다. (handoff 젤리 규칙 3) */}
+              <span
+                aria-label={isCalled ? '대기 진행 완료' : `대기 진행 ${motifPct}퍼센트`}
+                className="relative h-9 w-[26px] flex-none overflow-hidden rounded-[5px_5px_13px_13px] bg-[var(--color-surface-page)]"
+                role="img"
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-0 bottom-0 transition-[height] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+                  style={{
+                    height: `${motifPct}%`,
+                    background:
+                      'linear-gradient(180deg, var(--color-primary-coral-highlight), var(--color-primary-coral))',
+                  }}
+                />
+              </span>
+            </div>
+            <p className="mt-4 text-base font-medium tabular-nums text-[var(--color-text-muted)]">
+              앞에 <strong className="font-extrabold text-[var(--color-text-primary)]">{ahead > 0 ? `${ahead}명` : '없음'}</strong> · 예상{' '}
+              <strong className="font-extrabold text-[var(--color-text-primary)]">{etaText}</strong>
+            </p>
+            {phase === 'waiting' ? (
+              changeRequested ? (
+                <p className="mt-3 text-sm font-semibold text-[var(--color-text-muted)]">
+                  순서 변경 요청이 접수되었습니다.
+                </p>
               ) : (
-                <Button
-                  disabled={!queueSnapshot || isRequestingChange}
+                <button
+                  className="mj-font-label mt-3 min-h-9 text-sm text-[var(--color-text-muted)] underline underline-offset-4 hover:text-[var(--color-primary-coral)]"
                   onClick={() => {
                     setChangeError(undefined)
                     setChangeDialogOpen(true)
                   }}
-                  variant="secondary"
+                  type="button"
                 >
-                  순서 변경 요청
-                </Button>
-              )}
-            </section>
+                  지금 통화가 어려우면 순서 변경 요청
+                </button>
+              )
+            ) : null}
+            {changeError && !changeDialogOpen ? (
+              <p className="mt-2 text-sm font-semibold text-[var(--color-error)]">{changeError}</p>
+            ) : null}
           </div>
-        </Card>
+        </div>
+      </section>
 
-        <Card className="overflow-hidden">
-          <div className="grid h-full min-h-[420px] grid-rows-[1fr_auto]">
-            <div className="grid content-center justify-items-center gap-6 px-6 py-10 text-center">
-              <span
-                className={`inline-flex size-16 items-center justify-center rounded-[var(--radius-panel)] ${isCalled
-                    ? 'bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
-                    : 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
-                  }`}
+      {notices.length > 0 ? (
+        <div className="mx-auto w-[min(100%-40px,1240px)] pt-[34px] min-[1081px]:w-[min(100%-88px,1240px)]">
+          <section
+            aria-labelledby="mj-notice-board"
+            className={`rounded-xl border px-6 py-[22px] ${
+              urgentNotice
+                ? 'border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)]'
+                : 'border-[var(--color-divider)] bg-[var(--color-surface-subtle)]'
+            }`}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-4">
+              <h2
+                className={`text-[15px] font-extrabold tracking-[-0.02em] ${urgentNotice ? 'text-[var(--color-primary-coral)]' : 'text-[var(--color-text-muted)]'}`}
+                id="mj-notice-board"
               >
-                <BellRinging aria-hidden size={34} weight="duotone" />
+                운영 공지
+              </h2>
+              <span className="text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
+                {detail?.meeting.title ?? '팬미팅'} · {noticeTotal}건
               </span>
-              <div>
-                <h2 className="text-2xl font-black tracking-[-0.03em]">
-                  {isCalled ? '팬미팅에 호출되었습니다' : '호출을 기다려 주세요'}
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">
-                  {isCalled ? '지금 팬미팅에 입장해 주세요' : '내 차례가 되면 이 화면에서 바로 알려드릴게요.'}
-                </p>
-              </div>
-              <p
-                className={`flex items-center gap-2 border-y border-[var(--color-divider)] py-5 text-sm font-bold ${
-                  isCalled
-                    ? 'text-[var(--color-primary-coral)]'
-                    : 'text-[var(--color-success)]'
-                }`}
-              >
-                <Check aria-hidden size={20} weight="bold" />
-                {isCalled
-                  ? '지금 팬미팅에 입장할 수 있습니다.'
-                  : '현재 대기 상태를 유지하고 있습니다.'}
-              </p>
             </div>
+            <div className="mt-3.5">
+              {notices.map((notice, index) => (
+                <article
+                  className={index ? 'mt-4 border-t border-[var(--color-divider)] pt-4' : ''}
+                  key={notice.noticeId}
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-4">
+                    <strong className="text-lg font-extrabold tracking-[-0.026em]">
+                      {notice.title}
+                    </strong>
+                    <time className="whitespace-nowrap text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
+                      {notice.when}
+                    </time>
+                  </div>
+                  <p className="mt-2 max-w-[70ch] text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
+                    {notice.body}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
-            <div className="border-t border-[var(--color-divider)] p-5 sm:p-6">
-              <Button
-                className="w-full"
-                disabled={!isCalled}
-                onClick={handleEnterCall}
-                size="lg"
-                variant={isCalled ? 'primary' : 'secondary'}
-              >
-                {isCalled ? '팬미팅 입장' : '호출 대기 중'}
-              </Button>
-            </div>
+      <div className="mx-auto grid w-[min(100%-40px,1240px)] items-start gap-10 pb-[72px] pt-12 lg:grid-cols-[1fr_460px] lg:gap-[72px] min-[1081px]:w-[min(100%-88px,1240px)]">
+        <section aria-labelledby="mj-memo-title">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="text-[22px] font-extrabold tracking-[-0.032em]" id="mj-memo-title">
+              하고 싶은 말
+            </h2>
+            <button
+              className="mj-font-label min-h-[38px] whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3.5 text-sm hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+              onClick={toggleMemoEdit}
+              type="button"
+            >
+              {memoEditing ? '저장' : '수정'}
+            </button>
           </div>
-        </Card>
+          {memoEditing ? (
+            <>
+              <textarea
+                aria-label="하고 싶은 말 메모"
+                className="mj-font-body mt-4 min-h-28 w-full max-w-[56ch] resize-y rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] p-[15px] text-lg leading-[1.7] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary-coral)] focus:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
+                maxLength={MEMO_MAX_LENGTH}
+                onChange={(event) => setMemo(event.target.value)}
+                placeholder="예: 첫 앨범부터 들었어요. 이번 곡 작업 이야기가 궁금해요."
+                value={memo}
+              />
+              <div className="mt-2 flex max-w-[56ch] justify-between">
+                <span className="text-sm font-semibold text-[var(--color-text-muted)]">
+                  통화 화면에 함께 표시됩니다.
+                </span>
+                <span className="text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
+                  {`${memo.length} / ${MEMO_MAX_LENGTH}자`}
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-4 max-w-[52ch] text-[19px] font-medium leading-[1.75] text-[var(--color-text-body)]">
+              {memo.trim()
+                ? `“${memo}”`
+                : '아직 적지 않았어요. 미리 적어두면 통화 화면에 함께 보입니다.'}
+            </p>
+          )}
+        </section>
+        <section aria-labelledby="mj-notice-title">
+          <h2 className="text-base font-extrabold tracking-[-0.025em]" id="mj-notice-title">
+            대기 중 유의사항
+          </h2>
+          <ul className="mt-3 list-disc pl-[18px] text-base font-medium leading-[1.85] text-[var(--color-text-muted)]">
+            <li>화면을 닫아도 5분 안에 다시 접속하면 순번이 유지됩니다.</li>
+            <li>호출 후 30초 안에 입장하지 않으면 호출이 만료됩니다.</li>
+            <li>연결이 끊기면 같은 순번으로 재연결을 시도합니다.</li>
+          </ul>
+        </section>
       </div>
 
       <Dialog
@@ -557,7 +783,7 @@ export function FanMeetingWaitingPage() {
               닫기
             </Button>
             <Button
-              disabled={!trimmedChangeReason || isRequestingChange}
+              disabled={!changeReason.trim() || isRequestingChange}
               loading={isRequestingChange}
               onClick={() => void handleChangeRequestSubmit()}
             >
