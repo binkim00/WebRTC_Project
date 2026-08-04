@@ -115,7 +115,7 @@ export function FanApplicationResultPage() {
     )
   }
 
-  if (application === undefined) {
+  if (application === undefined || resultPublished === undefined) {
     return (
       <div className="flex justify-center py-24">
         <Spinner label="응모 결과를 불러오는 중" />
