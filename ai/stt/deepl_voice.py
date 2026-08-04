@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import base64
+from collections.abc import Callable
 
 import httpx
 import websockets
@@ -40,7 +41,7 @@ class DeepLVoiceAdapter(STTAdapter):
         self,
         audio_stream,
         language: str,
-        on_final: callable,
+        on_final: Callable,
     ) -> None:
         # 1. 세션 생성
         streaming_url, token = await self._create_session(language)
@@ -173,7 +174,7 @@ class DeepLVoiceAdapter(STTAdapter):
     async def _receive_results(
         self,
         *,
-        on_final: callable,
+        on_final: Callable,
         source_lang: str,
     ) -> None:
         """

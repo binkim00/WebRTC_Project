@@ -7,6 +7,7 @@ translated_text는 항상 None.
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 
 from google.oauth2 import service_account
 from google.cloud import speech_v1 as speech
@@ -31,7 +32,7 @@ class GoogleSTTAdapter(STTAdapter):
         self,
         audio_stream, #구독 중인 오디오
         language: str, #사용하는 언어
-        on_final: callable, #전체 문장이면 call
+        on_final: Callable, #전체 문장이면 call
     ) -> None:
         """
         AudioStream → Google STT streaming API → concluded 시 on_final 콜백.

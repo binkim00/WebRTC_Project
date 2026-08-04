@@ -5,6 +5,7 @@ agent.py는 이 인터페이스만 바라봄.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -30,7 +31,7 @@ class STTAdapter(ABC):
         self,
         audio_stream,           # LiveKit AudioStream
         language: str,          # 사전 지정 언어 ("ko" | "en")
-        on_final: callable,     # async def on_final(transcript: FinalTranscript)
+        on_final: Callable,     # async def on_final(transcript: FinalTranscript)
     ) -> None:
         """
         오디오 스트림을 STT에 흘려보내고,
