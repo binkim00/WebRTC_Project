@@ -2,7 +2,10 @@ package com.ssafy.backend.recording.egress;
 
 import com.ssafy.backend.recording.domain.Recording;
 import com.ssafy.backend.recording.domain.RecordingStatus;
+import com.ssafy.backend.recording.config.RecordingEgressProperties;
+import com.ssafy.backend.recording.config.RecordingStorageProperties;
 import com.ssafy.backend.recording.repository.RecordingRepository;
+import com.ssafy.backend.recording.storage.RecordingFileStorage;
 import livekit.LivekitEgress;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,10 +22,20 @@ public class RecordingEgressStateService {
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
 
     private final RecordingRepository recordingRepository;
+    private final RecordingFileStorage fileStorage;
+    private final RecordingStorageProperties storageProperties;
+    private final RecordingEgressProperties egressProperties;
     private final Clock clock;
 
-    public RecordingEgressStateService(RecordingRepository recordingRepository, Clock clock) {
+    public RecordingEgressStateService(RecordingRepository recordingRepository,
+                                       RecordingFileStorage fileStorage,
+                                       RecordingStorageProperties storageProperties,
+                                       RecordingEgressProperties egressProperties,
+                                       Clock clock) {
         this.recordingRepository = recordingRepository;
+        this.fileStorage = fileStorage;
+        this.storageProperties = storageProperties;
+        this.egressProperties = egressProperties;
         this.clock = clock;
     }
 
@@ -98,8 +111,7 @@ public class RecordingEgressStateService {
             case EGRESS_ACTIVE -> recording.markRecording(
                     fromUnixNanos(info.getStartedAt()));
             case EGRESS_ENDING -> recording.markProcessing();
-            case EGRESS_COMPLETE -> recording.markEgressEnded(
-                    fromUnixNanos(info.getEndedAt()));
+            case EGRESS_COMPLETE -> complete(recording, info);
             case EGRESS_FAILED, EGRESS_ABORTED, EGRESS_LIMIT_REACHED ->
                     recording.markFailed(failureCode(info), info.getError(),
                             fromUnixNanos(info.getEndedAt()));
@@ -107,6 +119,66 @@ public class RecordingEgressStateService {
                     "EGRESS_STATUS_UNRECOGNIZED", "알 수 없는 Egress 상태입니다.",
                     LocalDateTime.now(clock));
         }
+    }
+
+    private void complete(Recording recording, LivekitEgress.EgressInfo info) {
+        LocalDateTime endedAt = fromUnixNanos(info.getEndedAt());
+        if (endedAt == null) {
+            endedAt = LocalDateTime.now(clock);
+        }
+        recording.markEgressEnded(endedAt);
+
+        LivekitEgress.FileInfo output = info.getFileResultsList().stream()
+                .filter(file -> matchesExpectedOutput(file, recording.getStorageKey()))
+                .findFirst()
+                .orElse(null);
+        if (output == null) {
+            recording.markFailed("EGRESS_OUTPUT_MISMATCH",
+                    "Egress result does not contain the expected output file.", endedAt);
+            return;
+        }
+        if (!fileStorage.exists(recording.getStorageKey())) {
+            recording.markFailed("EGRESS_OUTPUT_MISSING",
+                    "Egress completed but the output file is missing.", endedAt);
+            return;
+        }
+
+        long actualSize = fileStorage.size(recording.getStorageKey());
+        if (actualSize <= 0) {
+            recording.markFailed("EGRESS_OUTPUT_EMPTY",
+                    "Egress output file is empty.", endedAt);
+            return;
+        }
+        recording.markAvailable(actualSize, durationSeconds(output.getDuration()),
+                endedAt, endedAt.plusDays(storageProperties.retentionDays()));
+    }
+
+    private boolean matchesExpectedOutput(LivekitEgress.FileInfo file, String storageKey) {
+        String root = normalizePath(egressProperties.outputRoot());
+        String expected = root.endsWith("/") ? root + storageKey : root + "/" + storageKey;
+        String filename = normalizePath(file.getFilename());
+        String location = normalizePath(file.getLocation());
+        return expected.equals(filename) || expected.equals(location);
+    }
+
+    private String normalizePath(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim().replace('\\', '/');
+        while (normalized.length() > 1 && normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
+    }
+
+    private Integer durationSeconds(long durationNanos) {
+        if (durationNanos <= 0) {
+            return null;
+        }
+        long roundedUp = durationNanos / NANOS_PER_SECOND
+                + (durationNanos % NANOS_PER_SECOND == 0 ? 0 : 1);
+        return (int) Math.min(roundedUp, Integer.MAX_VALUE);
     }
 
     private String failureCode(LivekitEgress.EgressInfo info) {

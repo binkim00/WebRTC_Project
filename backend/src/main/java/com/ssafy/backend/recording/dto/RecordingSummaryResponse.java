@@ -29,7 +29,9 @@ public record RecordingSummaryResponse(
         String contentType,
         Long fileSizeBytes,
         Integer durationSec,
+        String source,
         String status,
+        String failureCode,
         LocalDateTime completedAt,
         LocalDateTime availableUntil,
         boolean playable
@@ -51,7 +53,9 @@ public record RecordingSummaryResponse(
                 recording.getContentType(),
                 recording.getFileSizeBytes(),
                 recording.getDurationSec(),
+                recording.getSource().name(),
                 recording.getStatus().name(),
+                recording.getFailureCode(),
                 recording.getCompletedAt(),
                 recording.getAvailableUntil(),
                 playable

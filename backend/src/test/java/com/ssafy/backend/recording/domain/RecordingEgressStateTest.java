@@ -46,6 +46,20 @@ class RecordingEgressStateTest {
         assertThat(recording.getEgressEndedAt()).isEqualTo(endedAt);
     }
 
+    @Test
+    void becomesAvailableOnlyAfterProcessing() {
+        Recording recording = startingRecording();
+        LocalDateTime completedAt = REQUESTED_AT.plusMinutes(1);
+
+        recording.markEgressEnded(completedAt);
+        recording.markAvailable(2048L, 62, completedAt, completedAt.plusDays(7));
+
+        assertThat(recording.getStatus()).isEqualTo(RecordingStatus.AVAILABLE);
+        assertThat(recording.getFileSizeBytes()).isEqualTo(2048L);
+        assertThat(recording.getDurationSec()).isEqualTo(62);
+        assertThat(recording.getAvailableUntil()).isEqualTo(completedAt.plusDays(7));
+    }
+
     /** 실패가 확정된 뒤 늦은 active 이벤트가 상태를 되돌리지 않는지 검증한다. */
     @Test
     void ignoresLateActiveAfterFailure() {

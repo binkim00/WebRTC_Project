@@ -205,6 +205,28 @@ public class Recording extends BaseTimeEntity {
         }
     }
 
+    /** Egress output validation succeeded and the recording can now be served. */
+    public void markAvailable(long fileSizeBytes, Integer durationSec,
+                              LocalDateTime completedAt, LocalDateTime availableUntil) {
+        if (status == RecordingStatus.AVAILABLE) {
+            return;
+        }
+        if (source != RecordingSource.LIVEKIT_EGRESS
+                || status != RecordingStatus.PROCESSING) {
+            throw new IllegalStateException("Only a processed Egress recording can become available.");
+        }
+        if (fileSizeBytes <= 0) {
+            throw new IllegalArgumentException("The recording file must not be empty.");
+        }
+        this.fileSizeBytes = fileSizeBytes;
+        this.durationSec = durationSec;
+        this.completedAt = Objects.requireNonNull(completedAt);
+        this.availableUntil = Objects.requireNonNull(availableUntil);
+        this.status = RecordingStatus.AVAILABLE;
+        this.failureCode = null;
+        this.failureMessage = null;
+    }
+
     /** Egress 시작·진행·종료 실패를 녹화 실패로 확정한다. */
     public void markFailed(String failureCode, String failureMessage,
                            LocalDateTime endedAt) {

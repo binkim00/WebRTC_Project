@@ -3,7 +3,10 @@ package com.ssafy.backend.recording.egress;
 import com.ssafy.backend.call.domain.CallSession;
 import com.ssafy.backend.recording.domain.Recording;
 import com.ssafy.backend.recording.domain.RecordingStatus;
+import com.ssafy.backend.recording.config.RecordingEgressProperties;
+import com.ssafy.backend.recording.config.RecordingStorageProperties;
 import com.ssafy.backend.recording.repository.RecordingRepository;
+import com.ssafy.backend.recording.storage.RecordingFileStorage;
 import livekit.LivekitEgress;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,12 +26,20 @@ class RecordingEgressStateServiceTest {
     private static final Clock CLOCK = Clock.fixed(
             Instant.parse("2026-08-04T02:00:00Z"), ZoneId.of("Asia/Seoul"));
     private RecordingRepository repository;
+    private RecordingFileStorage fileStorage;
     private RecordingEgressStateService service;
 
     @BeforeEach
     void setUp() {
         repository = mock(RecordingRepository.class);
-        service = new RecordingEgressStateService(repository, CLOCK);
+        fileStorage = mock(RecordingFileStorage.class);
+        service = new RecordingEgressStateService(
+                repository,
+                fileStorage,
+                new RecordingStorageProperties("build/test-recordings", 7, 600, 600_000,
+                        2_147_483_648L),
+                new RecordingEgressProperties(true, "/out", "grid"),
+                CLOCK);
     }
 
     /** EGRESS_ACTIVE 응답이 ID와 실제 시작 시각을 기록하는지 검증한다. */
@@ -84,6 +95,76 @@ class RecordingEgressStateServiceTest {
         assertThat(context).isNotNull();
         assertThat(context.roomName()).isEqualTo("meeting-room-1");
         assertThat(context.storageKey()).isEqualTo("egress/2026/08/04/file.mp4");
+    }
+
+    @Test
+    void completesOnlyAfterExpectedFileExists() {
+        Recording recording = startingRecording();
+        recording.assignEgressId("EG_complete");
+        when(repository.findByEgressIdForUpdate("EG_complete"))
+                .thenReturn(Optional.of(recording));
+        when(fileStorage.exists(recording.getStorageKey())).thenReturn(true);
+        when(fileStorage.size(recording.getStorageKey())).thenReturn(12_345L);
+        long endedAt = Instant.parse("2026-08-04T02:01:00Z").toEpochMilli() * 1_000_000L;
+        LivekitEgress.EgressInfo info = LivekitEgress.EgressInfo.newBuilder()
+                .setEgressId("EG_complete")
+                .setStatus(LivekitEgress.EgressStatus.EGRESS_COMPLETE)
+                .setEndedAt(endedAt)
+                .addFileResults(LivekitEgress.FileInfo.newBuilder()
+                        .setFilename("/out/egress/2026/08/04/file.mp4")
+                        .setDuration(42_100_000_000L)
+                        .setSize(12_345L))
+                .build();
+
+        service.applyWebhook(info);
+
+        assertThat(recording.getStatus()).isEqualTo(RecordingStatus.AVAILABLE);
+        assertThat(recording.getFileSizeBytes()).isEqualTo(12_345L);
+        assertThat(recording.getDurationSec()).isEqualTo(43);
+        assertThat(recording.getCompletedAt())
+                .isEqualTo(LocalDateTime.of(2026, 8, 4, 11, 1));
+        assertThat(recording.getAvailableUntil())
+                .isEqualTo(LocalDateTime.of(2026, 8, 11, 11, 1));
+        assertThat(recording.isPlayableAt(LocalDateTime.of(2026, 8, 4, 12, 0))).isTrue();
+    }
+
+    @Test
+    void failsWhenCompletedOutputIsMissing() {
+        Recording recording = startingRecording();
+        recording.assignEgressId("EG_missing");
+        when(repository.findByEgressIdForUpdate("EG_missing"))
+                .thenReturn(Optional.of(recording));
+        when(fileStorage.exists(recording.getStorageKey())).thenReturn(false);
+        LivekitEgress.EgressInfo info = LivekitEgress.EgressInfo.newBuilder()
+                .setEgressId("EG_missing")
+                .setStatus(LivekitEgress.EgressStatus.EGRESS_COMPLETE)
+                .addFileResults(LivekitEgress.FileInfo.newBuilder()
+                        .setFilename("/out/egress/2026/08/04/file.mp4"))
+                .build();
+
+        service.applyWebhook(info);
+
+        assertThat(recording.getStatus()).isEqualTo(RecordingStatus.FAILED);
+        assertThat(recording.getFailureCode()).isEqualTo("EGRESS_OUTPUT_MISSING");
+    }
+
+    @Test
+    void failsWhenCompletedOutputPathDoesNotMatchStorageKey() {
+        Recording recording = startingRecording();
+        recording.assignEgressId("EG_wrong_path");
+        when(repository.findByEgressIdForUpdate("EG_wrong_path"))
+                .thenReturn(Optional.of(recording));
+        LivekitEgress.EgressInfo info = LivekitEgress.EgressInfo.newBuilder()
+                .setEgressId("EG_wrong_path")
+                .setStatus(LivekitEgress.EgressStatus.EGRESS_COMPLETE)
+                .addFileResults(LivekitEgress.FileInfo.newBuilder()
+                        .setFilename("/out/other/file.mp4"))
+                .build();
+
+        service.applyWebhook(info);
+
+        assertThat(recording.getStatus()).isEqualTo(RecordingStatus.FAILED);
+        assertThat(recording.getFailureCode()).isEqualTo("EGRESS_OUTPUT_MISMATCH");
     }
 
     private Recording startingRecording() {
