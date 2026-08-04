@@ -121,17 +121,27 @@ export function ConnectedCallRoom({
     [remoteName],
   )
 
-  const handleSubtitleMessage = useCallback(
-    (message: { payload: Uint8Array }) => {
-      const payload = parseSubtitlePayload(message.payload)
-      if (!payload) return
+  // 핸들러 identity가 바뀌면 데이터 채널 구독이 다시 걸릴 수 있고, 그 틈에 도착한 자막을
+  // 놓칠 수 있다. 하필 그 시점이 상대 이름이 채워지는 통화 시작 직후여서 첫 대사가 사라진다.
+  // 최신 값은 ref로 읽어 콜백 identity를 영구히 고정한다.
+  const viewerRoleRef = useRef(authSession?.role)
+  viewerRoleRef.current = authSession?.role
+  const subtitleSpeakerNamesRef = useRef(subtitleSpeakerNames)
+  subtitleSpeakerNamesRef.current = subtitleSpeakerNames
 
-      setSubtitleLines((current) =>
-        appendSubtitleLine(current, payload, authSession?.role, subtitleSpeakerNames),
-      )
-    },
-    [authSession?.role, subtitleSpeakerNames],
-  )
+  const handleSubtitleMessage = useCallback((message: { payload: Uint8Array }) => {
+    const payload = parseSubtitlePayload(message.payload)
+    if (!payload) return
+
+    setSubtitleLines((current) =>
+      appendSubtitleLine(
+        current,
+        payload,
+        viewerRoleRef.current,
+        subtitleSpeakerNamesRef.current,
+      ),
+    )
+  }, [])
 
   useDataChannel(SUBTITLE_DATA_TOPIC, handleSubtitleMessage)
 
