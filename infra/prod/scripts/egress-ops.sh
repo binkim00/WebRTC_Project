@@ -105,13 +105,14 @@ MSG
   exit 1
 }
 
+# Egress 가 표준 녹화 방식이 된 뒤로는 플래그 값과 무관하게 worker 를 올릴 수 있어야
+# 한다(재부팅 복구 등). 그래서 다른 명령과 달리 모드 검사를 하지 않는다.
 start_worker() {
-  require_mode false
   validate
   compose up -d egress
   wait_worker_healthy
   ensure_output_writable
-  echo "worker만 시작했습니다. backend Egress 기능은 아직 비활성 상태입니다."
+  echo "Egress worker 가 실행 중입니다."
 }
 
 activate() {
