@@ -261,7 +261,7 @@ export function MyPage() {
             aria-labelledby="mp-profile"
             className="mt-[26px] border-t border-[var(--color-divider)] pt-[26px]"
           >
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-6">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
               {hasPhoto ? (
                 <img
                   alt={`${profile.nickname}님의 프로필`}
@@ -289,37 +289,53 @@ export function MyPage() {
                 >
                   {profile.nickname}
                 </h2>
-                <dl className="mt-3.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2">
-                  <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                    이름
-                  </dt>
-                  <dd className="text-[15px] font-bold">{profile.nickname}</dd>
-                  <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                    이메일
-                  </dt>
-                  <dd className="text-[15px] font-bold [overflow-wrap:anywhere]">
-                    {profile.email}
-                  </dd>
+                <dl className="mt-3.5 flex flex-wrap gap-x-7 gap-y-2">
+                  <div className="flex items-baseline gap-2.5">
+                    <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
+                      아이디
+                    </dt>
+                    <dd className="text-[15px] font-bold">{profile.loginId}</dd>
+                  </div>
+                  <div className="flex min-w-0 items-baseline gap-2.5">
+                    <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
+                      이메일
+                    </dt>
+                    <dd className="text-[15px] font-bold [overflow-wrap:anywhere]">
+                      {profile.email}
+                    </dd>
+                  </div>
+                  <div className="flex items-baseline gap-2.5">
+                    <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
+                      선호 언어
+                    </dt>
+                    <dd className="text-[15px] font-bold">
+                      {languageOptions.find((option) => option.value === profile.preferredLanguage)
+                        ?.label ?? profile.preferredLanguage}
+                    </dd>
+                  </div>
+                  <div className="flex items-baseline gap-2.5">
+                    <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
+                      회원번호
+                    </dt>
+                    <dd className="text-[15px] font-bold tabular-nums">{profile.userId}</dd>
+                  </div>
                 </dl>
               </div>
-            </div>
 
-            <div className="mt-[22px] flex flex-col gap-2.5 sm:flex-row">
-              <Button className="min-h-[50px] text-base" onClick={openEdit}>
-                회원정보 수정
-              </Button>
-              <Button
-                className="min-h-[50px] text-base"
-                disabled
-                title="비밀번호 변경 기능은 아직 지원되지 않습니다."
-                variant="secondary"
-              >
-                비밀번호 변경
-              </Button>
+              <div className="flex flex-col gap-2.5 max-lg:col-span-2 lg:self-center lg:border-l lg:border-[var(--color-divider)] lg:pl-8">
+                <Button className="min-h-[50px] text-base" onClick={openEdit}>
+                  회원정보 수정
+                </Button>
+                <Button
+                  className="min-h-[50px] text-base"
+                  disabled
+                  title="비밀번호 변경 기능은 아직 지원되지 않습니다."
+                  variant="secondary"
+                >
+                  비밀번호 변경 준비 중
+                </Button>
+              </div>
             </div>
-            <p className="mt-2 text-sm font-medium text-[var(--color-text-muted)]">
-              비밀번호 변경 기능은 아직 지원되지 않습니다.
-            </p>
           </section>
 
           <section
