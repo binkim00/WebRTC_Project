@@ -42,11 +42,21 @@ from stt.google_stt import GoogleSTTAdapter
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# grpc(gRPC) DEBUG 노이즈 억제.
+# 팬 퇴장 시 STT task를 cancel하면 grpc가 CancelledError 트레이스백을 DEBUG로 찍는데,
+# 이는 정상적인 스트림 취소라 무해하다. dev 모드의 DEBUG 로그에서만 보이므로 조용히 시킨다.
+logging.getLogger("grpc").setLevel(logging.INFO)
+logging.getLogger("grpc.aio").setLevel(logging.INFO)
+
 DEEPL_API_KEY = os.environ.get("DEEPL_API_KEY")
 
 # 이벤트 종료 시 진행 중인 요약을 기다리는 한도.
 # 요약은 LLM 호출과 최대 3회 재시도를 포함하므로 여유를 둔다.
 SUMMARY_WAIT_TIMEOUT_SECONDS = 90
+
+# 통화 종료 시 STT가 '마지막 문장'을 flush하고 끝나길 기다리는 한도.
+# 이 시간 안에 안 끝나면 그때 task를 cancel한다(안전장치).
+STT_DRAIN_TIMEOUT_SECONDS = 5
 
 
 # ── 팬 1명과의 통화 상태 ─────────────────────────────────────────────────────
@@ -186,24 +196,30 @@ async def my_agent(ctx: JobContext) -> None:
             call.fan_identity, call.call_session_id,
         )
 
-        # 오디오 태스크 정리 — cancel 후 완전히 끝날 때까지 대기.
-        # (마지막 자막 insert가 끝나기 전에 요약이 조회되는 경쟁 조건 방지)
+        # STT 정리 — 마지막 문장까지 flush되도록 "우아하게" 종료한다.
+        # (기존처럼 곧바로 cancel하면 STT가 마지막 final을 내보내기 전에 끊겨 유실됨)
+        # 1) 어댑터에 종료 신호: 오디오 입력을 끊어 STT가 마지막 final을 방출하도록 유도.
+        for adapter in (call.fan_adapter, call.influencer_adapter):
+            if adapter:
+                try:
+                    await adapter.close()
+                except Exception:
+                    logger.exception("STT 어댑터 close 실패")
+
+        # 2) STT task가 남은 final(=마지막 문장)까지 처리하고 스스로 끝나길 기다린다.
+        #    제한 시간 안에 안 끝나면 그때 cancel(안전장치).
         stt_tasks = [
             t for t in (call.fan_audio_task, call.influencer_audio_task)
             if t and not t.done()
         ]
-        for t in stt_tasks:
-            t.cancel()
         if stt_tasks:
-            await asyncio.gather(*stt_tasks, return_exceptions=True)
+            _, pending = await asyncio.wait(stt_tasks, timeout=STT_DRAIN_TIMEOUT_SECONDS)
+            for t in pending:
+                t.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
-        # 어댑터 정리
-        if call.fan_adapter:
-            await call.fan_adapter.close()
-        if call.influencer_adapter:
-            await call.influencer_adapter.close()
-
-        # 프로세서 정리 (httpx.AsyncClient close)
+        # 3) 프로세서 정리 (httpx.AsyncClient close)
         await call.processor.close()
 
         task = asyncio.create_task(_trigger_summary(call.call_session_id))
