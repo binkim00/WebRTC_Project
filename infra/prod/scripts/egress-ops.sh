@@ -84,11 +84,33 @@ reload_nginx() {
   compose exec -T nginx nginx -s reload
 }
 
+# worker 는 non-root(uid 1001) 로 실행되어 /out 하위 디렉터리 소유권이 없으면
+# 녹화 파이프라인이 끝까지 돈 뒤 파일 저장에서야 permission denied 로 실패한다.
+# 그 실패를 준비 단계에서 미리 잡기 위해 실제 쓰기까지 시도해 본다.
+ensure_output_writable() {
+  if docker exec livekit-egress sh -c \
+      'mkdir -p /out/egress /out/egress-backup \
+       && : > /out/egress/.write-test && rm -f /out/egress/.write-test' 2>/dev/null; then
+    return 0
+  fi
+  local uid gid storage_root
+  uid="$(docker exec livekit-egress id -u 2>/dev/null || echo 1001)"
+  gid="$(docker exec livekit-egress id -g 2>/dev/null || echo 0)"
+  storage_root="$(setting RECORDING_STORAGE_ROOT)"
+  cat >&2 <<MSG
+Egress worker(uid=$uid)가 출력 경로에 쓸 수 없습니다. 호스트에서 실행하세요:
+  sudo mkdir -p $storage_root/egress $storage_root/egress-backup
+  sudo chown -R $uid:$gid $storage_root/egress $storage_root/egress-backup
+MSG
+  exit 1
+}
+
 start_worker() {
   require_mode false
   validate
   compose up -d egress
   wait_worker_healthy
+  ensure_output_writable
   echo "worker만 시작했습니다. backend Egress 기능은 아직 비활성 상태입니다."
 }
 
@@ -99,6 +121,7 @@ activate() {
     echo "먼저 RECORDING_EGRESS_ENABLED=false 상태에서 start-worker를 실행하세요." >&2
     exit 1
   }
+  ensure_output_writable
   compose build --pull backend frontend
   compose up -d backend frontend
   reload_nginx
