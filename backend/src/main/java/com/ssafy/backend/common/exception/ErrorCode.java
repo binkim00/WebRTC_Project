@@ -140,6 +140,8 @@ public enum ErrorCode {
     EMAIL_VERIFICATION_TOKEN_INVALID(HttpStatus.BAD_REQUEST,
             "이메일 인증 정보가 만료되었거나 이미 사용되었습니다."),
     EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "이미 인증이 완료된 이메일입니다."),
+    // SMTP 발송 실패는 서버 밖 원인이라 502로 알리고, 사용자가 재발송으로 복구할 수 있게 한다.
+    EMAIL_VERIFICATION_SEND_FAILED(HttpStatus.BAD_GATEWAY, "인증 메일을 발송하지 못했습니다."),
 
     // 기기 토큰 기반 다계정 응모 탐지
     DEVICE_DUPLICATE_APPLICATION(HttpStatus.CONFLICT, "같은 기기에서 다른 계정으로 이미 응모했습니다."),
