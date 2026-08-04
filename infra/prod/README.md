@@ -46,6 +46,20 @@ docker compose -p project --env-file /home/ubuntu/docker/project/.env \
 남은 시간이 감소한 뒤 `ENDED`와 대기열 완료 및 다음 참가자 호출까지 이어지는지
 확인합니다.
 
+## Egress 자원 점검
+
+Egress PoC 전에 운영 서버의 CPU, 메모리, 디스크와 현재 컨테이너 사용량을 secret 노출
+없이 확인합니다.
+
+```bash
+cd /home/ubuntu/docker/project/S15P11E106
+bash ./infra/prod/scripts/check-egress-capacity.sh
+```
+
+이 출력은 한 시점의 스냅샷입니다. 유휴 상태와 실제 팬미팅 진행 상태에서 각각 한 번씩
+측정해야 하며, `docker stats` 결과와 녹화 파일 용량을 함께 비교합니다. Room Composite
+Egress 한 건의 기준 CPU 비용은 3코어이므로 PoC에서는 동시 녹화를 1건으로 제한합니다.
+
 ### Rollback
 
 배포가 실패하면 코드에서 이전 검증된 커밋의 LiveKit Compose 설정을 복구한 뒤 같은
