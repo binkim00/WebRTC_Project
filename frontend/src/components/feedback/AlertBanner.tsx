@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 import { IconButton } from '../ui/Button'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 export type FeedbackVariant = 'success' | 'info' | 'warning' | 'error'
 
@@ -32,12 +33,15 @@ export type AlertBannerProps = Omit<HTMLAttributes<HTMLDivElement>, 'title'> & {
 export function AlertBanner({
   variant = 'info',
   title,
-  dismissLabel = '알림 닫기',
+  dismissLabel,
   onDismiss,
   children,
   className,
   ...props
 }: AlertBannerProps) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const dismissLabelResolved = dismissLabel ?? t('alertBanner.t1')
   return (
     <div
       className={cn(
@@ -60,7 +64,7 @@ export function AlertBanner({
       </div>
       {onDismiss ? (
         <IconButton
-          aria-label={dismissLabel}
+          aria-label={dismissLabelResolved}
           className="-m-2"
           icon="×"
           onClick={onDismiss}

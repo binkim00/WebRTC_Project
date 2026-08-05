@@ -5,7 +5,7 @@ import { getAuthSession } from '../../api/authSession'
 import { acceptOrganizationInvitation, getMyOrganization } from '../../api/organizations'
 import { AlertBanner } from '../../components/feedback/AlertBanner'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 type InvitationView = 'pending' | 'accepted' | 'expired' | 'conflict'
 
@@ -18,13 +18,13 @@ const footnoteClass =
 /** 수락 실패 응답을 만료·소속 충돌 화면으로 분류한다. 둘 다 아니면 pending에 오류 배너만 띄운다. */
 function classifyAcceptFailure(reason: unknown): InvitationView | undefined {
   if (!(reason instanceof ApiError)) return undefined
-  if (reason.status === 409 || reason.message.includes('소속')) return 'conflict'
+  if (reason.status === 409 || reason.message.includes(translate('influencerOrganizationInvitationPage.t30'))) return 'conflict'
   if (
     reason.status === 404 ||
     reason.status === 410 ||
-    reason.message.includes('만료') ||
-    reason.message.includes('유효하지 않') ||
-    reason.message.includes('사용')
+    reason.message.includes(translate('influencerOrganizationInvitationPage.t31')) ||
+    reason.message.includes(translate('influencerOrganizationInvitationPage.t32')) ||
+    reason.message.includes(translate('influencerOrganizationInvitationPage.t33'))
   ) {
     return 'expired'
   }
@@ -60,7 +60,7 @@ export function InfluencerOrganizationInvitationPage() {
   async function handleAccept() {
     const authToken = getAuthSession()?.accessToken
     if (!authToken) {
-      setError('초대를 수락하려면 인플루언서 계정으로 로그인해 주세요.')
+      setError(t('influencerOrganizationInvitationPage.t25'))
       return
     }
 
@@ -84,7 +84,7 @@ export function InfluencerOrganizationInvitationPage() {
       if (failureView) {
         setView(failureView)
       } else {
-        setError(reason instanceof Error ? reason.message : '조직 초대 수락에 실패했습니다.')
+        setError(reason instanceof Error ? reason.message : t('influencerOrganizationInvitationPage.t26'))
       }
     } finally {
       setSubmitting(false)
@@ -134,7 +134,7 @@ export function InfluencerOrganizationInvitationPage() {
               onClick={() => void handleAccept()}
               type="button"
             >
-              {submitting ? '수락 처리 중…' : '초대 수락하기'}
+              {submitting ? t('influencerOrganizationInvitationPage.t27') : t('influencerOrganizationInvitationPage.t28')}
             </button>
             <button
               className="min-h-14 whitespace-nowrap rounded-[10px] border border-[var(--color-border-control)] bg-white px-[22px] text-base font-bold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
@@ -198,7 +198,7 @@ export function InfluencerOrganizationInvitationPage() {
                 {t('influencerOrganizationInvitationPage.t22')}
               </>
             ) : (
-              '다른 조직에'
+              t('influencerOrganizationInvitationPage.t29')
             )}{' '}
             {t('influencerOrganizationInvitationPage.t23')}
           </p>

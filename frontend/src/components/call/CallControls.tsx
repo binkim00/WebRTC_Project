@@ -35,7 +35,7 @@ export function CallControls({
           onClick={onToggleCamera}
           variant={isCameraEnabled ? 'secondary' : 'outline'}
         >
-          {isCameraEnabled ? '카메라 끄기' : '카메라 켜기'}
+          {isCameraEnabled ? t('callControls.t3') : t('callControls.t4')}
         </Button>
         <Button
           disabled={!isConnected}
@@ -43,7 +43,7 @@ export function CallControls({
           onClick={onToggleMicrophone}
           variant={isMicrophoneEnabled ? 'secondary' : 'outline'}
         >
-          {isMicrophoneEnabled ? '마이크 끄기' : '마이크 켜기'}
+          {isMicrophoneEnabled ? t('callControls.t5') : t('callControls.t6')}
         </Button>
         <Link
           className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"

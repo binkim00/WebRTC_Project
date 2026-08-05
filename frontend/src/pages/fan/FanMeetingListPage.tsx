@@ -127,7 +127,7 @@ export function FanMeetingListPage() {
     const session = getAuthSession()
 
     if (!session || session.role !== 'FAN') {
-      setListError('팬 계정으로 로그인해 주세요.')
+      setListError(t('fanMeetingListPage.t40'))
       setLoading(false)
       return () => controller.abort()
     }
@@ -156,8 +156,8 @@ export function FanMeetingListPage() {
             if (!controller.signal.aborted) {
               setPartialWarning(
                 error instanceof Error
-                  ? `녹화 목록을 불러오지 못했습니다: ${error.message}`
-                  : '녹화 목록을 불러오지 못했습니다.',
+                  ? t('fanMeetingListPage.t55', { p0: error.message })
+                  : t('fanMeetingListPage.t41'),
               )
             }
             return [] as RecordingSummaryResponse[]
@@ -215,7 +215,7 @@ export function FanMeetingListPage() {
         if (controller.signal.aborted) return
         if (detailFailureCount > 0) {
           setPartialWarning((current) =>
-            [current, `${detailFailureCount}개 팬미팅의 최신 상태를 확인하지 못했습니다.`]
+            [current, t('fanMeetingListPage.t56', { p0: detailFailureCount })]
               .filter(Boolean)
               .join(' '),
           )
@@ -233,7 +233,7 @@ export function FanMeetingListPage() {
         setListError(
           error instanceof ApiError || error instanceof TypeError
             ? error.message
-            : '내 팬미팅 목록을 불러오지 못했습니다.',
+            : t('fanMeetingListPage.t42'),
         )
       } finally {
         if (!controller.signal.aborted) {
@@ -244,6 +244,8 @@ export function FanMeetingListPage() {
     })()
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey])
 
   /**
@@ -363,7 +365,7 @@ export function FanMeetingListPage() {
     const session = getAuthSession()
 
     if (!session || session.role !== 'FAN') {
-      setQueueError({ meetingId, message: '팬 계정으로 로그인한 뒤 입장해 주세요.' })
+      setQueueError({ meetingId, message: t('fanMeetingListPage.t43') })
       return
     }
 
@@ -390,7 +392,7 @@ export function FanMeetingListPage() {
     if (!item.recording || downloadingRecordingId !== undefined) return
     const session = getAuthSession()
     if (!session) {
-      setDownloadError({ meetingId: item.application.meetingId, message: '로그인이 필요합니다.' })
+      setDownloadError({ meetingId: item.application.meetingId, message: t('fanMeetingListPage.t44') })
       return
     }
 
@@ -411,7 +413,7 @@ export function FanMeetingListPage() {
     } catch (error: unknown) {
       setDownloadError({
         meetingId: item.application.meetingId,
-        message: error instanceof Error ? error.message : '다운로드 링크를 만들지 못했습니다.',
+        message: error instanceof Error ? error.message : t('fanMeetingListPage.t45'),
       })
     } finally {
       setDownloadingRecordingId(undefined)
@@ -478,7 +480,7 @@ export function FanMeetingListPage() {
       ) : null}
       {/* 대기열 자동 갱신 상태는 화면 구성 요소를 늘리지 않고 보조기기에만 알린다. */}
       <p aria-live="polite" className="sr-only">
-        {refreshing ? '대기열 상태를 확인하는 중입니다.' : ''}
+        {refreshing ? t('fanMeetingListPage.t46') : ''}
       </p>
 
       <div aria-label={t('fanMeetingListPage.t12')} className="mt-6 flex gap-2" role="tablist">
@@ -563,7 +565,7 @@ export function FanMeetingListPage() {
                     <p
                       className={`text-[13px] font-extrabold ${today ? 'text-[var(--color-primary-coral)]' : 'text-[var(--color-text-muted)]'}`}
                     >
-                      {today ? '오늘 진행' : '예정된 팬미팅'}
+                      {today ? t('fanMeetingListPage.t47') : t('fanMeetingListPage.t48')}
                     </p>
                     <h2 className="mt-2 text-[22px] font-extrabold tracking-[-0.032em]">
                       {item.application.meetingTitle}
@@ -582,7 +584,7 @@ export function FanMeetingListPage() {
                     <span
                       className={`text-sm ${canEnter ? 'font-bold text-[var(--color-success)]' : 'font-semibold text-[var(--color-text-muted)]'}`}
                     >
-                      {canEnter ? '지금 입장할 수 있어요' : '입장 전에 장비를 확인해 주세요'}
+                      {canEnter ? t('fanMeetingListPage.t49') : t('fanMeetingListPage.t50')}
                     </span>
                     {canEnter ? (
                       <Button
@@ -689,14 +691,14 @@ export function FanMeetingListPage() {
                           type="button"
                         >
                           {downloadingRecordingId === item.recording.recordingId
-                            ? '다운로드 준비 중'
-                            : '영상 다운로드'}
+                            ? t('fanMeetingListPage.t51')
+                            : t('fanMeetingListPage.t52')}
                         </button>
                       </>
                     ) : (
                       <>
                         <p className="mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-extrabold text-[var(--color-text-muted)]">
-                          {recordingEnabled === false ? '녹화하지 않은 팬미팅' : '영상 보관 종료'}
+                          {recordingEnabled === false ? t('fanMeetingListPage.t53') : t('fanMeetingListPage.t54')}
                         </p>
                         <p className="mt-1 text-sm font-medium text-[var(--color-text-muted)]">
                           {t('fanMeetingListPage.t34')}

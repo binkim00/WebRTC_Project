@@ -34,7 +34,7 @@ export function InfluencerMeetingCallPage() {
       //  1인 운영자의 대기열 오픈·호출도 지금은 운영 콘솔이 아니라 대기실에 있다.)
       endTo={`/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/ready`}
       meetingId={fanMeetingId}
-      participantLabel="팬 영상"
+      participantLabel={t('influencerRoutePages.t5')}
       screenId="ID-003"
       sidePanel={<InfluencerCallSidePanel meetingId={fanMeetingId} />}
       forceEndOnLeave

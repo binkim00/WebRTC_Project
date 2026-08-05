@@ -1,3 +1,4 @@
+import { translate } from '../../i18n'
 /**
  * 1인 통화 시간(`callDurationSec`) 입력을 다루는 공용 헬퍼다.
  *
@@ -48,28 +49,28 @@ export function minutesInputToCallDurationSec(value: string): number | undefined
  */
 export function validateCallDurationSec(seconds: number | undefined): string | undefined {
   if (seconds === undefined || !Number.isFinite(seconds)) {
-    return '1인 통화 시간을 입력해 주세요.'
+    return translate('callDuration.t1')
   }
   if (!Number.isInteger(seconds) || seconds <= 0) {
-    return '1인 통화 시간은 0보다 큰 값이어야 합니다.'
+    return translate('callDuration.t2')
   }
   if (seconds < CALL_DURATION_MIN_MINUTES * SECONDS_PER_MINUTE) {
-    return `1인 통화 시간은 ${CALL_DURATION_MIN_MINUTES}분 이상으로 입력해 주세요.`
+    return translate('callDuration.t3', { p0: CALL_DURATION_MIN_MINUTES })
   }
   if (seconds > CALL_DURATION_MAX_MINUTES * SECONDS_PER_MINUTE) {
-    return `1인 통화 시간은 ${CALL_DURATION_MAX_MINUTES}분 이하로 입력해 주세요.`
+    return translate('callDuration.t4', { p0: CALL_DURATION_MAX_MINUTES })
   }
   return undefined
 }
 
 /** 확인 화면에서 쓸 사람이 읽기 쉬운 표기를 만든다. (예: 90 → "1분 30초") */
 export function formatCallDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '미설정'
+  if (!Number.isFinite(seconds) || seconds <= 0) return translate('callDuration.t5')
 
   const minutes = Math.floor(seconds / SECONDS_PER_MINUTE)
   const restSeconds = Math.round(seconds % SECONDS_PER_MINUTE)
 
-  if (minutes === 0) return `${restSeconds}초`
-  if (restSeconds === 0) return `${minutes}분`
-  return `${minutes}분 ${restSeconds}초`
+  if (minutes === 0) return translate('callDuration.t6', { p0: restSeconds })
+  if (restSeconds === 0) return translate('callDuration.t7', { p0: minutes })
+  return translate('callDuration.t8', { p0: minutes, p1: restSeconds })
 }

@@ -30,7 +30,7 @@ export function FanMeetingCallPage() {
       callSessionId={callSessionId}
       endTo={`/fan/fan-meetings/${fanMeetingId}/complete`}
       meetingId={fanMeetingId}
-      participantLabel="인플루언서 영상"
+      participantLabel={t('fanRoutePages.t5')}
       screenId="FN-005"
     />
   )

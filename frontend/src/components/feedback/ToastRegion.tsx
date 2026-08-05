@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '../ui/cn'
 import { AlertBanner, type FeedbackVariant } from './AlertBanner'
+import { useTranslation } from '../../i18n'
 
 export type ToastItem = {
   id: string
@@ -19,12 +20,15 @@ export type ToastRegionProps = {
 export function ToastRegion({
   toasts,
   onDismiss,
-  label = '알림 메시지',
+  label,
   className,
 }: ToastRegionProps) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const resolvedLabel = label ?? t('toastRegion.t1')
   return (
     <section
-      aria-label={label}
+      aria-label={resolvedLabel}
       className={cn(
         'fixed bottom-5 right-5 z-50 grid w-[min(24rem,calc(100vw-2.5rem))] gap-2',
         className,

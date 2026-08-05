@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 import { unwrapEnvelope } from './envelope'
+import { translate } from '../i18n'
 
 /** 백엔드 AiCallSummaryStatus enum과 같은 값이다. */
 export type AiCallSummaryStatus = 'GENERATING' | 'COMPLETED' | 'FAILED'
@@ -67,7 +68,7 @@ export async function getCallSummary(
   if (isRecord(data) && data.status === 'GENERATING') {
     return {
       state: 'GENERATING',
-      message: typeof data.message === 'string' ? data.message : '요약을 생성 중입니다',
+      message: typeof data.message === 'string' ? data.message : translate('aiSummaries.t1'),
     }
   }
 

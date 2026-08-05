@@ -56,7 +56,7 @@ export function ScreenPage({
   if (missingParam) {
     return (
       <InvalidRouteState
-        message={`URL에 필요한 ${missingParam} 값이 없습니다. 이전 화면에서 올바른 식별자를 사용해 다시 이동해 주세요.`}
+        message={t('screenPage.t8', { p0: missingParam })}
         title={t('screenPage.t4')}
       />
     )

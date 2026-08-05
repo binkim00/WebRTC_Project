@@ -44,7 +44,7 @@ export function InfluencerMyFansPage() {
   useEffect(() => {
     const session = getAuthSession()
     if (!session) {
-      setError('인플루언서 계정으로 로그인해 주세요.')
+      setError(t('influencerMyFansPage.t28'))
       return
     }
 
@@ -90,12 +90,14 @@ export function InfluencerMyFansPage() {
       setError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '내 팬 목록을 불러오지 못했습니다.',
+          : t('influencerMyFansPage.t29'),
       )
       setFans((current) => current ?? [])
     })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 선택한 팬의 팬미팅별 메모 이력을 읽는다.
@@ -141,10 +143,10 @@ export function InfluencerMyFansPage() {
   const noFans = !loading && allFans.length === 0
 
   const summary = [
-    { label: '만난 팬', value: `${allFans.length}명`, highlight: false },
-    { label: '누적 팬미팅', value: `${totalMeets}회`, highlight: false },
-    { label: '재참여 팬', value: `${repeatCount}명`, highlight: repeatCount > 0 },
-    { label: '메모 작성', value: `${memoTotal}건`, highlight: false },
+    { label: t('influencerMyFansPage.t30'), value: t('influencerMyFansPage.t40', { p0: allFans.length }), highlight: false },
+    { label: t('influencerMyFansPage.t31'), value: t('influencerMyFansPage.t41', { p0: totalMeets }), highlight: false },
+    { label: t('influencerMyFansPage.t32'), value: t('influencerMyFansPage.t42', { p0: repeatCount }), highlight: repeatCount > 0 },
+    { label: t('influencerMyFansPage.t33'), value: t('influencerMyFansPage.t43', { p0: memoTotal }), highlight: false },
   ] as const
 
   // 메모 관리는 팬 기록 화면(메모 탭)으로 이동하며, 경로에 팬미팅 ID가 필요해 가장 최근 메모의 회차를 쓴다.
@@ -236,12 +238,12 @@ export function InfluencerMyFansPage() {
                   role="status"
                 >
                   <strong className="text-lg font-extrabold tracking-[-0.03em] text-[var(--color-text-primary)]">
-                    {noFans ? '아직 만난 팬이 없어요' : '검색 결과가 없습니다'}
+                    {noFans ? t('influencerMyFansPage.t34') : t('influencerMyFansPage.t35')}
                   </strong>
                   <span className="mt-2 max-w-[400px] text-[15px] font-medium leading-[1.6] text-[var(--color-text-tertiary)]">
                     {noFans
-                      ? '팬미팅을 진행하면 만난 팬이 이곳에 쌓이고, 팬미팅마다 메모를 남길 수 있어요.'
-                      : '닉네임을 다시 확인해 주세요.'}
+                      ? t('influencerMyFansPage.t36')
+                      : t('influencerMyFansPage.t37')}
                   </span>
                 </div>
               ) : (
@@ -285,10 +287,10 @@ export function InfluencerMyFansPage() {
                           className={`whitespace-nowrap text-sm font-bold ${memoCount ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
                         >
                           {memoCount === undefined
-                            ? '메모 확인 중'
+                            ? t('influencerMyFansPage.t38')
                             : memoCount > 0
-                              ? `메모 ${memoCount}`
-                              : '메모 없음'}
+                              ? t('influencerMyFansPage.t44', { p0: memoCount })
+                              : t('influencerMyFansPage.t39')}
                         </span>
                       </button>
                     )

@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
 export type ManagerMeetingSummary = {
   meetingId: string
@@ -48,7 +49,7 @@ function unwrapData(value: unknown): unknown {
 function readString(value: unknown, fieldName: string): string {
   if (typeof value === 'string' && value.trim()) return value
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('managerMeetings.t1', { p0: fieldName }))
 }
 
 function readNumber(value: unknown, fallback: number): number {
@@ -65,7 +66,7 @@ function parseMeeting(value: unknown): ManagerMeetingSummary {
   const influencer = asRecord(record?.influencer)
 
   if (!record) {
-    throw new TypeError('팬미팅 목록 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('managerMeetings.t2'))
   }
 
   return {
@@ -114,7 +115,7 @@ export async function fetchManagerMeetings(
       : null
 
   if (!rawContent) {
-    throw new TypeError('팬미팅 목록 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('managerMeetings.t3'))
   }
 
   const content = rawContent.map(parseMeeting)
@@ -206,7 +207,7 @@ export async function fetchOwnedMeetings(
       : null
 
   if (!rawContent) {
-    throw new TypeError('내 팬미팅 목록 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('managerMeetings.t4'))
   }
 
   const content = rawContent.map(parseMeeting)

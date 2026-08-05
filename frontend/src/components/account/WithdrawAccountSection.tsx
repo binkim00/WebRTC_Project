@@ -15,11 +15,13 @@ import { useTranslation } from '../../i18n'
  * 백엔드가 탈퇴와 함께 액세스 토큰을 무효화하므로 성공 후에는 세션을 지우고 로그인 화면으로 보낸다.
  */
 export function WithdrawAccountSection({
-  description = '탈퇴하면 응모 내역과 참여 기록을 다시 볼 수 없습니다.',
+  description,
 }: {
   description?: string
 }) {
   const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const descriptionResolved = description ?? t('withdrawAccountSection.t7')
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -37,11 +39,11 @@ export function WithdrawAccountSection({
   async function submit() {
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+      setError(t('withdrawAccountSection.t8'))
       return
     }
     if (!password) {
-      setError('비밀번호를 입력해 주세요.')
+      setError(t('withdrawAccountSection.t9'))
       return
     }
 
@@ -57,13 +59,13 @@ export function WithdrawAccountSection({
       if (cause instanceof ApiError) {
         setError(
           cause.status === 401
-            ? '비밀번호가 올바르지 않습니다.'
+            ? t('withdrawAccountSection.t10')
             : cause.status === 409
-              ? '진행 중인 팬미팅이 있어 지금은 탈퇴할 수 없습니다.'
+              ? t('withdrawAccountSection.t11')
               : cause.message,
         )
       } else {
-        setError('회원탈퇴를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+        setError(t('withdrawAccountSection.t12'))
       }
       setSubmitting(false)
     }
@@ -82,7 +84,7 @@ export function WithdrawAccountSection({
       </div>
 
       <Dialog
-        description={description}
+        description={descriptionResolved}
         footer={
           <div className="flex justify-end gap-3">
             <Button disabled={submitting} onClick={closeDialog} variant="secondary">

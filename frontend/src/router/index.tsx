@@ -160,6 +160,15 @@ export const router = createBrowserRouter([
           'ServiceNoticeDetailPage',
         ),
       },
+      // 서비스 운영자(ADMIN) 전용 영역이다. 접근 제어는 /admin/* 경로에 걸린
+      // MANAGE_SERVICE_NOTICES 권한이 담당한다. (router/roleCapabilities.ts)
+      {
+        path: 'admin/service-notices',
+        lazy: lazyPage(
+          () => import('../pages/admin/AdminServiceNoticesPage'),
+          'AdminServiceNoticesPage',
+        ),
+      },
       {
         path: 'community/posts/:postId',
         lazy: lazyPage(

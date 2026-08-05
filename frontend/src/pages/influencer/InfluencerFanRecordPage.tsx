@@ -102,20 +102,22 @@ export function InfluencerFanRecordPage() {
         setPageError(undefined)
       } catch (reason) {
         if (signal?.aborted) return
-        setPageError(errorMessage(reason, '팬 메모를 불러오지 못했습니다.'))
+        setPageError(errorMessage(reason, t('influencerFanRecordPage.t18')))
       }
     },
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [authToken, fanId],
   )
 
   useEffect(() => {
     if (!fanId) {
-      setPageError('팬 식별자가 없습니다.')
+      setPageError(t('influencerFanRecordPage.t19'))
       setLoading(false)
       return
     }
     if (!authToken) {
-      setPageError('로그인 정보가 없습니다. 로그인 후 다시 시도해 주세요.')
+      setPageError(t('influencerFanRecordPage.t20'))
       setLoading(false)
       return
     }
@@ -127,6 +129,8 @@ export function InfluencerFanRecordPage() {
     })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, fanId, loadMemos])
 
   useEffect(() => {
@@ -315,29 +319,29 @@ export function InfluencerFanRecordPage() {
         return loadMemos()
       })
       .catch((reason: unknown) => {
-        setPageError(errorMessage(reason, '메모 저장에 실패했습니다.'))
+        setPageError(errorMessage(reason, t('influencerFanRecordPage.t21')))
       })
       .finally(() => setSaving(false))
   }
 
-  const fanName = participant?.nickname ?? `팬 ${fanId ?? ''}`.trim()
+  const fanName = participant?.nickname ?? t('influencerFanRecordPage.t32', { p0: fanId ?? '' }).trim()
   const recentSessionDate = formatDate(sessions.at(0)?.at)
   const memoMeta = hasMemo
     ? justSaved
-      ? '방금 저장'
+      ? t('influencerFanRecordPage.t22')
       : formatDateTime(selected?.savedAt)
-    : '아직 작성하지 않았어요.'
+    : t('influencerFanRecordPage.t23')
 
   const hint = pageError
     ? pageError
     : justSaved
-      ? '메모가 저장되었습니다. 통화 화면에서도 볼 수 있어요.'
+      ? t('influencerFanRecordPage.t24')
       : editing
         ? canSave
-          ? '저장하면 기존 메모를 덮어씁니다.'
-          : '내용을 입력하면 저장할 수 있어요.'
+          ? t('influencerFanRecordPage.t25')
+          : t('influencerFanRecordPage.t26')
         : hasMemo
-          ? '다음 통화 화면에 이 메모가 함께 표시됩니다.'
+          ? t('influencerFanRecordPage.t27')
           : ''
   const hintClassName = pageError
     ? 'text-[var(--color-error)]'
@@ -361,7 +365,7 @@ export function InfluencerFanRecordPage() {
       <div className="mt-4 flex items-center gap-4">
         {participant?.profileImageUrl ? (
           <img
-            alt={`팬 ${fanName}`}
+            alt={t('influencerFanRecordPage.t33', { p0: fanName })}
             className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
             src={participant.profileImageUrl}
           />
@@ -445,7 +449,7 @@ export function InfluencerFanRecordPage() {
                             : 'text-[var(--color-text-muted)]',
                         ].join(' ')}
                       >
-                        {sessionHasMemo ? '메모 있음' : '메모 없음'}
+                        {sessionHasMemo ? t('influencerFanRecordPage.t28') : t('influencerFanRecordPage.t29')}
                       </span>
                     </span>
                     <span
@@ -509,7 +513,7 @@ export function InfluencerFanRecordPage() {
                     onClick={startEdit}
                     variant="secondary"
                   >
-                    {hasMemo ? '메모 수정' : '메모 작성'}
+                    {hasMemo ? t('influencerFanRecordPage.t30') : t('influencerFanRecordPage.t31')}
                   </Button>
                 )}
               </div>
@@ -541,7 +545,7 @@ export function InfluencerFanRecordPage() {
                       {t('influencerFanRecordPage.t16')}
                     </Button>
                     <span className="text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
-                      {`${draft.length}자`}
+                      {t('influencerFanRecordPage.t34', { p0: draft.length })}
                     </span>
                   </div>
                 </>

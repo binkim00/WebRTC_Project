@@ -38,7 +38,7 @@ import {
 } from './subtitleChannel'
 import type { MediaAction, VideoCallRoomProps } from './types'
 import { useRemainingTime } from './useRemainingTime'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 /**
  * 종료 시각을 넘긴 뒤 서버 status=ENDED를 기다려 주는 시간이다.
@@ -70,8 +70,8 @@ function formatCallDuration(
 
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
-  if (minutes === 0) return `${seconds}초`
-  return seconds > 0 ? `${minutes}분 ${seconds}초` : `${minutes}분`
+  if (minutes === 0) return translate('connectedCallRoom.t46', { p0: seconds })
+  return seconds > 0 ? translate('connectedCallRoom.t47', { p0: minutes, p1: seconds }) : translate('connectedCallRoom.t48', { p0: minutes })
 }
 
 /** 자막·이름 계산에 필요한 참가자 정보만 좁혀 받는다. (Participant·TrackReference 모두 이 형태를 만족한다) */
@@ -221,9 +221,11 @@ export function ConnectedCallRoom({
       participants.find((participant) => participantRole(participant) === role)?.name?.trim()
 
     return {
-      influencer: nameOf('INFLUENCER') || '인플루언서',
-      fan: nameOf('FAN') || '팬',
+      influencer: nameOf('INFLUENCER') || t('connectedCallRoom.t18'),
+      fan: nameOf('FAN') || t('connectedCallRoom.t19'),
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participants])
 
   // 핸들러 identity가 바뀌면 데이터 채널 구독이 다시 걸릴 수 있고, 그 틈에 도착한 자막을
@@ -327,7 +329,7 @@ export function ConnectedCallRoom({
     try {
       await localParticipant.setCameraEnabled(!isCameraEnabled)
     } catch (error: unknown) {
-      setMediaError(error instanceof Error ? error.message : '카메라 상태를 변경하지 못했습니다.')
+      setMediaError(error instanceof Error ? error.message : t('connectedCallRoom.t20'))
     } finally {
       setMediaAction(undefined)
     }
@@ -340,7 +342,7 @@ export function ConnectedCallRoom({
     try {
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
     } catch (error: unknown) {
-      setMediaError(error instanceof Error ? error.message : '마이크 상태를 변경하지 못했습니다.')
+      setMediaError(error instanceof Error ? error.message : t('connectedCallRoom.t21'))
     } finally {
       setMediaAction(undefined)
     }
@@ -366,7 +368,7 @@ export function ConnectedCallRoom({
           } else {
             await forceEndCallSession(
               callSessionId,
-              { reason: '영상통화 종료' },
+              { reason: t('connectedCallRoom.t22') },
               { authToken },
             )
           }
@@ -378,7 +380,7 @@ export function ConnectedCallRoom({
             setMediaError(
               error instanceof Error
                 ? error.message
-                : '통화 종료 상태를 서버에 반영하지 못했습니다.',
+                : t('connectedCallRoom.t23'),
             )
             return
           }
@@ -400,6 +402,8 @@ export function ConnectedCallRoom({
       }
       navigate(endTo)
     },
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 콜백을 다시 만든다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       announceCallEnded,
       authSession,
@@ -422,6 +426,8 @@ export function ConnectedCallRoom({
     leavingRef.current = true
     await room.disconnect()
     navigate(endTo)
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endTo, navigate, room])
 
   async function handleRecordingRetry() {
@@ -524,39 +530,39 @@ export function ConnectedCallRoom({
   /** 방금 끝난 통화의 길이다. 서버가 시각을 주지 않았으면 표시하지 않는다. */
   const finishedDurationLabel = formatCallDuration(sessionStatus.startedAt, sessionStatus.endedAt)
 
-  let connectionLabel = '연결 중'
+  let connectionLabel = t('connectedCallRoom.t24')
 
   if (waitingForNextFan) {
-    connectionLabel = '다음 팬 대기 중'
+    connectionLabel = t('connectedCallRoom.t25')
   } else if (isConnected && remoteParticipants.length > 0) {
-    connectionLabel = '연결 완료'
+    connectionLabel = t('connectedCallRoom.t26')
   } else if (isConnected) {
-    connectionLabel = '입장 대기'
+    connectionLabel = t('connectedCallRoom.t27')
   } else if (isReconnecting) {
-    connectionLabel = '연결 끊김'
+    connectionLabel = t('connectedCallRoom.t28')
   } else if (connectionState === ConnectionState.Disconnected) {
-    connectionLabel = '연결 종료'
+    connectionLabel = t('connectedCallRoom.t29')
   }
 
   // dc.html의 connecting·disconnected 오버레이. 연결이 정상이면 아무것도 덮지 않는다.
   const overlay = isReconnecting
     ? {
-        title: '연결이 끊어졌어요',
-        description: '현재 화면을 유지한 채 연결 상태를 확인하고 있습니다.',
+        title: t('connectedCallRoom.t30'),
+        description: t('connectedCallRoom.t31'),
         showLink: true,
       }
     : connectionState === ConnectionState.Connecting
       ? {
-          title: '영상통화를 연결하고 있어요',
-          description: '잠시만 기다려 주세요.',
+          title: t('connectedCallRoom.t32'),
+          description: t('connectedCallRoom.t33'),
           showLink: true,
         }
       : connectionState === ConnectionState.Disconnected && !departurePending
         ? {
-            title: '연결이 끊어졌어요',
-            description: '현재 팬 정보는 그대로 유지됩니다.',
+            title: t('connectedCallRoom.t34'),
+            description: t('connectedCallRoom.t35'),
             showLink: false,
-            actionLabel: '다시 연결',
+            actionLabel: t('connectedCallRoom.t36'),
             // LiveKit 자동 복구가 끝내 실패한 상태라, 토큰 발급부터 다시 시작한다.
             onAction: () => window.location.reload(),
           }
@@ -565,9 +571,9 @@ export function ConnectedCallRoom({
   // dc.html의 device-error — 통화를 가리지 않고 상단 배너로 원인과 복구 행동을 준다.
   const deviceAlert = mediaError
     ? {
-        title: '장치를 확인해 주세요',
+        title: t('connectedCallRoom.t37'),
         description: mediaError,
-        actionLabel: '장치 재확인',
+        actionLabel: t('connectedCallRoom.t38'),
         onAction: () => {
           setMediaError(undefined)
           void localParticipant.setCameraEnabled(true).catch(() => undefined)
@@ -577,11 +583,11 @@ export function ConnectedCallRoom({
     : undefined
 
   const footNote = mediaError
-    ? '장치 문제가 계속되면 팬미팅을 나간 뒤 장비 점검을 다시 진행해 주세요.'
+    ? t('connectedCallRoom.t39')
     : isReconnecting
-      ? '통화 시간은 연결이 복구된 뒤부터 다시 계산됩니다.'
+      ? t('connectedCallRoom.t40')
       : authSession?.role === 'FAN' && recordingEnabled
-        ? '통화가 끝나면 녹화 영상이 저장되고, 남긴 말과 함께 기록에 보관됩니다.'
+        ? t('connectedCallRoom.t41')
         : undefined
 
   const remoteVideo = remoteCameraTrack ? (
@@ -638,7 +644,7 @@ export function ConnectedCallRoom({
         remoteName={remoteName}
         remoteVideo={remoteVideo}
         // 통화 시작 전에는 아직 줄어들 남은 시간이 없으므로 설정된 통화 시간임을 밝힌다.
-        timeLabel={remaining.counting ? '남은 시간' : '통화 시간'}
+        timeLabel={remaining.counting ? t('connectedCallRoom.t42') : t('connectedCallRoom.t43')}
         // 종료 직전에는 타이머가 경고색으로 바뀌어 마무리를 준비하게 한다.
         timeUrgent={remaining.counting && remaining.label <= '00:05'}
         timeValue={remaining.label}
@@ -659,8 +665,8 @@ export function ConnectedCallRoom({
           <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1.5">
             <h2 className="text-[22px] font-black tracking-[-0.032em] text-white">
               {lastRemoteName
-                ? `${lastRemoteName}님과의 통화가 끝났어요`
-                : '통화가 끝났어요'}
+                ? t('connectedCallRoom.t49', { p0: lastRemoteName })
+                : t('connectedCallRoom.t44')}
             </h2>
             {finishedDurationLabel ? (
               <p className="text-[15px] font-bold tabular-nums text-white/70">
@@ -717,7 +723,7 @@ export function ConnectedCallRoom({
 
       {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'failed' ? (
         <AlertBanner title={t('connectedCallRoom.t15')} variant="error">
-          <p>{recordingError ?? '브라우저에 임시 보관했으며 다시 업로드할 수 있습니다.'}</p>
+          <p>{recordingError ?? t('connectedCallRoom.t45')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               className="rounded-[var(--radius-control)] border border-current px-3 py-2 font-semibold"

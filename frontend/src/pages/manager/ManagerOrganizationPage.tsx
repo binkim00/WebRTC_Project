@@ -14,7 +14,7 @@ import { AlertBanner } from '../../components/feedback/AlertBanner'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Button } from '../../components/ui/Button'
 import { TextField, Textarea } from '../../components/ui/FormControls'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 const initialForm = {
   name: '',
@@ -56,11 +56,11 @@ function isExpired(invitation: IssuedInvitation, now: number): boolean {
   return Number.isFinite(expiry) && expiry <= now
 }
 
-const roleLabels: Record<string, string> = {
-  MANAGER: '매니저',
-  INFLUENCER: '인플루언서',
-  SOLO_INFLUENCER: '인플루언서',
-}
+const roleLabels = (): Record<string, string> => ({
+  MANAGER: translate('managerOrganizationPage.t69'),
+  INFLUENCER: translate('managerOrganizationPage.t70'),
+  SOLO_INFLUENCER: translate('managerOrganizationPage.t71'),
+})
 
 /**
  * 매니저의 조직 생성, 구성원 관리, 인플루언서 초대 화면이다.
@@ -104,7 +104,7 @@ export function ManagerOrganizationPage() {
   const loadOrganization = useCallback(async (showSpinner = true, signal?: AbortSignal) => {
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('조직 정보를 조회하려면 먼저 로그인해 주세요.')
+      setError(t('managerOrganizationPage.t42'))
       setLoading(false)
       return
     }
@@ -116,10 +116,12 @@ export function ManagerOrganizationPage() {
     } catch (cause) {
       // 폴링이 취소한 요청이면 사용자에게 보여줄 오류가 아니다.
       if (signal?.aborted) return
-      setError(cause instanceof Error ? cause.message : '조직 정보를 불러오지 못했습니다.')
+      setError(cause instanceof Error ? cause.message : t('managerOrganizationPage.t43'))
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /** usePolling에 넘길 백그라운드 동기화 함수입니다. 스피너를 띄우지 않습니다. */
@@ -167,7 +169,7 @@ export function ManagerOrganizationPage() {
       await createOrganization({ ...form, description: form.description || undefined }, token)
       await loadOrganization()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '조직 생성에 실패했습니다.')
+      setError(cause instanceof Error ? cause.message : t('managerOrganizationPage.t44'))
     } finally {
       setCreating(false)
     }
@@ -197,7 +199,7 @@ export function ManagerOrganizationPage() {
   const inviteIdValid = inviteId.trim() !== '' && Number.isInteger(inviteIdNumber) && inviteIdNumber > 0
   const inviteInputError =
     inviteTouched && inviteId.trim() !== '' && !inviteIdValid
-      ? '대상 인플루언서의 회원번호를 숫자로 입력해 주세요.'
+      ? t('managerOrganizationPage.t45')
       : undefined
 
   async function handleSendInvite() {
@@ -214,7 +216,7 @@ export function ManagerOrganizationPage() {
       }
     } catch (cause) {
       setInviteServerError(
-        cause instanceof Error ? cause.message : '인플루언서 초대에 실패했습니다.',
+        cause instanceof Error ? cause.message : t('managerOrganizationPage.t46'),
       )
     } finally {
       setSending(false)
@@ -231,7 +233,7 @@ export function ManagerOrganizationPage() {
         setCopiedToken(undefined)
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '초대 링크를 재발급하지 못했습니다.')
+      setError(cause instanceof Error ? cause.message : t('managerOrganizationPage.t47'))
     } finally {
       setReissuingId(undefined)
     }
@@ -242,7 +244,7 @@ export function ManagerOrganizationPage() {
       await navigator.clipboard.writeText(invitation.url)
       setCopiedToken(invitation.token)
     } catch {
-      setError('링크를 자동으로 복사하지 못했습니다. 브라우저 권한을 확인해 주세요.')
+      setError(t('managerOrganizationPage.t48'))
     }
   }
 
@@ -258,7 +260,7 @@ export function ManagerOrganizationPage() {
       setRemoveTarget(undefined)
       await loadOrganization(false)
     } catch (cause) {
-      setRemoveError(cause instanceof Error ? cause.message : '구성원 소속 해제에 실패했습니다.')
+      setRemoveError(cause instanceof Error ? cause.message : t('managerOrganizationPage.t49'))
     } finally {
       setRemoving(false)
     }
@@ -380,10 +382,10 @@ export function ManagerOrganizationPage() {
           >
             {(
               [
-                { label: '전체 구성원', value: `${members.length}명`, highlight: false },
-                { label: '인플루언서', value: `${influencerCount}명`, highlight: false },
-                { label: '매니저', value: `${managerCount}명`, highlight: false },
-                { label: '초대 대기', value: `${pendingCount}건`, highlight: pendingCount > 0 },
+                { label: t('managerOrganizationPage.t50'), value: t('managerOrganizationPage.t72', { p0: members.length }), highlight: false },
+                { label: t('managerOrganizationPage.t51'), value: t('managerOrganizationPage.t73', { p0: influencerCount }), highlight: false },
+                { label: t('managerOrganizationPage.t52'), value: t('managerOrganizationPage.t74', { p0: managerCount }), highlight: false },
+                { label: t('managerOrganizationPage.t53'), value: t('managerOrganizationPage.t75', { p0: pendingCount }), highlight: pendingCount > 0 },
               ] as const
             ).map((cell, index) => (
               <div
@@ -421,7 +423,7 @@ export function ManagerOrganizationPage() {
                   className="hidden gap-4 border-b border-[var(--color-border-control)] pb-2.5 md:grid md:grid-cols-[minmax(0,1fr)_110px_130px_88px]"
                   role="row"
                 >
-                  {['구성원', '역할', '합류일', '관리'].map((label, index) => (
+                  {[t('managerOrganizationPage.t54'), t('managerOrganizationPage.t55'), t('managerOrganizationPage.t56'), t('managerOrganizationPage.t57')].map((label, index) => (
                     <span
                       className={`text-[13px] font-bold text-[var(--color-text-tertiary)] ${index === 3 ? 'text-right' : ''}`}
                       key={label}
@@ -451,7 +453,7 @@ export function ManagerOrganizationPage() {
                         className={`text-[15px] font-extrabold ${member.userRole === 'MANAGER' ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-primary-coral)]'}`}
                         role="cell"
                       >
-                        {roleLabels[member.userRole] ?? member.userRole}
+                        {roleLabels()[member.userRole] ?? member.userRole}
                       </span>
                       <span
                         className="text-[15px] font-semibold tabular-nums text-[var(--color-text-tertiary)] max-md:hidden"
@@ -462,7 +464,7 @@ export function ManagerOrganizationPage() {
                       <div className="text-right" role="cell">
                         <button
                           aria-label={
-                            isSelf ? '본인은 소속을 해제할 수 없습니다' : `${member.nickname} 소속 해제`
+                            isSelf ? t('managerOrganizationPage.t58') : t('managerOrganizationPage.t76', { p0: member.nickname })
                           }
                           className={`min-h-10 whitespace-nowrap rounded-lg border bg-white px-3 text-sm font-bold ${
                             isSelf
@@ -529,11 +531,11 @@ export function ManagerOrganizationPage() {
                             <span
                               className={`whitespace-nowrap text-[13px] font-extrabold ${expired ? 'text-[var(--color-text-tertiary)]' : 'text-[var(--color-warning)]'}`}
                             >
-                              {expired ? '만료' : '대기'}
+                              {expired ? t('managerOrganizationPage.t59') : t('managerOrganizationPage.t60')}
                             </span>
                           </div>
                           <p className="mt-[7px] text-sm font-medium leading-[1.55] tabular-nums text-[var(--color-text-tertiary)]">
-                            {formatDateTime(invitation.expiresAt)} {expired ? '만료됨' : '만료'}
+                            {formatDateTime(invitation.expiresAt)} {expired ? t('managerOrganizationPage.t61') : t('managerOrganizationPage.t62')}
                           </p>
                           <div className="mt-3 flex gap-2">
                             <button
@@ -543,17 +545,17 @@ export function ManagerOrganizationPage() {
                               type="button"
                             >
                               {reissuingId === invitation.influencerId
-                                ? '재발급 중…'
+                                ? t('managerOrganizationPage.t63')
                                 : reissuedToken === invitation.token
-                                  ? '재발급됨'
-                                  : '링크 재발급'}
+                                  ? t('managerOrganizationPage.t64')
+                                  : t('managerOrganizationPage.t65')}
                             </button>
                             <button
                               className="min-h-10 whitespace-nowrap rounded-lg border border-[var(--color-border-control)] bg-white px-[13px] text-sm font-bold transition-colors hover:border-[var(--color-text-tertiary)]"
                               onClick={() => void handleCopy(invitation)}
                               type="button"
                             >
-                              {copiedToken === invitation.token ? '복사됨' : '링크 복사'}
+                              {copiedToken === invitation.token ? t('managerOrganizationPage.t66') : t('managerOrganizationPage.t67')}
                             </button>
                           </div>
                         </div>
@@ -635,7 +637,7 @@ export function ManagerOrganizationPage() {
           if (!open && !removing) setRemoveTarget(undefined)
         }}
         open={removeTarget !== undefined}
-        title={`${removeTarget?.nickname ?? '구성원'} 님의 소속을 해제할까요?`}
+        title={t('managerOrganizationPage.t77', { p0: removeTarget?.nickname ?? t('managerOrganizationPage.t68') })}
       >
         {removeError ? (
           <AlertBanner title={t('managerOrganizationPage.t41')} variant="error">

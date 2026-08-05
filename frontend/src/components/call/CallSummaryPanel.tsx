@@ -47,7 +47,7 @@ export function CallSummaryPanel({ callSessionId }: { callSessionId: string | nu
     async function load() {
       const token = getAuthSession()?.accessToken
       if (!token) {
-        setState({ kind: 'error', message: '요약을 보려면 먼저 로그인해 주세요.' })
+        setState({ kind: 'error', message: t('callSummaryPanel.t5') })
         return
       }
 
@@ -67,10 +67,10 @@ export function CallSummaryPanel({ callSessionId }: { callSessionId: string | nu
           kind: 'error',
           message:
             cause instanceof ApiError && cause.status === 404
-              ? '이 통화의 요약이 아직 만들어지지 않았습니다.'
+              ? t('callSummaryPanel.t6')
               : cause instanceof ApiError
                 ? cause.message
-                : '대화 요약을 불러오지 못했습니다.',
+                : t('callSummaryPanel.t7'),
         })
       }
     }
@@ -82,6 +82,8 @@ export function CallSummaryPanel({ callSessionId }: { callSessionId: string | nu
       controller.abort()
       if (timer) clearTimeout(timer)
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callSessionId])
 
   if (state.kind === 'loading') {

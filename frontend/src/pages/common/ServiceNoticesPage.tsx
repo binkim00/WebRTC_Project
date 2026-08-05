@@ -53,13 +53,15 @@ export function ServiceNoticesPage() {
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        setError(toErrorMessage(cause, '공지사항을 불러오지 못했습니다.'))
+        setError(toErrorMessage(cause, t('serviceNoticesPage.t14')))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page])
 
   return (
@@ -137,7 +139,7 @@ export function ServiceNoticeDetailPage() {
 
   useEffect(() => {
     if (!noticeId) {
-      setError('공지 식별자가 없습니다.')
+      setError(t('serviceNoticesPage.t15'))
       setLoading(false)
       return
     }
@@ -152,13 +154,15 @@ export function ServiceNoticeDetailPage() {
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        setError(toErrorMessage(cause, '공지사항을 불러오지 못했습니다.'))
+        setError(toErrorMessage(cause, t('serviceNoticesPage.t16')))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noticeId])
 
   if (loading) {
@@ -180,7 +184,7 @@ export function ServiceNoticeDetailPage() {
 
       {error || !notice ? (
         <AlertBanner title={t('serviceNoticesPage.t10')} variant="error">
-          {error ?? '해당 공지를 찾을 수 없습니다.'}
+          {error ?? t('serviceNoticesPage.t17')}
         </AlertBanner>
       ) : (
         <Card className="p-6 sm:p-9">

@@ -1,3 +1,4 @@
+import { translate } from '../i18n'
 /** 업로드 실패 뒤 브라우저에 임시 보관하는 녹화 데이터다. */
 export type PendingRecording = {
   callSessionId: string
@@ -14,7 +15,7 @@ const STORE_NAME = 'pending-recordings'
 
 function openDatabase(): Promise<IDBDatabase> {
   if (!('indexedDB' in window)) {
-    return Promise.reject(new Error('이 브라우저는 임시 녹화 보관을 지원하지 않습니다.'))
+    return Promise.reject(new Error(translate('pendingRecordings.t1')))
   }
 
   return new Promise((resolve, reject) => {
@@ -29,7 +30,7 @@ function openDatabase(): Promise<IDBDatabase> {
     request.addEventListener('success', () => resolve(request.result), { once: true })
     request.addEventListener(
       'error',
-      () => reject(request.error ?? new Error('임시 녹화 저장소를 열지 못했습니다.')),
+      () => reject(request.error ?? new Error(translate('pendingRecordings.t2'))),
       { once: true },
     )
   })
@@ -48,7 +49,7 @@ function runRequest<T>(
         request.addEventListener('success', () => resolve(request.result), { once: true })
         request.addEventListener(
           'error',
-          () => reject(request.error ?? new Error('임시 녹화 저장소 요청에 실패했습니다.')),
+          () => reject(request.error ?? new Error(translate('pendingRecordings.t3'))),
           { once: true },
         )
         transaction.addEventListener('complete', () => database.close(), { once: true })

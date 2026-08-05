@@ -68,7 +68,7 @@ export function CallStage({
   localVideo,
   participantLabel,
   remoteName,
-  localParticipantLabel = '나',
+  localParticipantLabel,
   connectionLabel,
   connected,
   timeLabel,
@@ -87,6 +87,8 @@ export function CallStage({
   onLeave,
 }: CallStageProps) {
   const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const localParticipantLabelResolved = localParticipantLabel ?? t('callStage.t8')
   const deviceButtonClass =
     'min-h-9 whitespace-nowrap rounded-md px-1.5 text-[13px] font-bold transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-60'
 
@@ -128,7 +130,7 @@ export function CallStage({
           </p>
           <p className="flex items-center gap-3 whitespace-nowrap">
             <button
-              aria-label={`마이크 ${microphoneEnabled ? '끄기' : '켜기'}`}
+              aria-label={t('callStage.t19', { p0: microphoneEnabled ? t('callStage.t9') : t('callStage.t10') })}
               className={cn(
                 deviceButtonClass,
                 microphoneEnabled ? 'text-white/75' : 'text-[var(--color-error-on-dark)]',
@@ -137,10 +139,10 @@ export function CallStage({
               onClick={onMicrophoneToggle}
               type="button"
             >
-              {t('callStage.t2')} {microphoneEnabled ? '정상' : '꺼짐'}
+              {t('callStage.t2')} {microphoneEnabled ? t('callStage.t11') : t('callStage.t12')}
             </button>
             <button
-              aria-label={`카메라 ${cameraEnabled ? '끄기' : '켜기'}`}
+              aria-label={t('callStage.t20', { p0: cameraEnabled ? t('callStage.t13') : t('callStage.t14') })}
               className={cn(
                 deviceButtonClass,
                 cameraEnabled ? 'text-white/75' : 'text-[var(--color-error-on-dark)]',
@@ -149,7 +151,7 @@ export function CallStage({
               onClick={onCameraToggle}
               type="button"
             >
-              {t('callStage.t3')} {cameraEnabled ? '정상' : '꺼짐'}
+              {t('callStage.t3')} {cameraEnabled ? t('callStage.t15') : t('callStage.t16')}
             </button>
             <button
               className="min-h-9 whitespace-nowrap rounded-md px-1.5 text-[13px] font-bold text-[var(--color-error-on-dark)] transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
@@ -188,12 +190,12 @@ export function CallStage({
 
       {/* 내 화면 PIP */}
       <figure
-        aria-label={`${localParticipantLabel} 영상`}
+        aria-label={t('callStage.t21', { p0: localParticipantLabelResolved })}
         className="absolute bottom-[74px] right-[18px] z-10 m-0 w-[clamp(140px,17%,216px)] overflow-hidden rounded-lg bg-[var(--color-surface-dark-media)] shadow-[0_6px_24px_rgb(0_0_0/42%)]"
       >
         <div className="relative aspect-[4/3] w-full">{localVideo}</div>
         <figcaption className="absolute bottom-2 left-2 flex items-center gap-[7px] rounded-[5px] bg-[rgb(15_17_21/82%)] px-[9px] py-[5px]">
-          <span className="text-xs font-extrabold text-white">{localParticipantLabel}</span>
+          <span className="text-xs font-extrabold text-white">{localParticipantLabelResolved}</span>
           <span className="text-xs font-bold text-[var(--color-success-on-dark)]">{t('callStage.t5')}</span>
         </figcaption>
       </figure>
@@ -235,7 +237,7 @@ export function CallStage({
         <span className="text-sm font-bold text-white/90">{t('callStage.t6')}</span>
         <button
           aria-checked={captionEnabled}
-          aria-label={`자막 ${captionEnabled ? '끄기' : '켜기'}`}
+          aria-label={t('callStage.t22', { p0: captionEnabled ? t('callStage.t17') : t('callStage.t18') })}
           className={cn(
             'relative h-[26px] w-[46px] rounded-full border p-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
             captionEnabled ? 'border-white/90 bg-white/90' : 'border-white/40 bg-transparent',

@@ -113,7 +113,7 @@ export function EmailVerificationNotice({
   async function handleSend() {
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+      setError(t('emailVerificationNotice.t10'))
       return
     }
 
@@ -127,7 +127,7 @@ export function EmailVerificationNotice({
       setSentOnce(true)
       setKnownEmail(result.email)
       setCooldownUntil(Date.now() + RESEND_COOLDOWN_MS)
-      setMessage('인증 메일을 보냈어요. 메일함에서 인증 링크를 눌러 주세요.')
+      setMessage(t('emailVerificationNotice.t11'))
       // 개발 프로파일에서만 내려오는 값이며, 로컬에서 메일 없이 흐름을 확인할 때 쓴다.
       if (import.meta.env.DEV && result.devToken) setDevToken(result.devToken)
     } catch (reason) {
@@ -138,13 +138,13 @@ export function EmailVerificationNotice({
       if (reason instanceof ApiError && reason.status === 429) {
         // 서버 쿨다운이 진행 중이라는 뜻이므로 버튼도 같은 시간만큼 잠가 반복 429를 막는다.
         setCooldownUntil(Date.now() + RESEND_COOLDOWN_MS)
-        setError('요청이 너무 많아요. 잠시 후 다시 시도해 주세요.')
+        setError(t('emailVerificationNotice.t12'))
         return
       }
       setError(
         reason instanceof ApiError
           ? reason.message
-          : '인증 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('emailVerificationNotice.t13'),
       )
     } finally {
       setSending(false)
@@ -155,7 +155,7 @@ export function EmailVerificationNotice({
   async function handleCheck() {
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+      setError(t('emailVerificationNotice.t14'))
       return
     }
 
@@ -167,12 +167,12 @@ export function EmailVerificationNotice({
         onVerified()
         return
       }
-      setError('아직 인증이 확인되지 않았어요. 메일의 인증 링크를 누른 뒤 다시 확인해 주세요.')
+      setError(t('emailVerificationNotice.t15'))
     } catch (reason) {
       setError(
         reason instanceof ApiError
           ? reason.message
-          : '인증 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('emailVerificationNotice.t16'),
       )
     } finally {
       setChecking(false)
@@ -219,10 +219,10 @@ export function EmailVerificationNotice({
           type="button"
         >
           {cooldownRemainingSec > 0
-            ? `다시 보내기 (${cooldownRemainingSec}초 후)`
+            ? t('emailVerificationNotice.t19', { p0: cooldownRemainingSec })
             : sentOnce
-              ? '인증 메일 다시 보내기'
-              : '인증 메일 보내기'}
+              ? t('emailVerificationNotice.t17')
+              : t('emailVerificationNotice.t18')}
         </Button>
         <Button
           className="w-full"

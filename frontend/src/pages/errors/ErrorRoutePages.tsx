@@ -65,14 +65,14 @@ export function RouterErrorPage() {
     return (
       <ErrorPageShell
         code={String(error.status)}
-        description={error.statusText || '라우트를 처리하는 중 오류가 발생했습니다.'}
+        description={error.statusText || t('errorRoutePages.t9')}
         title={t('errorRoutePages.t7')}
       />
     )
   }
 
   const description =
-    error instanceof Error ? error.message : '알 수 없는 라우트 오류가 발생했습니다.'
+    error instanceof Error ? error.message : t('errorRoutePages.t10')
 
   return <ErrorPageShell code="ERROR" description={description} title={t('errorRoutePages.t8')} />
 }

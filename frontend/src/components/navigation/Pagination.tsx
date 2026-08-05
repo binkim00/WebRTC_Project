@@ -73,7 +73,7 @@ export function Pagination({
         typeof item === 'number' ? (
           <button
             aria-current={item === safeCurrent ? 'page' : undefined}
-            aria-label={`${item}페이지`}
+            aria-label={t('pagination.t4', { p0: item })}
             className={cn(
               'inline-flex size-12 items-center justify-center rounded-xl border text-base font-bold transition-colors',
               item === safeCurrent

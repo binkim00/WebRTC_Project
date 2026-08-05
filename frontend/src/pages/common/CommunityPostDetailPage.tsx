@@ -29,7 +29,7 @@ import {
   TextField,
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 const COMMENT_PAGE_SIZE = 10
 
@@ -47,10 +47,10 @@ function formatDateTime(iso: string): string {
 
 function toFriendlyCommentError(error: unknown): string {
   if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-    return '댓글은 확정 참가자 또는 운영자만 작성할 수 있습니다.'
+    return translate('communityPostDetailPage.t60')
   }
 
-  return error instanceof Error ? error.message : '댓글 작성에 실패했습니다.'
+  return error instanceof Error ? error.message : translate('communityPostDetailPage.t61')
 }
 
 export function CommunityPostDetailPage() {
@@ -103,7 +103,7 @@ export function CommunityPostDetailPage() {
         }
 
         setPostError(
-          error instanceof Error ? error.message : '게시글을 불러오지 못했습니다.',
+          error instanceof Error ? error.message : t('communityPostDetailPage.t45'),
         )
       })
       .finally(() => {
@@ -113,6 +113,8 @@ export function CommunityPostDetailPage() {
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, postReloadCount])
 
   useEffect(() => {
@@ -137,7 +139,7 @@ export function CommunityPostDetailPage() {
         }
 
         setCommentsError(
-          error instanceof Error ? error.message : '댓글을 불러오지 못했습니다.',
+          error instanceof Error ? error.message : t('communityPostDetailPage.t46'),
         )
       })
       .finally(() => {
@@ -147,6 +149,8 @@ export function CommunityPostDetailPage() {
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, commentPage, commentsReloadCount])
 
   async function handleUpdatePost(event: FormEvent<HTMLFormElement>) {
@@ -161,7 +165,7 @@ export function CommunityPostDetailPage() {
     const content = String(formData.get('content') ?? '').trim()
 
     if (!title || !content) {
-      setPostActionError('제목과 내용을 모두 입력해 주세요.')
+      setPostActionError(t('communityPostDetailPage.t47'))
       return
     }
 
@@ -174,7 +178,7 @@ export function CommunityPostDetailPage() {
       setPostReloadCount((count) => count + 1)
     } catch (error: unknown) {
       setPostActionError(
-        error instanceof Error ? error.message : '게시글 수정에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t48'),
       )
     } finally {
       setPostSaving(false)
@@ -186,7 +190,7 @@ export function CommunityPostDetailPage() {
       return
     }
 
-    if (!window.confirm('게시글을 삭제하시겠습니까?')) {
+    if (!window.confirm(t('communityPostDetailPage.t49'))) {
       return
     }
 
@@ -202,7 +206,7 @@ export function CommunityPostDetailPage() {
       }
     } catch (error: unknown) {
       setPostActionError(
-        error instanceof Error ? error.message : '게시글 삭제에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t50'),
       )
     }
   }
@@ -217,7 +221,7 @@ export function CommunityPostDetailPage() {
     const content = commentContent.trim()
 
     if (!content) {
-      setCommentError('댓글 내용을 입력해 주세요.')
+      setCommentError(t('communityPostDetailPage.t51'))
       return
     }
 
@@ -245,7 +249,7 @@ export function CommunityPostDetailPage() {
     const content = editingCommentContent.trim()
 
     if (!content) {
-      setCommentActionError('댓글 내용을 입력해 주세요.')
+      setCommentActionError(t('communityPostDetailPage.t52'))
       return
     }
 
@@ -260,7 +264,7 @@ export function CommunityPostDetailPage() {
       setCommentsReloadCount((count) => count + 1)
     } catch (error: unknown) {
       setCommentActionError(
-        error instanceof Error ? error.message : '댓글 수정에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t53'),
       )
     } finally {
       setCommentActionBusy(false)
@@ -272,7 +276,7 @@ export function CommunityPostDetailPage() {
       return
     }
 
-    if (!window.confirm('댓글을 삭제하시겠습니까?')) {
+    if (!window.confirm(t('communityPostDetailPage.t54'))) {
       return
     }
 
@@ -286,7 +290,7 @@ export function CommunityPostDetailPage() {
       setPostReloadCount((count) => count + 1)
     } catch (error: unknown) {
       setCommentActionError(
-        error instanceof Error ? error.message : '댓글 삭제에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t55'),
       )
     } finally {
       setCommentActionBusy(false)
@@ -308,7 +312,7 @@ export function CommunityPostDetailPage() {
     const detail = String(formData.get('detail') ?? '').trim()
 
     if (!reason) {
-      setCommentActionError('신고 사유를 입력해 주세요.')
+      setCommentActionError(t('communityPostDetailPage.t56'))
       return
     }
 
@@ -323,10 +327,10 @@ export function CommunityPostDetailPage() {
         session.accessToken,
       )
       setReportingCommentId(undefined)
-      setCommentActionSuccess('신고가 접수되었습니다. 확인 후 조치하겠습니다.')
+      setCommentActionSuccess(t('communityPostDetailPage.t57'))
     } catch (error: unknown) {
       setCommentActionError(
-        error instanceof Error ? error.message : '신고 접수에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t58'),
       )
     } finally {
       setCommentActionBusy(false)
@@ -354,7 +358,7 @@ export function CommunityPostDetailPage() {
     return (
       <div className="mx-auto grid w-full max-w-4xl gap-6">
         <AlertBanner title={t('communityPostDetailPage.t4')} variant="error">
-          {postError ?? '게시글 정보를 찾을 수 없습니다.'}
+          {postError ?? t('communityPostDetailPage.t59')}
         </AlertBanner>
         <div>
           <Button onClick={() => setPostReloadCount((count) => count + 1)}>{t('communityPostDetailPage.t5')}</Button>

@@ -24,7 +24,7 @@ import { isQueueNotInitialized } from '../../api/queue'
 import { useMediaDeviceCheck } from '../../hooks/useMediaDeviceCheck'
 import { useNowTicker } from '../../hooks/useNowTicker'
 import { usePolling } from '../../hooks/usePolling'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 type DeviceCheckResult = {
   cameraOk?: boolean
@@ -66,7 +66,7 @@ function pad(value: number) {
 
 /** 2026.07.28 20:00 — L0 날짜·시간 표기다. */
 function formatScheduledAt(value?: string) {
-  if (!value) return '일정 확인 중'
+  if (!value) return translate('influencerMeetingReadyPage.t77')
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
@@ -77,9 +77,9 @@ function formatDurationSec(totalSeconds: number) {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '—'
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = Math.floor(totalSeconds % 60)
-  if (minutes === 0) return `${seconds}초`
-  if (seconds === 0) return `${minutes}분`
-  return `${minutes}분 ${seconds}초`
+  if (minutes === 0) return translate('influencerMeetingReadyPage.t78', { p0: seconds })
+  if (seconds === 0) return translate('influencerMeetingReadyPage.t79', { p0: minutes })
+  return translate('influencerMeetingReadyPage.t80', { p0: minutes, p1: seconds })
 }
 
 export function InfluencerMeetingReadyPage() {
@@ -149,9 +149,11 @@ export function InfluencerMeetingReadyPage() {
       setError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '팬미팅 정보를 불러오지 못했습니다.',
+          : t('influencerMeetingReadyPage.t47'),
       )
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId])
 
   // 종료·취소를 늦게 알아차리지 않도록 10초마다 상태를 확인한다.
@@ -212,7 +214,7 @@ export function InfluencerMeetingReadyPage() {
 
     const session = getAuthSession()
     if (!session || (session.role !== 'INFLUENCER' && session.role !== 'SOLO_INFLUENCER')) {
-      setError('인플루언서 계정으로 로그인한 뒤 대기실을 이용해 주세요.')
+      setError(t('influencerMeetingReadyPage.t48'))
       return
     }
 
@@ -231,9 +233,11 @@ export function InfluencerMeetingReadyPage() {
       setError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '현재 통화 정보를 불러오지 못했습니다.',
+          : t('influencerMeetingReadyPage.t49'),
       )
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId])
 
   /** 대기열 오픈 시각(밀리초). 상세 정보를 아직 불러오지 못했으면 undefined다. */
@@ -346,7 +350,7 @@ export function InfluencerMeetingReadyPage() {
       setOpenQueueError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '대기열을 열지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('influencerMeetingReadyPage.t50'),
       )
     } finally {
       setOpeningQueue(false)
@@ -386,7 +390,7 @@ export function InfluencerMeetingReadyPage() {
       setEndError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '팬미팅을 종료하지 못했습니다.',
+          : t('influencerMeetingReadyPage.t51'),
       )
     } finally {
       setEnding(false)
@@ -409,7 +413,7 @@ export function InfluencerMeetingReadyPage() {
       setCallError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : `${target.nickname} 님을 호출하지 못했습니다. 잠시 후 다시 시도해 주세요.`,
+          : t('influencerMeetingReadyPage.t81', { p0: target.nickname }),
       )
       setCallingNext(false)
     }
@@ -444,36 +448,36 @@ export function InfluencerMeetingReadyPage() {
     isSolo && noFan && nextEntry?.status === 'WAITING' ? nextEntry : undefined
   const callBlocked = cameraBroken || !isDeviceChecked || !meetingLive
   const callHelp = cameraBroken
-    ? '카메라 연결을 복구하면 호출할 수 있어요. 팬의 순번은 유지됩니다.'
+    ? t('influencerMeetingReadyPage.t52')
     : !isDeviceChecked
-      ? '장비 점검을 마치면 호출할 수 있어요.'
+      ? t('influencerMeetingReadyPage.t53')
       : !meetingLive
-        ? '팬미팅을 시작한 뒤에 팬을 호출할 수 있어요.'
-        : `호출하면 ${callableEntry?.nickname ?? '다음 팬'} 님에게 입장 안내가 가고 바로 통화 화면으로 이동합니다.`
+        ? t('influencerMeetingReadyPage.t54')
+        : t('influencerMeetingReadyPage.t82', { p0: callableEntry?.nickname ?? t('influencerMeetingReadyPage.t55') })
 
   const statusLine = cameraBroken
-    ? '카메라 연결 이상 · 입장 불가'
+    ? t('influencerMeetingReadyPage.t56')
     : !isDeviceChecked
-      ? '장비 점검 미완료 · 입장 불가'
+      ? t('influencerMeetingReadyPage.t57')
       : noFan
-        ? '대기 중 · 입장 가능한 팬 없음'
+        ? t('influencerMeetingReadyPage.t58')
         : isLastFan
-          ? '진행 중 · 마지막 팬'
-          : `진행 중 · ${currentEntry?.position ?? '-'}번째 팬`
+          ? t('influencerMeetingReadyPage.t59')
+          : t('influencerMeetingReadyPage.t83', { p0: currentEntry?.position ?? '-' })
   const equipLabel = cameraBroken
-    ? '장비 상태 · 카메라 연결 이상'
+    ? t('influencerMeetingReadyPage.t60')
     : !isDeviceChecked
-      ? '장비 상태 · 점검 미완료'
-      : '장비 상태 · 점검 완료'
+      ? t('influencerMeetingReadyPage.t61')
+      : t('influencerMeetingReadyPage.t62')
   const ctaHelp = cameraBroken
-    ? '카메라 연결을 복구하면 입장할 수 있어요. 팬의 순번은 유지됩니다.'
+    ? t('influencerMeetingReadyPage.t63')
     : !isDeviceChecked
-      ? '장비 점검을 마치면 입장할 수 있어요.'
+      ? t('influencerMeetingReadyPage.t64')
       : noFan
-        ? '입장 가능한 팬이 없습니다. 다음 팬이 준비되면 입장할 수 있어요.'
+        ? t('influencerMeetingReadyPage.t65')
         : isLastFan
-          ? `입장하면 오늘의 마지막 통화가 시작됩니다. ${currentFanName ?? '팬'} 님과 ${perFanLabel}입니다.`
-          : `입장하면 ${currentFanName ?? '팬'} 님과의 ${perFanLabel} 통화가 시작됩니다.`
+          ? t('influencerMeetingReadyPage.t84', { p0: currentFanName ?? t('influencerMeetingReadyPage.t66'), p1: perFanLabel })
+          : t('influencerMeetingReadyPage.t85', { p0: currentFanName ?? t('influencerMeetingReadyPage.t67'), p1: perFanLabel })
 
   return (
     <div>
@@ -483,14 +487,14 @@ export function InfluencerMeetingReadyPage() {
           className="mb-6"
           title={
             detail?.meeting.status === 'CANCELED'
-              ? '팬미팅이 취소되었습니다'
-              : '팬미팅이 종료되었습니다'
+              ? t('influencerMeetingReadyPage.t68')
+              : t('influencerMeetingReadyPage.t69')
           }
           variant="info"
         >
           {t('influencerMeetingReadyPage.t1')}
           {closedRedirectRemainingSec !== undefined
-            ? ` ${closedRedirectRemainingSec}초 뒤 메인으로 이동합니다.`
+            ? t('influencerMeetingReadyPage.t86', { p0: closedRedirectRemainingSec })
             : ''}
         </AlertBanner>
       ) : null}
@@ -548,7 +552,7 @@ export function InfluencerMeetingReadyPage() {
         <div className="py-[18px] pr-6">
           <p className="text-[13px] font-bold text-[var(--color-text-muted)]">{t('influencerMeetingReadyPage.t9')}</p>
           <p className="mt-1.5 truncate text-lg font-extrabold tracking-[-0.025em]">
-            {detail?.meeting.title ?? '팬미팅 정보를 불러오는 중'}
+            {detail?.meeting.title ?? t('influencerMeetingReadyPage.t70')}
           </p>
           <p className="mt-1 text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
             {influencerName ? `${influencerName} · ` : ''}
@@ -603,7 +607,7 @@ export function InfluencerMeetingReadyPage() {
                   </p>
                   <p className="mt-2 text-[15px] font-medium leading-[1.6] text-[var(--color-text-body)]">
                     {mediaErrorMessage ??
-                      '화면 연결이 불안정합니다. 연결을 확인한 뒤 상태를 다시 확인해 주세요.'}
+                      t('influencerMeetingReadyPage.t71')}
                   </p>
                   <button
                     className="mj-font-label mt-4 flex min-h-[46px] w-full items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[15px] hover:border-[var(--color-text-muted)]"
@@ -640,7 +644,7 @@ export function InfluencerMeetingReadyPage() {
           <p className="mt-2 text-[15px] font-extrabold tabular-nums">
             {completedFanCount}{t('influencerMeetingReadyPage.t21')}{' '}
             <span className="font-medium text-[var(--color-text-muted)]">
-              {currentEntry ? `· 현재 ${currentEntry.position}번째 ` : ''}{t('influencerMeetingReadyPage.t22')} {totalFanCount}{t('influencerMeetingReadyPage.t23')}
+              {currentEntry ? t('influencerMeetingReadyPage.t87', { p0: currentEntry.position }) : ''}{t('influencerMeetingReadyPage.t22')} {totalFanCount}{t('influencerMeetingReadyPage.t23')}
             </span>
           </p>
           <div
@@ -673,7 +677,7 @@ export function InfluencerMeetingReadyPage() {
               <div className="mt-3 flex items-center gap-3.5">
                 {currentEntry?.profileImageUrl ? (
                   <img
-                    alt={`현재 팬 ${currentFanName}`}
+                    alt={t('influencerMeetingReadyPage.t88', { p0: currentFanName })}
                     className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
                     src={currentEntry.profileImageUrl}
                   />
@@ -690,7 +694,7 @@ export function InfluencerMeetingReadyPage() {
                     {currentFanName}
                   </h3>
                   <p className="mt-1 text-sm font-medium text-[var(--color-text-muted)]">
-                    {currentFanMemo ? '메모 있음' : '메모 없음'}
+                    {currentFanMemo ? t('influencerMeetingReadyPage.t72') : t('influencerMeetingReadyPage.t73')}
                   </p>
                 </div>
               </div>
@@ -707,7 +711,7 @@ export function InfluencerMeetingReadyPage() {
                   </button>
                 </div>
                 <p className="mt-2 text-[15px] font-medium leading-[1.65] text-[var(--color-text-body)]">
-                  {currentFanMemo?.content ?? '작성된 메모가 없습니다.'}
+                  {currentFanMemo?.content ?? t('influencerMeetingReadyPage.t74')}
                 </p>
               </div>
             </section>
@@ -732,7 +736,7 @@ export function InfluencerMeetingReadyPage() {
             {nextEntry ? (
               <div className="flex items-center gap-3">
                 <div
-                  aria-label={`다음 팬 ${nextEntry.nickname}`}
+                  aria-label={t('influencerMeetingReadyPage.t89', { p0: nextEntry.nickname })}
                   className="grid size-10 flex-none place-items-center rounded-lg bg-[var(--color-surface-muted)] text-[15px] font-extrabold text-[var(--color-text-muted)]"
                   role="img"
                 >
@@ -780,7 +784,7 @@ export function InfluencerMeetingReadyPage() {
                 onClick={() => void handleCallNext(callableEntry)}
                 type="button"
               >
-                {callingNext ? '호출 중…' : '다음 팬 호출'}
+                {callingNext ? t('influencerMeetingReadyPage.t75') : t('influencerMeetingReadyPage.t76')}
               </button>
               <p
                 aria-live="polite"

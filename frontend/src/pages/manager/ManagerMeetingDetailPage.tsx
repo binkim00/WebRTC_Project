@@ -62,7 +62,7 @@ import {
   toErrorMessage,
   type MeetingDetailTab,
 } from './meetingLifecycle'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 /**
  * 위험한 테스트 제어는 개발 서버에서도 명시적으로 켠 경우에만 노출한다.
@@ -78,13 +78,13 @@ const TEST_CONTROL_ENABLED =
  * 진행 현황(단계 확인·다음 액션 실행) / 응모자·추첨(응모 목록과 추첨·발표) /
  * 응모 질문(응모 폼 질문 편집) / 정보 수정(제목·일정·운영 설정 편집).
  */
-const TABS: readonly { id: MeetingDetailTab; label: string }[] = [
-  { id: 'overview', label: '진행 현황' },
-  { id: 'applicants', label: '응모자·추첨' },
-  { id: 'application-form', label: '응모 질문' },
-  { id: 'settings', label: '정보 수정' },
+const TABS = (): readonly { id: MeetingDetailTab; label: string }[] => [
+  { id: 'overview', label: translate('managerMeetingDetailPage.t138') },
+  { id: 'applicants', label: translate('managerMeetingDetailPage.t139') },
+  { id: 'application-form', label: translate('managerMeetingDetailPage.t140') },
+  { id: 'settings', label: translate('managerMeetingDetailPage.t141') },
   ...(TEST_CONTROL_ENABLED
-    ? [{ id: 'test-control' as const, label: '테스트 제어' }]
+    ? [{ id: 'test-control' as const, label: translate('managerMeetingDetailPage.t142') }]
     : []),
 ]
 
@@ -101,61 +101,61 @@ type MeetingOperationAction =
   | 'closeApplicationsNow'
   | 'startNow'
 
-const ACTION_CONFIRMATION: Record<
+const ACTION_CONFIRMATION = (): Record<
   MeetingOperationAction,
   { title: string; description: string; confirmLabel: string }
-> = {
+> => ({
   publish: {
-    title: '팬미팅을 팬에게 공개할까요?',
-    description: '공개하면 팬이 팬미팅 정보와 응모 안내를 볼 수 있습니다.',
-    confirmLabel: '팬에게 공개',
+    title: translate('managerMeetingDetailPage.t143'),
+    description: translate('managerMeetingDetailPage.t144'),
+    confirmLabel: translate('managerMeetingDetailPage.t145'),
   },
   cancel: {
-    title: '팬미팅을 취소할까요?',
-    description: '취소한 팬미팅은 되돌릴 수 없습니다.',
-    confirmLabel: '팬미팅 취소',
+    title: translate('managerMeetingDetailPage.t146'),
+    description: translate('managerMeetingDetailPage.t147'),
+    confirmLabel: translate('managerMeetingDetailPage.t148'),
   },
   delete: {
-    title: '작성 중인 팬미팅을 삭제할까요?',
-    description: '삭제한 내용은 되돌릴 수 없습니다.',
-    confirmLabel: '작성 내용 삭제',
+    title: translate('managerMeetingDetailPage.t149'),
+    description: translate('managerMeetingDetailPage.t150'),
+    confirmLabel: translate('managerMeetingDetailPage.t151'),
   },
   start: {
-    title: '팬미팅을 시작할까요?',
-    description: '대기열이 열리고 영상통화가 시작됩니다.',
-    confirmLabel: '팬미팅 시작',
+    title: translate('managerMeetingDetailPage.t152'),
+    description: translate('managerMeetingDetailPage.t153'),
+    confirmLabel: translate('managerMeetingDetailPage.t154'),
   },
   end: {
-    title: '팬미팅을 종료할까요?',
-    description: '진행 중인 통화가 모두 종료됩니다.',
-    confirmLabel: '팬미팅 종료',
+    title: translate('managerMeetingDetailPage.t155'),
+    description: translate('managerMeetingDetailPage.t156'),
+    confirmLabel: translate('managerMeetingDetailPage.t157'),
   },
   draw: {
-    title: '당첨자를 추첨할까요?',
-    description: '추첨 결과는 다시 변경할 수 없습니다.',
-    confirmLabel: '추첨',
+    title: translate('managerMeetingDetailPage.t158'),
+    description: translate('managerMeetingDetailPage.t159'),
+    confirmLabel: translate('managerMeetingDetailPage.t160'),
   },
   publishResults: {
-    title: '응모 결과를 발표할까요?',
-    description: '응모자 전원에게 알림이 전송됩니다.',
-    confirmLabel: '결과 발표',
+    title: translate('managerMeetingDetailPage.t161'),
+    description: translate('managerMeetingDetailPage.t162'),
+    confirmLabel: translate('managerMeetingDetailPage.t163'),
   },
   openApplicationsNow: {
-    title: '응모 접수를 지금 시작할까요?',
-    description: '응모 시작 시각이 현재로 변경되며, 지난 마감 시각은 기존 응모 기간만큼 연장됩니다.',
-    confirmLabel: '응모 시작',
+    title: translate('managerMeetingDetailPage.t164'),
+    description: translate('managerMeetingDetailPage.t165'),
+    confirmLabel: translate('managerMeetingDetailPage.t166'),
   },
   closeApplicationsNow: {
-    title: '응모 접수를 지금 마감할까요?',
-    description: '마감 이후에는 새 응모를 받을 수 없습니다.',
-    confirmLabel: '응모 마감',
+    title: translate('managerMeetingDetailPage.t167'),
+    description: translate('managerMeetingDetailPage.t168'),
+    confirmLabel: translate('managerMeetingDetailPage.t169'),
   },
   startNow: {
-    title: '팬미팅을 지금 시작할까요?',
-    description: '예정 시작 시각이 현재로 변경되고 확정 참가자에게 즉시 영향을 줍니다.',
-    confirmLabel: '지금 시작',
+    title: translate('managerMeetingDetailPage.t170'),
+    description: translate('managerMeetingDetailPage.t171'),
+    confirmLabel: translate('managerMeetingDetailPage.t172'),
   },
-}
+})
 
 /** 상태 배지를 추가하지 않고 토큰 색상의 텍스트로 상태를 구분한다. */
 function meetingStatusTextClass(status?: string | null): string {
@@ -173,28 +173,28 @@ function meetingStatusTextClass(status?: string | null): string {
 /** 상세 화면에서는 운영 상태를 사용자가 이해하기 쉬운 진행 단계로 표시한다. */
 function meetingStatusDisplayLabel(status?: string | null): string {
   const labels: Record<string, string> = {
-    DRAFT: '작성 중',
-    PUBLISHED: '공개',
-    APPLICATION_OPEN: '응모 접수 중',
-    APPLICATION_CLOSED: '응모 마감',
-    READY: '시작 대기',
-    LIVE: '진행 중',
-    ENDED: '종료',
-    CANCELED: '취소됨',
+    DRAFT: translate('managerMeetingDetailPage.t173'),
+    PUBLISHED: translate('managerMeetingDetailPage.t174'),
+    APPLICATION_OPEN: translate('managerMeetingDetailPage.t175'),
+    APPLICATION_CLOSED: translate('managerMeetingDetailPage.t176'),
+    READY: translate('managerMeetingDetailPage.t177'),
+    LIVE: translate('managerMeetingDetailPage.t178'),
+    ENDED: translate('managerMeetingDetailPage.t179'),
+    CANCELED: translate('managerMeetingDetailPage.t180'),
   }
-  return status ? labels[status] ?? '진행 단계 확인 필요' : '진행 단계 확인 필요'
+  return status ? labels[status] ?? translate('managerMeetingDetailPage.t181') : translate('managerMeetingDetailPage.t182')
 }
 
 /** 테스트 제어에서 강제로 지정할 수 있는 상태 목록이다. */
-const TEST_CONTROL_STATUS_OPTIONS: readonly { value: FanMeetingStatus; label: string }[] = [
-  { value: 'DRAFT', label: '초안' },
-  { value: 'PUBLISHED', label: '발행' },
-  { value: 'APPLICATION_OPEN', label: '응모 접수 중' },
-  { value: 'APPLICATION_CLOSED', label: '응모 마감' },
-  { value: 'READY', label: '진행 준비' },
-  { value: 'LIVE', label: '진행 중' },
-  { value: 'ENDED', label: '종료' },
-  { value: 'CANCELED', label: '취소' },
+const TEST_CONTROL_STATUS_OPTIONS = (): readonly { value: FanMeetingStatus; label: string }[] => [
+  { value: 'DRAFT', label: translate('managerMeetingDetailPage.t183') },
+  { value: 'PUBLISHED', label: translate('managerMeetingDetailPage.t184') },
+  { value: 'APPLICATION_OPEN', label: translate('managerMeetingDetailPage.t185') },
+  { value: 'APPLICATION_CLOSED', label: translate('managerMeetingDetailPage.t186') },
+  { value: 'READY', label: translate('managerMeetingDetailPage.t187') },
+  { value: 'LIVE', label: translate('managerMeetingDetailPage.t188') },
+  { value: 'ENDED', label: translate('managerMeetingDetailPage.t189') },
+  { value: 'CANCELED', label: translate('managerMeetingDetailPage.t190') },
 ]
 
 /**
@@ -371,13 +371,13 @@ export function ManagerMeetingDetailPage() {
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!meetingId) {
-      setLoadError('팬미팅 정보를 확인할 수 없습니다.')
+      setLoadError(t('managerMeetingDetailPage.t78'))
       setLoading(false)
       return
     }
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setLoadError('팬미팅 정보를 조회하려면 먼저 로그인해 주세요.')
+      setLoadError(t('managerMeetingDetailPage.t79'))
       setLoading(false)
       return
     }
@@ -404,10 +404,12 @@ export function ManagerMeetingDetailPage() {
       }
     } catch (cause) {
       if (signal?.aborted) return
-      setLoadError(toErrorMessage(cause, '팬미팅 정보를 불러오지 못했습니다.'))
+      setLoadError(toErrorMessage(cause, t('managerMeetingDetailPage.t80')))
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId])
 
   useEffect(() => {
@@ -437,7 +439,7 @@ export function ManagerMeetingDetailPage() {
   async function runAction(action: MeetingOperationAction) {
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('작업을 수행하려면 먼저 로그인해 주세요.')
+      setError(t('managerMeetingDetailPage.t81'))
       return
     }
 
@@ -447,32 +449,32 @@ export function ManagerMeetingDetailPage() {
     try {
       if (action === 'publish') {
         await publishFanMeeting(Number(meetingId), token)
-        setMessage('팬미팅을 팬에게 공개했습니다. 응모 시작 일시가 되면 응모가 열립니다.')
+        setMessage(t('managerMeetingDetailPage.t82'))
       } else if (action === 'cancel') {
         await cancelFanMeeting(meetingId, token)
-        setMessage('팬미팅을 취소했습니다.')
+        setMessage(t('managerMeetingDetailPage.t83'))
       } else if (action === 'delete') {
         await deleteFanMeetingDraft(meetingId, token)
-        setMessage('작성 중인 팬미팅을 삭제했습니다.')
+        setMessage(t('managerMeetingDetailPage.t84'))
       } else if (action === 'start') {
         await startFanMeeting(meetingId, token)
-        setMessage('팬미팅을 시작했습니다.')
+        setMessage(t('managerMeetingDetailPage.t85'))
       } else if (action === 'end') {
         await endFanMeeting(meetingId, token)
-        setMessage('팬미팅을 종료했습니다.')
+        setMessage(t('managerMeetingDetailPage.t86'))
       } else if (action === 'draw') {
         const result = await drawApplicationWinners(meetingId, token)
         setMessage(
-          `추첨을 완료했습니다. 당첨 ${result.selectedCount}명 · 미당첨 ${result.notSelectedCount}명 · 참가자 ${result.participantCount}명`,
+          t('managerMeetingDetailPage.t191', { p0: result.selectedCount, p1: result.notSelectedCount, p2: result.participantCount }),
         )
         setApplicantsRefresh((value) => value + 1)
       } else if (action === 'publishResults') {
         const result = await publishApplicationResults(meetingId, token)
-        setMessage(`응모 결과를 발표했습니다. 알림 ${result.notificationCount}건을 전송했습니다.`)
+        setMessage(t('managerMeetingDetailPage.t192', { p0: result.notificationCount }))
         setApplicantsRefresh((value) => value + 1)
       } else {
         const currentStatus = detail?.meeting.status
-        if (!currentStatus) throw new TypeError('현재 팬미팅 상태를 확인할 수 없습니다.')
+        if (!currentStatus) throw new TypeError(t('managerMeetingDetailPage.t87'))
 
         const targetStatus = action === 'openApplicationsNow'
           ? 'APPLICATION_OPEN'
@@ -487,20 +489,28 @@ export function ManagerMeetingDetailPage() {
           {
             applicationStartAt: detail.meeting.application.startAt,
             applicationEndAt: detail.meeting.application.endAt,
+            // 정식 PATCH 경로가 백엔드 일정 검증(응모 시작 < 마감 ≤ 발표 < 팬미팅 시작)을
+            // 통과할 값을 계산할 수 있도록 나머지 일정도 함께 넘긴다.
+            applicationResultAnnouncementAt: detail.meeting.application.resultAnnouncementAt,
+            scheduledStartAt: detail.meeting.scheduledStartAt,
           },
         )
         setMessage(
           action === 'openApplicationsNow'
-            ? '응모 접수를 즉시 시작하고 응모 시작 시각을 현재로 갱신했습니다.'
+            ? t('managerMeetingDetailPage.t88')
             : action === 'closeApplicationsNow'
-              ? '응모 접수를 즉시 마감하고 응모 마감 시각을 현재로 갱신했습니다.'
-              : '팬미팅을 즉시 시작하고 예정 시작 시각을 현재로 갱신했습니다.',
+              // PUBLISHED에서는 응모 기간을 접는 방식이라 곧 열렸다가 마감된다.
+              // 즉시 마감이 아니므로 다음에 무엇을 기다려야 하는지 함께 알려 준다.
+              ? currentStatus === 'PUBLISHED'
+                ? t('managerMeetingDetailPage.applicationWindowCollapsed')
+                : t('managerMeetingDetailPage.t89')
+              : t('managerMeetingDetailPage.t90'),
         )
       }
       await load()
       setPendingAction(undefined)
     } catch (cause) {
-      setError(toErrorMessage(cause, '요청을 처리하지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerMeetingDetailPage.t91')))
     } finally {
       setBusy(false)
     }
@@ -521,14 +531,14 @@ export function ManagerMeetingDetailPage() {
           {t('managerMeetingDetailPage.t2')}
         </Link>
         <AlertBanner title={t('managerMeetingDetailPage.t3')} variant="error">
-          {loadError ?? '팬미팅 정보를 찾을 수 없습니다.'}
+          {loadError ?? t('managerMeetingDetailPage.t92')}
         </AlertBanner>
       </div>
     )
   }
 
   const status = detail.meeting.status
-  const confirmation = pendingAction ? ACTION_CONFIRMATION[pendingAction] : undefined
+  const confirmation = pendingAction ? ACTION_CONFIRMATION()[pendingAction] : undefined
   const encodedMeetingId = encodeURIComponent(meetingId)
 
   return (
@@ -550,13 +560,13 @@ export function ManagerMeetingDetailPage() {
           {detail.influencer.name} {t('managerMeetingDetailPage.t5')} {formatDateTime(detail.meeting.scheduledStartAt)}
         </p>
         {/* 다른 관리 화면으로 가는 링크는 탭과 무관하므로 헤더에 두어 어느 탭에서도 바로 이동할 수 있게 한다. */}
-        <nav aria-label="연결된 관리 화면" className="mt-1 flex flex-wrap gap-2">
-          <QuickLink label="참가 팬" to={`/manager/fan-meetings/${encodedMeetingId}/fans`} />
-          <QuickLink label="공지 관리" to={`/manager/fan-meetings/${encodedMeetingId}/notices`} />
+        <nav aria-label={t('managerMeetingDetailPage.t93')} className="mt-1 flex flex-wrap gap-2">
+          <QuickLink label={t('managerMeetingDetailPage.t94')} to={`/manager/fan-meetings/${encodedMeetingId}/fans`} />
+          <QuickLink label={t('managerMeetingDetailPage.t95')} to={`/manager/fan-meetings/${encodedMeetingId}/notices`} />
           {!isSolo ? (
-            <QuickLink label="실시간 운영 모니터" to={`/manager/fan-meetings/${encodedMeetingId}/monitor`} />
+            <QuickLink label={t('managerMeetingDetailPage.t96')} to={`/manager/fan-meetings/${encodedMeetingId}/monitor`} />
           ) : null}
-          <QuickLink label="결과 통계" to={`/manager/fan-meetings/${encodedMeetingId}/statistics`} />
+          <QuickLink label={t('managerMeetingDetailPage.t97')} to={`/manager/fan-meetings/${encodedMeetingId}/statistics`} />
         </nav>
       </header>
 
@@ -568,7 +578,7 @@ export function ManagerMeetingDetailPage() {
       ) : null}
 
       <nav className="flex flex-wrap gap-1 border-b border-[var(--color-divider)]" aria-label={t('managerMeetingDetailPage.t8')}>
-        {TABS.map((item) => (
+        {TABS().map((item) => (
           <button
             aria-current={tab === item.id ? 'page' : undefined}
             className={`min-h-11 whitespace-nowrap rounded-t-[var(--radius-control)] px-5 text-sm font-bold transition-colors ${
@@ -627,8 +637,8 @@ export function ManagerMeetingDetailPage() {
           editable={actions.canEditApplicationForm}
           lockedReason={
             actions.applicationStarted
-              ? '응모가 시작된 뒤에는 응모 폼을 수정할 수 없습니다.'
-              : '팬미팅을 공개하기 전이거나 응모가 시작되기 전까지만 응모 폼을 수정할 수 있습니다.'
+              ? t('managerMeetingDetailPage.t98')
+              : t('managerMeetingDetailPage.t99')
           }
           meetingId={meetingId}
         />
@@ -655,7 +665,7 @@ export function ManagerMeetingDetailPage() {
               onClick={() => pendingAction && void runAction(pendingAction)}
               variant={pendingAction === 'cancel' || pendingAction === 'delete' ? 'danger' : 'primary'}
             >
-              {confirmation?.confirmLabel ?? '확인'}
+              {confirmation?.confirmLabel ?? t('managerMeetingDetailPage.t100')}
             </Button>
           </>
         }
@@ -663,7 +673,7 @@ export function ManagerMeetingDetailPage() {
           if (!open && !busy) setPendingAction(undefined)
         }}
         open={Boolean(pendingAction)}
-        title={confirmation?.title ?? '작업을 확인해 주세요.'}
+        title={confirmation?.title ?? t('managerMeetingDetailPage.t101')}
       >
         {busy ? (
           <p className="text-sm font-medium text-[var(--color-text-secondary)]" role="status">
@@ -704,46 +714,53 @@ function OverviewPanel({
   // 백엔드는 발행(PUBLISHED) 상태에서만 명단 업로드를 허용하고, 확정하면 READY로 넘어간다.
   const canUploadExternalParticipants = isExternalSelection && meeting.status === 'PUBLISHED'
   const primaryActions: { action: MeetingOperationAction; label: string }[] = []
-  if (actions.canPublish) primaryActions.push({ action: 'publish', label: '팬에게 공개' })
-  if (actions.canDraw) primaryActions.push({ action: 'draw', label: '당첨자 추첨' })
-  if (actions.canPublishResults) primaryActions.push({ action: 'publishResults', label: '결과 발표' })
-  if (actions.canStart) primaryActions.push({ action: 'start', label: '팬미팅 시작' })
-  if (actions.canEnd) primaryActions.push({ action: 'end', label: '팬미팅 종료' })
+  if (actions.canPublish) primaryActions.push({ action: 'publish', label: t('managerMeetingDetailPage.t102') })
+  if (actions.canDraw) primaryActions.push({ action: 'draw', label: t('managerMeetingDetailPage.t103') })
+  if (actions.canPublishResults) primaryActions.push({ action: 'publishResults', label: t('managerMeetingDetailPage.t104') })
+  if (actions.canStart) primaryActions.push({ action: 'start', label: t('managerMeetingDetailPage.t105') })
+  if (actions.canEnd) primaryActions.push({ action: 'end', label: t('managerMeetingDetailPage.t106') })
   if (actions.canOpenApplicationsNow) {
-    primaryActions.push({ action: 'openApplicationsNow', label: '응모 즉시 시작' })
+    primaryActions.push({ action: 'openApplicationsNow', label: t('managerMeetingDetailPage.t107') })
   }
   if (actions.canCloseApplicationsNow) {
-    primaryActions.push({ action: 'closeApplicationsNow', label: '응모 즉시 마감' })
+    // 아직 열리지 않은 팬미팅에서는 "마감"이 아니라 응모 기간을 접는 동작이므로 라벨을 달리 쓴다.
+    primaryActions.push({
+      action: 'closeApplicationsNow',
+      label:
+        meeting.status === 'PUBLISHED'
+          ? t('managerMeetingDetailPage.collapseApplicationWindow')
+          : t('managerMeetingDetailPage.t108'),
+    })
   }
   if (actions.canStartNow && !actions.canStart) {
-    primaryActions.push({ action: 'startNow', label: '지금 팬미팅 시작' })
+    primaryActions.push({ action: 'startNow', label: t('managerMeetingDetailPage.t109') })
   }
 
   const secondaryAction = actions.canDeleteDraft
-    ? ({ action: 'delete', label: '작성 내용 삭제' } as const)
+    ? ({ action: 'delete', label: t('managerMeetingDetailPage.t110') } as const)
     : actions.canCancel
-      ? ({ action: 'cancel', label: '취소' } as const)
+      ? ({ action: 'cancel', label: t('managerMeetingDetailPage.t111') } as const)
       : undefined
 
   const actionNote = meeting.status === 'DRAFT'
-    ? '팬미팅을 공개하면 팬이 팬미팅 정보와 응모 안내를 볼 수 있습니다.'
+    ? t('managerMeetingDetailPage.t112')
     : meeting.status === 'PUBLISHED'
       ? canUploadExternalParticipants
-        ? 'CSV로 참가자 명단을 등록해 확정하면 팬미팅이 진행 준비 상태가 됩니다.'
-        : `응모 시작 일시(${formatDateTime(meeting.application.startAt)})가 지나면 응모 접수가 열립니다.`
+        ? t('managerMeetingDetailPage.t113')
+        : t('managerMeetingDetailPage.t193', { p0: formatDateTime(meeting.application.startAt) })
       : meeting.status === 'APPLICATION_OPEN'
-        ? `응모 마감(${formatDateTime(meeting.application.endAt)})까지 팬이 응모할 수 있습니다. 현재 응모 ${applicantCount}명.`
+        ? t('managerMeetingDetailPage.t194', { p0: formatDateTime(meeting.application.endAt), p1: applicantCount })
         : meeting.status === 'APPLICATION_CLOSED' && !drawCompleted
-          ? `응모가 마감되었습니다. 응모자 ${applicantCount}명 중에서 당첨자를 추첨할 수 있습니다.`
+          ? t('managerMeetingDetailPage.t195', { p0: applicantCount })
           : meeting.status === 'APPLICATION_CLOSED'
-            ? `당첨자 ${participantCount}명이 참가자와 대기열에 등록되었습니다. 결과를 발표하면 알림이 발송됩니다.`
+            ? t('managerMeetingDetailPage.t196', { p0: participantCount })
             : meeting.status === 'READY'
-              ? `대기열 개방(${formatDateTime(meeting.operation.queueOpenAt)}) 뒤 팬미팅을 시작할 수 있습니다.`
+              ? t('managerMeetingDetailPage.t197', { p0: formatDateTime(meeting.operation.queueOpenAt) })
               : meeting.status === 'LIVE'
-                ? '팬미팅이 진행되고 있습니다. 실시간 운영 모니터에서 대기열을 관리하세요.'
+                ? t('managerMeetingDetailPage.t114')
                 : meeting.status === 'ENDED'
-                  ? '종료된 팬미팅은 취소하거나 다시 시작할 수 없습니다.'
-                  : '취소된 팬미팅은 다시 운영할 수 없습니다.'
+                  ? t('managerMeetingDetailPage.t115')
+                  : t('managerMeetingDetailPage.t116')
 
   const stageIndex = meeting.status === 'DRAFT' || meeting.status === 'CANCELED'
     ? -1
@@ -758,10 +775,10 @@ function OverviewPanel({
             : 4
 
   const unavailableReason = meeting.status === 'ENDED'
-    ? '종료된 팬미팅은 취소할 수 없습니다.'
+    ? t('managerMeetingDetailPage.t117')
     : meeting.status === 'CANCELED'
-      ? '이미 취소된 팬미팅입니다.'
-      : '지금은 팬미팅을 취소할 수 없습니다.'
+      ? t('managerMeetingDetailPage.t118')
+      : t('managerMeetingDetailPage.t119')
 
   return (
     <div>
@@ -782,15 +799,14 @@ function OverviewPanel({
                 className="inline-flex min-h-[var(--control-height)] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] text-sm font-bold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
                 to={`/manager/fan-meetings/${encodedId}/external-participants`}
               >
-                참가자 명단 등록 (CSV)
-              </Link>
+                 {t('managerMeetingDetailPage.t198')} </Link>
             ) : null}
             {primaryActions.map((item) => (
               <Button
                 disabled={busy}
                 key={item.action}
                 onClick={() => onAction(item.action)}
-                title={busy ? '다른 작업을 처리하고 있습니다.' : undefined}
+                title={busy ? t('managerMeetingDetailPage.t120') : undefined}
               >
                 {item.label}
               </Button>
@@ -799,7 +815,7 @@ function OverviewPanel({
               <Button
                 disabled={busy}
                 onClick={() => onAction(secondaryAction.action)}
-                title={busy ? '다른 작업을 처리하고 있습니다.' : undefined}
+                title={busy ? t('managerMeetingDetailPage.t121') : undefined}
                 variant="outline"
               >
                 {secondaryAction.label}
@@ -834,15 +850,15 @@ function OverviewPanel({
               done={stageIndex >= 1}
               description={
                 meeting.application.enabled
-                  ? `응모 기간 ${formatDateTime(meeting.application.startAt)} ~ ${formatDateTime(meeting.application.endAt)} · 모집 ${meeting.application.capacity}명`
-                  : '이 팬미팅은 응모를 사용하지 않습니다.'
+                  ? t('managerMeetingDetailPage.t199', { p0: formatDateTime(meeting.application.startAt), p1: formatDateTime(meeting.application.endAt), p2: meeting.application.capacity })
+                  : t('managerMeetingDetailPage.t122')
               }
               title={t('managerMeetingDetailPage.t18')}
             />
             <FlowStep
               current={stageIndex === 1}
               done={stageIndex >= 2}
-              description={`추첨하면 당첨자가 참가자와 대기열로 바로 등록됩니다. 현재 확정 참가자 ${participantCount}명.`}
+              description={t('managerMeetingDetailPage.t200', { p0: participantCount })}
               title={t('managerMeetingDetailPage.t19')}
             />
             <FlowStep
@@ -854,7 +870,7 @@ function OverviewPanel({
             <FlowStep
               current={stageIndex === 3}
               done={stageIndex >= 4}
-              description={`대기열 개방 ${formatDateTime(meeting.operation.queueOpenAt)} · 1인 통화 ${formatCallDuration(meeting.operation.callDurationSec)}`}
+              description={t('managerMeetingDetailPage.t201', { p0: formatDateTime(meeting.operation.queueOpenAt), p1: formatCallDuration(meeting.operation.callDurationSec) })}
               title={t('managerMeetingDetailPage.t22')}
             />
         </ol>
@@ -978,11 +994,11 @@ function SettingsPanel({
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('설정을 저장하려면 먼저 로그인해 주세요.')
+      setError(t('managerMeetingDetailPage.t123'))
       return
     }
     if (dirty.size === 0) {
-      setMessage('변경한 항목이 없습니다.')
+      setMessage(t('managerMeetingDetailPage.t124'))
       return
     }
     if (scheduleErrors.length > 0) {
@@ -1037,7 +1053,7 @@ function SettingsPanel({
     if (Object.keys(operation).length > 0) patch.operation = operation
 
     if (Object.keys(patch).length === 0) {
-      setMessage('지금은 저장할 수 있는 변경 내용이 없습니다.')
+      setMessage(t('managerMeetingDetailPage.t125'))
       return
     }
 
@@ -1046,11 +1062,11 @@ function SettingsPanel({
     setMessage(undefined)
     try {
       await patchFanMeeting(meetingId, patch, token)
-      setMessage('팬미팅 설정을 저장했습니다.')
+      setMessage(t('managerMeetingDetailPage.t126'))
       setDirty(new Set())
       onSaved()
     } catch (cause) {
-      setError(toErrorMessage(cause, '팬미팅 설정을 저장하지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerMeetingDetailPage.t127')))
     } finally {
       setSaving(false)
     }
@@ -1064,8 +1080,8 @@ function SettingsPanel({
       {basicLocked ? (
         <AlertBanner title={t('managerMeetingDetailPage.t29')} variant="info">
           {actions.applicationStarted
-            ? '응모가 시작되어 기본 정보·응모 설정·대기열 설정은 수정할 수 없습니다. 재입장 가능 시간과 다시 호출 횟수만 변경할 수 있습니다.'
-            : '진행이 시작되었거나 종료된 팬미팅은 수정할 수 없습니다.'}
+            ? t('managerMeetingDetailPage.t128')
+            : t('managerMeetingDetailPage.t129')}
         </AlertBanner>
       ) : null}
 
@@ -1136,7 +1152,7 @@ function SettingsPanel({
               />
               <TextField
                 disabled={basicLocked}
-                error={scheduleErrors.find((item) => item.startsWith('응모 마감'))}
+                error={scheduleErrors.find((item) => item.startsWith(t('managerMeetingDetailPage.t130')))}
                 label={t('managerMeetingDetailPage.t42')}
                 onChange={(event) => setField('applicationEndAt', event.target.value)}
                 type="datetime-local"
@@ -1144,7 +1160,7 @@ function SettingsPanel({
               />
               <TextField
                 disabled={basicLocked}
-                error={scheduleErrors.find((item) => item.startsWith('결과 발표'))}
+                error={scheduleErrors.find((item) => item.startsWith(t('managerMeetingDetailPage.t131')))}
                 label={t('managerMeetingDetailPage.t43')}
                 onChange={(event) => setField('resultAnnouncementAt', event.target.value)}
                 type="datetime-local"
@@ -1171,7 +1187,7 @@ function SettingsPanel({
         <CardContent className="grid gap-5 sm:grid-cols-2">
           <TextField
             disabled={operationLocked}
-            error={scheduleErrors.find((item) => item.startsWith('대기열 오픈'))}
+            error={scheduleErrors.find((item) => item.startsWith(t('managerMeetingDetailPage.t132')))}
             label={t('managerMeetingDetailPage.t47')}
             onChange={(event) => setField('queueOpenAt', event.target.value)}
             type="datetime-local"
@@ -1181,7 +1197,7 @@ function SettingsPanel({
             disabled={operationLocked}
             endAdornment={<span className="pr-3 text-sm text-[var(--color-text-secondary)]">{t('managerMeetingDetailPage.t48')}</span>}
             error={callDurationError}
-            helperText={`${CALL_DURATION_MIN_MINUTES}~${CALL_DURATION_MAX_MINUTES}분 사이로 입력합니다.`}
+            helperText={t('managerMeetingDetailPage.t202', { p0: CALL_DURATION_MIN_MINUTES, p1: CALL_DURATION_MAX_MINUTES })}
             label={t('managerMeetingDetailPage.t49')}
             max={CALL_DURATION_MAX_MINUTES}
             min={CALL_DURATION_MIN_MINUTES}
@@ -1397,10 +1413,10 @@ function TestControlPanel({
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('테스트 제어를 실행하려면 먼저 로그인해 주세요.')
+      setError(t('managerMeetingDetailPage.t133'))
       return
     }
-    if (!window.confirm('상태와 일정을 강제로 변경할까요? 정상 전환 규칙을 건너뜁니다.')) return
+    if (!window.confirm(t('managerMeetingDetailPage.t134'))) return
 
     const request: FanMeetingTestControlRequest = { status: form.status }
     if (form.scheduledStartAt) request.scheduledStartAt = toApiLocalDateTime(form.scheduledStartAt)
@@ -1416,10 +1432,10 @@ function TestControlPanel({
     setMessage(undefined)
     try {
       const updated = await controlFanMeetingForTest(meetingId, request, token)
-      setMessage(`상태를 ${meetingStatusLabel(updated.status)}(으)로 변경했습니다.`)
+      setMessage(t('managerMeetingDetailPage.t203', { p0: meetingStatusLabel(updated.status) }))
       onApplied()
     } catch (cause) {
-      setError(toErrorMessage(cause, '테스트 제어를 실행하지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerMeetingDetailPage.t135')))
     } finally {
       setSaving(false)
     }
@@ -1440,7 +1456,7 @@ function TestControlPanel({
           <Select
             label={t('managerMeetingDetailPage.t68')}
             onChange={(event) => changeStatus(event.target.value as FanMeetingStatus)}
-            options={TEST_CONTROL_STATUS_OPTIONS.map((option) => ({
+            options={TEST_CONTROL_STATUS_OPTIONS().map((option) => ({
               value: option.value,
               label: option.label,
             }))}
@@ -1490,8 +1506,8 @@ function TestControlPanel({
           />
           <p className="text-xs leading-5 text-[var(--color-text-secondary)] sm:col-span-2">
             {autoSchedule
-              ? '상태를 고르면 그 상태가 성립하는 일시로 자동 계산합니다. 직접 입력하려면 자동 조정을 꺼 주세요.'
-              : '비워 둔 일시는 기존 설정을 그대로 유지합니다. 상태는 항상 함께 전송됩니다.'}
+              ? t('managerMeetingDetailPage.t136')
+              : t('managerMeetingDetailPage.t137')}
           </p>
         </CardContent>
       </Card>

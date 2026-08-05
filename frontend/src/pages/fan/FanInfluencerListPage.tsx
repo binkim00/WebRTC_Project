@@ -49,7 +49,7 @@ export function FanInfluencerListPage() {
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
         setError(
-          cause instanceof ApiError ? cause.message : '인플루언서 목록을 불러오지 못했습니다.',
+          cause instanceof ApiError ? cause.message : t('fanInfluencerListPage.t12'),
         )
       })
       .finally(() => {
@@ -57,6 +57,8 @@ export function FanInfluencerListPage() {
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyword, page])
 
   /** 검색어를 확정하고 첫 페이지로 되돌린다. 남은 페이지 번호로 조회하면 빈 목록이 나올 수 있다. */
@@ -113,8 +115,8 @@ export function FanInfluencerListPage() {
         <EmptyState
           description={
             keyword
-              ? '검색어와 일치하는 인플루언서가 없습니다. 다른 검색어를 입력해 보세요.'
-              : '아직 공개된 인플루언서가 없습니다.'
+              ? t('fanInfluencerListPage.t13')
+              : t('fanInfluencerListPage.t14')
           }
           title={t('fanInfluencerListPage.t8')}
         />
@@ -141,7 +143,7 @@ export function FanInfluencerListPage() {
                     </div>
 
                     <p className="line-clamp-3 min-h-15 text-sm leading-6 text-[var(--color-text-secondary)]">
-                      {influencer.introduction ?? '등록된 소개가 없습니다.'}
+                      {influencer.introduction ?? t('fanInfluencerListPage.t15')}
                     </p>
 
                     <Link

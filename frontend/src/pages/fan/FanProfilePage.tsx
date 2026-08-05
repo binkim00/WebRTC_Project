@@ -9,6 +9,7 @@ import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
+import { PREFERRED_LANGUAGE_OPTIONS, preferredLanguageLabel } from '../../api/auth'
 import { getAuthSession } from '../../api/authSession'
 import { getEmailVerificationStatus } from '../../api/emailVerifications'
 import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
@@ -25,33 +26,34 @@ import {
   TextField,
   WithdrawAccountSection,
 } from '../../components'
-import { useTranslation } from '../../i18n'
+import { useTranslation, type TranslationKey } from '../../i18n'
 
-// 백엔드 PreferredLanguage Enum(KOREAN, ENGLISH)과 동일한 값만 사용한다.
-const preferredLanguageOptions = [
-  { label: '한국어', value: 'KOREAN' },
-  { label: 'English', value: 'ENGLISH' },
-]
 
-const preferredLanguageLabels: Record<string, string> = {
-  KOREAN: '한국어',
-  ENGLISH: 'English',
-}
-
+/**
+ * 마이페이지 활동 바로가기다.
+ *
+ * 문장 대신 **사전 키**를 들고 있다. 이 배열은 모듈 로드 시 한 번만 만들어지므로 여기서 번역하면
+ * 처음 언어로 굳는다. 렌더 시점에 `t(item.titleKey)`로 옮긴다.
+ */
 const activityItems = [
   {
-    title: '응모한 이벤트',
-    description: '내가 응모한 이벤트를 확인해 보세요.',
+    titleKey: 'fanProfilePage.activity.applications',
+    descriptionKey: 'fanProfilePage.activity.applicationsDesc',
     to: '/fan/mypage/applications',
     icon: Ticket,
   },
   {
-    title: '팬미팅',
-    description: '신청한 팬미팅 목록으로 이동합니다.',
+    titleKey: 'fanProfilePage.activity.fanMeetings',
+    descriptionKey: 'fanProfilePage.activity.fanMeetingsDesc',
     to: '/fan/mypage/fan-meetings?status=upcoming',
     icon: VideoCamera,
   },
-] as const
+] as const satisfies readonly {
+  titleKey: TranslationKey
+  descriptionKey: TranslationKey
+  to: string
+  icon: unknown
+}[]
 
 export function FanProfilePage() {
   const { t } = useTranslation()
@@ -67,7 +69,7 @@ export function FanProfilePage() {
     const session = getAuthSession()
 
     if (!session) {
-      setLoadError('프로필을 확인하려면 먼저 로그인해 주세요.')
+      setLoadError(t('fanProfilePage.t22'))
       return () => controller.abort()
     }
 
@@ -81,11 +83,13 @@ export function FanProfilePage() {
         setLoadError(
           reason instanceof ApiError || reason instanceof TypeError
             ? reason.message
-            : '프로필 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+            : t('fanProfilePage.t23'),
         )
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // /users/me가 emailVerified를 내려주지 않는 백엔드에서도 인증 안내를 띄울 수 있도록
@@ -118,7 +122,7 @@ export function FanProfilePage() {
 
     const session = getAuthSession()
     if (!session) {
-      setSaveError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+      setSaveError(t('fanProfilePage.t24'))
       return
     }
 
@@ -127,7 +131,7 @@ export function FanProfilePage() {
     const preferredLanguage = String(formData.get('preferredLanguage') ?? 'KOREAN')
 
     if (!nickname) {
-      setSaveError('닉네임을 입력해 주세요.')
+      setSaveError(t('fanProfilePage.t25'))
       return
     }
 
@@ -152,12 +156,12 @@ export function FanProfilePage() {
           : current,
       )
       setIsEditing(false)
-      setSaveNotice('회원정보가 수정되었습니다.')
+      setSaveNotice(t('fanProfilePage.t26'))
     } catch (reason) {
       setSaveError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '회원정보 수정에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('fanProfilePage.t27'),
       )
     } finally {
       setIsSaving(false)
@@ -197,7 +201,7 @@ export function FanProfilePage() {
                 setProfile((current) =>
                   current ? { ...current, emailVerified: true } : current,
                 )
-                setSaveNotice('이메일 인증이 완료되었어요. 이제 팬미팅 응모에 참여할 수 있습니다.')
+                setSaveNotice(t('fanProfilePage.t28'))
               }}
             />
           </CardContent>
@@ -215,7 +219,7 @@ export function FanProfilePage() {
               {/* 등록된 프로필 이미지가 없으면 닉네임 기반 아바타를 표시한다 */}
               {profile.profileImageUrl ? (
                 <img
-                  alt={`${profile.nickname} 프로필`}
+                  alt={t('fanProfilePage.t29', { p0: profile.nickname })}
                   className="size-24 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
                   src={profile.profileImageUrl}
                 />
@@ -244,7 +248,7 @@ export function FanProfilePage() {
                       defaultValue={profile.preferredLanguage}
                       label={t('fanProfilePage.t8')}
                       name="preferredLanguage"
-                      options={preferredLanguageOptions}
+                      options={PREFERRED_LANGUAGE_OPTIONS}
                     />
                     {saveError ? (
                       <AlertBanner title={t('fanProfilePage.t9')} variant="error">
@@ -292,8 +296,7 @@ export function FanProfilePage() {
                           {t('fanProfilePage.t14')}
                         </dt>
                         <dd className="font-bold">
-                          {preferredLanguageLabels[profile.preferredLanguage] ??
-                            profile.preferredLanguage}
+                          {preferredLanguageLabel(profile.preferredLanguage)}
                         </dd>
                       </div>
                       <div className="flex gap-3">
@@ -357,9 +360,9 @@ export function FanProfilePage() {
                     <Icon aria-hidden size={28} weight="duotone" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <strong className="block text-lg">{item.title}</strong>
+                    <strong className="block text-lg">{t(item.titleKey)}</strong>
                     <span className="mt-1 block text-sm text-[var(--color-text-secondary)]">
-                      {item.description}
+                      {t(item.descriptionKey)}
                     </span>
                   </span>
                   <ArrowRight

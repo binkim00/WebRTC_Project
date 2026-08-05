@@ -10,9 +10,10 @@ import {
   fetchPublicFanMeetingDetail,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
+import { markApplicationResultRevealed } from './applicationResultReveal'
 import { JellyCelebration } from '../../components/celebration/JellyCelebration'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 function pad(part: number) {
   return String(part).padStart(2, '0')
@@ -50,7 +51,7 @@ function formatRemaining(announceAt: string): string {
   const diff = Math.max(0, new Date(announceAt).getTime() - Date.now())
   const days = Math.floor(diff / 86_400_000)
   const hours = Math.floor((diff % 86_400_000) / 3_600_000)
-  return `${days}일 ${hours}시간`
+  return translate('fanApplicationResultPage.t42', { p0: days, p1: hours })
 }
 
 function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
@@ -78,7 +79,7 @@ export function FanApplicationResultPage() {
     const session = getAuthSession()
 
     if (!session || session.role !== 'FAN') {
-      setError('팬 계정으로 로그인한 뒤 응모 결과를 확인해 주세요.')
+      setError(t('fanApplicationResultPage.t36'))
       return () => controller.abort()
     }
 
@@ -100,7 +101,13 @@ export function FanApplicationResultPage() {
               session.accessToken,
               controller.signal,
             )
-            setResultPublished(isResultPublished(detail))
+            const published = isResultPublished(detail)
+            setResultPublished(published)
+            // 결과를 실제로 화면에 띄운 시점에만 "확인함"으로 기록한다. 이 기록이 있어야
+            // 응모 내역 목록이 당첨·미당첨을 미리 노출하지 않는다.
+            if (published) {
+              markApplicationResultRevealed(session.userId, Number(meetingId))
+            }
           } catch {
             if (controller.signal.aborted) return
             // 공개 여부를 확인하지 못하면 결과를 숨기는 쪽으로 처리한다.
@@ -116,7 +123,7 @@ export function FanApplicationResultPage() {
         setError(
           reason instanceof ApiError || reason instanceof TypeError
             ? reason.message
-            : '응모 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+            : t('fanApplicationResultPage.t37'),
         )
       })
 
@@ -131,6 +138,8 @@ export function FanApplicationResultPage() {
       .catch(() => undefined)
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId, reloadKey])
 
   if (!meetingId?.trim()) {
@@ -183,12 +192,12 @@ export function FanApplicationResultPage() {
     return (
       <div className="rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
         <h1 className="text-xl font-black tracking-[-0.03em]">
-          {application === null ? '응모 내역이 없습니다' : '응모를 취소한 이벤트입니다'}
+          {application === null ? t('fanApplicationResultPage.t38') : t('fanApplicationResultPage.t39')}
         </h1>
         <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
           {application === null
-            ? '이 이벤트에 응모한 기록을 찾을 수 없어요. 이벤트 상세에서 응모해 주세요.'
-            : '응모를 취소해 결과를 확인할 수 없어요. 모집 중이라면 다시 응모할 수 있어요.'}
+            ? t('fanApplicationResultPage.t40')
+            : t('fanApplicationResultPage.t41')}
         </p>
         <Link
           className="mj-font-label mt-6 inline-flex min-h-[var(--control-height)] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-6 py-2 text-sm transition-colors hover:bg-[var(--color-surface-page)]"
@@ -201,7 +210,7 @@ export function FanApplicationResultPage() {
   }
 
   const announcedAtLabel = application.resultDecidedAt
-    ? `${formatDateTime(application.resultDecidedAt)} 발표`
+    ? t('fanApplicationResultPage.t43', { p0: formatDateTime(application.resultDecidedAt) })
     : null
   const operation = detail?.meeting.operation
   const resultAnnounceAt = detail?.meeting.application.resultAnnouncementAt ?? null
@@ -219,7 +228,7 @@ export function FanApplicationResultPage() {
         {application.coverImageUrl ? (
           <figure className="relative m-0 h-[min(34vw,320px)] overflow-hidden bg-[var(--color-surface-muted)]">
             <img
-              alt={`팬미팅에서 만나게 될 ${application.influencerName}`}
+              alt={t('fanApplicationResultPage.t44', { p0: application.influencerName })}
               className="absolute inset-0 size-full object-cover"
               src={application.coverImageUrl}
             />
@@ -319,7 +328,7 @@ export function FanApplicationResultPage() {
               <div>
                 <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanApplicationResultPage.t24')}</p>
                 <p className="mt-1.5 text-lg font-extrabold tabular-nums">
-                  {capacity !== undefined ? `${capacity}명 선정` : '-'}
+                  {capacity !== undefined ? t('fanApplicationResultPage.t45', { p0: capacity }) : '-'}
                 </p>
               </div>
             </div>

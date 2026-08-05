@@ -20,12 +20,12 @@ import {
   Textarea,
 } from '../../components'
 import { toErrorMessage } from './meetingLifecycle'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 /** 백엔드가 응모 답변으로 허용하는 질문 유형은 주관식 두 가지뿐이다. */
-const QUESTION_TYPE_OPTIONS = [
-  { value: 'SHORT_TEXT', label: '단답형' },
-  { value: 'LONG_TEXT', label: '장문형' },
+const QUESTION_TYPE_OPTIONS = () => [
+  { value: 'SHORT_TEXT', label: translate('managerApplicationFormPanel.t27') },
+  { value: 'LONG_TEXT', label: translate('managerApplicationFormPanel.t28') },
 ]
 
 /** 백엔드가 허용하는 응모 질문 최대 개수다. */
@@ -82,10 +82,12 @@ export function ManagerApplicationFormPanel({
           setLoaded(true)
           return
         }
-        setError(toErrorMessage(cause, '응모 폼을 불러오지 못했습니다.'))
+        setError(toErrorMessage(cause, t('managerApplicationFormPanel.t21')))
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId])
 
   /** 질문 순서를 위나 아래로 한 칸 옮긴다. */
@@ -113,23 +115,23 @@ export function ManagerApplicationFormPanel({
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('응모 폼을 저장하려면 먼저 로그인해 주세요.')
+      setError(t('managerApplicationFormPanel.t22'))
       return
     }
     if (questions.some((question) => !question.questionText.trim())) {
-      setError('모든 질문 내용을 입력해 주세요.')
+      setError(t('managerApplicationFormPanel.t23'))
       return
     }
     if (formDescription.trim().length > MAX_FORM_DESCRIPTION_LENGTH) {
-      setError(`응모 안내 문구는 ${MAX_FORM_DESCRIPTION_LENGTH}자 이내로 입력해 주세요.`)
+      setError(t('managerApplicationFormPanel.t29', { p0: MAX_FORM_DESCRIPTION_LENGTH }))
       return
     }
     if (questions.some((question) => question.questionText.trim().length > MAX_QUESTION_TEXT_LENGTH)) {
-      setError(`질문 내용은 항목당 ${MAX_QUESTION_TEXT_LENGTH}자 이내로 입력해 주세요.`)
+      setError(t('managerApplicationFormPanel.t30', { p0: MAX_QUESTION_TEXT_LENGTH }))
       return
     }
     if (questions.length > MAX_QUESTIONS) {
-      setError(`응모 질문은 최대 ${MAX_QUESTIONS}개까지 등록할 수 있습니다.`)
+      setError(t('managerApplicationFormPanel.t31', { p0: MAX_QUESTIONS }))
       return
     }
 
@@ -153,9 +155,9 @@ export function ManagerApplicationFormPanel({
       )
       setFormDescription(saved.formDescription ?? '')
       setQuestions(toEditableQuestions(saved.questions, nextKey))
-      setMessage('응모 폼을 저장했습니다.')
+      setMessage(t('managerApplicationFormPanel.t24'))
     } catch (cause) {
-      setError(toErrorMessage(cause, '응모 폼을 저장하지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerApplicationFormPanel.t25')))
     } finally {
       setSaving(false)
     }
@@ -165,7 +167,7 @@ export function ManagerApplicationFormPanel({
     <form className="grid gap-5" onSubmit={save}>
       {!editable ? (
         <AlertBanner title={t('managerApplicationFormPanel.t1')} variant="info">
-          {lockedReason ?? '응모가 시작된 뒤에는 응모 폼을 수정할 수 없습니다. 현재 내용은 확인만 가능합니다.'}
+          {lockedReason ?? t('managerApplicationFormPanel.t26')}
         </AlertBanner>
       ) : null}
 
@@ -192,6 +194,10 @@ export function ManagerApplicationFormPanel({
             rows={3}
             value={formDescription}
           />
+          {/* 어디에 쓰이는 문구인지 운영자가 알 수 있게 노출 위치를 함께 알려 준다. */}
+          <p className="-mt-2 text-[13px] leading-6 text-[var(--color-text-tertiary)]">
+            {t('managerApplicationFormPanel.descriptionHint')}
+          </p>
 
           {questions.length === 0 ? (
             <p className="rounded-xl border border-dashed border-[var(--color-divider)] p-5 text-center text-sm text-[var(--color-text-secondary)]">
@@ -241,7 +247,7 @@ export function ManagerApplicationFormPanel({
                           questionType: event.target.value === 'LONG_TEXT' ? 'LONG_TEXT' : 'SHORT_TEXT',
                         })
                       }
-                      options={QUESTION_TYPE_OPTIONS}
+                      options={QUESTION_TYPE_OPTIONS()}
                       value={question.questionType}
                     />
                   </div>

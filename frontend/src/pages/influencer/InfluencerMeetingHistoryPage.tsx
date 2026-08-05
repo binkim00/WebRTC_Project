@@ -7,20 +7,20 @@ import {
   fetchMyMeetings,
   type ManagerMeetingSummary,
 } from '../../api/managerMeetings'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
-const statusContent: Record<string, { label: string; className: string }> = {
-  DRAFT: { label: '작성 중', className: 'text-[var(--color-text-secondary)]' },
-  PUBLISHED: { label: '발행됨', className: 'text-[var(--color-text-secondary)]' },
-  APPLICATION_OPEN: { label: '응모 접수 중', className: 'text-[var(--color-primary-coral)]' },
-  APPLICATION_CLOSED: { label: '응모 마감', className: 'text-[var(--color-text-secondary)]' },
-  READY: { label: '시작 대기', className: 'text-[var(--color-warning)]' },
-  LIVE: { label: '진행 중', className: 'text-[var(--color-success)]' },
-  ENDED: { label: '종료', className: 'text-[var(--color-text-secondary)]' },
-  CANCELED: { label: '취소됨', className: 'text-[var(--color-error)]' },
-}
+const statusContent = (): Record<string, { label: string; className: string }> => ({
+  DRAFT: { label: translate('influencerMeetingHistoryPage.t33'), className: 'text-[var(--color-text-secondary)]' },
+  PUBLISHED: { label: translate('influencerMeetingHistoryPage.t34'), className: 'text-[var(--color-text-secondary)]' },
+  APPLICATION_OPEN: { label: translate('influencerMeetingHistoryPage.t35'), className: 'text-[var(--color-primary-coral)]' },
+  APPLICATION_CLOSED: { label: translate('influencerMeetingHistoryPage.t36'), className: 'text-[var(--color-text-secondary)]' },
+  READY: { label: translate('influencerMeetingHistoryPage.t37'), className: 'text-[var(--color-warning)]' },
+  LIVE: { label: translate('influencerMeetingHistoryPage.t38'), className: 'text-[var(--color-success)]' },
+  ENDED: { label: translate('influencerMeetingHistoryPage.t39'), className: 'text-[var(--color-text-secondary)]' },
+  CANCELED: { label: translate('influencerMeetingHistoryPage.t40'), className: 'text-[var(--color-error)]' },
+})
 
-const fallbackStatus = { label: '종료', className: 'text-[var(--color-text-secondary)]' }
+const fallbackStatus = () => ({ label: translate('influencerMeetingHistoryPage.t41'), className: 'text-[var(--color-text-secondary)]' })
 
 const PAGE_SIZE = 5
 /** 이 화면에서만 팬미팅을 만드는 1인 인플루언서·매니저 전용 경로다. 소속 인플루언서가 열면 라우터가 403으로 보낸다. */
@@ -37,12 +37,12 @@ function formatSchedule(value: string) {
 function errorMessage(reason: unknown) {
   return reason instanceof ApiError || reason instanceof TypeError
     ? reason.message
-    : '팬미팅 이력을 불러오지 못했습니다.'
+    : translate('influencerMeetingHistoryPage.t42')
 }
 
 function statusOf(meeting: ManagerMeetingSummary) {
   // 백엔드가 새 상태를 추가해도 배지 렌더링이 중단되지 않도록 안전한 기본값을 둔다.
-  return statusContent[meeting.status ?? 'ENDED'] ?? fallbackStatus
+  return statusContent()[meeting.status ?? 'ENDED'] ?? fallbackStatus()
 }
 
 export function InfluencerMeetingHistoryPage() {
@@ -69,7 +69,7 @@ export function InfluencerMeetingHistoryPage() {
 
   useEffect(() => {
     if (!authToken) {
-      setLoadError('로그인 정보가 없습니다. 로그인 후 다시 시도해 주세요.')
+      setLoadError(t('influencerMeetingHistoryPage.t17'))
       setLoading(false)
       return
     }
@@ -95,6 +95,8 @@ export function InfluencerMeetingHistoryPage() {
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, keyword, page])
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -156,12 +158,12 @@ export function InfluencerMeetingHistoryPage() {
       ) : isEmpty ? (
         <div className="grid place-items-center px-6 py-20 text-center" role="status">
           <strong className="text-xl font-extrabold tracking-[-0.03em]">
-            {keyword ? '검색 결과가 없습니다' : '아직 생성한 팬미팅이 없습니다'}
+            {keyword ? t('influencerMeetingHistoryPage.t18') : t('influencerMeetingHistoryPage.t19')}
           </strong>
           <span className="mt-[9px] max-w-[420px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
             {keyword
-              ? '입력한 팬미팅명을 확인하고 다시 검색해 주세요.'
-              : '새 팬미팅을 만들면 일정과 진행 상태를 이곳에서 확인할 수 있어요.'}
+              ? t('influencerMeetingHistoryPage.t20')
+              : t('influencerMeetingHistoryPage.t21')}
           </span>
           {keyword ? (
             <Button className="mt-5" onClick={resetSearch} variant="secondary">
@@ -184,8 +186,8 @@ export function InfluencerMeetingHistoryPage() {
               role="row"
             >
               {(canOpenDetail
-                ? ['팬미팅', '일정', '상태', '팬 정보', '보고서', '상세']
-                : ['팬미팅', '일정', '상태', '팬 정보', '보고서']
+                ? [t('influencerMeetingHistoryPage.t22'), t('influencerMeetingHistoryPage.t23'), t('influencerMeetingHistoryPage.t24'), t('influencerMeetingHistoryPage.t25'), t('influencerMeetingHistoryPage.t26'), t('influencerMeetingHistoryPage.t27')]
+                : [t('influencerMeetingHistoryPage.t28'), t('influencerMeetingHistoryPage.t29'), t('influencerMeetingHistoryPage.t30'), t('influencerMeetingHistoryPage.t31'), t('influencerMeetingHistoryPage.t32')]
               ).map((label) => (
                 <span
                   className="text-[13px] font-bold text-[var(--color-text-muted)]"

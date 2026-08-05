@@ -1,14 +1,22 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { I18nProvider } from '../../i18n'
 import { Tabs } from './Tabs'
+
+/**
+ * Tabs는 기본 aria-label을 사전에서 가져오므로 실제 사용처와 같이 Provider 안에서 렌더링한다.
+ */
+function renderWithI18n(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>)
+}
 
 afterEach(cleanup)
 
 describe('Tabs', () => {
   it('방향키로 비활성 탭을 건너뛰고 선택과 포커스를 함께 이동한다', () => {
     const onValueChange = vi.fn()
-    render(
+    renderWithI18n(
       <Tabs
         items={[
           { value: 'upcoming', label: '예정' },
@@ -31,7 +39,7 @@ describe('Tabs', () => {
 
   it('Home/End 키와 탭-패널 ARIA 연결을 제공한다', () => {
     const onValueChange = vi.fn()
-    render(
+    renderWithI18n(
       <Tabs
         ariaLabel="팬 기록 종류"
         items={[
@@ -57,7 +65,7 @@ describe('Tabs', () => {
 
   it('수동 활성화 모드에서는 방향키가 포커스만 이동한다', () => {
     const onValueChange = vi.fn()
-    render(
+    renderWithI18n(
       <Tabs
         activationMode="manual"
         items={[

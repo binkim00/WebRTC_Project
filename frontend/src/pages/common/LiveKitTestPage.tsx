@@ -10,9 +10,9 @@ import { useTranslation } from '../../i18n'
 export function LiveKitTestPage() {
   const { t } = useTranslation()
   const [identity, setIdentity] = useState('browser-user-1')
-  const [displayName, setDisplayName] = useState('브라우저 테스트 사용자')
+  const [displayName, setDisplayName] = useState(t('liveKitTestPage.t13'))
   const [tokenInfo, setTokenInfo] = useState<LiveKitTestTokenResponse>()
-  const [status, setStatus] = useState('백엔드 토큰 발급을 기다리는 중입니다.')
+  const [status, setStatus] = useState(t('liveKitTestPage.t14'))
   const [error, setError] = useState<string>()
   const [connecting, setConnecting] = useState(false)
   const roomRef = useRef<Room | null>(null)
@@ -33,7 +33,7 @@ export function LiveKitTestPage() {
   async function join() {
     setConnecting(true)
     setError(undefined)
-    setStatus('POST /api/v1/livekit/test-token 요청 중입니다.')
+    setStatus(t('liveKitTestPage.t15'))
     clearTracks(localVideoRef.current)
     clearTracks(remoteVideoRef.current)
     roomRef.current?.disconnect()
@@ -52,9 +52,9 @@ export function LiveKitTestPage() {
         }
       })
       room.on(RoomEvent.TrackUnsubscribed, (track) => track.detach())
-      room.on(RoomEvent.Disconnected, () => setStatus('LiveKit 방에서 나갔습니다.'))
+      room.on(RoomEvent.Disconnected, () => setStatus(t('liveKitTestPage.t16')))
 
-      setStatus('LiveKit 방에 연결 중입니다.')
+      setStatus(t('liveKitTestPage.t17'))
       await room.connect(info.liveKitUrl, info.accessToken)
       await room.localParticipant.setCameraEnabled(true)
       await room.localParticipant.setMicrophoneEnabled(true)
@@ -67,13 +67,13 @@ export function LiveKitTestPage() {
         video.playsInline = true
         localVideoRef.current.appendChild(video)
       }
-      setStatus(`연결 완료 · ${info.roomName} · ${info.identity}`)
+      setStatus(t('liveKitTestPage.t21', { p0: info.roomName, p1: info.identity }))
     } catch (caught) {
       roomRef.current?.disconnect()
       roomRef.current = null
       setTokenInfo(undefined)
-      setStatus('연결하지 못했습니다.')
-      setError(caught instanceof Error ? caught.message : 'LiveKit 테스트 연결에 실패했습니다.')
+      setStatus(t('liveKitTestPage.t18'))
+      setError(caught instanceof Error ? caught.message : t('liveKitTestPage.t19'))
     } finally {
       setConnecting(false)
     }
@@ -85,7 +85,7 @@ export function LiveKitTestPage() {
     clearTracks(localVideoRef.current)
     clearTracks(remoteVideoRef.current)
     setTokenInfo(undefined)
-    setStatus('연결이 종료되었습니다.')
+    setStatus(t('liveKitTestPage.t20'))
   }
 
   // 공통 App이 main 랜드마크를 제공하므로 페이지 내부는 일반 컨테이너로 둔다.

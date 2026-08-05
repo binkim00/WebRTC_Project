@@ -29,8 +29,8 @@ export function EndCallDialog({
     <Dialog
       description={
         isHostMode
-          ? '현재 팬과의 통화만 끝내고 다음 팬을 기다릴 수 있습니다.'
-          : 'LiveKit 통화방 연결을 종료하고 다음 화면으로 이동합니다.'
+          ? t('endCallDialog.t3')
+          : t('endCallDialog.t4')
       }
       footer={
         <>
@@ -43,18 +43,18 @@ export function EndCallDialog({
             </Button>
           ) : null}
           <Button onClick={onConfirm} variant="danger">
-            {isHostMode ? '이 팬 통화 종료' : '종료하기'}
+            {isHostMode ? t('endCallDialog.t5') : t('endCallDialog.t6')}
           </Button>
         </>
       }
       onOpenChange={onOpenChange}
       open={open}
-      title={isHostMode ? '이 팬과의 통화를 종료할까요?' : '영상 통화를 종료할까요?'}
+      title={isHostMode ? t('endCallDialog.t7') : t('endCallDialog.t8')}
     >
       <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
         {isHostMode
-          ? '통화를 종료하면 같은 방에 머문 채 다음 팬이 연결될 때까지 기다립니다. 카메라와 마이크는 계속 사용합니다.'
-          : '연결을 종료하면 LiveKit이 사용 중인 카메라와 마이크도 함께 정리합니다.'}
+          ? t('endCallDialog.t9')
+          : t('endCallDialog.t10')}
       </p>
     </Dialog>
   )

@@ -55,7 +55,7 @@ export function FanInfluencerDetailPage() {
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
         setError(
-          cause instanceof ApiError ? cause.message : '인플루언서 정보를 불러오지 못했습니다.',
+          cause instanceof ApiError ? cause.message : t('fanInfluencerDetailPage.t15'),
         )
       })
       .finally(() => {
@@ -63,6 +63,8 @@ export function FanInfluencerDetailPage() {
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [influencerId, validId])
 
   if (!validId) {
@@ -92,7 +94,7 @@ export function FanInfluencerDetailPage() {
           <ArrowLeft size={17} /> {t('fanInfluencerDetailPage.t4')}
         </Link>
         <AlertBanner title={t('fanInfluencerDetailPage.t5')} variant="error">
-          {error ?? '해당 인플루언서를 찾을 수 없습니다.'}
+          {error ?? t('fanInfluencerDetailPage.t16')}
         </AlertBanner>
       </div>
     )
@@ -158,7 +160,7 @@ export function FanInfluencerDetailPage() {
                 <Card className="h-full overflow-hidden">
                   {meeting.coverImageUrl ? (
                     <img
-                      alt={`${meeting.title} 썸네일`}
+                      alt={t('fanInfluencerDetailPage.t17', { p0: meeting.title })}
                       className="aspect-[16/7] w-full object-cover"
                       src={meeting.coverImageUrl}
                     />
@@ -166,9 +168,9 @@ export function FanInfluencerDetailPage() {
                   <CardContent className="grid content-start gap-3">
                     <Badge
                       className="w-fit"
-                      variant={fanMeetingStatusContent[meeting.status].variant}
+                      variant={fanMeetingStatusContent()[meeting.status].variant}
                     >
-                      {fanMeetingStatusContent[meeting.status].label}
+                      {fanMeetingStatusContent()[meeting.status].label}
                     </Badge>
                     <p className="text-base font-extrabold">{meeting.title}</p>
                     <p className="text-sm text-[var(--color-text-secondary)]">

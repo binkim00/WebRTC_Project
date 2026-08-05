@@ -62,7 +62,7 @@ export function ManagerExternalParticipantsPage() {
       anchor.click()
       URL.revokeObjectURL(objectUrl)
     } catch (reason) {
-      setTemplateError(errorMessage(reason, '명단 양식을 내려받지 못했습니다.'))
+      setTemplateError(errorMessage(reason, t('managerExternalParticipantsPage.t34')))
     } finally {
       setDownloadingTemplate(false)
     }
@@ -76,7 +76,7 @@ export function ManagerExternalParticipantsPage() {
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setPreviewError('명단을 업로드하려면 먼저 로그인해 주세요.')
+      setPreviewError(t('managerExternalParticipantsPage.t35'))
       return
     }
 
@@ -88,7 +88,7 @@ export function ManagerExternalParticipantsPage() {
     try {
       setPreview(await previewExternalParticipantsCsv(fanMeetingId, selected, token))
     } catch (reason) {
-      setPreviewError(errorMessage(reason, '명단 파일을 확인하지 못했습니다.'))
+      setPreviewError(errorMessage(reason, t('managerExternalParticipantsPage.t36')))
       setFile(undefined)
     } finally {
       setPreviewing(false)
@@ -113,12 +113,12 @@ export function ManagerExternalParticipantsPage() {
       setConfirmDialogOpen(false)
       navigate(`/manager/fan-meetings/${fanMeetingId}`)
     } catch (reason) {
-      const message = errorMessage(reason, '참가자 명단을 확정하지 못했습니다.')
+      const message = errorMessage(reason, t('managerExternalParticipantsPage.t37'))
       // 백엔드 전역 핸들러가 모든 DB 제약 위반을 회원가입용 문구로 돌려줘 이 화면과 문맥이
       // 어긋난다. 명단 확정에서는 실제로는 참가자 저장이 실패한 것이므로 상황을 설명해 준다.
       setConfirmError(
         message === 'Login ID or email is already in use.'
-          ? `참가자 정보를 저장하는 중 서버 데이터 제약과 충돌했습니다. 같은 명단을 이미 확정했거나 서버 스키마 문제일 수 있습니다. (서버 응답: ${message})`
+          ? t('managerExternalParticipantsPage.t44', { p0: message })
           : message,
       )
       // 오류가 모달 뒤에 가려지지 않도록 확인 창을 닫고 화면의 오류 배너로 보여 준다.
@@ -192,7 +192,7 @@ export function ManagerExternalParticipantsPage() {
                 previewing ? 'pointer-events-none opacity-60' : ''
               }`}
             >
-              {previewing ? '확인하는 중…' : 'CSV 업로드'}
+              {previewing ? t('managerExternalParticipantsPage.t38') : t('managerExternalParticipantsPage.t39')}
               <input
                 accept=".csv,text/csv"
                 className="sr-only"
@@ -218,8 +218,8 @@ export function ManagerExternalParticipantsPage() {
             <p className="whitespace-nowrap text-sm font-bold">
               {preview.validRowCount}{t('managerExternalParticipantsPage.t20')}
               {preview.invalidRowCount > 0
-                ? ` · ${preview.invalidRowCount}건 확인 필요`
-                : ' · 모두 정상'}
+                ? t('managerExternalParticipantsPage.t45', { p0: preview.invalidRowCount })
+                : t('managerExternalParticipantsPage.t40')}
             </p>
           </div>
 
@@ -248,7 +248,7 @@ export function ManagerExternalParticipantsPage() {
                         row.valid ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'
                       }`}
                     >
-                      {row.valid ? '정상' : (row.errorMessage ?? '오류')}
+                      {row.valid ? t('managerExternalParticipantsPage.t41') : (row.errorMessage ?? t('managerExternalParticipantsPage.t42'))}
                     </td>
                   </tr>
                 ))}
@@ -277,7 +277,7 @@ export function ManagerExternalParticipantsPage() {
               title={
                 preview.confirmable
                   ? undefined
-                  : '형식 오류가 있는 행을 모두 고친 뒤 다시 업로드해 주세요.'
+                  : t('managerExternalParticipantsPage.t43')
               }
               type="button"
             >
@@ -312,7 +312,7 @@ export function ManagerExternalParticipantsPage() {
           if (!confirming) setConfirmDialogOpen(open)
         }}
         open={confirmDialogOpen}
-        title={`참가자 ${preview?.validRowCount ?? 0}명을 등록할까요?`}
+        title={t('managerExternalParticipantsPage.t46', { p0: preview?.validRowCount ?? 0 })}
       />
     </div>
   )

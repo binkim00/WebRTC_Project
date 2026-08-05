@@ -16,6 +16,7 @@ import { SocialProviderLogo } from './SocialProviderLogo'
 import { AlertBanner } from '../feedback/AlertBanner'
 import { Spinner } from '../feedback/Spinner'
 import { Button } from '../ui/Button'
+import { useTranslation } from '../../i18n'
 
 /** 연결 시각을 2026.08.05 14:00 형태로 보여 준다. */
 function formatConnectedAt(value: string): string {
@@ -36,6 +37,7 @@ function formatConnectedAt(value: string): string {
  * "로그인 흐름"이 아니라 "연결 흐름"으로 처리하게 한다.
  */
 export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
+  const { t } = useTranslation()
   const location = useLocation()
   const [accounts, setAccounts] = useState<SocialAccountResponse[]>()
   const [loadError, setLoadError] = useState<string>()
@@ -59,9 +61,11 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
       setLoadError(
         reason instanceof ApiError
           ? reason.message
-          : '연결된 소셜 계정을 불러오지 못했습니다.',
+          : t('socialAccountsSection.t1'),
       )
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -83,7 +87,7 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
       setActionError(
         reason instanceof ApiError
           ? reason.message
-          : `${SOCIAL_PROVIDER_LABELS[provider]} 연결을 시작하지 못했습니다.`,
+          : t('socialAccountsSection.t8', { p0: SOCIAL_PROVIDER_LABELS()[provider] }),
       )
       setBusyProvider(undefined)
     }
@@ -92,7 +96,7 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
   async function handleDisconnect(provider: SocialProviderPath) {
     const token = getAuthSession()?.accessToken
     if (!token || busyProvider) return
-    if (!window.confirm(`${SOCIAL_PROVIDER_LABELS[provider]} 연결을 해제할까요?`)) return
+    if (!window.confirm(t('socialAccountsSection.t9', { p0: SOCIAL_PROVIDER_LABELS()[provider] }))) return
 
     setBusyProvider(provider)
     setActionError(undefined)
@@ -104,7 +108,7 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
       setActionError(
         reason instanceof ApiError
           ? reason.message
-          : '연결을 해제하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('socialAccountsSection.t2'),
       )
       // 목록과 화면 상태가 어긋났을 수 있으므로 최신 상태로 맞춘다.
       await load()
@@ -117,32 +121,29 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
     <section aria-labelledby="social-accounts-title" className="grid gap-4">
       <div>
         <h2 className="text-[19px] font-extrabold tracking-[-0.03em]" id="social-accounts-title">
-          소셜 계정 연결
-        </h2>
+           {t('socialAccountsSection.t10')} </h2>
         <p className="mt-1.5 text-[15px] font-medium text-[var(--color-text-muted)]">
-          연결하면 다음부터 버튼 한 번으로 로그인할 수 있어요.
-        </p>
+           {t('socialAccountsSection.t11')} </p>
       </div>
 
       {connectedNotice ? (
-        <AlertBanner title="연결 완료" variant="success">
-          {connectedNotice} 계정이 연결되었습니다.
-        </AlertBanner>
+        <AlertBanner title={t('socialAccountsSection.t3')} variant="success">
+          {connectedNotice}  {t('socialAccountsSection.t12')} </AlertBanner>
       ) : null}
       {loadError ? (
-        <AlertBanner title="연결 정보를 불러오지 못했습니다" variant="error">
+        <AlertBanner title={t('socialAccountsSection.t4')} variant="error">
           {loadError}
         </AlertBanner>
       ) : null}
       {actionError ? (
-        <AlertBanner title="요청을 처리하지 못했습니다" variant="error">
+        <AlertBanner title={t('socialAccountsSection.t5')} variant="error">
           {actionError}
         </AlertBanner>
       ) : null}
 
       {accounts === undefined && !loadError ? (
         <div className="flex min-h-24 items-center justify-center">
-          <Spinner label="연결된 소셜 계정을 불러오는 중" />
+          <Spinner label={t('socialAccountsSection.t6')} />
         </div>
       ) : (
         <ul className="grid gap-2.5">
@@ -176,12 +177,12 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
                   </span>
                   <div className="min-w-0">
                     <p className="text-base font-extrabold">
-                      {SOCIAL_PROVIDER_LABELS[provider]}
+                      {SOCIAL_PROVIDER_LABELS()[provider]}
                     </p>
                     <p className="mt-0.5 text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
                       {connected
-                        ? `${formatConnectedAt(connected.connectedAt)} 연결`
-                        : '연결되지 않음'}
+                        ? t('socialAccountsSection.t13', { p0: formatConnectedAt(connected.connectedAt) })
+                        : t('socialAccountsSection.t7')}
                     </p>
                   </div>
                 </div>
@@ -193,8 +194,7 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
                     size="sm"
                     variant="secondary"
                   >
-                    연결 해제
-                  </Button>
+                     {t('socialAccountsSection.t14')} </Button>
                 ) : (
                   <Button
                     disabled={Boolean(busyProvider)}
@@ -203,8 +203,7 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
                     size="sm"
                     variant="outline"
                   >
-                    연결하기
-                  </Button>
+                     {t('socialAccountsSection.t15')} </Button>
                 )}
               </li>
             )
@@ -214,9 +213,7 @@ export function SocialAccountsSection({ returnTo }: { returnTo: string }) {
       )}
 
       <p className="text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]">
-        마지막 로그인 수단은 해제할 수 없습니다. 비밀번호가 없는 계정이라면 소셜 연결을 하나 이상
-        유지해 주세요.
-      </p>
+         {t('socialAccountsSection.t16')} </p>
     </section>
   )
 }

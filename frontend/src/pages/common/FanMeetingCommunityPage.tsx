@@ -81,7 +81,7 @@ export function FanMeetingCommunityPage() {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : '커뮤니티 게시글을 불러오지 못했습니다.',
+            : t('fanMeetingCommunityPage.t17'),
         )
       })
       .finally(() => {
@@ -91,6 +91,8 @@ export function FanMeetingCommunityPage() {
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId, keyword, currentPage, reloadCount])
 
   async function handleCreatePost(event: FormEvent<HTMLFormElement>) {
@@ -105,7 +107,7 @@ export function FanMeetingCommunityPage() {
     const content = String(formData.get('content') ?? '').trim()
 
     if (!title || !content) {
-      setWriteError('제목과 내용을 모두 입력해 주세요.')
+      setWriteError(t('fanMeetingCommunityPage.t18'))
       return
     }
 
@@ -119,7 +121,7 @@ export function FanMeetingCommunityPage() {
       setReloadCount((count) => count + 1)
     } catch (createError: unknown) {
       setWriteError(
-        createError instanceof Error ? createError.message : '게시글 작성에 실패했습니다.',
+        createError instanceof Error ? createError.message : t('fanMeetingCommunityPage.t19'),
       )
     } finally {
       setSubmitting(false)
@@ -156,7 +158,7 @@ export function FanMeetingCommunityPage() {
             }}
             variant={writeOpen ? 'secondary' : 'primary'}
           >
-            {writeOpen ? '작성 취소' : '글쓰기'}
+            {writeOpen ? t('fanMeetingCommunityPage.t20') : t('fanMeetingCommunityPage.t21')}
           </Button>
         ) : null}
       </header>
@@ -194,7 +196,7 @@ export function FanMeetingCommunityPage() {
       ) : null}
 
       <SearchField
-        buttonLabel="검색"
+        buttonLabel={t('fanMeetingCommunityPage.t22')}
         label={t('fanMeetingCommunityPage.t11')}
         onSearch={(query) => {
           setKeyword(query.trim())
@@ -217,8 +219,8 @@ export function FanMeetingCommunityPage() {
         <EmptyState
           description={
             keyword
-              ? '검색어를 변경해 다시 시도해 주세요.'
-              : '아직 등록된 게시글이 없습니다.'
+              ? t('fanMeetingCommunityPage.t23')
+              : t('fanMeetingCommunityPage.t24')
           }
           title={t('fanMeetingCommunityPage.t15')}
         />

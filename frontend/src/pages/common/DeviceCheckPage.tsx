@@ -12,33 +12,33 @@ import {
   useMediaDeviceCheck,
   type MediaCheckStatus,
 } from '../../hooks/useMediaDeviceCheck'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
 /** 권한·장치 문제 상태의 안내 배너 문구다. 정상 흐름에서는 배너를 띄우지 않는다. */
-const statusContent: Record<
+const statusContent = (): Record<
   MediaCheckStatus,
   { title: string; message: string; variant: FeedbackVariant }
-> = {
+> => ({
   idle: {
-    title: '장비 사용 전 안내',
-    message: '아래 버튼을 누르면 브라우저가 카메라와 마이크 사용 권한을 요청합니다.',
+    title: translate('deviceCheckPage.t66'),
+    message: translate('deviceCheckPage.t67'),
     variant: 'info',
   },
   requesting: {
-    title: '권한 확인 중',
-    message: '브라우저의 권한 요청 창에서 카메라와 마이크 사용을 허용해 주세요.',
+    title: translate('deviceCheckPage.t68'),
+    message: translate('deviceCheckPage.t69'),
     variant: 'warning',
   },
   ready: {
-    title: '장비 준비 완료',
-    message: '카메라 미리보기와 선택한 마이크가 정상적으로 연결되었습니다.',
+    title: translate('deviceCheckPage.t70'),
+    message: translate('deviceCheckPage.t71'),
     variant: 'success',
   },
-  denied: { title: '장비 권한이 필요합니다', message: '', variant: 'error' },
-  'no-device': { title: '장치를 찾을 수 없습니다', message: '', variant: 'error' },
-  unsupported: { title: '지원하지 않는 환경입니다', message: '', variant: 'error' },
-  error: { title: '장비를 시작하지 못했습니다', message: '', variant: 'error' },
-}
+  denied: { title: translate('deviceCheckPage.t72'), message: '', variant: 'error' },
+  'no-device': { title: translate('deviceCheckPage.t73'), message: '', variant: 'error' },
+  unsupported: { title: translate('deviceCheckPage.t74'), message: '', variant: 'error' },
+  error: { title: translate('deviceCheckPage.t75'), message: '', variant: 'error' },
+})
 
 type SinkSelectableAudioElement = HTMLAudioElement & {
   setSinkId: (sinkId: string) => Promise<void>
@@ -184,15 +184,15 @@ export function DeviceCheckPage() {
 
   const meetingId = fanMeetingId
   const session = getAuthSession()
-  const currentStatus = statusContent[status]
+  const currentStatus = statusContent()[status]
   const isRequesting = status === 'requesting'
   const isReady = status === 'ready'
-  const cameraOptions = createDeviceOptions(cameras, '카메라')
-  const microphoneOptions = createDeviceOptions(microphones, '마이크')
+  const cameraOptions = createDeviceOptions(cameras, t('deviceCheckPage.t17'))
+  const microphoneOptions = createDeviceOptions(microphones, t('deviceCheckPage.t18'))
   const speakerOptions =
     speakers.length > 0
-      ? createDeviceOptions(speakers, '스피커')
-      : [{ label: '시스템 기본 스피커', value: 'default' }]
+      ? createDeviceOptions(speakers, t('deviceCheckPage.t19'))
+      : [{ label: t('deviceCheckPage.t20'), value: 'default' }]
   const videoTrackReady = Boolean(
     stream?.getVideoTracks().some((track) => track.readyState === 'live'),
   )
@@ -204,20 +204,20 @@ export function DeviceCheckPage() {
 
   const summaryItems = [
     {
-      label: '카메라',
-      value: videoTrackReady ? '화면이 선명해요' : '확인이 필요해요',
+      label: t('deviceCheckPage.t21'),
+      value: videoTrackReady ? t('deviceCheckPage.t22') : t('deviceCheckPage.t23'),
     },
     {
-      label: '마이크',
-      value: audioTrackReady ? '목소리가 잘 들려요' : '확인이 필요해요',
+      label: t('deviceCheckPage.t24'),
+      value: audioTrackReady ? t('deviceCheckPage.t25') : t('deviceCheckPage.t26'),
     },
     {
-      label: '스피커',
-      value: speakerTestPassed ? '소리가 잘 들렸어요' : '테스트할 수 있어요',
+      label: t('deviceCheckPage.t27'),
+      value: speakerTestPassed ? t('deviceCheckPage.t28') : t('deviceCheckPage.t29'),
     },
     {
-      label: '네트워크',
-      value: networkReady ? '연결이 안정적이에요' : '연결이 끊겼어요',
+      label: t('deviceCheckPage.t30'),
+      value: networkReady ? t('deviceCheckPage.t31') : t('deviceCheckPage.t32'),
     },
   ]
   const missingItems = summaryItems
@@ -265,10 +265,10 @@ export function DeviceCheckPage() {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 900))
       setSpeakerTestPassed(true)
     } catch (error) {
-      console.warn('스피커 테스트를 재생하지 못했습니다.', error)
+      console.warn(t('deviceCheckPage.t33'), error)
       setSpeakerTestPassed(false)
       setSpeakerTestError(
-        '테스트 소리를 재생하지 못했습니다. 브라우저의 소리 권한과 출력 장치를 확인해 주세요.',
+        t('deviceCheckPage.t34'),
       )
     } finally {
       try {
@@ -288,7 +288,7 @@ export function DeviceCheckPage() {
     if (isEnteringQueue) return
 
     if (!session) {
-      setQueueError('팬미팅에 입장하려면 먼저 로그인해 주세요.')
+      setQueueError(t('deviceCheckPage.t35'))
       return
     }
 
@@ -296,7 +296,7 @@ export function DeviceCheckPage() {
       session.role === 'INFLUENCER' || session.role === 'SOLO_INFLUENCER'
 
     if (!isInfluencerRole && session.role !== 'FAN') {
-      setQueueError('팬 또는 인플루언서 계정으로 로그인해 주세요.')
+      setQueueError(t('deviceCheckPage.t36'))
       return
     }
 
@@ -341,7 +341,7 @@ export function DeviceCheckPage() {
       // 참가자 전용 저장 API가 인플루언서 요청을 거부할 수 있으므로 팬에게만 경고를 보여준다.
       if (!isInfluencerRole) {
         setDeviceCheckWarning(
-          '장비 점검 결과를 서버에 저장하지 못했습니다. 입장은 계속 진행됩니다.',
+          t('deviceCheckPage.t37'),
         )
       }
     }
@@ -375,7 +375,7 @@ export function DeviceCheckPage() {
     <div>
       <div>
         <p className="text-sm font-bold text-[var(--color-text-muted)]">
-          {meetingTitle ? `${meetingTitle} 입장 전` : '팬미팅 입장 전'}
+          {meetingTitle ? t('deviceCheckPage.t76', { p0: meetingTitle }) : t('deviceCheckPage.t38')}
         </p>
         <h1 className="mt-3 text-[32px] font-black tracking-[-0.04em]">
           {t('deviceCheckPage.t3')}
@@ -395,7 +395,7 @@ export function DeviceCheckPage() {
               <p
                 className={`text-sm font-bold ${videoTrackReady ? 'text-[var(--color-success)]' : 'text-[var(--color-text-muted)]'}`}
               >
-                {videoTrackReady ? '연결 완료' : '연결 대기'}
+                {videoTrackReady ? t('deviceCheckPage.t39') : t('deviceCheckPage.t40')}
               </p>
             </div>
             {/* 점검을 통과하면 1px 코랄 테두리 — 이 화면에 허용된 유일한 브랜드 제스처다. (강도 2) */}
@@ -414,11 +414,11 @@ export function DeviceCheckPage() {
             className="mt-8 border-t border-[var(--color-divider)] pt-6"
           >
             <h2 className="text-xl font-extrabold tracking-[-0.03em]" id="ec-sum">
-              {allReady ? '입장 준비가 완료됐어요' : '장비 연결을 확인하고 있어요'}
+              {allReady ? t('deviceCheckPage.t41') : t('deviceCheckPage.t42')}
             </h2>
             <p className="mt-2 text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
               {allReady
-                ? '모든 장비와 네트워크가 정상적으로 연결되었습니다.'
+                ? t('deviceCheckPage.t43')
                 : currentStatus.message}
             </p>
             <dl className="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
@@ -452,7 +452,7 @@ export function DeviceCheckPage() {
             <p
               className={`whitespace-nowrap text-sm font-bold ${allReady ? 'text-[var(--color-success)]' : 'text-[var(--color-text-muted)]'}`}
             >
-              {allReady ? '모든 항목 정상' : '확인 중'}
+              {allReady ? t('deviceCheckPage.t44') : t('deviceCheckPage.t45')}
             </p>
           </div>
 
@@ -467,14 +467,14 @@ export function DeviceCheckPage() {
               <p className="text-[15px] font-extrabold">{t('deviceCheckPage.t8')}</p>
               <p className="mt-[5px] text-sm font-medium leading-[1.55] text-[var(--color-text-muted)]">
                 {networkReady
-                  ? '팬미팅을 진행하기에 안정적인 연결이에요'
-                  : '네트워크 연결을 확인해 주세요'}
+                  ? t('deviceCheckPage.t46')
+                  : t('deviceCheckPage.t47')}
               </p>
             </div>
             <p
               className={`whitespace-nowrap text-sm font-bold ${networkReady ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'}`}
             >
-              {networkReady ? '안정적' : '연결 끊김'}
+              {networkReady ? t('deviceCheckPage.t48') : t('deviceCheckPage.t49')}
             </p>
           </div>
 
@@ -483,8 +483,8 @@ export function DeviceCheckPage() {
               htmlFor="ec-camera"
               label={t('deviceCheckPage.t9')}
               ok={videoTrackReady}
-              okLabel="연결됨"
-              pendingLabel="확인 필요"
+              okLabel={t('deviceCheckPage.t50')}
+              pendingLabel={t('deviceCheckPage.t51')}
             />
             <Select
               containerClassName="mt-[9px] [&_label]:sr-only"
@@ -517,7 +517,7 @@ export function DeviceCheckPage() {
               <span
                 className={`whitespace-nowrap text-[13px] font-bold ${audioTrackReady ? 'text-[var(--color-focus-indigo)]' : 'text-[var(--color-text-muted)]'}`}
               >
-                {audioTrackReady ? '연결됨' : '확인 필요'}
+                {audioTrackReady ? t('deviceCheckPage.t52') : t('deviceCheckPage.t53')}
               </span>
             </div>
             <Select
@@ -536,8 +536,8 @@ export function DeviceCheckPage() {
               htmlFor="ec-speaker"
               label={t('deviceCheckPage.t13')}
               ok={speakerTestPassed}
-              okLabel="연결됨"
-              pendingLabel="테스트 필요"
+              okLabel={t('deviceCheckPage.t54')}
+              pendingLabel={t('deviceCheckPage.t55')}
             />
             <Select
               containerClassName="mt-[9px] [&_label]:sr-only"
@@ -564,15 +564,15 @@ export function DeviceCheckPage() {
                 <PlayIcon aria-hidden size={17} weight="fill" />
               )}
               {isPlayingTestSound
-                ? '테스트 음원 재생 중...'
+                ? t('deviceCheckPage.t56')
                 : speakerTestPassed
-                  ? '소리가 잘 들렸어요'
-                  : '스피커 소리 들어보기'}
+                  ? t('deviceCheckPage.t57')
+                  : t('deviceCheckPage.t58')}
             </button>
             <p aria-live="polite" className="mt-2 text-sm font-medium leading-[1.55] text-[var(--color-text-muted)]">
               {speakerTestPassed && !isPlayingTestSound
-                ? '소리가 들리지 않았다면 스피커를 바꿔 다시 테스트해 주세요.'
-                : '버튼을 누른 후 테스트 소리가 들리는지 확인해주세요.'}
+                ? t('deviceCheckPage.t59')
+                : t('deviceCheckPage.t60')}
             </p>
             {speakerTestError ? (
               <p className="mt-2 text-sm font-medium text-[var(--color-error)]" role="alert">
@@ -604,15 +604,15 @@ export function DeviceCheckPage() {
               onClick={() => void handleEnterQueue()}
               type="button"
             >
-              {isEnteringQueue ? '입장 중' : '팬미팅 입장하기'}
+              {isEnteringQueue ? t('deviceCheckPage.t61') : t('deviceCheckPage.t62')}
             </button>
             <p
               aria-live="polite"
               className="mt-[11px] text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]"
             >
               {allReady
-                ? '입장 후에도 팬미팅 화면에서 장비를 변경할 수 있어요.'
-                : `아직 확인되지 않은 항목이 있어요: ${missingItems.join(', ')}`}
+                ? t('deviceCheckPage.t63')
+                : t('deviceCheckPage.t77', { p0: missingItems.join(', ') })}
             </p>
             {!isReady ? (
               <Button
@@ -621,7 +621,7 @@ export function DeviceCheckPage() {
                 onClick={() => void start()}
                 variant="ghost"
               >
-                {status === 'idle' ? '카메라·마이크 권한 요청' : '장비 다시 확인'}
+                {status === 'idle' ? t('deviceCheckPage.t64') : t('deviceCheckPage.t65')}
               </Button>
             ) : null}
           </div>

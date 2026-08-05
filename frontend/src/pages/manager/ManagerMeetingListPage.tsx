@@ -82,7 +82,7 @@ export function ManagerMeetingListPage() {
   const load = useCallback(async (signal?: AbortSignal) => {
     const session = getAuthSession()
     if (!session || (session.role !== 'MANAGER' && session.role !== 'SOLO_INFLUENCER')) {
-      setError('팬미팅을 운영할 수 있는 계정으로 로그인해 주세요.')
+      setError(t('managerMeetingListPage.t25'))
       setLoading(false)
       return
     }
@@ -113,10 +113,12 @@ export function ManagerMeetingListPage() {
       setError(undefined)
     } catch (cause) {
       if (signal?.aborted) return
-      setError(toErrorMessage(cause, '팬미팅 목록을 불러오지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerMeetingListPage.t26')))
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyword, page, statusFilter])
 
   useEffect(() => {
@@ -129,15 +131,15 @@ export function ManagerMeetingListPage() {
   async function runAction(meetingId: string, action: 'publish' | 'cancel' | 'delete') {
     const confirmText =
       action === 'publish'
-        ? '이 팬미팅을 발행할까요? 발행하면 팬에게 공개됩니다.'
+        ? t('managerMeetingListPage.t27')
         : action === 'cancel'
-          ? '이 팬미팅을 취소할까요? 취소하면 되돌릴 수 없습니다.'
-          : '이 초안을 삭제할까요? 삭제하면 되돌릴 수 없습니다.'
+          ? t('managerMeetingListPage.t28')
+          : t('managerMeetingListPage.t29')
     if (!window.confirm(confirmText)) return
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('작업을 수행하려면 먼저 로그인해 주세요.')
+      setError(t('managerMeetingListPage.t30'))
       return
     }
 
@@ -147,17 +149,17 @@ export function ManagerMeetingListPage() {
     try {
       if (action === 'publish') {
         await publishFanMeeting(Number(meetingId), token)
-        setMessage('팬미팅을 발행했습니다. 응모 시작 일시가 되면 응모가 열립니다.')
+        setMessage(t('managerMeetingListPage.t31'))
       } else if (action === 'cancel') {
         await cancelFanMeeting(meetingId, token)
-        setMessage('팬미팅을 취소했습니다.')
+        setMessage(t('managerMeetingListPage.t32'))
       } else {
         await deleteFanMeetingDraft(meetingId, token)
-        setMessage('초안을 삭제했습니다.')
+        setMessage(t('managerMeetingListPage.t33'))
       }
       await load()
     } catch (cause) {
-      setError(toErrorMessage(cause, '팬미팅 상태를 변경하지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerMeetingListPage.t34')))
     } finally {
       setBusyId(undefined)
     }
@@ -213,7 +215,7 @@ export function ManagerMeetingListPage() {
                 setPage(1)
                 setStatusFilter(event.target.value)
               }}
-              options={[...meetingStatusFilterOptions]}
+              options={[...meetingStatusFilterOptions()]}
               value={statusFilter}
             />
             <Button className="min-h-12 px-8" type="submit" variant="secondary">

@@ -10,17 +10,17 @@ import {
 import { getAuthSession } from '../../api/authSession'
 import { AlertBanner, Button, Pagination, Spinner, TextField } from '../../components'
 import { toErrorMessage } from './meetingLifecycle'
-import { useTranslation } from '../../i18n'
+import { translate, useTranslation } from '../../i18n'
 
-const applicationStatusContent: Record<
+const applicationStatusContent = (): Record<
   ApplicationStatus,
   { label: string; className: string }
-> = {
-  SUBMITTED: { label: '미검토', className: 'text-[var(--color-text-secondary)]' },
-  WITHDRAWN: { label: '응모 철회', className: 'text-[var(--color-text-secondary)]' },
-  SELECTED: { label: '선정', className: 'text-[var(--color-success)]' },
-  NOT_SELECTED: { label: '미선정', className: 'text-[var(--color-error)]' },
-}
+> => ({
+  SUBMITTED: { label: translate('managerApplicantsPanel.t35'), className: 'text-[var(--color-text-secondary)]' },
+  WITHDRAWN: { label: translate('managerApplicantsPanel.t36'), className: 'text-[var(--color-text-secondary)]' },
+  SELECTED: { label: translate('managerApplicantsPanel.t37'), className: 'text-[var(--color-success)]' },
+  NOT_SELECTED: { label: translate('managerApplicantsPanel.t38'), className: 'text-[var(--color-error)]' },
+})
 
 function firstAnswer(applicant?: ApplicantResponse): string {
   return applicant?.answers[0]?.answerText ?? '-'
@@ -64,12 +64,12 @@ export function ManagerApplicantsPanel({
   const loadApplicants = useCallback(async () => {
     const token = getAuthSession()?.accessToken
     if (!meetingId) {
-      setError('팬미팅 정보를 확인할 수 없습니다.')
+      setError(t('managerApplicantsPanel.t21'))
       setLoading(false)
       return
     }
     if (!token) {
-      setError('응모자 목록을 확인하려면 먼저 로그인해 주세요.')
+      setError(t('managerApplicantsPanel.t22'))
       setLoading(false)
       return
     }
@@ -93,10 +93,12 @@ export function ManagerApplicantsPanel({
       setStats(statistics)
       setError(undefined)
     } catch (cause) {
-      setError(toErrorMessage(cause, '응모자 목록을 불러오지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerApplicantsPanel.t23')))
     } finally {
       setLoading(false)
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedKeyword, meetingId, page, statusFilter])
 
   useEffect(() => {
@@ -107,14 +109,14 @@ export function ManagerApplicantsPanel({
     list?.content.find((applicant) => applicant.applicationId === selectedId) ??
     list?.content[0]
   const selectedStatus = selectedApplicant
-    ? applicationStatusContent[selectedApplicant.applicationStatus]
+    ? applicationStatusContent()[selectedApplicant.applicationStatus]
     : undefined
   const unreviewedCount = stats?.submittedCount ?? 0
   const headLine = drawCompleted
     ? canPublishResults
-      ? '선정 완료 · 확정 대기'
-      : '선정 확정 완료'
-    : `선정 전 ${unreviewedCount}명`
+      ? t('managerApplicantsPanel.t24')
+      : t('managerApplicantsPanel.t25')
+    : t('managerApplicantsPanel.t39', { p0: unreviewedCount })
   const headColor = drawCompleted
     ? 'text-[var(--color-success)]'
     : 'text-[var(--color-warning)]'
@@ -122,17 +124,17 @@ export function ManagerApplicantsPanel({
   const canRunDraw = canDraw && hasApplications
 
   const drawDisabledReason = drawCompleted
-    ? '랜덤 선정이 이미 완료되었습니다.'
+    ? t('managerApplicantsPanel.t26')
     : !hasApplications
-      ? '응모자가 없어 랜덤 선정을 진행할 수 없습니다.'
+      ? t('managerApplicantsPanel.t27')
     : meetingStatus !== 'APPLICATION_CLOSED'
-      ? '응모가 마감된 뒤 랜덤 선정을 진행할 수 있습니다.'
-      : '지금은 랜덤 선정을 진행할 수 없습니다.'
+      ? t('managerApplicantsPanel.t28')
+      : t('managerApplicantsPanel.t29')
   const confirmHint = canPublishResults
-    ? '확정하면 되돌릴 수 없고 선정 결과가 응모자에게 발송됩니다.'
+    ? t('managerApplicantsPanel.t30')
     : drawCompleted
-      ? '선정 결과가 이미 확정되었습니다.'
-      : '랜덤 선정을 먼저 완료해야 선정 결과를 확정할 수 있습니다.'
+      ? t('managerApplicantsPanel.t31')
+      : t('managerApplicantsPanel.t32')
 
   function applyStatusFilter(next: ApplicationStatus | '') {
     setStatusFilter(next)
@@ -244,7 +246,7 @@ export function ManagerApplicantsPanel({
                 <span className="text-right text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">{t('managerApplicantsPanel.t17')}</span>
               </div>
               {list?.content.map((applicant) => {
-                const status = applicationStatusContent[applicant.applicationStatus]
+                const status = applicationStatusContent()[applicant.applicationStatus]
                 const selected = selectedApplicant?.applicationId === applicant.applicationId
                 return (
                   <button
@@ -322,7 +324,7 @@ export function ManagerApplicantsPanel({
               onClick={onPublishResults}
               title={!canPublishResults ? confirmHint : undefined}
             >
-              {drawCompleted && !canPublishResults ? '선정 확정 완료' : '선정 확정'}
+              {drawCompleted && !canPublishResults ? t('managerApplicantsPanel.t33') : t('managerApplicantsPanel.t34')}
             </Button>
             <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
               {confirmHint}
@@ -349,6 +351,7 @@ function MetricFilter({
   className?: string
   tone?: 'default' | 'success' | 'error'
 }) {
+  const { t } = useTranslation()
   const valueClass = tone === 'success'
     ? 'text-[var(--color-success)]'
     : tone === 'error'
@@ -364,7 +367,7 @@ function MetricFilter({
     >
       <span className="block text-sm font-bold text-[var(--color-text-secondary)]">{label}</span>
       <span className={`mt-2 block text-2xl font-black tabular-nums ${valueClass}`}>
-        {value == null ? '-' : `${value}명`}
+        {value == null ? '-' : t('managerApplicantsPanel.t40', { p0: value })}
       </span>
     </button>
   )
