@@ -17,6 +17,7 @@ import {
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import {
+  downloadFanMeetingStatisticsCsv,
   getFanMeetingStatistics,
   type FanMeetingStatisticsResponse,
 } from '../../api/meetingManagement'
@@ -274,11 +275,38 @@ export function MeetingStatisticsPage() {
   const authSession = getAuthSession()
   const authToken = authSession?.accessToken
   const isManager = authSession?.role === 'MANAGER'
+  // CSV 내보내기는 소유 운영자 권한이라 1인 인플루언서도 자기 팬미팅에서 쓸 수 있다.
+  const canOperateExport = isManager || authSession?.role === 'SOLO_INFLUENCER'
   const roleLabel = isManager ? '매니저 보기' : '인플루언서 보기'
 
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
   const [statistics, setStatistics] = useState<FanMeetingStatisticsResponse>()
   const [error, setError] = useState<string>()
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string>()
+
+  /** 참가자별 운영 결과 CSV를 받아 브라우저 다운로드로 저장한다. */
+  async function handleExport() {
+    if (!fanMeetingId || !authToken || exporting) return
+
+    setExporting(true)
+    setExportError(undefined)
+    try {
+      const { blob, fileName } = await downloadFanMeetingStatisticsCsv(fanMeetingId, authToken)
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = fileName
+      anchor.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch (reason) {
+      setExportError(
+        reason instanceof Error ? reason.message : '결과 파일을 내려받지 못했습니다.',
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
 
   useEffect(() => {
     if (!fanMeetingId?.trim()) return
@@ -332,7 +360,7 @@ export function MeetingStatisticsPage() {
       : statistics.completedCallCount === 0
         ? 'empty'
         : 'ready'
-  const canExport = isManager && stage === 'ready'
+  const canExport = canOperateExport && stage === 'ready'
 
   const metrics: StatisticsMetric[] = statistics
     ? [
@@ -501,7 +529,7 @@ export function MeetingStatisticsPage() {
             <div className="min-w-0">
               <h2 className="text-lg font-extrabold tracking-[-0.028em]">팬미팅 결과 상세</h2>
               <p className="mt-1.5 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
-                {isManager
+                {canOperateExport
                   ? '참가자별 상태를 확인하거나 운영 결과 파일을 준비할 수 있습니다.'
                   : '참가자별 상태를 확인할 수 있습니다.'}
               </p>
@@ -513,26 +541,32 @@ export function MeetingStatisticsPage() {
               >
                 팬 리스트 보기
               </Link>
-              {isManager ? (
+              {canOperateExport ? (
                 <button
                   className={`mj-font-label inline-flex min-h-[50px] items-center whitespace-nowrap rounded-[var(--radius-control)] border px-5 text-base ${
-                    canExport
+                    canExport && !exporting
                       ? 'border-[var(--color-border-control)] text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)]'
                       : 'cursor-not-allowed border-[var(--color-divider)] text-[var(--color-text-muted)]'
                   }`}
-                  disabled={!canExport}
+                  disabled={!canExport || exporting}
+                  onClick={() => void handleExport()}
                   type="button"
                 >
-                  결과 내보내기
+                  {exporting ? '내보내는 중…' : '결과 내보내기'}
                 </button>
               ) : null}
             </div>
           </section>
-          {isManager && !canExport ? (
+          {canOperateExport && !canExport ? (
             <p className="mt-[11px] text-sm font-medium text-[var(--color-text-muted)]">
               {stage === 'collecting'
                 ? '집계가 끝나면 결과 파일을 내보낼 수 있어요.'
                 : '집계된 세션이 없어 내보낼 결과가 없습니다.'}
+            </p>
+          ) : null}
+          {exportError ? (
+            <p className="mt-[11px] text-sm font-bold text-[var(--color-error)]" role="alert">
+              {exportError}
             </p>
           ) : null}
         </>
