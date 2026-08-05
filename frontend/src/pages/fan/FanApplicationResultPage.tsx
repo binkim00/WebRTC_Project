@@ -10,6 +10,7 @@ import {
   fetchPublicFanMeetingDetail,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
+import { JellyCelebration } from '../../components/celebration/JellyCelebration'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 function pad(part: number) {
@@ -224,15 +225,17 @@ export function FanApplicationResultPage() {
         ) : null}
 
         <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] pt-11 min-[1081px]:w-[min(100%-88px,1240px)]">
+          {/* 당첨 문구 위에 배치하는 장식형 축하 연출 — 버튼·정보를 가리지 않는다. */}
+          <JellyCelebration className="mb-2 h-[clamp(225px,27vw,315px)]" />
           {announcedAtLabel ? (
-            <p className="text-[15px] font-bold text-[var(--color-primary-coral)]">
+            <p className="jc-heading-intro text-[15px] font-bold text-[var(--color-primary-coral)]">
               {announcedAtLabel}
             </p>
           ) : null}
-          <h1 className="mt-3.5 text-[clamp(38px,4.4vw,58px)] font-black leading-[1.1] tracking-[-0.05em] [text-wrap:balance]">
+          <h1 className="jc-heading-intro mt-3.5 text-[clamp(38px,4.4vw,58px)] font-black leading-[1.1] tracking-[-0.05em] [text-wrap:balance]">
             당첨됐어요
           </h1>
-          <p className="mt-[18px] max-w-[46ch] text-xl font-medium leading-[1.6] text-[var(--color-text-body)]">
+          <p className="jc-heading-intro mt-[18px] max-w-[46ch] text-xl font-medium leading-[1.6] text-[var(--color-text-body)]">
             {application.meetingTitle}에 초대되었습니다. 팬미팅 전에 장비 점검을 마쳐 주세요.
           </p>
 
