@@ -78,7 +78,7 @@ class CallState:
 
 
 # ── 진입점 ────────────────────────────────────────────────────────────────────
-# LiveKit이 새 Room에 자동 dispatch하면 my_agent를 실행
+# 백엔드가 생성한 subtitle-agent Dispatch로 배치되면 my_agent를 실행
 async def my_agent(ctx: JobContext) -> None:
 
     # 1. 인플루언서 언어 — INFLUENCER participant 입장 시 token metadata에서 읽어 채운다.
@@ -307,7 +307,8 @@ async def my_agent(ctx: JobContext) -> None:
             return
 
         if role == "INFLUENCER":
-            # 인플루언서 트랙 저장만. STT는 팬 입장 시 시작. 왜냐면 fan_lang을 모르니까
+            # 팬이 아직 없으면 fan_lang을 모르니 트랙만 저장하고 STT는 팬 입장 시 시작한다.
+            # 이미 통화가 시작된 뒤 트랙이 도착했으면 아래에서 곧바로 STT를 시작한다.
             try:
                 influencer_user_id = int(attributes["user_id"])
             except (KeyError, TypeError, ValueError):
