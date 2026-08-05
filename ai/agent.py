@@ -3,7 +3,7 @@
 
 실행: python agent.py dev
 
-LiveKit Room 생성 시 자동 dispatch → agent는 이벤트 내내 Room에 상주.
+백엔드가 생성한 subtitle-agent Dispatch로 배치 → agent는 이벤트 내내 Room에 상주.
 인플루언서 트랙은 계속 유지, 팬만 교체됨.
 팬 교체 시 인플루언서/팬 어댑터 둘 다 재시작.
 
@@ -419,5 +419,8 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=my_agent,
+            # 백엔드가 createDispatch("subtitle-agent")로 명시 배치하므로 worker 등록 이름을
+            # 같게 맞춘다. 이름을 지정하면 자동 dispatch는 비활성화되고 이 이름의 Dispatch만 받는다.
+            agent_name="subtitle-agent",
         )
     )
