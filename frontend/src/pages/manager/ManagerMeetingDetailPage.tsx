@@ -49,6 +49,7 @@ import {
   TextField,
   Textarea,
 } from '../../components'
+import { ManagerApplicantsPanel } from './ManagerApplicantsPanel'
 import { ManagerApplicationFormPanel } from './ManagerApplicationFormPanel'
 import {
   formatDateTime,
@@ -69,11 +70,18 @@ import {
 const TEST_CONTROL_ENABLED =
   import.meta.env.DEV && import.meta.env.VITE_ENABLE_TEST_CONTROLS === 'true'
 
-/** 상세 화면 상단에 표시할 탭 목록이다. */
+/**
+ * 상세 화면 상단에 표시할 탭 목록이다.
+ *
+ * 라벨은 탭이 실제로 하는 일을 기준으로 붙인다:
+ * 진행 현황(단계 확인·다음 액션 실행) / 응모자·추첨(응모 목록과 추첨·발표) /
+ * 응모 질문(응모 폼 질문 편집) / 정보 수정(제목·일정·운영 설정 편집).
+ */
 const TABS: readonly { id: MeetingDetailTab; label: string }[] = [
-  { id: 'overview', label: '개요' },
-  { id: 'settings', label: '설정' },
-  { id: 'application-form', label: '응모 폼' },
+  { id: 'overview', label: '진행 현황' },
+  { id: 'applicants', label: '응모자·추첨' },
+  { id: 'application-form', label: '응모 질문' },
+  { id: 'settings', label: '정보 수정' },
   ...(TEST_CONTROL_ENABLED
     ? [{ id: 'test-control' as const, label: '테스트 제어' }]
     : []),
@@ -352,6 +360,8 @@ export function ManagerMeetingDetailPage() {
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
   const [pendingAction, setPendingAction] = useState<MeetingOperationAction>()
+  // 추첨·발표 직후 응모자 탭 목록이 새 상태를 다시 읽도록 신호를 준다.
+  const [applicantsRefresh, setApplicantsRefresh] = useState(0)
   // 마감·조기 시작 경계가 지나면 새로고침하지 않아도 버튼 상태를 다시 계산한다.
   const actionNowMs = useNowTicker(15_000)
   // getAvailableActions가 Date를 받고 useMemo 의존성으로도 쓰이므로 identity를 고정한다.
@@ -453,9 +463,11 @@ export function ManagerMeetingDetailPage() {
         setMessage(
           `추첨을 완료했습니다. 당첨 ${result.selectedCount}명 · 미당첨 ${result.notSelectedCount}명 · 참가자 ${result.participantCount}명`,
         )
+        setApplicantsRefresh((value) => value + 1)
       } else if (action === 'publishResults') {
         const result = await publishApplicationResults(meetingId, token)
         setMessage(`응모 결과를 발표했습니다. 알림 ${result.notificationCount}건을 전송했습니다.`)
+        setApplicantsRefresh((value) => value + 1)
       } else {
         const currentStatus = detail?.meeting.status
         if (!currentStatus) throw new TypeError('현재 팬미팅 상태를 확인할 수 없습니다.')
@@ -572,6 +584,21 @@ export function ManagerMeetingDetailPage() {
           onAction={setPendingAction}
           participantCount={participantCount}
           solo={isSolo}
+        />
+      ) : null}
+
+      {tab === 'applicants' ? (
+        <ManagerApplicantsPanel
+          canDraw={actions.canDraw}
+          canPublishResults={actions.canPublishResults}
+          capacity={detail.meeting.application.capacity}
+          drawCompleted={drawCompleted}
+          meetingId={meetingId}
+          meetingStatus={status}
+          meetingTitle={detail.meeting.title}
+          onDraw={() => setPendingAction('draw')}
+          onPublishResults={() => setPendingAction('publishResults')}
+          refreshToken={applicantsRefresh}
         />
       ) : null}
 
