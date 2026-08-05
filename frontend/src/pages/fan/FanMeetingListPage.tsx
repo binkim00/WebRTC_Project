@@ -70,10 +70,19 @@ function isToday(value: string): boolean {
   )
 }
 
-/** 영상 보관 만료까지 남은 일수다. 지났으면 0을 준다. */
-function remainingDays(availableUntil: string): number {
-  const diff = new Date(availableUntil).getTime() - Date.now()
-  return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)))
+/**
+ * 영상 보관 만료까지 남은 일수다. 지났으면 0을 준다.
+ *
+ * 백엔드는 녹화가 완료되지 않았거나 실패한 경우 `availableUntil`을 내려주지 않는다.
+ * 0일로 표시하면 "곧 삭제됨"이라는 잘못된 안내가 되므로 모르는 상태는 null로 구분한다.
+ */
+function remainingDays(availableUntil: string | null | undefined): number | null {
+  if (!availableUntil) return null
+
+  const until = new Date(availableUntil).getTime()
+  if (Number.isNaN(until)) return null
+
+  return Math.max(0, Math.ceil((until - Date.now()) / (24 * 60 * 60 * 1000)))
 }
 
 function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
@@ -657,12 +666,21 @@ export function FanMeetingListPage() {
                     </p>
                     {playable && item.recording ? (
                       <>
-                        <p className="mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-extrabold text-[var(--color-warning)]">
-                          영상 {remainingDays(item.recording.availableUntil)}일 남음
-                        </p>
-                        <p className="mt-1 text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
-                          {formatDate(item.recording.availableUntil)}까지
-                        </p>
+                        {/*
+                          보관 기한을 아는 경우에만 남은 일수와 만료일을 보여 준다.
+                          기한이 없는 녹화(저장 처리 중·실패)는 단정할 수 없어 표기를 생략하고,
+                          아래 다운로드 버튼은 playable 판정에 따라 그대로 제공한다.
+                        */}
+                        {remainingDays(item.recording.availableUntil) !== null ? (
+                          <>
+                            <p className="mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-extrabold text-[var(--color-warning)]">
+                              영상 {remainingDays(item.recording.availableUntil)}일 남음
+                            </p>
+                            <p className="mt-1 text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
+                              {formatDate(item.recording.availableUntil)}까지
+                            </p>
+                          </>
+                        ) : null}
                         <button
                           className="mj-font-label mt-3 inline-flex min-h-[46px] items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-[18px] text-[15px] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
                           disabled={downloadingRecordingId !== undefined}
