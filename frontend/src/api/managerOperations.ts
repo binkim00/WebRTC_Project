@@ -44,6 +44,14 @@ export type OperationSettingRequest = {
 }
 
 /**
+ * 팬미팅이 실제 참가자를 정하는 방식이다. 생성 후에는 바꿀 수 없다.
+ *
+ * - APPLICATION: 멜리 내부에서 응모를 받고 추첨으로 참가자를 정한다.
+ * - EXTERNAL_SELECTION: 외부에서 이미 선별한 명단을 CSV로 등록해 참가자를 정한다.
+ */
+export type ParticipantSelectionType = 'APPLICATION' | 'EXTERNAL_SELECTION'
+
+/**
  * 현재 백엔드의 `POST /api/v1/fan-meetings` 요청 본문 구조이다.
  * 엔드포인트 이름과 달리 프런트에서는 홍보·응모 이벤트를 등록할 때 사용한다.
  */
@@ -53,6 +61,8 @@ export type FanMeetingCreateRequest = {
   description: string | null
   coverImageUrl: string | null
   scheduledStartAt: string
+  /** 생략하면 서버가 APPLICATION(응모 방식)으로 해석한다. 저장된 예전 로컬 초안에는 없을 수 있다. */
+  participantSelectionType?: ParticipantSelectionType
   application: ApplicationSettingRequest
   operation: OperationSettingRequest
 }
@@ -175,6 +185,15 @@ function assertFanMeetingCreateRequest(payload: FanMeetingCreateRequest) {
       throw new TypeError('응모를 사용하는 경우 응모 기간·결과 발표 일시·정원을 입력해 주세요.')
     }
   }
+
+  if (payload.participantSelectionType === 'EXTERNAL_SELECTION') {
+    if (payload.application.enabled) {
+      throw new TypeError('CSV 직접 등록 방식은 응모 기능과 함께 사용할 수 없습니다.')
+    }
+    if (!Number.isInteger(payload.application.capacity) || payload.application.capacity <= 0) {
+      throw new TypeError('CSV로 등록할 참가자 정원을 1명 이상 입력해 주세요.')
+    }
+  }
 }
 
 /**
@@ -189,7 +208,8 @@ export async function createEvent(
   assertFanMeetingCreateRequest(payload)
 
   // lab 브랜치의 FanMeetingCreateRequest 계약에 정의된 필드만 전송한다.
-  // 응모를 사용하지 않아도 capacity는 @NotNull이므로 0을 보내고,
+  // CSV 직접 등록(EXTERNAL_SELECTION)은 응모를 쓰지 않지만 capacity를 등록 가능한
+  // 최대 인원으로 그대로 보낸다. 그 외 응모 미사용은 capacity가 의미 없으므로 0을 보내고,
   // 날짜는 null이어야 서비스의 비활성 응모 검증을 통과한다.
   const requestBody = {
     influencerId: payload.influencerId,
@@ -197,6 +217,7 @@ export async function createEvent(
     description: payload.description?.trim() || null,
     coverImageUrl: normalizeCoverImageUrl(payload.coverImageUrl),
     scheduledStartAt: payload.scheduledStartAt,
+    participantSelectionType: payload.participantSelectionType ?? 'APPLICATION',
     application: payload.application.enabled
       ? {
           enabled: true,
@@ -210,7 +231,9 @@ export async function createEvent(
           startAt: null,
           endAt: null,
           resultAnnouncementAt: null,
-          capacity: 0,
+          capacity: payload.participantSelectionType === 'EXTERNAL_SELECTION'
+            ? payload.application.capacity
+            : 0,
         },
     operation: {
       queueOpenAt: payload.operation.queueOpenAt,
@@ -270,7 +293,11 @@ export async function updateFanMeeting(
           startAt: null,
           endAt: null,
           resultAnnouncementAt: null,
-          capacity: 0,
+          // 참가자 선별 방식은 생성 후 변경할 수 없어 수정 요청에는 담지 않지만,
+          // CSV 직접 등록으로 만든 초안을 다시 저장할 때도 정원 값은 그대로 유지해야 한다.
+          capacity: payload.participantSelectionType === 'EXTERNAL_SELECTION'
+            ? payload.application.capacity
+            : 0,
         },
     operation: {
       ...payload.operation,

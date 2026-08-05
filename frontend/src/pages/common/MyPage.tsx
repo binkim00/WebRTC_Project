@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
   getAuthSession,
@@ -12,6 +12,7 @@ import {
   Button,
   Dialog,
   Select,
+  SocialAccountsSection,
   Spinner,
   TextField,
   WithdrawAccountSection,
@@ -146,6 +147,8 @@ function errorMessage(reason: unknown, fallback: string) {
  * 역할별로 새로 만들지 않고 이 컴포넌트 하나가 로그인 세션의 role을 읽어 분기한다.
  */
 export function MyPage() {
+  // 소셜 연결 후 돌아올 경로로 쓴다. 역할마다 마이페이지 경로가 달라 현재 경로를 그대로 넘긴다.
+  const location = useLocation()
   const authSession = getAuthSession()
   const authToken = authSession?.accessToken
   const role = authSession?.role ?? 'FAN'
@@ -384,6 +387,14 @@ export function MyPage() {
               ))}
             </div>
           </section>
+
+          {/*
+            소셜 계정 연결 관리. 연결 흐름은 공급자 왕복이 필요하므로 돌아올 경로를 넘긴다.
+            (콜백 화면이 이 값으로 '로그인 흐름'과 '연결 흐름'을 구분한다)
+          */}
+          <div className="mt-10 border-t border-[var(--color-divider)] pt-[22px]">
+            <SocialAccountsSection returnTo={location.pathname} />
+          </div>
 
           <div className="mt-10 border-t border-[var(--color-divider)] pt-[22px]">
             <WithdrawAccountSection description={content.withdrawDescription} />

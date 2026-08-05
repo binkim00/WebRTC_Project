@@ -55,6 +55,10 @@ function isFanMeetingForm(value: unknown): value is FanMeetingForm {
       isNullableString(form.description) &&
       isNullableString(form.coverImageUrl) &&
       typeof form.scheduledStartAt === 'string' &&
+      // 이전 로컬 초안에는 이 필드가 없을 수 있어 없어도 유효한 폼으로 본다.
+      (form.participantSelectionType === undefined ||
+        form.participantSelectionType === 'APPLICATION' ||
+        form.participantSelectionType === 'EXTERNAL_SELECTION') &&
       application &&
       typeof application.enabled === 'boolean' &&
       isNullableString(application.startAt) &&
@@ -117,6 +121,7 @@ export function createInitialMeetingForm(influencerId?: number): FanMeetingForm 
     description: '',
     coverImageUrl: null,
     scheduledStartAt: '',
+    participantSelectionType: 'APPLICATION',
     application: {
       enabled: true,
       startAt: null,
@@ -167,7 +172,8 @@ export function hasMeaningfulMeetingDraft(
       form.operation.queueOpenAt ||
       formDescription.trim() ||
       questions.length > 0 ||
-      form.application.enabled === false,
+      form.application.enabled === false ||
+      form.participantSelectionType === 'EXTERNAL_SELECTION',
   )
 }
 

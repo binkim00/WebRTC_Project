@@ -40,6 +40,25 @@ export const router = createBrowserRouter([
             path: 'signup',
             lazy: lazyPage(() => import('../pages/auth/AuthRoutePages'), 'SignupPage'),
           },
+          // 소셜 로그인 콜백이다. 이 경로는 구글·카카오·네이버 콘솔에 등록된 redirect_uri와
+          // 같아야 하므로 바꾸면 안 된다. 공급자별로 라우트를 나누지 않고 경로 변수로 받는다.
+          {
+            path: 'oauth/callback/:provider',
+            lazy: lazyPage(
+              () => import('../pages/auth/SocialCallbackPage'),
+              'SocialCallbackPage',
+            ),
+          },
+          // 소셜 신규 가입 추가정보 화면이다. 콜백이 라우터 state로 임시 토큰을 넘겨 준다.
+          {
+            path: 'signup/social',
+            lazy: lazyPage(() => import('../pages/auth/SocialSignupPage'), 'SocialSignupPage'),
+          },
+          // 같은 이메일의 기존 계정에 소셜 계정을 연결하는 확인 화면이다.
+          {
+            path: 'login/social-link',
+            lazy: lazyPage(() => import('../pages/auth/SocialLinkPage'), 'SocialLinkPage'),
+          },
         ],
       },
       // 인증 메일 링크가 도착하는 화면이다. 백엔드 EMAIL_VERIFY_BASE_URL이 이 경로를 가리킨다.
@@ -368,6 +387,13 @@ export const router = createBrowserRouter([
             lazy: lazyPage(
               () => import('../pages/manager/ManagerMeetingDetailPage'),
               'ManagerMeetingDetailPage',
+            ),
+          },
+          {
+            path: 'fan-meetings/:fanMeetingId/external-participants',
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerExternalParticipantsPage'),
+              'ManagerExternalParticipantsPage',
             ),
           },
           {
