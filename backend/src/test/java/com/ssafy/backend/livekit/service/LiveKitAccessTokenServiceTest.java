@@ -13,6 +13,7 @@ import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
+import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,9 +73,9 @@ class LiveKitAccessTokenServiceTest {
         queueEntry = mock(QueueEntry.class);
         meeting = mock(FanMeeting.class);
         Participant participant = mock(Participant.class);
-        fan = user(11L, UserRole.FAN, "팬");
-        host = user(12L, UserRole.INFLUENCER, "호스트");
-        manager = user(13L, UserRole.MANAGER, "매니저");
+        fan = user(11L, UserRole.FAN, "팬", PreferredLanguage.ENGLISH);
+        host = user(12L, UserRole.INFLUENCER, "호스트", PreferredLanguage.KOREAN);
+        manager = user(13L, UserRole.MANAGER, "매니저", PreferredLanguage.KOREAN);
 
         when(callSessionRepository.findAccessContextById(CALL_SESSION_ID))
                 .thenReturn(Optional.of(callSession));
@@ -142,6 +143,37 @@ class LiveKitAccessTokenServiceTest {
     }
 
     /**
+     * 한국어를 쓰지 않는 인플루언서에게 실제 선호 언어 코드가 담긴 토큰을 발급하는지 검증한다.
+     */
+    @Test
+    void issuesHostTokenWithInfluencerPreferredLanguage() {
+        when(currentUserService.requireActiveUser(any())).thenReturn(host);
+        when(host.getPreferredLanguage()).thenReturn(PreferredLanguage.ENGLISH);
+
+        String payload = decodePayload(service.issue(
+                CALL_SESSION_ID, new AuthenticatedUser(12L, UserRole.INFLUENCER)).accessToken());
+
+        assertThat(payload)
+                .contains("\"role\":\"INFLUENCER\"")
+                .contains("\"influencer_lang\":\"en\"")
+                .doesNotContain("\"influencer_lang\":\"ko\"");
+    }
+
+    /**
+     * 인플루언서 선호 언어가 비어 있어도 기본 언어 코드로 토큰을 발급하는지 검증한다.
+     */
+    @Test
+    void issuesHostTokenWithDefaultLanguageWhenPreferenceMissing() {
+        when(currentUserService.requireActiveUser(any())).thenReturn(host);
+        when(host.getPreferredLanguage()).thenReturn(null);
+
+        String payload = decodePayload(service.issue(
+                CALL_SESSION_ID, new AuthenticatedUser(12L, UserRole.INFLUENCER)).accessToken());
+
+        assertThat(payload).contains("\"influencer_lang\":\"ko\"");
+    }
+
+    /**
      * 팬미팅 매니저가 LiveKit 통화방 입장 토큰을 발급받지 못하는지 검증한다.
      */
     @Test
@@ -160,7 +192,7 @@ class LiveKitAccessTokenServiceTest {
      */
     @Test
     void rejectsFanWhoIsNotCallParticipant() {
-        User otherFan = user(99L, UserRole.FAN, "다른 팬");
+        User otherFan = user(99L, UserRole.FAN, "다른 팬", PreferredLanguage.KOREAN);
         when(currentUserService.requireActiveUser(any())).thenReturn(otherFan);
 
         assertThatThrownBy(() -> service.issue(
@@ -218,13 +250,21 @@ class LiveKitAccessTokenServiceTest {
     }
 
     /**
-     * 지정 식별자와 역할을 반환하는 사용자 mock을 생성한다.
+     * 지정 식별자와 역할, 선호 언어를 반환하는 사용자 mock을 생성한다.
+     *
+     * @param id 사용자 식별자
+     * @param role 사용자 역할
+     * @param nickname 사용자 닉네임
+     * @param preferredLanguage 사용자 선호 언어
+     * @return 토큰 발급 검증에 사용할 사용자 mock
      */
-    private User user(Long id, UserRole role, String nickname) {
+    private User user(Long id, UserRole role, String nickname,
+                      PreferredLanguage preferredLanguage) {
         User user = mock(User.class);
         when(user.getId()).thenReturn(id);
         when(user.getRole()).thenReturn(role);
         when(user.getNickname()).thenReturn(nickname);
+        when(user.getPreferredLanguage()).thenReturn(preferredLanguage);
         return user;
     }
 
