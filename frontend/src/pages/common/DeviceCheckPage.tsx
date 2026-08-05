@@ -7,6 +7,7 @@ import { saveDeviceCheck } from '../../api/deviceChecks'
 import { fetchMeetingDetail } from '../../api/fanMeetingParticipants'
 import { AlertBanner, Button, MediaDevicePreview, Select } from '../../components'
 import type { FeedbackVariant } from '../../components'
+import { CharacterSetup } from '../../components/call/CharacterSetup'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 import {
   useMediaDeviceCheck,
@@ -530,6 +531,15 @@ export function DeviceCheckPage() {
               value={selectedMicrophoneId}
             />
           </div>
+
+          {/*
+            캐릭터로 참여 — 팬에게만 보여 준다. 인플루언서 얼굴을 직접 보는 것이 팬미팅의 가치라
+            인플루언서에게는 이 선택지를 열지 않는다.
+            마이크 선택 바로 아래에 두어, 방금 확인한 마이크로 입이 움직이는 것을 그 자리에서 볼 수 있다.
+          */}
+          {session?.role === 'FAN' ? (
+            <CharacterSetup microphoneTrack={stream?.getAudioTracks()[0]} />
+          ) : null}
 
           <div className="mt-5 border-t border-[var(--color-divider)] pt-[18px]">
             <RowHeading

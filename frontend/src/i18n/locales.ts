@@ -67,23 +67,31 @@ const ko = {
   // 무엇이 왜 막혔는지와 대신 할 수 있는 일을 함께 알려 준다.
   'fanApplicationsPage.resultReady': '결과 도착',
 
-  'managerMeetingDetailPage.collapseApplicationWindow': '응모 기간 최소로 줄이기',
-  'managerMeetingDetailPage.applicationWindowCollapsed':
-    '응모 기간을 최소로 조정했습니다. 잠시 뒤 응모가 열렸다가 곧 마감되며, 마감된 뒤에 추첨할 수 있습니다. (최대 2분)',
-  'meetingManagement.t8':
-    '응모 기간을 줄일 수 없습니다. 팬미팅 예정 시작 일시가 너무 가까워 응모 마감·결과 발표 시각을 그 앞에 둘 수 없습니다. 정보 수정에서 팬미팅 시작 일시를 뒤로 옮겨 주세요.',
+  'characterSetup.title': '캐릭터로 참여',
+  'characterSetup.on': '사용 중',
+  'characterSetup.off': '사용 안 함',
+  'characterSetup.description':
+    '얼굴을 보이지 않고 캐릭터로 참여할 수 있어요. 말하면 입이 움직이고, 통화 중에도 언제든 끌 수 있습니다.',
+  'characterSetup.preview': '캐릭터 미리보기',
+  'characterSetup.pick': '캐릭터 고르기',
+  'characterSetup.unsupported': '이 브라우저에서는 캐릭터로 참여할 수 없습니다.',
+
+  'callStage.reactionGroup': '리액션 보내기',
+  'callStage.reactionSend': '{p0} 리액션 보내기',
+  'callStage.characterOn': '캐릭터로 참여 중',
+  'callStage.characterOff': '캐릭터로 참여',
+  'callStage.characterPick': '캐릭터 고르기',
+  'connectedCallRoom.characterUnsupported':
+    '이 브라우저에서는 캐릭터로 참여할 수 없습니다.',
+  'connectedCallRoom.characterFailed':
+    '캐릭터를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  'influencerCallSidePanel.answersTitle': '응모 답변',
+  'influencerCallSidePanel.answersEmpty': '작성된 응모 답변이 없습니다.',
+  'influencerCallSidePanel.answersCollapse': '답변 접기',
+  'influencerCallSidePanel.answersExpand': '답변 전체 보기',
 
   'managerApplicationFormPanel.descriptionHint':
     '팬이 이벤트 상세에서 응모 폼을 열 때 질문 위에 표시됩니다. 질문이 없어도 이 문구만 보여 줄 수 있습니다.',
-
-  'meetingManagement.t4':
-    '응모 시작 일시를 현재로 옮길 수 없습니다. 팬미팅 예정 시작 일시가 이미 지났거나 응모 일정이 검증 조건에 맞지 않습니다. 정보 수정에서 일정을 먼저 조정해 주세요.',
-  'meetingManagement.t5':
-    '응모 즉시 마감은 이 서버에서 지원하지 않습니다. 응모가 열린 뒤에는 응모 일정을 바꿀 수 없고, 마감은 예약된 마감 시각이 지난 뒤 추첨을 실행할 때 처리됩니다.',
-  'meetingManagement.t6':
-    '팬미팅을 지금 시작할 수 없습니다. 확정 참가자가 있는지, 진행 준비 상태인지 확인해 주세요.',
-  'meetingManagement.t7':
-    '대기열 오픈 시각을 현재로 옮길 수 없습니다. 응모가 시작된 뒤에는 대기열 오픈 일시를 변경할 수 없습니다.',
 
   // 언어 선택기
   'language.label': '언어',
@@ -2062,7 +2070,8 @@ const ko = {
   'managerMeetingDetailPage.t87': '현재 팬미팅 상태를 확인할 수 없습니다.',
   'managerMeetingDetailPage.t88': '응모 접수를 즉시 시작하고 응모 시작 시각을 현재로 갱신했습니다.',
   'managerMeetingDetailPage.t89': '응모 접수를 즉시 마감하고 응모 마감 시각을 현재로 갱신했습니다.',
-  'managerMeetingDetailPage.t90': '팬미팅을 즉시 시작하고 예정 시작 시각을 현재로 갱신했습니다.',
+  // 정식 명령은 예정 시작 시각을 건드리지 않고 대기실만 연다. 이전 문구는 사실과 달랐다.
+  'managerMeetingDetailPage.t90': '대기실을 열고 팬미팅을 시작했습니다. 예정 시작 시각은 그대로입니다.',
   'managerMeetingDetailPage.t91': '요청을 처리하지 못했습니다.',
   'managerMeetingDetailPage.t92': '팬미팅 정보를 찾을 수 없습니다.',
   'managerMeetingDetailPage.t93': '연결된 관리 화면',
@@ -2786,7 +2795,8 @@ const ko = {
   'managerMeetingDetailPage.t168': '마감 이후에는 새 응모를 받을 수 없습니다.',
   'managerMeetingDetailPage.t169': '응모 마감',
   'managerMeetingDetailPage.t170': '팬미팅을 지금 시작할까요?',
-  'managerMeetingDetailPage.t171': '예정 시작 시각이 현재로 변경되고 확정 참가자에게 즉시 영향을 줍니다.',
+  'managerMeetingDetailPage.t171':
+    '대기실이 즉시 열려 확정 참가자가 바로 입장할 수 있습니다. 예정 시작 시각은 바뀌지 않으며, 되돌리려면 팬미팅을 종료해야 합니다.',
   'managerMeetingDetailPage.t172': '지금 시작',
   'managerMeetingDetailPage.t173': '작성 중',
   'managerMeetingDetailPage.t174': '공개',
@@ -2953,23 +2963,31 @@ const en: Partial<Record<TranslationKey, string>> = {
 
   'fanApplicationsPage.resultReady': 'Result ready',
 
-  'managerMeetingDetailPage.collapseApplicationWindow': 'Shorten application window',
-  'managerMeetingDetailPage.applicationWindowCollapsed':
-    'The application window was shortened to the minimum. Applications will open shortly and close right after; you can run the draw once they close. (up to 2 minutes)',
-  'meetingManagement.t8':
-    'The application window cannot be shortened. The scheduled fan meeting start time is too close to fit the application closing and results announcement times before it. Please move the start time later from Edit details.',
+  'characterSetup.title': 'Join as a character',
+  'characterSetup.on': 'On',
+  'characterSetup.off': 'Off',
+  'characterSetup.description':
+    'Join with a character instead of your face. Its mouth moves when you speak, and you can turn it off during the call at any time.',
+  'characterSetup.preview': 'Character preview',
+  'characterSetup.pick': 'Choose a character',
+  'characterSetup.unsupported': 'This browser cannot join as a character.',
+
+  'callStage.reactionGroup': 'Send a reaction',
+  'callStage.reactionSend': 'Send {p0} reaction',
+  'callStage.characterOn': 'Joined as a character',
+  'callStage.characterOff': 'Join as a character',
+  'callStage.characterPick': 'Choose a character',
+  'connectedCallRoom.characterUnsupported':
+    'This browser cannot join as a character.',
+  'connectedCallRoom.characterFailed':
+    'Could not start the character. Please try again in a moment.',
+  'influencerCallSidePanel.answersTitle': 'Application answers',
+  'influencerCallSidePanel.answersEmpty': 'No application answers were written.',
+  'influencerCallSidePanel.answersCollapse': 'Collapse answers',
+  'influencerCallSidePanel.answersExpand': 'Show all answers',
 
   'managerApplicationFormPanel.descriptionHint':
     'Shown above the questions when a fan opens the application form on the event page. It can appear on its own even with no questions.',
-
-  'meetingManagement.t4':
-    'The application start time cannot be moved to now. Either the scheduled fan meeting start time has already passed, or the application schedule does not satisfy the validation rules. Please adjust the schedule from Edit details first.',
-  'meetingManagement.t5':
-    'Closing applications immediately is not supported on this server. Once applications open, the application schedule is fixed, and closing happens when you run the draw after the scheduled closing time has passed.',
-  'meetingManagement.t6':
-    'The fan meeting cannot start now. Please check that there are confirmed participants and that the meeting is ready to run.',
-  'meetingManagement.t7':
-    'The queue open time cannot be moved to now. It cannot be changed once applications have opened.',
 
   // 공용 셸·라우팅
   'app.t1': 'Main sections',
@@ -5095,7 +5113,7 @@ const en: Partial<Record<TranslationKey, string>> = {
   'managerMeetingDetailPage.t87': 'We cannot determine the current fan meeting status.',
   'managerMeetingDetailPage.t88': 'Applications opened immediately and the start time was set to now.',
   'managerMeetingDetailPage.t89': 'Applications closed immediately and the closing time was set to now.',
-  'managerMeetingDetailPage.t90': 'The fan meeting started immediately and the scheduled start time was set to now.',
+  'managerMeetingDetailPage.t90': 'The waiting room is open and the fan meeting has started. The scheduled start time is unchanged.',
   'managerMeetingDetailPage.t91': 'We could not process the request.',
   'managerMeetingDetailPage.t92': 'We could not find that fan meeting.',
   'managerMeetingDetailPage.t93': 'Related management screens',
@@ -5817,7 +5835,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'managerMeetingDetailPage.t168': 'After closing, no new applications can be accepted.',
   'managerMeetingDetailPage.t169': 'Close applications',
   'managerMeetingDetailPage.t170': 'Start the fan meeting now?',
-  'managerMeetingDetailPage.t171': 'The scheduled start time changes to now and immediately affects confirmed participants.',
+  'managerMeetingDetailPage.t171':
+    'The waiting room opens immediately so confirmed participants can join right away. The scheduled start time does not change, and undoing this requires ending the fan meeting.',
   'managerMeetingDetailPage.t172': 'Start now',
   'managerMeetingDetailPage.t173': 'Draft',
   'managerMeetingDetailPage.t174': 'Public',

@@ -189,17 +189,8 @@ export function getAvailableActions(context: MeetingActionContext): MeetingActio
     canEnd: status === 'LIVE',
     // 수동 운영 전환은 시간만 우회한다. 상태 순서와 참가자 존재 조건은 그대로 지킨다.
     canOpenApplicationsNow: status === 'PUBLISHED' && context.applicationEnabled === true,
-    /*
-     * 응모를 지금 마감 처리할 수 있는지다.
-     *
-     * PUBLISHED도 허용하는 이유: 백엔드는 응모가 한 번 열리면 응모 일정 변경을 모두 거부하고,
-     * 마감 상태 전환은 추첨이 담당하는데 추첨은 예약 마감 시각이 지나야 허용한다. 그래서 마감을
-     * 앞당길 수 있는 시점은 아직 열리지 않은 PUBLISHED뿐이며, 이때 응모 기간을 최소로 접는다.
-     * (APPLICATION_OPEN에서 눌러도 백엔드가 막으므로 화면에서 원인을 안내한다.)
-     */
-    canCloseApplicationsNow:
-      status === 'APPLICATION_OPEN' ||
-      (status === 'PUBLISHED' && context.applicationEnabled === true),
+    // 정식 명령 `applications/close`가 APPLICATION_OPEN → APPLICATION_CLOSED만 허용한다.
+    canCloseApplicationsNow: status === 'APPLICATION_OPEN',
     canStartNow,
     applicationStarted,
     startBlockedReason,

@@ -23,6 +23,15 @@ export type CallStageOverlay = {
   onAction?: () => void
 }
 
+/** 화면에 떠오르는 리액션 한 개다. 표시가 끝나면 목록에서 사라진다. */
+export type FloatingReaction = {
+  /** React key이며 같은 이모지를 연속으로 눌러도 겹치지 않게 한다. */
+  id: string
+  emoji: string
+  /** 가로 위치(%)다. 여러 개가 한 줄에 겹치지 않도록 보낼 때 흩뿌린다. */
+  leftPercent: number
+}
+
 /** 통화를 유지한 채 상단에 띄우는 장치 이상 배너다. (device-error 상태) */
 export type CallStageDeviceAlert = {
   title: string
@@ -44,6 +53,32 @@ export type CallStageProps = {
   timeValue: string
   /** 종료가 임박하면 타이머를 경고색으로 바꾼다. */
   timeUrgent?: boolean
+  /**
+   * 남은 시간의 비율(0~1)이며 카운트다운 테두리를 따라 줄어드는 게이지로 그린다.
+   *
+   * 숫자만 있으면 "얼마나 남았는지"가 감각으로 오지 않는다. 다만 통화 화면을 가리면 안 되므로
+   * 별도 영역을 만들지 않고 **기존 카운트다운 자리의 테두리**만 쓴다. 값이 없으면 게이지를 숨긴다.
+   */
+  timeRatio?: number
+  /**
+   * 캐릭터로 참여하기 제어다. 팬에게만 넘겨 준다.
+   *
+   * 얼굴을 보이고 싶지 않은 참가자가 카메라를 끄는 대신 고를 수 있는 선택지다.
+   * 이 값이 없으면 관련 UI를 전부 숨긴다.
+   */
+  character?: {
+    enabled: boolean
+    /** 고를 수 있는 캐릭터 목록이며 미리보기 색으로 구분한다. */
+    presets: readonly { id: string; hair: string; skin: string }[]
+    selectedPresetId: string
+    onSelect: (presetId: string) => void
+    onToggle: () => void
+  }
+  /** 보낼 수 있는 리액션 목록이며 비어 있으면 리액션 UI를 숨긴다. */
+  reactionEmojis?: readonly string[]
+  /** 화면에 떠오르는 중인 리액션들이다. */
+  floatingReactions?: readonly FloatingReaction[]
+  onReactionSend?: (emoji: string) => void
   cameraEnabled: boolean
   microphoneEnabled: boolean
   captionEnabled: boolean
@@ -74,6 +109,11 @@ export function CallStage({
   timeLabel,
   timeValue,
   timeUrgent,
+  timeRatio,
+  character,
+  reactionEmojis,
+  floatingReactions,
+  onReactionSend,
   cameraEnabled,
   microphoneEnabled,
   captionEnabled,
@@ -115,7 +155,40 @@ export function CallStage({
           </span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
-          <p className="flex items-baseline gap-2">
+          {/*
+            남은 시간 — 숫자 그대로 두고 그 **테두리**만 게이지로 쓴다.
+            통화 화면을 가리지 않아야 하므로 링이나 배너를 따로 두지 않고, 기존 카운트다운이
+            차지하던 자리 안에서만 표현한다. SVG는 absolute라 레이아웃 크기를 늘리지 않는다.
+          */}
+          <p className="relative flex items-baseline gap-2 px-2 py-1">
+            {timeRatio === undefined ? null : (
+              <svg
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 size-full"
+                preserveAspectRatio="none"
+                viewBox="0 0 100 100"
+              >
+                {/* 남은 양이 줄어드는 것을 보여 준다. pathLength=1로 두면 비율을 그대로 쓸 수 있다. */}
+                <rect
+                  className={cn(
+                    'transition-[stroke-dashoffset] duration-500 ease-linear',
+                    timeUrgent
+                      ? 'stroke-[var(--color-warning-on-dark)]'
+                      : 'stroke-white/45',
+                  )}
+                  fill="none"
+                  height="96"
+                  pathLength={1}
+                  rx="12"
+                  strokeDasharray={1}
+                  strokeDashoffset={1 - Math.min(1, Math.max(0, timeRatio))}
+                  strokeWidth="4"
+                  width="96"
+                  x="2"
+                  y="2"
+                />
+              </svg>
+            )}
             <span className="whitespace-nowrap text-[13px] font-semibold text-white/75">
               {timeLabel}
             </span>
@@ -229,6 +302,98 @@ export function CallStage({
               ) : null}
             </p>
           ))}
+        </div>
+      ) : null}
+
+      {/*
+        떠오르는 리액션 — 화면 전체를 덮지만 `pointer-events-none`이라 아래 조작을 가리지 않는다.
+        영상 위에 잠깐 떴다 사라지는 표현이므로 레이아웃을 차지하지 않게 absolute로 둔다.
+      */}
+      {floatingReactions?.length ? (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
+          {floatingReactions.map((reaction) => (
+            <span
+              className="absolute bottom-[120px] text-[38px] leading-none motion-safe:animate-[mj-reaction-float_2200ms_cubic-bezier(0.2,0.6,0.3,1)_forwards] motion-reduce:opacity-80"
+              key={reaction.id}
+              style={{ left: `${reaction.leftPercent}%` }}
+            >
+              {reaction.emoji}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {/*
+        리액션 — 2분 통화에서 고민 없이 누를 수 있도록 고정된 소수의 이모지만 둔다.
+        자막 토글 바로 위에 놓아 내 화면 PIP(우측)와 자막(중앙)을 가리지 않는다.
+      */}
+      {reactionEmojis?.length && onReactionSend ? (
+        <div
+          aria-label={t('callStage.reactionGroup')}
+          className="absolute bottom-[70px] left-[18px] z-10 flex items-center gap-1 rounded-lg bg-[rgb(15_17_21/78%)] px-2 py-1.5"
+          role="group"
+        >
+          {reactionEmojis.map((emoji) => (
+            <button
+              aria-label={t('callStage.reactionSend', { p0: emoji })}
+              className="min-h-9 rounded-md px-2 text-xl leading-none transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:hover:scale-100"
+              key={emoji}
+              onClick={() => onReactionSend(emoji)}
+              type="button"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {/*
+        캐릭터로 참여 — 얼굴을 보이고 싶지 않은 팬의 선택지다.
+        좌측 조작 열(자막 토글 18px, 리액션 70px) 위에 쌓는다. 우측은 내 화면 PIP가,
+        중앙 하단은 자막이 쓰고 있어 그 자리를 침범하지 않는다.
+      */}
+      {character ? (
+        <div className="absolute bottom-[122px] left-[18px] z-10 flex flex-col items-start gap-1.5">
+          {/* 캐릭터가 켜져 있을 때만 색을 고를 수 있다. 꺼진 상태에서 고르게 하면 무엇이 바뀌는지 알 수 없다. */}
+          {character.enabled ? (
+            <div
+              aria-label={t('callStage.characterPick')}
+              className="order-first flex items-center gap-1 rounded-lg bg-[rgb(15_17_21/78%)] px-2 py-1.5"
+              role="group"
+            >
+              {character.presets.map((preset) => (
+                <button
+                  aria-label={preset.id}
+                  aria-pressed={preset.id === character.selectedPresetId}
+                  className={cn(
+                    'size-6 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:hover:scale-100',
+                    preset.id === character.selectedPresetId
+                      ? 'border-white'
+                      : 'border-transparent',
+                  )}
+                  key={preset.id}
+                  onClick={() => character.onSelect(preset.id)}
+                  style={{
+                    background: `radial-gradient(circle at 50% 62%, ${preset.skin} 0 46%, ${preset.hair} 47% 100%)`,
+                  }}
+                  type="button"
+                />
+              ))}
+            </div>
+          ) : null}
+          <button
+            aria-pressed={character.enabled}
+            className={cn(
+              'min-h-9 whitespace-nowrap rounded-lg px-3 text-[13px] font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
+              character.enabled
+                ? 'bg-white/90 text-[var(--color-surface-dark)]'
+                : 'bg-[rgb(15_17_21/78%)] text-white/90 hover:bg-[rgb(15_17_21/92%)]',
+            )}
+            onClick={character.onToggle}
+            type="button"
+          >
+            {character.enabled ? t('callStage.characterOn') : t('callStage.characterOff')}
+          </button>
         </div>
       ) : null}
 

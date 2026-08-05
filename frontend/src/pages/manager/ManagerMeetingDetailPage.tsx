@@ -481,29 +481,13 @@ export function ManagerMeetingDetailPage() {
           : action === 'closeApplicationsNow'
             ? 'APPLICATION_CLOSED'
             : 'LIVE'
-        await transitionFanMeetingImmediately(
-          meetingId,
-          currentStatus,
-          targetStatus,
-          token,
-          {
-            applicationStartAt: detail.meeting.application.startAt,
-            applicationEndAt: detail.meeting.application.endAt,
-            // 정식 PATCH 경로가 백엔드 일정 검증(응모 시작 < 마감 ≤ 발표 < 팬미팅 시작)을
-            // 통과할 값을 계산할 수 있도록 나머지 일정도 함께 넘긴다.
-            applicationResultAnnouncementAt: detail.meeting.application.resultAnnouncementAt,
-            scheduledStartAt: detail.meeting.scheduledStartAt,
-          },
-        )
+        // 일정 계산은 서버가 한다. 프론트가 넘길 값이 없다.
+        await transitionFanMeetingImmediately(meetingId, currentStatus, targetStatus, token)
         setMessage(
           action === 'openApplicationsNow'
             ? t('managerMeetingDetailPage.t88')
             : action === 'closeApplicationsNow'
-              // PUBLISHED에서는 응모 기간을 접는 방식이라 곧 열렸다가 마감된다.
-              // 즉시 마감이 아니므로 다음에 무엇을 기다려야 하는지 함께 알려 준다.
-              ? currentStatus === 'PUBLISHED'
-                ? t('managerMeetingDetailPage.applicationWindowCollapsed')
-                : t('managerMeetingDetailPage.t89')
+              ? t('managerMeetingDetailPage.t89')
               : t('managerMeetingDetailPage.t90'),
         )
       }
@@ -723,14 +707,7 @@ function OverviewPanel({
     primaryActions.push({ action: 'openApplicationsNow', label: t('managerMeetingDetailPage.t107') })
   }
   if (actions.canCloseApplicationsNow) {
-    // 아직 열리지 않은 팬미팅에서는 "마감"이 아니라 응모 기간을 접는 동작이므로 라벨을 달리 쓴다.
-    primaryActions.push({
-      action: 'closeApplicationsNow',
-      label:
-        meeting.status === 'PUBLISHED'
-          ? t('managerMeetingDetailPage.collapseApplicationWindow')
-          : t('managerMeetingDetailPage.t108'),
-    })
+    primaryActions.push({ action: 'closeApplicationsNow', label: t('managerMeetingDetailPage.t108') })
   }
   if (actions.canStartNow && !actions.canStart) {
     primaryActions.push({ action: 'startNow', label: t('managerMeetingDetailPage.t109') })
