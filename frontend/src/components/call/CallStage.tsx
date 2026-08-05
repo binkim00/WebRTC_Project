@@ -55,6 +55,12 @@ export type CallStageProps = {
   onMicrophoneToggle: () => void
   onCaptionToggle: () => void
   onLeave: () => void
+  /** 기념 사진 셔터다. 넘기지 않으면 셔터 버튼을 숨긴다(팬 화면에서만 쓴다). */
+  onCapture?: () => void
+  /** 셔터 버튼에 표시할 문구다. 찍은 장수를 함께 보여 준다. */
+  captureLabel?: string
+  /** 저장 중이거나 장수를 다 채워 셔터를 누를 수 없는 상태인지 */
+  captureDisabled?: boolean
 }
 
 /**
@@ -84,6 +90,9 @@ export function CallStage({
   onMicrophoneToggle,
   onCaptionToggle,
   onLeave,
+  onCapture,
+  captureLabel,
+  captureDisabled,
 }: CallStageProps) {
   const deviceButtonClass =
     'min-h-9 whitespace-nowrap rounded-md px-1.5 text-[13px] font-bold transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-60'
@@ -149,6 +158,18 @@ export function CallStage({
             >
               카메라 {cameraEnabled ? '정상' : '꺼짐'}
             </button>
+            {/* 기념 사진 셔터 — 통화가 끝난 뒤 완료 화면에서 카드로 만들 사진을 남긴다. */}
+            {onCapture ? (
+              <button
+                aria-label="기념 사진 찍기"
+                className={cn(deviceButtonClass, 'text-white/75')}
+                disabled={captureDisabled}
+                onClick={onCapture}
+                type="button"
+              >
+                {captureLabel ?? '사진'}
+              </button>
+            ) : null}
             <button
               className="min-h-9 whitespace-nowrap rounded-md px-1.5 text-[13px] font-bold text-[var(--color-error-on-dark)] transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               onClick={onLeave}

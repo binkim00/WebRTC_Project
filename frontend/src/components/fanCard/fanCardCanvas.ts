@@ -22,6 +22,22 @@ const QUOTE_AREA_HEIGHT = 680
 /** 문구 줄 간격 배수다. */
 const QUOTE_LINE_HEIGHT_RATIO = 1.45
 
+/**
+ * 팬이 고를 수 있는 카드 레이아웃이다.
+ *
+ * <p>INSTA·POLAROID는 사진 한 장, FOURCUT 계열은 네 장을 쓴다. 네컷은 칸 배치가 다른
+ * 세 가지(2×2 격자, 세로 스트립, 가로 스트립)를 따로 고를 수 있다.
+ */
+export type FanCardLayout =
+  | 'INSTA'
+  | 'POLAROID'
+  | 'FOURCUT'
+  | 'FOURCUT_VERTICAL'
+  | 'FOURCUT_HORIZONTAL'
+
+/** FOURCUT이 채우는 칸 수다. */
+const FOUR_CUT_SLOTS = 4
+
 /** 카드에 담을 정보다. */
 export type FanCardArtwork = {
   /** 팬이 고른 문구 */
@@ -34,6 +50,10 @@ export type FanCardArtwork = {
   fanNickname: string
   /** 카드에 표시할 날짜 문구 */
   dateLabel: string
+  /** 팬이 고른 레이아웃이다. 없으면 사진 없는 문구 전용 카드를 그린다. */
+  layout?: FanCardLayout
+  /** 합성할 사진이다. INSTA·POLAROID는 첫 장만, FOURCUT은 앞 네 장을 쓴다. */
+  photos?: readonly ImageBitmap[]
 }
 
 /**
@@ -82,6 +102,8 @@ export function wrapText(
  * @param text 카드에 넣을 문구
  * @param fontFamily 사용할 폰트 패밀리
  * @param maxWidth 한 줄의 최대 폭
+ * @param areaHeight 문구가 차지할 수 있는 최대 높이이며 레이아웃마다 다르다
+ * @param fontSizes 큰 값부터 시도할 폰트 크기 후보
  * @returns 선택한 폰트 크기와 줄 목록
  */
 function fitQuote(
@@ -89,14 +111,16 @@ function fitQuote(
   text: string,
   fontFamily: string,
   maxWidth: number,
+  areaHeight: number = QUOTE_AREA_HEIGHT,
+  fontSizes: readonly number[] = QUOTE_FONT_SIZES,
 ): { fontSize: number; lines: string[] } {
-  let fallback = { fontSize: QUOTE_FONT_SIZES.at(-1) ?? 34, lines: [text] }
+  let fallback = { fontSize: fontSizes.at(-1) ?? 34, lines: [text] }
 
-  for (const fontSize of QUOTE_FONT_SIZES) {
+  for (const fontSize of fontSizes) {
     ctx.font = `700 ${fontSize}px ${fontFamily}`
     const lines = wrapText(ctx, text, maxWidth)
     const height = lines.length * fontSize * QUOTE_LINE_HEIGHT_RATIO
-    if (height <= QUOTE_AREA_HEIGHT) {
+    if (height <= areaHeight) {
       return { fontSize, lines }
     }
     fallback = { fontSize, lines }
@@ -125,6 +149,9 @@ function resolveFontFamily(): string {
  * 웹폰트가 아직 로드되지 않았으면 글자가 대체 글꼴로 그려져 저장된 이미지가 화면과 달라지므로
  * 폰트 준비를 기다린 뒤 그린다.
  *
+ * <p>사진을 넘기지 않았거나 레이아웃을 고르지 않았으면 문구 전용 카드를 그린다. 셔터를
+ * 누르지 않았거나 촬영에 실패한 팬도 카드를 받을 수 있어야 하기 때문이다.
+ *
  * @param canvas 그릴 대상 캔버스
  * @param artwork 카드에 담을 정보
  * @throws Error 2D 컨텍스트를 얻지 못한 경우
@@ -143,6 +170,46 @@ export async function drawFanCard(
 
   await document.fonts?.ready
   const fontFamily = resolveFontFamily()
+  const photos = artwork.photos ?? []
+
+  if (photos.length === 0) {
+    drawQuoteOnlyCard(ctx, artwork, fontFamily)
+    return
+  }
+
+  switch (artwork.layout) {
+    case 'INSTA':
+      drawInstaCard(ctx, artwork, photos, fontFamily)
+      return
+    case 'POLAROID':
+      drawPolaroidCard(ctx, artwork, photos, fontFamily)
+      return
+    case 'FOURCUT':
+      drawFourCutCard(ctx, artwork, photos, fontFamily)
+      return
+    case 'FOURCUT_VERTICAL':
+      drawFourCutVerticalCard(ctx, artwork, photos, fontFamily)
+      return
+    case 'FOURCUT_HORIZONTAL':
+      drawFourCutHorizontalCard(ctx, artwork, photos, fontFamily)
+      return
+    default:
+      drawQuoteOnlyCard(ctx, artwork, fontFamily)
+  }
+}
+
+/**
+ * 사진 없이 문구만 담는 카드를 그린다. 레이아웃을 고르지 않았을 때의 기본 도안이다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param fontFamily 사용할 폰트 패밀리
+ */
+function drawQuoteOnlyCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  fontFamily: string,
+): void {
   const contentWidth = CARD_WIDTH - CARD_PADDING * 2
 
   drawBackground(ctx)
@@ -217,11 +284,899 @@ function drawBackground(ctx: CanvasRenderingContext2D): void {
   ctx.strokeRect(36, 36, CARD_WIDTH - 72, CARD_HEIGHT - 72)
 }
 
-/** 카드 하단에 서비스 표시를 남긴다. */
-function drawFooterMark(ctx: CanvasRenderingContext2D, fontFamily: string): void {
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.42)'
+/**
+ * 카드 하단에 서비스 표시를 남긴다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param fontFamily 사용할 폰트 패밀리
+ * @param y 기준선 y좌표이며 레이아웃마다 하단 여백이 달라 조정한다
+ * @param color 배경이 밝은 레이아웃에서는 어두운 색을 쓴다
+ */
+function drawFooterMark(
+  ctx: CanvasRenderingContext2D,
+  fontFamily: string,
+  y: number = CARD_HEIGHT - 74,
+  color = 'rgba(255, 255, 255, 0.42)',
+): void {
+  ctx.textAlign = 'center'
+  ctx.fillStyle = color
   ctx.font = `600 26px ${fontFamily}`
-  ctx.fillText('MELLY', CARD_WIDTH / 2, CARD_HEIGHT - 74)
+  ctx.fillText('MELLY', CARD_WIDTH / 2, y)
+}
+
+/**
+ * 모서리가 둥근 사각형 경로를 만든다.
+ *
+ * @param ctx 경로를 만들 컨텍스트
+ * @param x 왼쪽 좌표
+ * @param y 위쪽 좌표
+ * @param width 너비
+ * @param height 높이
+ * @param radius 모서리 반지름
+ */
+function roundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const limit = Math.min(radius, width / 2, height / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + limit, y)
+  ctx.lineTo(x + width - limit, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + limit)
+  ctx.lineTo(x + width, y + height - limit)
+  ctx.quadraticCurveTo(x + width, y + height, x + width - limit, y + height)
+  ctx.lineTo(x + limit, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - limit)
+  ctx.lineTo(x, y + limit)
+  ctx.quadraticCurveTo(x, y, x + limit, y)
+  ctx.closePath()
+}
+
+/**
+ * 사진을 지정한 사각형에 비율을 유지한 채 가득 채워 그린다.
+ *
+ * <p>가로세로 비가 맞지 않으면 넘치는 쪽을 중앙 기준으로 잘라 낸다. 늘려 맞추면 얼굴이
+ * 찌그러지므로 크롭을 택한다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param photo 그릴 사진
+ * @param x 왼쪽 좌표
+ * @param y 위쪽 좌표
+ * @param width 채울 너비
+ * @param height 채울 높이
+ * @param radius 모서리 반지름이며 0이면 직각으로 그린다
+ */
+function drawPhotoCover(
+  ctx: CanvasRenderingContext2D,
+  photo: ImageBitmap,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius = 0,
+): void {
+  ctx.save()
+  if (radius > 0) {
+    roundedRectPath(ctx, x, y, width, height, radius)
+  } else {
+    ctx.beginPath()
+    ctx.rect(x, y, width, height)
+  }
+  ctx.clip()
+
+  const scale = Math.max(width / photo.width, height / photo.height)
+  const drawWidth = photo.width * scale
+  const drawHeight = photo.height * scale
+  ctx.drawImage(
+    photo,
+    x + (width - drawWidth) / 2,
+    y + (height - drawHeight) / 2,
+    drawWidth,
+    drawHeight,
+  )
+  ctx.restore()
+}
+
+/**
+ * 사진이 아직 없는 자리를 옅은 안내 칸으로 채운다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 왼쪽 좌표
+ * @param y 위쪽 좌표
+ * @param width 너비
+ * @param height 높이
+ * @param radius 모서리 반지름
+ */
+function drawEmptySlot(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  roundedRectPath(ctx, x, y, width, height, radius)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.06)'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)'
+  ctx.lineWidth = 2
+  ctx.stroke()
+}
+
+/**
+ * 여러 줄로 나눈 문구를 가운데 정렬로 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param lines 그릴 줄 목록
+ * @param fontSize 폰트 크기
+ * @param startY 첫 줄의 기준선 y좌표
+ * @returns 마지막 줄 다음 기준선 y좌표
+ */
+function drawQuoteLines(
+  ctx: CanvasRenderingContext2D,
+  lines: readonly string[],
+  fontSize: number,
+  startY: number,
+): number {
+  const lineHeight = fontSize * QUOTE_LINE_HEIGHT_RATIO
+  let y = startY
+  for (const line of lines) {
+    ctx.fillText(line, CARD_WIDTH / 2, y)
+    y += lineHeight
+  }
+  return y
+}
+
+/**
+ * SNS 게시물 느낌을 내는 아이콘들을 선으로 그린다.
+ *
+ * <p>외부 아이콘 파일을 쓰면 canvas가 오염되거나 로딩 순서에 걸리므로 전부 패스로 그린다.
+ * 모양은 흔한 SNS 앱의 관용적 형태를 따르되 특정 서비스의 로고를 옮기지는 않는다.
+ */
+const SNS_ICON_LINE_WIDTH = 3
+
+/**
+ * 카메라 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ */
+function drawCameraIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  const bodyY = y + size * 0.22
+  const bodyHeight = size * 0.62
+  roundedRectPath(ctx, x, bodyY, size, bodyHeight, size * 0.16)
+  ctx.stroke()
+
+  // 뷰파인더 돌출부
+  ctx.beginPath()
+  ctx.moveTo(x + size * 0.3, bodyY)
+  ctx.lineTo(x + size * 0.38, y + size * 0.08)
+  ctx.lineTo(x + size * 0.62, y + size * 0.08)
+  ctx.lineTo(x + size * 0.7, bodyY)
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.arc(x + size / 2, bodyY + bodyHeight / 2, size * 0.18, 0, Math.PI * 2)
+  ctx.stroke()
+}
+
+/**
+ * 종이비행기(보내기) 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ */
+function drawPaperPlaneIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  ctx.beginPath()
+  ctx.moveTo(x, y + size * 0.44)
+  ctx.lineTo(x + size, y)
+  ctx.lineTo(x + size * 0.62, y + size)
+  ctx.lineTo(x + size * 0.46, y + size * 0.6)
+  ctx.closePath()
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.moveTo(x + size * 0.46, y + size * 0.6)
+  ctx.lineTo(x + size, y)
+  ctx.stroke()
+}
+
+/**
+ * 하트 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ * @param filled 채워서 그릴지 여부
+ */
+function drawHeartIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  filled = false,
+): void {
+  const centerX = x + size / 2
+  const topY = y + size * 0.28
+  ctx.beginPath()
+  ctx.moveTo(centerX, y + size * 0.94)
+  ctx.bezierCurveTo(x - size * 0.12, y + size * 0.52, x + size * 0.14, y - size * 0.06, centerX, topY)
+  ctx.bezierCurveTo(
+    x + size * 0.86, y - size * 0.06, x + size * 1.12, y + size * 0.52, centerX, y + size * 0.94,
+  )
+  ctx.closePath()
+  if (filled) ctx.fill()
+  else ctx.stroke()
+}
+
+/**
+ * 말풍선(댓글) 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ */
+function drawCommentIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  roundedRectPath(ctx, x, y + size * 0.08, size, size * 0.68, size * 0.24)
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.moveTo(x + size * 0.26, y + size * 0.76)
+  ctx.lineTo(x + size * 0.24, y + size * 0.98)
+  ctx.lineTo(x + size * 0.48, y + size * 0.76)
+  ctx.stroke()
+}
+
+/**
+ * 북마크(저장) 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ */
+function drawBookmarkIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  ctx.beginPath()
+  ctx.moveTo(x + size * 0.16, y)
+  ctx.lineTo(x + size * 0.84, y)
+  ctx.lineTo(x + size * 0.84, y + size)
+  ctx.lineTo(x + size * 0.5, y + size * 0.72)
+  ctx.lineTo(x + size * 0.16, y + size)
+  ctx.closePath()
+  ctx.stroke()
+}
+
+/**
+ * 집(홈) 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ */
+function drawHomeIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  ctx.beginPath()
+  ctx.moveTo(x, y + size * 0.44)
+  ctx.lineTo(x + size / 2, y + size * 0.04)
+  ctx.lineTo(x + size, y + size * 0.44)
+  ctx.lineTo(x + size, y + size * 0.96)
+  ctx.lineTo(x, y + size * 0.96)
+  ctx.closePath()
+  ctx.stroke()
+}
+
+/**
+ * 돋보기(검색) 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ */
+function drawSearchIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  ctx.beginPath()
+  ctx.arc(x + size * 0.42, y + size * 0.42, size * 0.34, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.moveTo(x + size * 0.68, y + size * 0.68)
+  ctx.lineTo(x + size * 0.98, y + size * 0.98)
+  ctx.stroke()
+}
+
+/**
+ * 네 칸 격자 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ */
+function drawGridIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  const cell = size * 0.42
+  const gap = size - cell * 2
+  for (const [column, row] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    roundedRectPath(
+      ctx, x + column * (cell + gap), y + row * (cell + gap), cell, cell, size * 0.09,
+    )
+    ctx.stroke()
+  }
+}
+
+/**
+ * 사람(프로필) 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param y 아이콘 위쪽 좌표
+ * @param size 아이콘 한 변의 크기
+ */
+function drawProfileIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  ctx.beginPath()
+  ctx.arc(x + size / 2, y + size * 0.3, size * 0.26, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.arc(x + size / 2, y + size * 1.06, size * 0.46, Math.PI * 1.15, Math.PI * 1.85)
+  ctx.stroke()
+}
+
+/**
+ * 더보기(점 세 개) 아이콘을 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 아이콘 왼쪽 좌표
+ * @param centerY 점의 세로 중심
+ * @param size 아이콘 가로 크기
+ */
+function drawDotsIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  centerY: number,
+  size: number,
+): void {
+  const radius = size * 0.09
+  for (let index = 0; index < 3; index += 1) {
+    ctx.beginPath()
+    ctx.arc(x + radius + index * (size * 0.42), centerY, radius, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+/**
+ * 인스타그램 게시물 프레임을 닮은 카드를 그린다.
+ *
+ * <p>파스텔 배경 위에 흰 게시물 카드를 올리고 캡션 자리에 통화 문구를 넣는다. 팬이 그대로
+ * SNS에 올리기 좋은 형태다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 합성할 사진이며 첫 장만 쓴다
+ * @param fontFamily 사용할 폰트 패밀리
+ */
+function drawInstaCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): void {
+  // 파스텔 배경
+  const background = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT)
+  background.addColorStop(0, '#ffe3f1')
+  background.addColorStop(0.5, '#efe0ff')
+  background.addColorStop(1, '#dde7ff')
+  ctx.fillStyle = background
+  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT)
+
+  const frameX = 40
+  const frameY = 40
+  const frameWidth = CARD_WIDTH - frameX * 2
+  const frameHeight = CARD_HEIGHT - frameY * 2
+  const inset = 36
+
+  // 게시물 프레임
+  ctx.save()
+  ctx.shadowColor = 'rgba(63, 28, 87, 0.2)'
+  ctx.shadowBlur = 34
+  ctx.shadowOffsetY = 12
+  roundedRectPath(ctx, frameX, frameY, frameWidth, frameHeight, 14)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.restore()
+
+  const ink = '#1f1430'
+  ctx.strokeStyle = ink
+  ctx.lineWidth = SNS_ICON_LINE_WIDTH
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+
+  // 상단 바 — 카메라 · 로고 · 보내기
+  const topBarHeight = 90
+  const topIconSize = 38
+  const topIconY = frameY + (topBarHeight - topIconSize) / 2
+  drawCameraIcon(ctx, frameX + inset, topIconY, topIconSize)
+  drawPaperPlaneIcon(ctx, frameX + frameWidth - inset - topIconSize, topIconY, topIconSize)
+
+  // 로고 자리 — 특정 서비스 상표 대신 서비스명을 필기체 계열로 넣는다.
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = ink
+  ctx.font = `italic 700 42px "Segoe Script", "Brush Script MT", ${fontFamily}`
+  ctx.fillText('MELLY', CARD_WIDTH / 2, frameY + topBarHeight / 2)
+
+  // 계정 줄 — 아바타 · 이름 · 더보기
+  const accountTop = frameY + topBarHeight
+  const accountHeight = 76
+  const accountCenterY = accountTop + accountHeight / 2
+  const avatarRadius = 23
+  const avatarCenterX = frameX + inset + avatarRadius
+
+  const avatarGradient = ctx.createLinearGradient(
+    avatarCenterX - avatarRadius, accountCenterY - avatarRadius,
+    avatarCenterX + avatarRadius, accountCenterY + avatarRadius,
+  )
+  avatarGradient.addColorStop(0, '#8e3b74')
+  avatarGradient.addColorStop(1, '#5b2a86')
+  ctx.beginPath()
+  ctx.arc(avatarCenterX, accountCenterY, avatarRadius, 0, Math.PI * 2)
+  ctx.fillStyle = avatarGradient
+  ctx.fill()
+
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `700 24px ${fontFamily}`
+  ctx.fillText([...artwork.influencerName][0] ?? 'M', avatarCenterX, accountCenterY + 1)
+
+  const nameX = avatarCenterX + avatarRadius + 18
+  const nameMaxWidth = frameX + frameWidth - inset - 60 - nameX
+  ctx.textAlign = 'left'
+  ctx.fillStyle = ink
+  ctx.font = `700 28px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.influencerName, nameMaxWidth), nameX, accountCenterY + 1)
+
+  ctx.fillStyle = ink
+  drawDotsIcon(ctx, frameX + frameWidth - inset - 34, accountCenterY, 34)
+
+  // 사진 — 통화 화면이 가로 영상이라 정사각보다 조금 낮게 잡아 덜 잘리게 한다.
+  const photoTop = accountTop + accountHeight
+  const photoHeight = 860
+  drawPhotoCover(ctx, photos[0], frameX, photoTop, frameWidth, photoHeight)
+
+  // 액션 바 — 좋아요 · 댓글 · 공유 · 저장
+  const actionTop = photoTop + photoHeight
+  const actionHeight = 66
+  const actionIconSize = 38
+  const actionIconY = actionTop + (actionHeight - actionIconSize) / 2
+  ctx.strokeStyle = ink
+  ctx.lineWidth = SNS_ICON_LINE_WIDTH
+
+  ctx.fillStyle = '#ff3b5c'
+  drawHeartIcon(ctx, frameX + inset, actionIconY, actionIconSize, true)
+  drawCommentIcon(ctx, frameX + inset + 64, actionIconY, actionIconSize)
+  drawPaperPlaneIcon(ctx, frameX + inset + 128, actionIconY, actionIconSize)
+  drawBookmarkIcon(
+    ctx, frameX + frameWidth - inset - actionIconSize, actionIconY, actionIconSize,
+  )
+
+  // 캡션 — 계정명에 이어 문구를 쓰는 게시물 형식이다.
+  const captionTop = actionTop + actionHeight
+  const captionHeight = 118
+  const captionWidth = frameWidth - inset * 2
+  const quote = fitQuote(
+    ctx, artwork.text, fontFamily, captionWidth, 78, [30, 27, 24, 22, 20],
+  )
+
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = ink
+  ctx.font = `500 ${quote.fontSize}px ${fontFamily}`
+  let captionY = captionTop + 34
+  const captionLineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
+  for (const line of quote.lines) {
+    ctx.fillText(line, frameX + inset, captionY)
+    captionY += captionLineHeight
+  }
+
+  ctx.fillStyle = 'rgba(31, 20, 48, 0.45)'
+  ctx.font = `500 21px ${fontFamily}`
+  ctx.fillText(
+    truncate(
+      ctx,
+      `${artwork.fanNickname} · ${artwork.meetingTitle} · ${artwork.dateLabel}`,
+      captionWidth,
+    ),
+    frameX + inset,
+    captionTop + captionHeight - 12,
+  )
+
+  // 하단 탐색 바
+  const navTop = captionTop + captionHeight
+  const navHeight = 60
+  const navIconSize = 32
+  const navIconY = navTop + (navHeight - navIconSize) / 2
+  const navInset = 74
+  const navSpan = frameWidth - navInset * 2
+  const navIcons = [drawHomeIcon, drawSearchIcon, drawGridIcon, drawHeartIcon, drawProfileIcon]
+
+  ctx.strokeStyle = ink
+  ctx.lineWidth = 2.5
+  navIcons.forEach((drawIcon, index) => {
+    const centerX = frameX + navInset + (navSpan / (navIcons.length - 1)) * index
+    drawIcon(ctx, centerX - navIconSize / 2, navIconY, navIconSize)
+  })
+}
+
+/**
+ * 폴라로이드 사진을 닮은 카드를 그린다.
+ *
+ * <p>아래 여백에 문구와 이름을 사인처럼 남겨 소장용 굿즈 인상을 준다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 합성할 사진이며 첫 장만 쓴다
+ * @param fontFamily 사용할 폰트 패밀리
+ */
+function drawPolaroidCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): void {
+  // 어두운 배경이라야 흰 폴라로이드가 떠 보인다.
+  const background = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT)
+  background.addColorStop(0, '#2a1547')
+  background.addColorStop(0.6, '#3b1d63')
+  background.addColorStop(1, '#57265f')
+  ctx.fillStyle = background
+  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT)
+
+  const frameX = 90
+  const frameY = 80
+  const frameWidth = CARD_WIDTH - frameX * 2
+  const photoInset = 45
+  const photoSize = frameWidth - photoInset * 2
+  const captionHeight = 300
+  const frameHeight = photoInset + photoSize + captionHeight
+
+  ctx.save()
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'
+  ctx.shadowBlur = 40
+  ctx.shadowOffsetY = 16
+  roundedRectPath(ctx, frameX, frameY, frameWidth, frameHeight, 10)
+  ctx.fillStyle = '#fdfcf8'
+  ctx.fill()
+  ctx.restore()
+
+  drawPhotoCover(
+    ctx, photos[0], frameX + photoInset, frameY + photoInset, photoSize, photoSize,
+  )
+
+  // 아래 여백 — 문구를 손글씨처럼 기울여 사인 느낌을 준다.
+  const captionTop = frameY + photoInset + photoSize
+  const captionWidth = photoSize
+  const quote = fitQuote(
+    ctx, artwork.text, fontFamily, captionWidth, 130, [46, 40, 35, 30, 26],
+  )
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.save()
+  ctx.translate(CARD_WIDTH / 2, captionTop + 74)
+  ctx.rotate(-0.022)
+  ctx.fillStyle = '#2a1547'
+  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+  let quoteY = 0
+  const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
+  for (const line of quote.lines) {
+    ctx.fillText(line, 0, quoteY)
+    quoteY += lineHeight
+  }
+  ctx.restore()
+
+  ctx.fillStyle = 'rgba(42, 21, 71, 0.9)'
+  ctx.font = `700 34px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, artwork.influencerName, captionWidth),
+    CARD_WIDTH / 2,
+    frameY + frameHeight - 96,
+  )
+
+  ctx.fillStyle = 'rgba(42, 21, 71, 0.55)'
+  ctx.font = `500 26px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.fanNickname} · ${artwork.dateLabel}`, captionWidth),
+    CARD_WIDTH / 2,
+    frameY + frameHeight - 52,
+  )
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
+  ctx.font = `500 24px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 160),
+    CARD_WIDTH / 2,
+    frameY + frameHeight + 62,
+  )
+
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 34)
+}
+
+/**
+ * 통화 중 여러 순간을 2×2로 모은 네컷 카드를 그린다.
+ *
+ * <p>사진이 네 장보다 적으면 남는 칸은 빈 자리로 남겨 두고 예외를 던지지 않는다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 합성할 사진이며 앞 네 장을 쓴다
+ * @param fontFamily 사용할 폰트 패밀리
+ */
+function drawFourCutCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): void {
+  drawFourCutBackground(ctx)
+
+  // 상단 제목
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.font = `600 30px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 104)
+
+  // 2×2 그리드
+  const gridX = 72
+  const gridY = 148
+  const gap = 24
+  const slotSize = (CARD_WIDTH - gridX * 2 - gap) / 2
+
+  for (let index = 0; index < FOUR_CUT_SLOTS; index += 1) {
+    const column = index % 2
+    const row = Math.floor(index / 2)
+    const x = gridX + column * (slotSize + gap)
+    const y = gridY + row * (slotSize + gap)
+    const photo = photos[index]
+
+    if (photo) {
+      drawPhotoCover(ctx, photo, x, y, slotSize, slotSize, 16)
+    } else {
+      drawEmptySlot(ctx, x, y, slotSize, slotSize, 16)
+    }
+  }
+
+  // 문구
+  const gridBottom = gridY + slotSize * 2 + gap
+  const quote = fitQuote(
+    ctx, `“${artwork.text}”`, fontFamily, CARD_WIDTH - 200, 110, [40, 35, 31, 27, 24],
+  )
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+  drawQuoteLines(ctx, quote.lines, quote.fontSize, gridBottom + 62)
+
+  // 하단 정보
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+  ctx.font = `700 32px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, artwork.influencerName, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 116,
+  )
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.font = `500 26px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.fanNickname} · ${artwork.dateLabel}`, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 74,
+  )
+
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 40)
+}
+
+/** 네컷 계열이 공유하는 어두운 배경과 테두리를 그린다. */
+function drawFourCutBackground(ctx: CanvasRenderingContext2D): void {
+  const background = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT)
+  background.addColorStop(0, '#1b1030')
+  background.addColorStop(0.55, '#3b1d63')
+  background.addColorStop(1, '#6d2d6b')
+  ctx.fillStyle = background
+  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT)
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)'
+  ctx.lineWidth = 3
+  ctx.strokeRect(30, 30, CARD_WIDTH - 60, CARD_HEIGHT - 60)
+}
+
+/**
+ * 네 칸을 세로로 쌓은 스트립형 네컷 카드를 그린다.
+ *
+ * <p>즉석사진 부스에서 뽑는 세로 스트립을 닮았다. 칸은 통화 화면과 같은 가로 비율이라
+ * 얼굴이 덜 잘리고, 글자는 스트립 위아래에만 둬 세로로 흐르는 형태를 지킨다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 합성할 사진이며 앞 네 장을 쓴다
+ * @param fontFamily 사용할 폰트 패밀리
+ */
+function drawFourCutVerticalCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): void {
+  drawFourCutBackground(ctx)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+
+  // 상단 — 제목과 문구를 스트립 위에 모은다.
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+  ctx.font = `600 27px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 220), CARD_WIDTH / 2, 96)
+
+  const quote = fitQuote(
+    ctx, `“${artwork.text}”`, fontFamily, CARD_WIDTH - 240, 110, [36, 32, 28, 25, 22],
+  )
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+  drawQuoteLines(ctx, quote.lines, quote.fontSize, 156)
+
+  // 세로 스트립 — 16:9 칸을 가운데로 모아 쌓는다.
+  const gap = 12
+  const slotHeight = 225
+  const slotWidth = Math.round((slotHeight * 16) / 9)
+  const stripX = (CARD_WIDTH - slotWidth) / 2
+  const stripTop = 288
+
+  for (let index = 0; index < FOUR_CUT_SLOTS; index += 1) {
+    const y = stripTop + index * (slotHeight + gap)
+    const photo = photos[index]
+    if (photo) {
+      drawPhotoCover(ctx, photo, stripX, y, slotWidth, slotHeight, 12)
+    } else {
+      drawEmptySlot(ctx, stripX, y, slotWidth, slotHeight, 12)
+    }
+  }
+
+  // 하단 서명
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+  ctx.font = `700 32px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, artwork.influencerName, CARD_WIDTH - 220),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 116,
+  )
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.font = `500 26px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.fanNickname} · ${artwork.dateLabel}`, CARD_WIDTH - 220),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 74,
+  )
+
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 38)
+}
+
+/**
+ * 네 칸을 가로로 늘어놓은 스트립형 네컷 카드를 그린다.
+ *
+ * <p>칸이 세로로 긴 형태라 인물 사진에 어울린다. 글자는 스트립 위아래에만 둬 가로로
+ * 늘어선 형태를 지키고, 스트립 아래는 팬이 나중에 꾸밀 자리로 남긴다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 합성할 사진이며 앞 네 장을 쓴다
+ * @param fontFamily 사용할 폰트 패밀리
+ */
+function drawFourCutHorizontalCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): void {
+  drawFourCutBackground(ctx)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+
+  // 상단 — 제목과 문구를 스트립 위에 모은다.
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+  ctx.font = `600 28px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 106)
+
+  const quote = fitQuote(
+    ctx, `“${artwork.text}”`, fontFamily, CARD_WIDTH - 220, 160, [42, 37, 33, 29, 25],
+  )
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+  drawQuoteLines(ctx, quote.lines, quote.fontSize, 176)
+
+  // 가로 스트립 — 9:16 칸을 한 줄로 늘어놓는다.
+  const gap = 16
+  const stripX = 60
+  const slotWidth = (CARD_WIDTH - stripX * 2 - gap * (FOUR_CUT_SLOTS - 1)) / FOUR_CUT_SLOTS
+  const slotHeight = Math.round((slotWidth * 16) / 9)
+  const stripTop = 396
+
+  for (let index = 0; index < FOUR_CUT_SLOTS; index += 1) {
+    const x = stripX + index * (slotWidth + gap)
+    const photo = photos[index]
+    if (photo) {
+      drawPhotoCover(ctx, photo, x, stripTop, slotWidth, slotHeight, 12)
+    } else {
+      drawEmptySlot(ctx, x, stripTop, slotWidth, slotHeight, 12)
+    }
+  }
+
+  // 하단 서명 — 스트립 바로 아래에 붙여 남은 공간을 꾸밀 자리로 비워 둔다.
+  const stripBottom = stripTop + slotHeight
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+  ctx.font = `700 32px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, artwork.influencerName, CARD_WIDTH - 200), CARD_WIDTH / 2, stripBottom + 74,
+  )
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.font = `500 26px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.fanNickname} · ${artwork.dateLabel}`, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    stripBottom + 116,
+  )
+
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 56)
 }
 
 /**

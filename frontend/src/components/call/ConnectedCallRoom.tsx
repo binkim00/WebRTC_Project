@@ -20,6 +20,7 @@ import {
   type CallSessionStatusResponse,
 } from '../../api/callSessions'
 import { getAuthSession } from '../../api/auth'
+import { useCallPhotoCapture } from '../../hooks/useCallPhotoCapture'
 import { useCallRecording } from '../../hooks/useCallRecording'
 import { AlertBanner } from '../feedback'
 import { CallStage } from './CallStage'
@@ -329,6 +330,20 @@ export function ConnectedCallRoom({
     localAudioTrack: localMicrophoneTrack?.publication?.track?.mediaStreamTrack,
   })
 
+  // 기념 사진은 팬만 남긴다. 녹화 설정과 무관하게 쓸 수 있어야 하므로 recordingEnabled를 보지 않는다.
+  const {
+    capture,
+    photoCount,
+    maxPhotoCount,
+    captureError,
+    canCapture,
+    capturing,
+  } = useCallPhotoCapture({
+    callSessionId,
+    remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
+  })
+  const photoCaptureVisible = authSession?.role === 'FAN' && isConnected
+
   async function toggleCamera() {
     setMediaAction('camera')
     setMediaError(undefined)
@@ -589,6 +604,8 @@ export function ConnectedCallRoom({
 
   const footNote = mediaError
     ? '장치 문제가 계속되면 팬미팅을 나간 뒤 장비 점검을 다시 진행해 주세요.'
+    : captureError
+    ? captureError
     : isReconnecting
       ? '통화 시간은 연결이 복구된 뒤부터 다시 계산됩니다.'
       : authSession?.role === 'FAN' && recordingEnabled
@@ -640,7 +657,10 @@ export function ConnectedCallRoom({
         localVideo={localVideo}
         mediaAction={mediaAction}
         microphoneEnabled={isMicrophoneEnabled}
+        captureDisabled={!canCapture || capturing}
+        captureLabel={capturing ? '사진 저장 중' : `사진 ${photoCount}/${maxPhotoCount}`}
         onCameraToggle={() => void toggleCamera()}
+        onCapture={photoCaptureVisible ? () => void capture() : undefined}
         onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
         onLeave={() => setEndDialogOpen(true)}
         onMicrophoneToggle={() => void toggleMicrophone()}
