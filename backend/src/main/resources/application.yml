@@ -81,6 +81,15 @@ app:
     login-max-failures: ${LOGIN_MAX_FAILURES:5}
     login-block-duration: ${LOGIN_BLOCK_DURATION:900}
 
+  admin-bootstrap:
+    # ADMIN은 회원가입으로 만들 수 없고 시드 SQL은 local 프로파일에서만 실행된다. DB를 초기화하는
+    # 환경에서 기동할 때 활성 ADMIN이 하나도 없으면 아래 값으로 계정을 하나 만든다.
+    # 아이디·비밀번호·이메일 중 하나라도 비면 아무 계정도 만들지 않는다.
+    login-id: ${ADMIN_BOOTSTRAP_LOGIN_ID:}
+    password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+    email: ${ADMIN_BOOTSTRAP_EMAIL:}
+    nickname: ${ADMIN_BOOTSTRAP_NICKNAME:멜리관리자}
+
   email-verification:
     # 인증 링크 유효 시간이며 기본 30분이다.
     ttl-seconds: ${EMAIL_VERIFY_TTL_SECONDS:1800}
