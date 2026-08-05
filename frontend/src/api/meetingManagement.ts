@@ -388,3 +388,38 @@ export async function getFanMeetingStatistics(
 
   return unwrapEnvelope<FanMeetingStatisticsResponse>(response)
 }
+
+/**
+ * 참가자별 운영 결과 CSV를 내려받는다.
+ *
+ * 공통 apiRequest는 JSON 응답 전용이라 파일 응답은 직접 fetch한다.
+ * 파일명은 서버 Content-Disposition의 값을 그대로 쓰고, 읽지 못하면 기본값을 만든다.
+ */
+export async function downloadFanMeetingStatisticsCsv(
+  meetingId: string | number,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; fileName: string }> {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
+  const response = await fetch(`${baseUrl}${meetingPath(meetingId, '/statistics/export.csv')}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 403
+        ? '이 팬미팅의 결과를 내보낼 권한이 없습니다.'
+        : `결과 파일을 내려받지 못했습니다. (HTTP ${response.status})`,
+    )
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1]
+  const plainName = /filename="?([^";]+)"?/i.exec(disposition)?.[1]
+  const fileName = encodedName
+    ? decodeURIComponent(encodedName)
+    : plainName ?? `fan-meeting-${meetingId}-statistics.csv`
+
+  return { blob: await response.blob(), fileName }
+}

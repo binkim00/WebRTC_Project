@@ -2,7 +2,6 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   CalendarBlankIcon,
-  ChartBarIcon,
   UserIcon,
   UsersThreeIcon,
 } from '@phosphor-icons/react'
@@ -12,18 +11,17 @@ import heroJellies from '../../assets/main-hero-jellies.webp'
 import eventSeoun from '../../assets/main-event-seoun.webp'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
-import { fetchPublicFanMeetings } from '../../api/fanMeetings'
 import {
+  fetchPublicFanMeetingDetail,
+  fetchPublicFanMeetings,
+  type PublicFanMeetingDetail,
+} from '../../api/fanMeetings'
+import {
+  downloadFanMeetingStatisticsCsv,
   getFanMeetingStatistics,
   type FanMeetingStatisticsResponse,
 } from '../../api/meetingManagement'
-import {
-  AlertBanner,
-  Card,
-  CardContent,
-  IconButton,
-  Spinner,
-} from '../../components'
+import { AlertBanner, IconButton, Skeleton, Spinner } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 type FeaturedMeeting = {
@@ -248,32 +246,85 @@ function formatDurationMinSec(totalSeconds: number): string {
   return `${minutes}분 ${String(seconds).padStart(2, '0')}초`
 }
 
-function formatTotalDuration(totalSeconds: number): string {
-  const safeSeconds = Math.max(0, Math.round(totalSeconds))
-  const hours = Math.floor(safeSeconds / 3600)
-  const minutes = Math.floor((safeSeconds % 3600) / 60)
-  return hours > 0 ? `${hours}시간 ${minutes}분` : `${minutes}분`
+function formatScheduleDot(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** 분모가 0이면 계산 자체가 의미 없으므로 0%로 두지 않고 대시로 남긴다. */
+function ratioPercent(numerator: number, denominator: number): string | undefined {
+  if (denominator <= 0) return undefined
+  return String(Math.round((numerator / denominator) * 100))
+}
+
+type StatisticsMetric = {
+  key: string
+  label: string
+  value?: string
+  unit: string
+  supporting: string
+  description: string
+  valueColor: string
 }
 
 export function MeetingStatisticsPage() {
   const { fanMeetingId } = useParams()
+  const authSession = getAuthSession()
+  const authToken = authSession?.accessToken
+  const isManager = authSession?.role === 'MANAGER'
+  // CSV 내보내기는 소유 운영자 권한이라 1인 인플루언서도 자기 팬미팅에서 쓸 수 있다.
+  const canOperateExport = isManager || authSession?.role === 'SOLO_INFLUENCER'
+  const roleLabel = isManager ? '매니저 보기' : '인플루언서 보기'
+
+  const [detail, setDetail] = useState<PublicFanMeetingDetail>()
   const [statistics, setStatistics] = useState<FanMeetingStatisticsResponse>()
   const [error, setError] = useState<string>()
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string>()
+
+  /** 참가자별 운영 결과 CSV를 받아 브라우저 다운로드로 저장한다. */
+  async function handleExport() {
+    if (!fanMeetingId || !authToken || exporting) return
+
+    setExporting(true)
+    setExportError(undefined)
+    try {
+      const { blob, fileName } = await downloadFanMeetingStatisticsCsv(fanMeetingId, authToken)
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = fileName
+      anchor.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch (reason) {
+      setExportError(
+        reason instanceof Error ? reason.message : '결과 파일을 내려받지 못했습니다.',
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
 
   useEffect(() => {
     if (!fanMeetingId?.trim()) return
 
-    const controller = new AbortController()
-    const session = getAuthSession()
-
-    if (!session) {
+    if (!authToken) {
       setError('팬미팅 통계를 확인하려면 먼저 로그인해 주세요.')
-      return () => controller.abort()
+      return
     }
 
-    void getFanMeetingStatistics(fanMeetingId, session.accessToken, controller.signal)
-      .then((result) => {
-        setStatistics(result)
+    const controller = new AbortController()
+
+    void Promise.all([
+      fetchPublicFanMeetingDetail(Number(fanMeetingId), authToken, controller.signal),
+      getFanMeetingStatistics(fanMeetingId, authToken, controller.signal),
+    ])
+      .then(([detailResult, statisticsResult]) => {
+        setDetail(detailResult)
+        setStatistics(statisticsResult)
         setError(undefined)
       })
       .catch((reason: unknown) => {
@@ -288,7 +339,7 @@ export function MeetingStatisticsPage() {
       })
 
     return () => controller.abort()
-  }, [fanMeetingId])
+  }, [authToken, fanMeetingId])
 
   if (!fanMeetingId?.trim()) {
     return (
@@ -299,80 +350,225 @@ export function MeetingStatisticsPage() {
     )
   }
 
-  const countItems = statistics
+  const loaded = detail && statistics
+  // 팬미팅이 아직 끝나지 않았으면 결과가 계속 바뀌는 중이고, 끝났는데 완료된 세션이
+  // 하나도 없으면 애초에 집계할 것이 없다. 그 외에는 정상적으로 결과를 보여준다.
+  const stage: 'ready' | 'collecting' | 'empty' = !loaded
+    ? 'collecting'
+    : detail.meeting.status !== 'ENDED'
+      ? 'collecting'
+      : statistics.completedCallCount === 0
+        ? 'empty'
+        : 'ready'
+  const canExport = canOperateExport && stage === 'ready'
+
+  const metrics: StatisticsMetric[] = statistics
     ? [
-        { label: '응모', value: statistics.applicationCount },
-        { label: '당첨', value: statistics.selectedCount },
-        { label: '참여', value: statistics.participantCount },
-        { label: '완료 통화', value: statistics.completedCallCount },
-        { label: '노쇼', value: statistics.noShowCount },
-        { label: '실패 통화', value: statistics.failedCallCount },
+        {
+          key: 'participation',
+          label: '참여율',
+          value: ratioPercent(statistics.participantCount, statistics.selectedCount),
+          unit: '%',
+          supporting: `${statistics.participantCount}명 / ${statistics.selectedCount}명`,
+          description: '전체 참가자 중 실제 팬미팅에 참여한 팬의 비율입니다.',
+          valueColor: 'text-[var(--color-text-primary)]',
+        },
+        {
+          key: 'completion',
+          label: '정상 완료율',
+          value: ratioPercent(statistics.completedCallCount, statistics.selectedCount),
+          unit: '%',
+          supporting: `${statistics.completedCallCount}개 세션 정상 종료`,
+          description: '연결 실패, 노쇼, 강제 종료 없이 완료된 세션 비율입니다.',
+          valueColor: 'text-[var(--color-success)]',
+        },
+        {
+          // 백엔드가 팬미팅 간 재참여 이력을 아직 내려주지 않아 실제 값을 계산할 수 없다.
+          // 값을 지어내는 대신 대시로 비워 두고 사유를 그대로 보여준다.
+          key: 'returning',
+          label: '재참여 팬 비율',
+          value: undefined,
+          unit: '',
+          supporting: '집계 데이터 없음',
+          description: '이전 팬미팅에도 참여한 이력이 있는 팬의 비율입니다.',
+          valueColor: 'text-[var(--color-text-primary)]',
+        },
+        {
+          key: 'duration',
+          label: '평균 통화 시간',
+          value: formatDurationMinSec(statistics.averageCallDurationSec),
+          unit: '',
+          supporting: '완료 세션 기준',
+          description: '정상적으로 완료된 세션의 실제 평균 통화 시간입니다.',
+          valueColor: 'text-[var(--color-text-primary)]',
+        },
       ]
     : []
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-8">
-      <header>
-        <p className="flex items-center gap-2 text-sm font-bold text-[var(--color-text-secondary)]">
-          <ChartBarIcon aria-hidden="true" size={18} weight="bold" />
-          팬미팅 운영 결과
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <p className="text-sm font-bold text-[var(--color-text-muted)]">종료된 팬미팅</p>
+          <h1 className="mt-[9px] text-[25px] font-black tracking-[-0.035em]">팬미팅 통계</h1>
+          <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
+            실제 1:1 영상통화 팬미팅의 핵심 운영 결과를 확인하세요.
+          </p>
+        </div>
+        <p className="whitespace-nowrap text-sm font-bold text-[var(--color-text-muted)]">
+          {roleLabel}
         </p>
-        <h1 className="mt-3 text-4xl font-black tracking-[-0.045em]">팬미팅 통계</h1>
-        <p className="mt-3 text-[var(--color-text-secondary)]">
-          응모부터 통화 완료까지 팬미팅 운영 결과를 확인하세요.
-        </p>
-      </header>
+      </div>
 
       {error ? (
-        <AlertBanner title="팬미팅 통계를 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mt-6" title="팬미팅 통계를 확인할 수 없습니다" variant="error">
           {error}
         </AlertBanner>
-      ) : !statistics ? (
+      ) : !loaded ? (
         <div className="flex justify-center py-24">
           <Spinner label="팬미팅 통계를 불러오는 중" />
         </div>
       ) : (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {countItems.map((item) => (
-              <Card key={item.label}>
-                <CardContent>
-                  <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
-                    {item.label}
-                  </p>
-                  <p className="mt-3 text-4xl font-black tracking-[-0.04em]">
-                    {item.value.toLocaleString('ko-KR')}
-                    <span className="ml-1 text-base font-bold text-[var(--color-text-tertiary)]">
-                      명
-                    </span>
-                  </p>
-                </CardContent>
-              </Card>
+          <section
+            aria-label="팬미팅 정보"
+            className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] sm:grid-cols-4"
+          >
+            {[
+              ['팬미팅명', detail.meeting.title],
+              ['진행 일자', formatScheduleDot(detail.meeting.scheduledStartAt)],
+              ['인플루언서', detail.influencer.name],
+              ['전체 참가자', `${statistics.selectedCount}명`],
+            ].map(([label, value], index) => (
+              <div
+                className={index ? 'border-l border-[var(--color-divider)] px-5 py-[17px]' : 'py-[17px] pr-5'}
+                key={label}
+              >
+                <p className="text-[13px] font-bold text-[var(--color-text-muted)]">{label}</p>
+                <p className="mt-1.5 truncate text-[17px] font-extrabold tabular-nums">{value}</p>
+              </div>
             ))}
           </section>
 
-          <section className="grid gap-4 sm:grid-cols-2">
-            <Card>
-              <CardContent>
-                <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
-                  평균 통화시간
-                </p>
-                <p className="mt-3 text-3xl font-black tracking-[-0.04em]">
-                  {formatDurationMinSec(statistics.averageCallDurationSec)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent>
-                <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
-                  총 진행시간
-                </p>
-                <p className="mt-3 text-3xl font-black tracking-[-0.04em]">
-                  {formatTotalDuration(statistics.totalMeetingDurationSec)}
-                </p>
-              </CardContent>
-            </Card>
+          <div className="mt-8">
+            <h2 className="text-xl font-extrabold tracking-[-0.03em]">핵심 결과</h2>
+            <p className="mt-1.5 text-[15px] font-medium text-[var(--color-text-muted)]">
+              완료된 세션을 기준으로 집계한 운영 결과입니다.
+            </p>
+          </div>
+
+          {stage === 'empty' ? (
+            <div
+              className="mt-5 grid place-items-center rounded-[10px] border border-dashed border-[var(--color-divider)] px-6 py-[72px] text-center"
+              role="status"
+            >
+              <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
+                집계할 수 있는 세션이 없습니다
+              </strong>
+              <span className="mt-[9px] max-w-[420px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
+                정상적으로 완료된 세션이 없어 핵심 결과 지표를 표시할 수 없습니다.
+              </span>
+            </div>
+          ) : null}
+
+          {stage === 'collecting' ? (
+            <div
+              className="mt-5 rounded-[10px] border border-[var(--color-warning-border)] bg-[var(--color-warning-soft)] px-[18px] py-4"
+              role="status"
+            >
+              <strong className="block text-base font-extrabold text-[var(--color-warning)]">
+                팬미팅 결과를 집계하고 있습니다
+              </strong>
+              <p className="mt-1.5 text-[15px] font-medium leading-[1.55] text-[var(--color-warning)]">
+                완료된 세션을 확인한 뒤 통계와 결과 파일을 준비합니다.
+              </p>
+            </div>
+          ) : null}
+
+          {stage !== 'empty' ? (
+            <div className="mt-5 grid grid-cols-2 border-t border-[var(--color-divider)] sm:grid-cols-4">
+              {metrics.map((metric, index) => (
+                <article
+                  className={`min-w-0 border-b border-[var(--color-divider)] py-[22px] pr-[22px] ${index ? 'border-l border-[var(--color-divider)] pl-[22px]' : ''}`}
+                  key={metric.key}
+                >
+                  <p className="text-sm font-bold text-[var(--color-text-muted)]">{metric.label}</p>
+                  {stage === 'collecting' ? (
+                    <Skeleton aria-label={`${metric.label} 집계 중`} className="mt-3" lines={3} />
+                  ) : (
+                    <>
+                      <p className="mt-2.5 flex items-baseline gap-[3px]">
+                        <strong
+                          className={`text-[38px] font-black leading-none tracking-[-0.045em] tabular-nums ${metric.valueColor}`}
+                        >
+                          {metric.value ?? '–'}
+                        </strong>
+                        {metric.value && metric.unit ? (
+                          <span className={`text-[22px] font-extrabold ${metric.valueColor}`}>
+                            {metric.unit}
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="mt-[11px] text-[15px] font-bold tabular-nums">
+                        {metric.supporting}
+                      </p>
+                      <p className="mt-[9px] text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]">
+                        {metric.description}
+                      </p>
+                    </>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : null}
+
+          <section
+            aria-label="팬미팅 결과"
+            className="mt-[34px] flex flex-col items-stretch justify-between gap-4 border-t border-[var(--color-divider)] pt-[26px] sm:flex-row sm:items-end"
+          >
+            <div className="min-w-0">
+              <h2 className="text-lg font-extrabold tracking-[-0.028em]">팬미팅 결과 상세</h2>
+              <p className="mt-1.5 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
+                {canOperateExport
+                  ? '참가자별 상태를 확인하거나 운영 결과 파일을 준비할 수 있습니다.'
+                  : '참가자별 상태를 확인할 수 있습니다.'}
+              </p>
+            </div>
+            <div className="flex flex-none flex-wrap gap-2.5">
+              <Link
+                className="mj-font-emphasis inline-flex min-h-[50px] items-center whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                to={`/fan-meetings/${encodeURIComponent(fanMeetingId)}/fans`}
+              >
+                팬 리스트 보기
+              </Link>
+              {canOperateExport ? (
+                <button
+                  className={`mj-font-label inline-flex min-h-[50px] items-center whitespace-nowrap rounded-[var(--radius-control)] border px-5 text-base ${
+                    canExport && !exporting
+                      ? 'border-[var(--color-border-control)] text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)]'
+                      : 'cursor-not-allowed border-[var(--color-divider)] text-[var(--color-text-muted)]'
+                  }`}
+                  disabled={!canExport || exporting}
+                  onClick={() => void handleExport()}
+                  type="button"
+                >
+                  {exporting ? '내보내는 중…' : '결과 내보내기'}
+                </button>
+              ) : null}
+            </div>
           </section>
+          {canOperateExport && !canExport ? (
+            <p className="mt-[11px] text-sm font-medium text-[var(--color-text-muted)]">
+              {stage === 'collecting'
+                ? '집계가 끝나면 결과 파일을 내보낼 수 있어요.'
+                : '집계된 세션이 없어 내보낼 결과가 없습니다.'}
+            </p>
+          ) : null}
+          {exportError ? (
+            <p className="mt-[11px] text-sm font-bold text-[var(--color-error)]" role="alert">
+              {exportError}
+            </p>
+          ) : null}
         </>
       )}
     </div>

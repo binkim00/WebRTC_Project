@@ -1,32 +1,26 @@
 import { LiveKitRoom } from '@livekit/components-react'
-import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getAuthSession } from '../../api/auth'
-import { consentToRecording } from '../../api/recordings'
 import {
   getCallSessionStatus,
   issueLiveKitAccessToken,
   type CallSessionStatusResponse,
   type LiveKitAccessTokenResponse,
 } from '../../api/callSessions'
-import { fetchMeetingQueue } from '../../api/fanMeetingParticipants'
+import { fetchMeetingQueue, type MeetingQueue } from '../../api/fanMeetingParticipants'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { isQueueNotInitialized } from '../../api/queue'
 import { usePolling } from '../../hooks/usePolling'
 import { Badge } from '../data-display'
 import { AlertBanner } from '../feedback'
 import { Button } from '../ui/Button'
-import { logCallConnectionDebug } from './connectionDebug'
 import { ConnectedCallRoom } from './ConnectedCallRoom'
-import { PreviewCallRoom } from './PreviewCallRoom'
+import { MeetingWrapUp } from './MeetingWrapUp'
 import type { VideoCallRoomProps } from './types'
 
 export type { VideoCallRoomProps } from './types'
 
 export function VideoCallRoom(props: VideoCallRoomProps) {
-  const [searchParams] = useSearchParams()
-  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
-  const [authSession] = useState(() => getAuthSession())
   const [connectionInfo, setConnectionInfo] = useState<LiveKitAccessTokenResponse>()
   const [sessionStatus, setSessionStatus] = useState<CallSessionStatusResponse>()
   const [connectionError, setConnectionError] = useState<string>()
@@ -36,16 +30,12 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   // 통화 시작 전에는 서버의 남은 시간이 0이라 카운트다운 대기 값으로 쓸 설정 값이 필요하다.
   const [callDurationSec, setCallDurationSec] = useState<number>()
   const [retryCount, setRetryCount] = useState(0)
-  const [loading, setLoading] = useState(!isDesignPreview)
+  const [loading, setLoading] = useState(true)
   const [meetingClosed, setMeetingClosed] = useState<'ENDED' | 'CANCELED'>()
-  const [recordingConsentGranted, setRecordingConsentGranted] = useState(
-    authSession?.role !== 'FAN',
-  )
-  const [consentSubmitting, setConsentSubmitting] = useState(false)
-  const [consentError, setConsentError] = useState<string>()
   /** 대기열에 앞으로 호출할 팬이 남아 있지 않은 상태다. */
   const [noPendingFan, setNoPendingFan] = useState(false)
-  const navigate = useNavigate()
+  /** 마지막으로 읽은 대기열이며, 팬미팅을 모두 마친 화면에서 진행 결과를 집계한다. */
+  const [queueSnapshot, setQueueSnapshot] = useState<MeetingQueue>()
 
   const hostStaysConnected = props.hostStaysConnected ?? false
 
@@ -64,15 +54,10 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   useEffect(() => {
     setConnectSessionId(props.callSessionId)
     setActiveCallSessionId(props.callSessionId)
-    setRecordingConsentGranted(authSession?.role !== 'FAN')
-  }, [authSession?.role, props.callSessionId])
+  }, [props.callSessionId])
 
   const loadConnectionInfo = useCallback(
     async (signal: AbortSignal) => {
-      if (isDesignPreview) {
-        return
-      }
-
       if (!connectSessionId) {
         setConnectionError('통화 연결에 필요한 callSessionId가 없습니다.')
         setLoading(false)
@@ -89,8 +74,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       setRecordingPolicyError(undefined)
 
       try {
-        const currentSession = getAuthSession()
-        const authToken = currentSession?.accessToken
+        const authSession = getAuthSession()
+        const authToken = authSession?.accessToken
         const [info, status] = await Promise.all([
           issueLiveKitAccessToken(connectSessionId, { authToken, signal }),
           getCallSessionStatus(connectSessionId, { authToken, signal }),
@@ -108,12 +93,12 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
           )
           durationSec = meeting.meeting.operation.callDurationSec
           shouldRecord =
-            currentSession?.role === 'FAN' && meeting.meeting.operation.recordingEnabled
+            authSession?.role === 'FAN' && meeting.meeting.operation.recordingEnabled
         } catch (error: unknown) {
           if (error instanceof DOMException && error.name === 'AbortError') throw error
           // 정책을 확인하지 못한 경우에는 개인정보 보호를 위해 녹화를 시작하지 않는다.
           // 카운트다운은 서버가 보내는 남은 시간으로 계속 동작하므로 통화 자체는 막지 않는다.
-          if (currentSession?.role === 'FAN') {
+          if (authSession?.role === 'FAN') {
             setRecordingPolicyError('팬미팅 녹화 설정을 확인하지 못해 녹화를 시작하지 않았습니다.')
           }
         }
@@ -121,11 +106,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         if (signal.aborted) return
         setRecordingEnabled(shouldRecord)
         setCallDurationSec(durationSec)
-        setSessionStatus(status)
-        if (shouldRecord && !recordingConsentGranted) {
-          return
-        }
         setConnectionInfo(info)
+        setSessionStatus(status)
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return
@@ -143,50 +125,14 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         }
       }
     },
-    [connectSessionId, isDesignPreview, props.meetingId, recordingConsentGranted],
+    [connectSessionId, props.meetingId],
   )
-
-  async function handleRecordingConsent() {
-    const sessionId = connectSessionId
-    const authToken = authSession?.accessToken
-    if (!sessionId || !authToken) {
-      setConsentError('녹화 동의를 기록할 로그인 정보가 없습니다.')
-      return
-    }
-
-    setConsentSubmitting(true)
-    setConsentError(undefined)
-    try {
-      await consentToRecording(sessionId, authToken)
-      setRecordingConsentGranted(true)
-    } catch (error: unknown) {
-      setConsentError(
-        error instanceof Error ? error.message : '녹화 동의를 기록하지 못했습니다.',
-      )
-    } finally {
-      setConsentSubmitting(false)
-    }
-  }
 
   useEffect(() => {
     const abortController = new AbortController()
     void loadConnectionInfo(abortController.signal)
     return () => abortController.abort()
   }, [loadConnectionInfo, retryCount])
-
-  // 입장 정보 요청 경로와 분리해, 진단 로그가 실패해도 LiveKit 입장을 막지 않도록 한다.
-  useEffect(() => {
-    if (!connectionInfo) {
-      return
-    }
-
-    logCallConnectionDebug({
-      callSessionId: props.callSessionId,
-      liveKitUrl: connectionInfo.liveKitUrl,
-      accessToken: connectionInfo.accessToken,
-      expiresAt: connectionInfo.expiresAt,
-    })
-  }, [connectionInfo, props.callSessionId])
 
   /**
    * 끊긴 연결을 새 토큰으로 다시 붙인다.
@@ -212,6 +158,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
       try {
         const queue = await fetchMeetingQueue(props.meetingId, authToken, signal)
+        // 마지막 대기열 상태를 남겨 둔다. 팬미팅을 모두 마친 화면에서 진행 결과를 집계하는 데 쓴다.
+        setQueueSnapshot(queue)
         const nextCallSessionId = queue.currentCall?.callSessionId
         if (nextCallSessionId) {
           setActiveCallSessionId(String(nextCallSessionId))
@@ -240,7 +188,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
   usePolling(followCurrentCall, {
     intervalMs: 3_000,
-    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo),
+    enabled: hostStaysConnected && Boolean(connectionInfo),
   })
 
   // 통화 세션이 끝난 것과 팬미팅 전체가 끝난 것은 다르다. 호스트는 통화방에
@@ -264,7 +212,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
   usePolling(loadMeetingStatus, {
     intervalMs: 3_000,
-    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo) && !meetingClosed,
+    enabled: hostStaysConnected && Boolean(connectionInfo) && !meetingClosed,
   })
 
   /**
@@ -276,12 +224,23 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   const allCallsFinished =
     hostStaysConnected && noPendingFan && sessionStatus?.status === 'ENDED'
 
-  useEffect(() => {
-    if (!meetingClosed && !allCallsFinished) return
+  /**
+   * 팬미팅을 모두 마친 화면에서 보여 줄 진행 결과다.
+   *
+   * 마지막으로 읽은 대기열을 집계한다. 대기열을 못 읽었으면(undefined) 숫자를 보여 주지 않는다.
+   * 통화까지 마친 팬과 못 만난 팬(노쇼·건너뜀)을 나눠 세어, 마무리 화면이 "무엇을 했는지"를
+   * 말해 줄 수 있게 한다.
+   */
+  const finishedTally = useMemo(() => {
+    const entries = queueSnapshot?.entries
+    if (!entries?.length) return undefined
 
-    const timer = window.setTimeout(() => navigate('/', { replace: true }), 3_000)
-    return () => window.clearTimeout(timer)
-  }, [allCallsFinished, meetingClosed, navigate])
+    const completed = entries.filter((entry) => entry.status === 'COMPLETED').length
+    const missed = entries.filter(
+      (entry) => entry.status === 'NO_SHOW' || entry.status === 'SKIPPED',
+    ).length
+    return { completed, missed }
+  }, [queueSnapshot?.entries])
 
   const refreshStatus = useCallback(
     async (signal: AbortSignal) => {
@@ -304,60 +263,49 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     [activeCallSessionId],
   )
 
+  /**
+   * 상대가 통화 종료를 알려 왔을 때 폴링 주기를 기다리지 않고 즉시 상태를 다시 읽는다.
+   *
+   * 알림 자체를 종료 근거로 쓰지 않는 것이 핵심이다. 참가자가 보낸 메시지는 신뢰할 수 없으므로
+   * 화면 정리는 이 재조회로 확인한 서버 상태(`ENDED`)로만 진행한다.
+   * 이 요청은 폴링과 별개라 자체 AbortController로 수명을 관리한다.
+   */
+  const handlePeerCallEnded = useCallback(() => {
+    const controller = new AbortController()
+    void refreshStatus(controller.signal)
+  }, [refreshStatus])
+
   // usePolling은 직렬 폴링이라 느린 요청이 겹쳐 오래된 통화 상태가 최신 상태를 덮지 않는다.
   // 차례가 바뀌면 activeCallSessionId가 변해 즉시 새 세션 상태를 읽는다.
+  //
+  // 통화 중에는 이 폴링이 **양쪽 화면 전환의 유일한 기준**이다(프론트는 타이머로 먼저 끊지 않는다).
+  // 5초 주기였을 때는 팬이 끊긴 뒤 인플루언서 화면이 최대 5초 늦게 바뀌었으므로 1초로 줄인다.
+  // 통화가 진행 중이 아닐 때(다음 팬 대기 등)는 급할 이유가 없어 3초로 되돌려 요청을 아낀다.
+  // 백엔드가 call_ended LiveKit data message를 추가하면 그 이벤트가 1차 신호가 되고
+  // 이 폴링은 보조 확인 수단으로 다시 완화할 수 있다.
   usePolling(refreshStatus, {
-    intervalMs: 5_000,
-    enabled: !isDesignPreview && Boolean(activeCallSessionId) && Boolean(connectionInfo),
+    intervalMs: sessionStatus?.status === 'ACTIVE' ? 1_000 : 3_000,
+    enabled: Boolean(activeCallSessionId) && Boolean(connectionInfo),
   })
 
-  if (isDesignPreview) {
-    return <PreviewCallRoom {...props} />
-  }
-
-  if (meetingClosed) {
+  // 팬미팅을 마친 뒤의 화면이다.
+  //
+  // 이전에는 안내 배너만 띄우고 3초 뒤 홈으로 강제 이동시켰다. 팬미팅을 끝까지 진행한
+  // 인플루언서가 결과를 확인할 새도 없이 화면에서 밀려나고, 다음에 무엇을 할지도 알 수 없었다.
+  // 자동 이동을 없애고 진행 결과와 다음 행동을 직접 고르게 한다.
+  //
+  // 이 화면은 인플루언서 전용이다(안내 문구와 이동 링크가 인플루언서 경로를 가리킨다).
+  // 두 조건 모두 hostStaysConnected일 때만 참이 되므로 팬 화면에는 나타나지 않는다.
+  // allCallsFinished는 조건에 직접 포함하고, meetingClosed는 이를 검사하는 loadMeetingStatus가
+  // 호스트가 아니면 곧바로 반환하므로 팬 세션에서는 설정되지 않는다.
+  if (meetingClosed || allCallsFinished) {
     return (
-      <div className="mx-auto grid max-w-3xl gap-6 py-10">
-        <AlertBanner title={meetingClosed === 'CANCELED' ? '팬미팅이 취소되었습니다' : '팬미팅이 종료되었습니다'} variant="info">
-          팬미팅이 종료되어 영상통화방을 나갑니다. 잠시 후 메인 화면으로 이동합니다.
-        </AlertBanner>
-      </div>
-    )
-  }
-
-  if (authSession?.role === 'FAN' && recordingEnabled && !recordingConsentGranted) {
-    return (
-      <div className="mx-auto grid max-w-2xl gap-6 py-10">
-        <header>
-          <Badge variant="primary">녹화 동의</Badge>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-            영상통화 녹화에 동의해 주세요
-          </h1>
-          <p className="mt-3 text-[var(--color-text-secondary)]">
-            팬미팅 다시보기를 제공하기 위해 양쪽 영상과 음성을 녹화합니다.
-          </p>
-        </header>
-        {consentError ? (
-          <AlertBanner title="녹화 동의를 기록하지 못했습니다" variant="error">
-            {consentError}
-          </AlertBanner>
-        ) : null}
-        <div>
-          <Button loading={consentSubmitting} onClick={() => void handleRecordingConsent()}>
-            녹화에 동의하고 입장
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (allCallsFinished) {
-    return (
-      <div className="mx-auto grid max-w-3xl gap-6 py-10">
-        <AlertBanner title="영상통화가 종료되었습니다" variant="info">
-          대기열에 남은 팬이 없어 영상통화방을 나갑니다. 잠시 후 메인 화면으로 이동합니다.
-        </AlertBanner>
-      </div>
+      <MeetingWrapUp
+        meetingId={props.meetingId}
+        // 팬미팅 자체가 끝난 경우와 남은 팬이 없어 끝난 경우는 문구가 다르다.
+        reason={meetingClosed ?? 'ALL_CALLS_FINISHED'}
+        tally={finishedTally}
+      />
     )
   }
 
@@ -412,6 +360,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         callDurationSec={callDurationSec}
         // 종료·남은 시간·요약이 모두 진행 중인 세션을 따라야 하므로 주소 값이 아닌 활성 세션을 넘긴다.
         callSessionId={activeCallSessionId}
+        onPeerCallEnded={handlePeerCallEnded}
         onReconnectNeeded={handleReconnectNeeded}
         recordingEnabled={recordingEnabled}
         recordingPolicyError={recordingPolicyError}

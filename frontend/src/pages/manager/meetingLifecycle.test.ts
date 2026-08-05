@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getAvailableActions } from './meetingLifecycle'
+import { getAvailableActions, normalizeDetailTab } from './meetingLifecycle'
 
 const NOW = new Date('2026-08-03T12:00:00.000Z')
 
@@ -101,5 +101,21 @@ describe('getAvailableActions - 수동 상태 전환', () => {
     expect(actions.canOpenApplicationsNow).toBe(false)
     expect(actions.canCloseApplicationsNow).toBe(false)
     expect(actions.canStartNow).toBe(false)
+  })
+})
+
+describe('normalizeDetailTab', () => {
+  // 응모자·추첨 탭이 상세 화면에 연결된 뒤로는 개요로 되돌리지 않는다.
+  // (연결 전에는 빈 화면을 막기 위해 overview로 보냈다.)
+  it('연결된 탭 요청은 그대로 유지한다', () => {
+    expect(normalizeDetailTab('applicants')).toBe('applicants')
+    expect(normalizeDetailTab('settings')).toBe('settings')
+    expect(normalizeDetailTab('application-form')).toBe('application-form')
+    expect(normalizeDetailTab('test-control')).toBe('test-control')
+  })
+
+  it('알 수 없는 탭이나 값이 없으면 개요로 보낸다', () => {
+    expect(normalizeDetailTab('unknown-tab')).toBe('overview')
+    expect(normalizeDetailTab(null)).toBe('overview')
   })
 })

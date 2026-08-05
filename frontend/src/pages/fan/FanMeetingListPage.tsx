@@ -1,4 +1,3 @@
-import { ImageSquare } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
@@ -21,18 +20,8 @@ import {
   resolveRecordingContentUrl,
   type RecordingSummaryResponse,
 } from '../../api/recordings'
-import {
-  AlertBanner,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardFooter,
-  Spinner,
-  Tabs,
-} from '../../components'
+import { AlertBanner, Button, Spinner } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
-import { fanMeetingStatusContent } from './fanMeetingStatus'
 
 type FanMeetingListStatus = 'upcoming' | 'completed'
 
@@ -44,37 +33,47 @@ type FanMeetingListItem = {
   recording?: RecordingSummaryResponse
 }
 
-const FAN_MEETING_TABS = [
-  {
-    value: 'upcoming',
-    label: '예정',
-    tabId: 'fan-meetings-upcoming-tab',
-    panelId: 'fan-meetings-upcoming-panel',
-  },
-  {
-    value: 'completed',
-    label: '히스토리',
-    tabId: 'fan-meetings-completed-tab',
-    panelId: 'fan-meetings-completed-panel',
-  },
-] as const
 const ITEMS_PER_PAGE = 6
 
+function pad(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+/** 2026.08.02 19:00 — L0 날짜·시간 표기다. */
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** 2026.07.30 */
+function formatDate(value: string | null | undefined): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
 
 function isCompletedStatus(status: FanMeetingDetailStatus | undefined): boolean {
   return status === 'ENDED' || status === 'CANCELED'
+}
+
+function isToday(value: string): boolean {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return false
+  const now = new Date()
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  )
+}
+
+/** 영상 보관 만료까지 남은 일수다. 지났으면 0을 준다. */
+function remainingDays(availableUntil: string): number {
+  const diff = new Date(availableUntil).getTime() - Date.now()
+  return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)))
 }
 
 function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
@@ -308,6 +307,12 @@ export function FanMeetingListPage() {
     refreshOnFocus: true,
   })
 
+  const upcomingCount = useMemo(
+    () => items.filter((item) => item.listStatus === 'upcoming').length,
+    [items],
+  )
+  const completedCount = items.length - upcomingCount
+
   const filteredItems = useMemo(() => {
     if (status !== 'upcoming' && status !== 'completed') return []
 
@@ -407,250 +412,321 @@ export function FanMeetingListPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const statusTabClass = (active: boolean) =>
+    `mj-font-emphasis min-h-11 rounded-[var(--radius-control)] border px-[18px] text-[15px] ${
+      active
+        ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white'
+        : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] hover:border-[var(--color-text-muted)]'
+    }`
+
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <header>
+    <div>
+      <Link
+        className="text-sm font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+        to="/fan/mypage/profile"
+      >
+        ← 프로필로 돌아가기
+      </Link>
+      <h1 className="mt-3.5 text-[28px] font-black tracking-[-0.038em]">마이페이지</h1>
+      <p className="mt-[7px] text-base font-medium text-[var(--color-text-muted)]">
+        내 정보와 참여 내역을 관리하세요.
+      </p>
+
+      <nav aria-label="마이페이지 메뉴" className="mt-6 flex gap-[26px] border-b border-[var(--color-divider)]">
         <Link
-          className="inline-flex items-center text-sm font-medium text-[var(--color-text-secondary)] transition-colors duration-200 hover:text-[var(--color-primary-coral)] motion-reduce:transition-none"
-          to="/fan/mypage/profile"
+          className="px-0.5 pb-[13px] text-base font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          to="/fan/mypage/applications"
         >
-          ← 프로필로 돌아가기
+          응모한 팬미팅
         </Link>
-        <h1 className="mt-5 text-4xl font-bold tracking-tight text-[var(--color-text-primary)]">
-          마이페이지
-        </h1>
-        <p className="mt-3 text-[var(--color-text-secondary)]">
-          내 정보와 참여 내역을 관리하세요.
-        </p>
-      </header>
-
-      <section className="mt-12">
-        {listError ? (
-          <AlertBanner className="mb-6" title="팬미팅 목록을 확인할 수 없습니다" variant="error">
-            <p>{listError}</p>
-            <Button
-              className="mt-3"
-              onClick={() => setReloadKey((key) => key + 1)}
-              size="sm"
-              variant="secondary"
-            >
-              목록 다시 불러오기
-            </Button>
-          </AlertBanner>
-        ) : null}
-        {partialWarning ? (
-          <AlertBanner className="mb-6" title="일부 정보를 확인하지 못했습니다" variant="warning">
-            {partialWarning}
-          </AlertBanner>
-        ) : null}
-
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-[var(--color-text-primary)]">팬미팅</h2>
-            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-              {isUpcoming
-                ? '참가가 확정된 다가오는 팬미팅을 확인하세요.'
-                : '참여한 팬미팅과 저장된 녹화 영상을 확인하세요.'}
-            </p>
-            {/* 대기열이 열리면 새로고침 없이 버튼이 바뀐다는 것을 알려 준다. */}
-            {isUpcoming && waitingCount > 0 ? (
-              <p
-                aria-live="polite"
-                className="mt-2 text-sm font-semibold text-[var(--color-text-tertiary)]"
-              >
-                {refreshing
-                  ? '대기열 상태를 확인하는 중입니다.'
-                  : '대기열이 열리면 이 화면에서 바로 입장할 수 있습니다.'}
-              </p>
-            ) : null}
-          </div>
-          <Tabs
-            ariaLabel="팬미팅 목록 상태"
-            items={FAN_MEETING_TABS}
-            onValueChange={(nextStatus) =>
-              setSearchParams({ status: nextStatus, page: '1' })
-            }
-            value={status}
-          />
-        </div>
-
-        {/* 선택된 탭과 실제 목록 영역을 명시적으로 연결해 스크린리더가 문맥을 유지하게 한다. */}
-        <div
-          aria-labelledby={`fan-meetings-${status}-tab`}
-          id={`fan-meetings-${status}-panel`}
-          role="tabpanel"
-          tabIndex={0}
+        <span
+          aria-current="page"
+          className="px-0.5 pb-[13px] text-base font-extrabold text-[var(--color-primary-coral)] shadow-[inset_0_-3px_0_0_var(--color-primary-coral)]"
         >
-        {loading ? (
-          <div className="flex min-h-64 items-center justify-center">
-            <Spinner label="내 팬미팅 목록을 불러오는 중" size="lg" />
-          </div>
-        ) : visibleItems.length === 0 ? (
-          <Card className="mt-6">
-            <CardContent className="py-14 text-center text-[var(--color-text-secondary)]">
-              {isUpcoming ? '예정된 팬미팅이 없습니다.' : '완료된 팬미팅이 없습니다.'}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-            {visibleItems.map((item) => {
-              const meeting = item.detail?.meeting
-              const meetingStatus = meeting?.status
-              const statusContent = meetingStatus
-                ? fanMeetingStatusContent[meetingStatus]
-                : undefined
+          내 팬미팅
+        </span>
+      </nav>
+
+      {listError ? (
+        <AlertBanner className="mt-6" title="팬미팅 목록을 확인할 수 없습니다" variant="error">
+          <p>{listError}</p>
+          <Button
+            className="mt-3"
+            onClick={() => setReloadKey((key) => key + 1)}
+            size="sm"
+            variant="secondary"
+          >
+            목록 다시 불러오기
+          </Button>
+        </AlertBanner>
+      ) : null}
+      {partialWarning ? (
+        <AlertBanner className="mt-6" title="일부 정보를 확인하지 못했습니다" variant="warning">
+          {partialWarning}
+        </AlertBanner>
+      ) : null}
+      {/* 대기열 자동 갱신 상태는 화면 구성 요소를 늘리지 않고 보조기기에만 알린다. */}
+      <p aria-live="polite" className="sr-only">
+        {refreshing ? '대기열 상태를 확인하는 중입니다.' : ''}
+      </p>
+
+      <div aria-label="팬미팅 상태" className="mt-6 flex gap-2" role="tablist">
+        <button
+          aria-selected={isUpcoming}
+          className={statusTabClass(isUpcoming)}
+          onClick={() => setSearchParams({ status: 'upcoming', page: '1' })}
+          role="tab"
+          type="button"
+        >
+          예정 <span className="font-bold tabular-nums">{upcomingCount}</span>
+        </button>
+        <button
+          aria-selected={!isUpcoming}
+          className={statusTabClass(!isUpcoming)}
+          onClick={() => setSearchParams({ status: 'completed', page: '1' })}
+          role="tab"
+          type="button"
+        >
+          히스토리 <span className="font-bold tabular-nums">{completedCount}</span>
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex min-h-64 items-center justify-center">
+          <Spinner label="내 팬미팅 목록을 불러오는 중" />
+        </div>
+      ) : isUpcoming ? (
+        <section aria-label="예정된 팬미팅" className="mt-[26px]">
+          {visibleItems.length === 0 ? (
+            <p className="py-14 text-center text-sm font-medium text-[var(--color-text-secondary)]">
+              예정된 팬미팅이 없습니다.
+            </p>
+          ) : (
+            visibleItems.map((item, index) => {
+              const today = isToday(item.application.scheduledStartAt)
               // LIVE 상태만으로 입장을 허용하지 않는다. 대기열 오픈 시각이 지나고
-              // 서버가 참가자 입장을 허용한 경우에만 장비 점검·대기실로 이동한다.
+              // 서버가 참가자 입장을 허용한 경우에만 대기실로 이동한다.
               const queueIsOpen = isWaitingRoomOpen(item.detail?.meeting.operation.queueOpenAt)
               const canEnter = Boolean(
                 queueIsOpen &&
                   (item.detail?.viewer.canEnter || item.detail?.meeting.status === 'READY'),
               )
-              const recordingEnabled = meeting?.operation.recordingEnabled
-              const recordingReady = Boolean(item.recording?.playable)
 
               return (
-                <Card className="overflow-hidden" key={item.application.applicationId}>
-                  {item.application.coverImageUrl ? (
-                    <img
-                      alt={`${item.application.meetingTitle} 대표 이미지`}
-                      className="h-56 w-full object-cover"
-                      src={item.application.coverImageUrl}
-                    />
-                  ) : (
-                    <div className="flex h-56 items-center justify-center bg-[var(--color-divider)] text-[var(--color-text-tertiary)]">
-                      <ImageSquare aria-hidden size={44} weight="duotone" />
-                      <span className="sr-only">등록된 대표 이미지가 없습니다</span>
-                    </div>
-                  )}
-
-                  <CardContent>
-                    <Badge variant={statusContent?.variant ?? (isUpcoming ? 'primary' : 'neutral')}>
-                      {statusContent?.label ?? (isUpcoming ? '참가 확정' : '참여 완료')}
-                    </Badge>
-                    <h3 className="mt-3 text-xl font-bold text-[var(--color-text-primary)]">
+                <article
+                  className={`grid grid-cols-1 items-center gap-4 py-6 min-[901px]:grid-cols-[236px_minmax(0,1fr)_auto] min-[901px]:gap-[26px] ${
+                    index < visibleItems.length - 1 ? 'border-b border-[var(--color-divider)]' : ''
+                  } ${index === 0 ? 'pt-0' : ''}`}
+                  key={item.application.applicationId}
+                >
+                  <figure className="relative m-0 max-w-[320px] overflow-hidden rounded-[10px] bg-[var(--color-surface-muted)] min-[901px]:max-w-none">
+                    {item.application.coverImageUrl ? (
+                      <img
+                        alt=""
+                        className="block aspect-[16/10] w-full object-cover"
+                        src={item.application.coverImageUrl}
+                      />
+                    ) : (
+                      <div
+                        aria-label="대표 이미지가 등록되지 않은 팬미팅"
+                        className="grid aspect-[16/10] w-full place-items-center"
+                        role="img"
+                      >
+                        <span className="text-sm font-semibold text-[var(--color-text-muted)]">
+                          이미지 없음
+                        </span>
+                      </div>
+                    )}
+                    {today ? (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-0 h-[3px]"
+                        style={{
+                          background:
+                            'linear-gradient(90deg, rgba(232,97,92,0) 0%, rgba(217,66,63,0.95) 50%, rgba(232,97,92,0) 100%)',
+                        }}
+                      />
+                    ) : null}
+                  </figure>
+                  <div className="min-w-0">
+                    <p
+                      className={`text-[13px] font-extrabold ${today ? 'text-[var(--color-primary-coral)]' : 'text-[var(--color-text-muted)]'}`}
+                    >
+                      {today ? '오늘 진행' : '예정된 팬미팅'}
+                    </p>
+                    <h2 className="mt-2 text-[22px] font-extrabold tracking-[-0.032em]">
                       {item.application.meetingTitle}
-                    </h3>
-                    <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+                    </h2>
+                    <p className="mt-[7px] text-base font-medium text-[var(--color-text-muted)]">
                       인플루언서 {item.application.influencerName}
                     </p>
-                    <div className="mt-6">
-                      <p className="text-sm text-[var(--color-text-secondary)]">
-                        {isUpcoming ? '팬미팅 일정' : '참여 일자'}
-                      </p>
-                      <time
-                        className="mt-1 block font-semibold text-[var(--color-text-primary)]"
-                        dateTime={item.application.scheduledStartAt}
+                    <p className="mt-3.5 text-[13px] font-bold text-[var(--color-text-muted)]">
+                      팬미팅 일정
+                    </p>
+                    <p className="mt-[5px] text-lg font-extrabold tabular-nums">
+                      {formatDateTime(item.application.scheduledStartAt)}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-start gap-2.5 text-left min-[901px]:items-end min-[901px]:text-right">
+                    <span
+                      className={`text-sm ${canEnter ? 'font-bold text-[var(--color-success)]' : 'font-semibold text-[var(--color-text-muted)]'}`}
+                    >
+                      {canEnter ? '지금 입장할 수 있어요' : '입장 전에 장비를 확인해 주세요'}
+                    </span>
+                    {canEnter ? (
+                      <Button
+                        className="mj-font-emphasis min-h-[52px] whitespace-nowrap rounded-[10px] px-6 text-base"
+                        disabled={enteringMeetingId !== undefined}
+                        loading={enteringMeetingId === item.application.meetingId}
+                        onClick={() => void handleEnterQueue(item.application.meetingId)}
                       >
-                        {formatDateTime(item.application.scheduledStartAt)}
-                      </time>
-                    </div>
-                  </CardContent>
+                        입장하기
+                      </Button>
+                    ) : (
+                      <Link
+                        className="mj-font-emphasis inline-flex min-h-[52px] items-center whitespace-nowrap rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-6 text-base hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+                        to={`/fan-meetings/${item.application.meetingId}/device-check`}
+                      >
+                        장비 점검하기
+                      </Link>
+                    )}
+                    {queueError?.meetingId === item.application.meetingId ? (
+                      <p className="text-sm font-semibold text-[var(--color-error)]" role="alert">
+                        {queueError.message}
+                      </p>
+                    ) : null}
+                  </div>
+                </article>
+              )
+            })
+          )}
+        </section>
+      ) : (
+        <section aria-label="지난 팬미팅" className="mt-[26px]">
+          <p className="max-w-[60ch] text-base font-medium leading-[1.65] text-[var(--color-text-body)]">
+            녹화 영상은 팬미팅 후{' '}
+            <strong className="font-extrabold text-[var(--color-text-primary)]">5일</strong> 동안
+            보관됩니다. 기간이 지나면 영상은 삭제되고 기록은 그대로 남습니다.
+          </p>
 
-                  <CardFooter className="grid gap-4">
-                    {isUpcoming ? (
-                      <>
-                        <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
-                          {canEnter
-                            ? '지금 대기실에 입장할 수 있어요.'
-                            : '입장 전에 카메라와 마이크를 점검해 주세요.'}
-                        </p>
-                        <Button
-                          className="w-full"
-                          disabled={enteringMeetingId !== undefined}
-                          loading={enteringMeetingId === item.application.meetingId}
-                          onClick={() =>
-                            canEnter
-                              ? void handleEnterQueue(item.application.meetingId)
-                              : navigate(`/fan-meetings/${item.application.meetingId}/device-check`)
-                          }
-                          size="lg"
-                          variant={canEnter ? 'primary' : 'secondary'}
+          {visibleItems.length === 0 ? (
+            <p className="py-14 text-center text-sm font-medium text-[var(--color-text-secondary)]">
+              완료된 팬미팅이 없습니다.
+            </p>
+          ) : (
+            <div className="mt-[22px] grid grid-cols-1 gap-7 min-[621px]:grid-cols-2 lg:grid-cols-3">
+              {visibleItems.map((item, index) => {
+                const playable = Boolean(item.recording?.playable)
+                const recordingEnabled = item.detail?.meeting.operation.recordingEnabled
+                const isLatest = index === 0 && currentPage === 1
+
+                return (
+                  <article className="min-w-0" key={item.application.applicationId}>
+                    <figure className="relative m-0 overflow-hidden rounded-[10px] bg-[var(--color-surface-muted)]">
+                      {item.application.coverImageUrl ? (
+                        <img
+                          alt=""
+                          className="block aspect-[16/10] w-full object-cover saturate-[0.8]"
+                          src={item.application.coverImageUrl}
+                        />
+                      ) : (
+                        <div
+                          aria-label="사진이 저장되지 않은 기록"
+                          className="grid aspect-[16/10] w-full place-items-center bg-[var(--color-surface-page)]"
+                          role="img"
                         >
-                          {canEnter ? '대기실 입장' : '장비 점검하기'}
-                        </Button>
-                        {queueError?.meetingId === item.application.meetingId ? (
-                          <AlertBanner title="대기실 입장 실패" variant="error">
-                            {queueError.message}
-                          </AlertBanner>
-                        ) : null}
+                          <span className="text-sm font-semibold text-[var(--color-text-muted)]">
+                            사진 없음
+                          </span>
+                        </div>
+                      )}
+                      {/* MELLY 씰 — 기록물 썸네일 전용 표식이며 최신 기록만 선명하다. */}
+                      <span
+                        aria-hidden="true"
+                        className={`absolute left-[11px] top-[11px] grid size-[22px] place-items-center rounded-full text-[11px] font-black tracking-[-0.05em] text-white ${isLatest ? 'bg-[var(--color-primary-coral)]' : 'bg-[var(--color-primary-coral)]/70'}`}
+                      >
+                        M
+                      </span>
+                    </figure>
+                    <h2 className="mt-[15px] text-lg font-extrabold tracking-[-0.03em]">
+                      {item.application.meetingTitle}
+                    </h2>
+                    <p className="mt-1.5 text-[15px] font-medium tabular-nums text-[var(--color-text-muted)]">
+                      {item.application.influencerName} ·{' '}
+                      {formatDateTime(item.application.scheduledStartAt)}
+                    </p>
+                    {playable && item.recording ? (
+                      <>
+                        <p className="mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-extrabold text-[var(--color-warning)]">
+                          영상 {remainingDays(item.recording.availableUntil)}일 남음
+                        </p>
+                        <p className="mt-1 text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
+                          {formatDate(item.recording.availableUntil)}까지
+                        </p>
+                        <button
+                          className="mj-font-label mt-3 inline-flex min-h-[46px] items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-[18px] text-[15px] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                          disabled={downloadingRecordingId !== undefined}
+                          onClick={() => void handleDownload(item)}
+                          type="button"
+                        >
+                          {downloadingRecordingId === item.recording.recordingId
+                            ? '다운로드 준비 중'
+                            : '영상 다운로드'}
+                        </button>
                       </>
                     ) : (
                       <>
-                        {recordingReady && item.recording ? (
-                          <>
-                            <p className="text-sm text-[var(--color-text-secondary)]">
-                              영상 보관 기한{' '}
-                              <strong className="text-[var(--color-text-primary)]">
-                                {formatDateTime(item.recording.availableUntil)}
-                              </strong>
-                            </p>
-                            <Badge className="w-fit" variant="success">녹화 영상 저장 완료</Badge>
-                            <Button
-                              className="w-full"
-                              loading={downloadingRecordingId === item.recording.recordingId}
-                              onClick={() => void handleDownload(item)}
-                              size="lg"
-                              variant="secondary"
-                            >
-                              녹화 영상 다운로드
-                            </Button>
-                          </>
-                        ) : (
-                          <Badge className="w-fit" variant="neutral">
-                            {recordingEnabled === false
-                              ? '녹화하지 않은 팬미팅'
-                              : item.recording?.status === 'EXPIRED'
-                                ? '녹화 영상 보관 종료'
-                                : '녹화 영상 없음'}
-                          </Badge>
-                        )}
+                        <p className="mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-extrabold text-[var(--color-text-muted)]">
+                          {recordingEnabled === false ? '녹화하지 않은 팬미팅' : '영상 보관 종료'}
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-[var(--color-text-muted)]">
+                          사진과 기록은 계속 보관
+                        </p>
                         <Link
-                          className="inline-flex min-h-[var(--control-height)] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 py-2 text-sm font-semibold"
+                          className="mj-font-label mt-3 inline-flex min-h-[46px] items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-[18px] text-[15px] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
                           to={`/fan/fan-meetings/${item.application.meetingId}/complete`}
                         >
-                          완료 내역 보기
+                          기록 보기
                         </Link>
-                        {downloadError?.meetingId === item.application.meetingId ? (
-                          <AlertBanner title="다운로드 실패" variant="error">
-                            {downloadError.message}
-                          </AlertBanner>
-                        ) : null}
                       </>
                     )}
-                  </CardFooter>
-                </Card>
-              )
-            })}
-          </div>
-        )}
+                    {downloadError?.meetingId === item.application.meetingId ? (
+                      <p className="mt-2 text-sm font-semibold text-[var(--color-error)]" role="alert">
+                        {downloadError.message}
+                      </p>
+                    ) : null}
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
-        {!loading && filteredItems.length > 0 ? (
-          <nav
-            aria-label="팬미팅 목록 페이지"
-            className="mt-8 flex items-center justify-center gap-4"
+      {!loading && totalPages > 1 ? (
+        <nav
+          aria-label="팬미팅 목록 페이지"
+          className="mt-8 flex items-center justify-center gap-4"
+        >
+          <Button
+            disabled={currentPage <= 1}
+            onClick={() => changePage(currentPage - 1)}
+            variant="secondary"
           >
-            <Button
-              disabled={currentPage <= 1}
-              onClick={() => changePage(currentPage - 1)}
-              variant="secondary"
-            >
-              이전
-            </Button>
-            <p aria-live="polite" className="text-sm font-semibold">
-              {currentPage} / {totalPages} 페이지
-            </p>
-            <Button
-              disabled={currentPage >= totalPages}
-              onClick={() => changePage(currentPage + 1)}
-              variant="secondary"
-            >
-              다음
-            </Button>
-          </nav>
-        ) : null}
-        </div>
-      </section>
+            이전
+          </Button>
+          <p aria-live="polite" className="text-sm font-semibold">
+            {currentPage} / {totalPages} 페이지
+          </p>
+          <Button
+            disabled={currentPage >= totalPages}
+            onClick={() => changePage(currentPage + 1)}
+            variant="secondary"
+          >
+            다음
+          </Button>
+        </nav>
+      ) : null}
     </div>
   )
 }

@@ -1,10 +1,7 @@
 import {
-  ArrowRight,
   CalendarBlank,
   MagnifyingGlass,
   Plus,
-  Trash,
-  UsersThree,
   VideoCamera,
 } from '@phosphor-icons/react'
 import { useCallback, useEffect, useState } from 'react'
@@ -319,18 +316,27 @@ function MeetingRow({
         <p className="mt-1">확정 {meeting.participantCount}명</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
-        <Link className="inline-flex items-center gap-1 text-[var(--color-primary-coral)]" to={detailTo}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          className="inline-flex min-h-[38px] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3.5 text-sm font-bold transition-colors hover:border-[var(--color-text-tertiary)]"
+          to={detailTo}
+        >
           상세 관리
-          <ArrowRight aria-hidden="true" size={16} />
         </Link>
         <Link
-          className="inline-flex items-center gap-1 hover:text-[var(--color-primary-coral)]"
+          className="inline-flex min-h-[38px] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3.5 text-sm font-bold transition-colors hover:border-[var(--color-text-tertiary)]"
           to={`${detailTo}/fans`}
         >
-          <UsersThree aria-hidden="true" size={17} weight="bold" />
           참가자
         </Link>
+        {meeting.status === 'LIVE' ? (
+          <Link
+            className="inline-flex min-h-[38px] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] px-3.5 text-sm font-extrabold text-[var(--color-primary-coral)] transition-colors hover:border-[var(--color-primary-coral)] hover:bg-[var(--color-primary-coral)] hover:text-white"
+            to={`${detailTo}/monitor`}
+          >
+            운영
+          </Link>
+        ) : null}
         {actions.canPublish ? (
           <Button disabled={busy} onClick={() => onAction(meeting.meetingId, 'publish')} size="sm">
             발행
@@ -339,7 +345,6 @@ function MeetingRow({
         {actions.canDeleteDraft ? (
           <Button
             disabled={busy}
-            leadingIcon={<Trash size={15} />}
             onClick={() => onAction(meeting.meetingId, 'delete')}
             size="sm"
             variant="danger"
@@ -351,12 +356,6 @@ function MeetingRow({
           <Button disabled={busy} onClick={() => onAction(meeting.meetingId, 'cancel')} size="sm" variant="danger">
             취소
           </Button>
-        ) : null}
-        {meeting.status === 'LIVE' ? (
-          <Link className="inline-flex items-center gap-1 text-[var(--color-primary-coral)]" to={`${detailTo}/monitor`}>
-            <VideoCamera aria-hidden="true" size={17} weight="fill" />
-            운영
-          </Link>
         ) : null}
       </div>
     </article>

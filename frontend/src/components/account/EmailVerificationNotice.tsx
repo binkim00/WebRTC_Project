@@ -1,5 +1,5 @@
 import { EnvelopeSimple } from '@phosphor-icons/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
@@ -26,11 +26,21 @@ const RESEND_COOLDOWN_MS = 60_000
 export function EmailVerificationNotice({
   email,
   onVerified,
+  autoSend = false,
 }: {
   /** 안내에 표시할 이메일이며 모르면 상태 조회로 채운다. 화면에는 항상 마스킹해 보여 준다. */
   email?: string
   /** 인증 완료가 확인됐을 때 부모 화면 상태를 갱신하기 위한 콜백이다. */
   onVerified: () => void
+  /**
+   * 마운트 직후 인증 메일을 한 번 자동 발송한다.
+   *
+   * 회원가입 직후 인증 단계처럼 "이미 인증을 하려고 들어온" 화면에서 쓴다. 발송을 이 컴포넌트
+   * 안에서 처리해야 쿨다운·`sentOnce`·오류 상태가 버튼 흐름과 어긋나지 않는다.
+   * 마이페이지·응모 게이트처럼 다른 일을 하다 만나는 안내에서는 기본값(false)을 유지해
+   * 사용자가 원할 때만 메일이 나가게 한다.
+   */
+  autoSend?: boolean
 }) {
   const [knownEmail, setKnownEmail] = useState(email)
   const [sentOnce, setSentOnce] = useState(false)
@@ -84,6 +94,18 @@ export function EmailVerificationNotice({
   const cooldownRemainingSec = cooldownUntil
     ? Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
     : 0
+
+  // autoSend가 켜진 화면에서 첫 메일을 자동으로 보낸다.
+  // StrictMode의 이중 마운트나 부모 리렌더로 두 번 발송되면 서버 쿨다운(429)에 바로 걸리므로
+  // ref로 1회만 통과시킨다. 이후 재발송은 사용자가 버튼으로 직접 수행한다.
+  const autoSendStartedRef = useRef(false)
+  useEffect(() => {
+    if (!autoSend || autoSendStartedRef.current) return
+    autoSendStartedRef.current = true
+    void handleSend()
+    // handleSend는 매 렌더마다 새 함수라 의존성에 넣으면 무한 재실행이 된다. ref 가드로 1회를 보장한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSend])
 
   /** 인증 메일을 보낸다. 이미 한 번 보냈으면 재발송 경로를 쓴다. */
   async function handleSend() {

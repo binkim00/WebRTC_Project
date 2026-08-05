@@ -422,11 +422,63 @@ export async function fetchFanMemos(
   fanId: string,
   authToken: string,
   signal?: AbortSignal,
+  /** 최근 메모만 필요한 화면은 기본값을 쓰고, 회차 목록이 필요한 화면은 크게 요청한다. */
+  size = 5,
 ): Promise<FanMemoPage> {
   const data = await apiRequest<unknown>(
-    `/api/v1/influencers/me/fans/${encodeURIComponent(fanId)}/memos?page=0&size=5`,
+    `/api/v1/influencers/me/fans/${encodeURIComponent(fanId)}/memos?page=0&size=${size}`,
     { authToken, signal },
   )
 
-  return parsePage(data, parseMemo, 5)
+  return parsePage(data, parseMemo, size)
+}
+
+/** 내가 개최한 팬미팅에 참가한 팬 한 명의 참여 집계다. 중복 참가는 한 건으로 합쳐진다. */
+export type ParticipantFanSummary = {
+  fanId: string
+  nickname: string
+  profileImageUrl?: string
+  /** 참가한 팬미팅 회차 수 */
+  participatedMeetingCount: number
+  firstParticipatedAt: string
+  lastParticipatedAt: string
+}
+
+export type ParticipantFanPage = {
+  content: ParticipantFanSummary[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+  hasNext: boolean
+}
+
+function parseParticipantFan(value: unknown): ParticipantFanSummary {
+  const record = asRecord(value)
+  if (!record) throw new TypeError('참가 팬 응답 형식이 올바르지 않습니다.')
+
+  return {
+    fanId: readString(record.fanId, 'fanId'),
+    nickname: readString(record.nickname, 'nickname'),
+    profileImageUrl: readOptionalString(record.profileImageUrl),
+    participatedMeetingCount: readNumber(record.participatedMeetingCount),
+    firstParticipatedAt: readString(record.firstParticipatedAt, 'firstParticipatedAt'),
+    lastParticipatedAt: readString(record.lastParticipatedAt, 'lastParticipatedAt'),
+  }
+}
+
+/** 내가 개최한 팬미팅에 참가한 팬을 중복 없이 최근 참여일 순으로 조회한다. */
+export async function fetchMyParticipantFans(
+  query: { page?: number; size?: number },
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<ParticipantFanPage> {
+  const page = query.page ?? 0
+  const size = query.size ?? 20
+  const data = await apiRequest<unknown>(
+    `/api/v1/influencers/me/participant-fans?page=${page}&size=${size}`,
+    { authToken, signal },
+  )
+
+  return parsePage(data, parseParticipantFan, size)
 }

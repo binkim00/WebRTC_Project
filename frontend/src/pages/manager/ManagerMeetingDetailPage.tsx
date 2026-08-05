@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, FloppyDisk } from '@phosphor-icons/react'
+import { ArrowRight } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -43,6 +43,7 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
+  Dialog,
   Select,
   Spinner,
   TextField,
@@ -54,7 +55,6 @@ import {
   formatDateTime,
   getAvailableActions,
   getScheduleErrors,
-  meetingStatusBadge,
   meetingStatusLabel,
   normalizeDetailTab,
   toApiLocalDateTime,
@@ -70,12 +70,18 @@ import {
 const TEST_CONTROL_ENABLED =
   import.meta.env.DEV && import.meta.env.VITE_ENABLE_TEST_CONTROLS === 'true'
 
-/** 상세 화면 상단에 표시할 탭 목록이다. */
+/**
+ * 상세 화면 상단에 표시할 탭 목록이다.
+ *
+ * 라벨은 탭이 실제로 하는 일을 기준으로 붙인다:
+ * 진행 현황(단계 확인·다음 액션 실행) / 응모자·추첨(응모 목록과 추첨·발표) /
+ * 응모 질문(응모 폼 질문 편집) / 정보 수정(제목·일정·운영 설정 편집).
+ */
 const TABS: readonly { id: MeetingDetailTab; label: string }[] = [
-  { id: 'overview', label: '개요' },
-  { id: 'settings', label: '설정' },
-  { id: 'application-form', label: '응모 폼' },
-  { id: 'applicants', label: '응모자' },
+  { id: 'overview', label: '진행 현황' },
+  { id: 'applicants', label: '응모자·추첨' },
+  { id: 'application-form', label: '응모 질문' },
+  { id: 'settings', label: '정보 수정' },
   ...(TEST_CONTROL_ENABLED
     ? [{ id: 'test-control' as const, label: '테스트 제어' }]
     : []),
@@ -93,6 +99,90 @@ type MeetingOperationAction =
   | 'openApplicationsNow'
   | 'closeApplicationsNow'
   | 'startNow'
+
+const ACTION_CONFIRMATION: Record<
+  MeetingOperationAction,
+  { title: string; description: string; confirmLabel: string }
+> = {
+  publish: {
+    title: '팬미팅을 팬에게 공개할까요?',
+    description: '공개하면 팬이 팬미팅 정보와 응모 안내를 볼 수 있습니다.',
+    confirmLabel: '팬에게 공개',
+  },
+  cancel: {
+    title: '팬미팅을 취소할까요?',
+    description: '취소한 팬미팅은 되돌릴 수 없습니다.',
+    confirmLabel: '팬미팅 취소',
+  },
+  delete: {
+    title: '작성 중인 팬미팅을 삭제할까요?',
+    description: '삭제한 내용은 되돌릴 수 없습니다.',
+    confirmLabel: '작성 내용 삭제',
+  },
+  start: {
+    title: '팬미팅을 시작할까요?',
+    description: '대기열이 열리고 영상통화가 시작됩니다.',
+    confirmLabel: '팬미팅 시작',
+  },
+  end: {
+    title: '팬미팅을 종료할까요?',
+    description: '진행 중인 통화가 모두 종료됩니다.',
+    confirmLabel: '팬미팅 종료',
+  },
+  draw: {
+    title: '당첨자를 추첨할까요?',
+    description: '추첨 결과는 다시 변경할 수 없습니다.',
+    confirmLabel: '추첨',
+  },
+  publishResults: {
+    title: '응모 결과를 발표할까요?',
+    description: '응모자 전원에게 알림이 전송됩니다.',
+    confirmLabel: '결과 발표',
+  },
+  openApplicationsNow: {
+    title: '응모 접수를 지금 시작할까요?',
+    description: '응모 시작 시각이 현재로 변경되며, 지난 마감 시각은 기존 응모 기간만큼 연장됩니다.',
+    confirmLabel: '응모 시작',
+  },
+  closeApplicationsNow: {
+    title: '응모 접수를 지금 마감할까요?',
+    description: '마감 이후에는 새 응모를 받을 수 없습니다.',
+    confirmLabel: '응모 마감',
+  },
+  startNow: {
+    title: '팬미팅을 지금 시작할까요?',
+    description: '예정 시작 시각이 현재로 변경되고 확정 참가자에게 즉시 영향을 줍니다.',
+    confirmLabel: '지금 시작',
+  },
+}
+
+/** 상태 배지를 추가하지 않고 토큰 색상의 텍스트로 상태를 구분한다. */
+function meetingStatusTextClass(status?: string | null): string {
+  if (status === 'LIVE') return 'text-[var(--color-primary-coral)]'
+  if (status === 'PUBLISHED' || status === 'APPLICATION_OPEN' || status === 'READY') {
+    return 'text-[var(--color-success)]'
+  }
+  if (status === 'APPLICATION_CLOSED' || status === 'DRAFT') {
+    return 'text-[var(--color-warning)]'
+  }
+  if (status === 'CANCELED') return 'text-[var(--color-error)]'
+  return 'text-[var(--color-text-secondary)]'
+}
+
+/** 상세 화면에서는 운영 상태를 사용자가 이해하기 쉬운 진행 단계로 표시한다. */
+function meetingStatusDisplayLabel(status?: string | null): string {
+  const labels: Record<string, string> = {
+    DRAFT: '작성 중',
+    PUBLISHED: '공개',
+    APPLICATION_OPEN: '응모 접수 중',
+    APPLICATION_CLOSED: '응모 마감',
+    READY: '시작 대기',
+    LIVE: '진행 중',
+    ENDED: '종료',
+    CANCELED: '취소됨',
+  }
+  return status ? labels[status] ?? '진행 단계 확인 필요' : '진행 단계 확인 필요'
+}
 
 /** 테스트 제어에서 강제로 지정할 수 있는 상태 목록이다. */
 const TEST_CONTROL_STATUS_OPTIONS: readonly { value: FanMeetingStatus; label: string }[] = [
@@ -251,6 +341,8 @@ function toSettingsForm(detail: PublicFanMeetingDetail): SettingsForm {
  */
 export function ManagerMeetingDetailPage() {
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
+  const isSolo = getAuthSession()?.role === 'SOLO_INFLUENCER'
+  const meetingListPath = isSolo ? '/influencer/fan-meetings' : '/manager/fan-meetings'
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = normalizeDetailTab(searchParams.get('tab'))
   // 주소를 직접 입력해도 운영 빌드에서는 테스트 패널에 접근할 수 없다.
@@ -259,6 +351,7 @@ export function ManagerMeetingDetailPage() {
     : requestedTab
 
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
+  const [applicantCount, setApplicantCount] = useState(0)
   const [participantCount, setParticipantCount] = useState(0)
   const [drawCompleted, setDrawCompleted] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -266,6 +359,8 @@ export function ManagerMeetingDetailPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [message, setMessage] = useState<string>()
+  const [pendingAction, setPendingAction] = useState<MeetingOperationAction>()
+  // 추첨·발표 직후 응모자 탭 목록이 새 상태를 다시 읽도록 신호를 준다.
   const [applicantsRefresh, setApplicantsRefresh] = useState(0)
   // 마감·조기 시작 경계가 지나면 새로고침하지 않아도 버튼 상태를 다시 계산한다.
   const actionNowMs = useNowTicker(15_000)
@@ -274,7 +369,7 @@ export function ManagerMeetingDetailPage() {
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!meetingId) {
-      setLoadError('팬미팅 식별자가 없습니다.')
+      setLoadError('팬미팅 정보를 확인할 수 없습니다.')
       setLoading(false)
       return
     }
@@ -299,6 +394,7 @@ export function ManagerMeetingDetailPage() {
       ])
       if (signal?.aborted) return
       if (statistics.status === 'fulfilled') {
+        setApplicantCount(statistics.value.totalApplications)
         setDrawCompleted(statistics.value.selectedCount + statistics.value.notSelectedCount > 0)
       }
       if (participants.status === 'fulfilled') {
@@ -335,25 +431,8 @@ export function ManagerMeetingDetailPage() {
     [actionNow, detail, drawCompleted, participantCount],
   )
 
-  /** 확인을 받은 뒤 상태 전환 API를 실행하고 화면 값을 다시 읽는다. */
+  /** 확인 모달에서 승인된 상태 전환 API를 실행하고 화면 값을 다시 읽는다. */
   async function runAction(action: MeetingOperationAction) {
-    const confirmTexts: Record<typeof action, string> = {
-      publish: '팬미팅을 발행할까요? 발행하면 팬에게 공개됩니다.',
-      cancel: '팬미팅을 취소할까요? 취소하면 되돌릴 수 없습니다.',
-      delete: '초안을 삭제할까요? 삭제하면 되돌릴 수 없습니다.',
-      start: '팬미팅을 시작할까요? 대기열이 열리고 영상통화가 시작됩니다.',
-      end: '팬미팅을 종료할까요? 진행 중인 통화가 모두 종료됩니다.',
-      draw: '응모자 중에서 당첨자를 추첨할까요? 추첨 후에는 다시 실행할 수 없습니다.',
-      publishResults: '응모 결과를 발표할까요? 모든 응모자에게 알림이 전송됩니다.',
-      openApplicationsNow:
-        '응모 접수를 지금 시작할까요? 응모 시작 시각이 현재로 변경되며, 이미 지난 마감 시각은 기존 응모 기간만큼 연장됩니다.',
-      closeApplicationsNow:
-        '응모 접수를 지금 마감할까요? 응모 마감 시각이 현재로 변경되며 이후에는 새 응모를 받을 수 없습니다.',
-      startNow:
-        '팬미팅을 지금 시작할까요? 예정 시작 시각이 현재로 변경되고 확정 참가자에게 즉시 영향을 줍니다.',
-    }
-    if (!window.confirm(confirmTexts[action])) return
-
     const token = getAuthSession()?.accessToken
     if (!token) {
       setError('작업을 수행하려면 먼저 로그인해 주세요.')
@@ -366,13 +445,13 @@ export function ManagerMeetingDetailPage() {
     try {
       if (action === 'publish') {
         await publishFanMeeting(Number(meetingId), token)
-        setMessage('팬미팅을 발행했습니다. 응모 시작 일시가 되면 응모가 열립니다.')
+        setMessage('팬미팅을 팬에게 공개했습니다. 응모 시작 일시가 되면 응모가 열립니다.')
       } else if (action === 'cancel') {
         await cancelFanMeeting(meetingId, token)
         setMessage('팬미팅을 취소했습니다.')
       } else if (action === 'delete') {
         await deleteFanMeetingDraft(meetingId, token)
-        setMessage('초안을 삭제했습니다.')
+        setMessage('작성 중인 팬미팅을 삭제했습니다.')
       } else if (action === 'start') {
         await startFanMeeting(meetingId, token)
         setMessage('팬미팅을 시작했습니다.')
@@ -417,6 +496,7 @@ export function ManagerMeetingDetailPage() {
         )
       }
       await load()
+      setPendingAction(undefined)
     } catch (cause) {
       setError(toErrorMessage(cause, '요청을 처리하지 못했습니다.'))
     } finally {
@@ -435,8 +515,8 @@ export function ManagerMeetingDetailPage() {
   if (loadError || !detail) {
     return (
       <div className="grid gap-5 pb-10">
-        <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold" to="/manager/fan-meetings">
-          <ArrowLeft size={17} /> 팬미팅 목록으로
+        <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold" to={meetingListPath}>
+          ← 팬미팅 목록으로
         </Link>
         <AlertBanner title="팬미팅 조회 실패" variant="error">
           {loadError ?? '팬미팅 정보를 찾을 수 없습니다.'}
@@ -446,18 +526,21 @@ export function ManagerMeetingDetailPage() {
   }
 
   const status = detail.meeting.status
+  const confirmation = pendingAction ? ACTION_CONFIRMATION[pendingAction] : undefined
 
   return (
     <div className="grid gap-6 pb-10">
       <header className="grid gap-3">
         <Link
-          className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]"
-          to="/manager/fan-meetings"
+          className="inline-flex w-fit text-sm font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+          to={meetingListPath}
         >
-          <ArrowLeft size={17} /> 팬미팅 목록으로
+          ← 팬미팅 목록으로
         </Link>
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge variant={meetingStatusBadge(status)}>{meetingStatusLabel(status)}</Badge>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <span className={`text-sm font-extrabold ${meetingStatusTextClass(status)}`}>
+            {meetingStatusDisplayLabel(status)}
+          </span>
           <h1 className="text-3xl font-black tracking-[-0.05em]">{detail.meeting.title}</h1>
         </div>
         <p className="text-[var(--color-text-secondary)]">
@@ -476,7 +559,7 @@ export function ManagerMeetingDetailPage() {
         {TABS.map((item) => (
           <button
             aria-current={tab === item.id ? 'page' : undefined}
-            className={`min-h-11 rounded-t-[var(--radius-control)] px-5 text-sm font-bold transition-colors ${
+            className={`min-h-11 whitespace-nowrap rounded-t-[var(--radius-control)] px-5 text-sm font-bold transition-colors ${
               tab === item.id
                 ? 'border-b-2 border-[var(--color-primary-coral)] text-[var(--color-primary-coral)]'
                 : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
@@ -493,12 +576,29 @@ export function ManagerMeetingDetailPage() {
       {tab === 'overview' ? (
         <OverviewPanel
           actions={actions}
+          applicantCount={applicantCount}
           busy={busy}
           detail={detail}
           drawCompleted={drawCompleted}
           meetingId={meetingId}
-          onAction={runAction}
+          onAction={setPendingAction}
           participantCount={participantCount}
+          solo={isSolo}
+        />
+      ) : null}
+
+      {tab === 'applicants' ? (
+        <ManagerApplicantsPanel
+          canDraw={actions.canDraw}
+          canPublishResults={actions.canPublishResults}
+          capacity={detail.meeting.application.capacity}
+          drawCompleted={drawCompleted}
+          meetingId={meetingId}
+          meetingStatus={status}
+          meetingTitle={detail.meeting.title}
+          onDraw={() => setPendingAction('draw')}
+          onPublishResults={() => setPendingAction('publishResults')}
+          refreshToken={applicantsRefresh}
         />
       ) : null}
 
@@ -517,19 +617,49 @@ export function ManagerMeetingDetailPage() {
           lockedReason={
             actions.applicationStarted
               ? '응모가 시작된 뒤에는 응모 폼을 수정할 수 없습니다.'
-              : '발행 전 또는 발행 직후 상태에서만 응모 폼을 수정할 수 있습니다.'
+              : '팬미팅을 공개하기 전이거나 응모가 시작되기 전까지만 응모 폼을 수정할 수 있습니다.'
           }
           meetingId={meetingId}
         />
       ) : null}
 
-      {tab === 'applicants' ? (
-        <ManagerApplicantsPanel meetingId={meetingId} refreshToken={applicantsRefresh} />
-      ) : null}
-
       {TEST_CONTROL_ENABLED && tab === 'test-control' ? (
         <TestControlPanel detail={detail} meetingId={meetingId} onApplied={() => void load()} />
       ) : null}
+
+      <Dialog
+        description={confirmation?.description}
+        footer={
+          <>
+            <Button
+              disabled={busy}
+              onClick={() => setPendingAction(undefined)}
+              variant="outline"
+            >
+              돌아가기
+            </Button>
+            <Button
+              disabled={busy}
+              loading={busy}
+              onClick={() => pendingAction && void runAction(pendingAction)}
+              variant={pendingAction === 'cancel' || pendingAction === 'delete' ? 'danger' : 'primary'}
+            >
+              {confirmation?.confirmLabel ?? '확인'}
+            </Button>
+          </>
+        }
+        onOpenChange={(open) => {
+          if (!open && !busy) setPendingAction(undefined)
+        }}
+        open={Boolean(pendingAction)}
+        title={confirmation?.title ?? '작업을 확인해 주세요.'}
+      >
+        {busy ? (
+          <p className="text-sm font-medium text-[var(--color-text-secondary)]" role="status">
+            요청을 처리하는 동안 창을 닫을 수 없습니다.
+          </p>
+        ) : null}
+      </Dialog>
     </div>
   )
 }
@@ -538,112 +668,144 @@ export function ManagerMeetingDetailPage() {
 function OverviewPanel({
   detail,
   actions,
+  applicantCount,
   busy,
   meetingId,
   participantCount,
   drawCompleted,
+  solo,
   onAction,
 }: {
   detail: PublicFanMeetingDetail
   actions: ReturnType<typeof getAvailableActions>
+  applicantCount: number
   busy: boolean
   meetingId: string
   participantCount: number
   drawCompleted: boolean
+  solo: boolean
   onAction: (action: MeetingOperationAction) => void
 }) {
   const { meeting } = detail
   const encodedId = encodeURIComponent(meetingId)
+  const primaryActions: { action: MeetingOperationAction; label: string }[] = []
+  if (actions.canPublish) primaryActions.push({ action: 'publish', label: '팬에게 공개' })
+  if (actions.canDraw) primaryActions.push({ action: 'draw', label: '당첨자 추첨' })
+  if (actions.canPublishResults) primaryActions.push({ action: 'publishResults', label: '결과 발표' })
+  if (actions.canStart) primaryActions.push({ action: 'start', label: '팬미팅 시작' })
+  if (actions.canEnd) primaryActions.push({ action: 'end', label: '팬미팅 종료' })
+  if (actions.canOpenApplicationsNow) {
+    primaryActions.push({ action: 'openApplicationsNow', label: '응모 즉시 시작' })
+  }
+  if (actions.canCloseApplicationsNow) {
+    primaryActions.push({ action: 'closeApplicationsNow', label: '응모 즉시 마감' })
+  }
+  if (actions.canStartNow && !actions.canStart) {
+    primaryActions.push({ action: 'startNow', label: '지금 팬미팅 시작' })
+  }
+
+  const secondaryAction = actions.canDeleteDraft
+    ? ({ action: 'delete', label: '작성 내용 삭제' } as const)
+    : actions.canCancel
+      ? ({ action: 'cancel', label: '취소' } as const)
+      : undefined
+
+  const actionNote = meeting.status === 'DRAFT'
+    ? '팬미팅을 공개하면 팬이 팬미팅 정보와 응모 안내를 볼 수 있습니다.'
+    : meeting.status === 'PUBLISHED'
+      ? `응모 시작 일시(${formatDateTime(meeting.application.startAt)})가 지나면 응모 접수가 열립니다.`
+      : meeting.status === 'APPLICATION_OPEN'
+        ? `응모 마감(${formatDateTime(meeting.application.endAt)})까지 팬이 응모할 수 있습니다. 현재 응모 ${applicantCount}명.`
+        : meeting.status === 'APPLICATION_CLOSED' && !drawCompleted
+          ? `응모가 마감되었습니다. 응모자 ${applicantCount}명 중에서 당첨자를 추첨할 수 있습니다.`
+          : meeting.status === 'APPLICATION_CLOSED'
+            ? `당첨자 ${participantCount}명이 참가자와 대기열에 등록되었습니다. 결과를 발표하면 알림이 발송됩니다.`
+            : meeting.status === 'READY'
+              ? `대기열 개방(${formatDateTime(meeting.operation.queueOpenAt)}) 뒤 팬미팅을 시작할 수 있습니다.`
+              : meeting.status === 'LIVE'
+                ? '팬미팅이 진행되고 있습니다. 실시간 운영 모니터에서 대기열을 관리하세요.'
+                : meeting.status === 'ENDED'
+                  ? '종료된 팬미팅은 취소하거나 다시 시작할 수 없습니다.'
+                  : '취소된 팬미팅은 다시 운영할 수 없습니다.'
+
+  const stageIndex = meeting.status === 'DRAFT' || meeting.status === 'CANCELED'
+    ? -1
+    : meeting.status === 'PUBLISHED'
+      ? 0
+      : meeting.status === 'APPLICATION_OPEN'
+        ? 1
+        : meeting.status === 'APPLICATION_CLOSED'
+          ? drawCompleted ? 2 : 1
+          : meeting.status === 'READY'
+            ? 3
+            : 4
+
+  const unavailableReason = meeting.status === 'ENDED'
+    ? '종료된 팬미팅은 취소할 수 없습니다.'
+    : meeting.status === 'CANCELED'
+      ? '이미 취소된 팬미팅입니다.'
+      : '지금은 팬미팅을 취소할 수 없습니다.'
 
   return (
-    <div className="grid gap-5">
-      <Card className="p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-black">운영 액션</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-              현재 상태에서 실행할 수 있는 작업만 표시합니다.
+    <div>
+      <section aria-labelledby="meeting-actions-title" className="border-t border-[var(--color-divider)] py-6">
+        <div className="flex flex-col items-start justify-between gap-5 md:flex-row">
+          <div className="min-w-0">
+            <h2 className="text-lg font-extrabold" id="meeting-actions-title">운영 액션</h2>
+            <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
+              지금 단계에서 할 수 있는 작업만 보여드립니다.
+            </p>
+            <p className="mt-4 text-sm font-semibold leading-6 text-[var(--color-text-body)]" id="operation-action-note">
+              {actions.startBlockedReason ?? actionNote}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {actions.canPublish ? (
-              <Button disabled={busy} onClick={() => onAction('publish')} size="sm">발행</Button>
-            ) : null}
-            {actions.canDraw ? (
-              <Button disabled={busy} onClick={() => onAction('draw')} size="sm">추첨하기</Button>
-            ) : null}
-            {actions.canPublishResults ? (
-              <Button disabled={busy} onClick={() => onAction('publishResults')} size="sm">결과 발표</Button>
-            ) : null}
-            {actions.canStart ? (
-              <Button disabled={busy} onClick={() => onAction('start')} size="sm">팬미팅 시작</Button>
-            ) : null}
-            {actions.canEnd ? (
-              <Button disabled={busy} onClick={() => onAction('end')} size="sm" variant="secondary">종료</Button>
-            ) : null}
-            {actions.canDeleteDraft ? (
-              <Button disabled={busy} onClick={() => onAction('delete')} size="sm" variant="danger">초안 삭제</Button>
-            ) : null}
-            {actions.canCancel ? (
-              <Button disabled={busy} onClick={() => onAction('cancel')} size="sm" variant="danger">취소</Button>
-            ) : null}
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {primaryActions.map((item) => (
+              <Button
+                disabled={busy}
+                key={item.action}
+                onClick={() => onAction(item.action)}
+                title={busy ? '다른 작업을 처리하고 있습니다.' : undefined}
+              >
+                {item.label}
+              </Button>
+            ))}
+            {secondaryAction ? (
+              <Button
+                disabled={busy}
+                onClick={() => onAction(secondaryAction.action)}
+                title={busy ? '다른 작업을 처리하고 있습니다.' : undefined}
+                variant="outline"
+              >
+                {secondaryAction.label}
+              </Button>
+            ) : (
+              <Button
+                aria-describedby="operation-action-note"
+                disabled
+                title={unavailableReason}
+                variant="outline"
+              >
+                취소
+              </Button>
+            )}
           </div>
         </div>
-        {(actions.canOpenApplicationsNow ||
-          actions.canCloseApplicationsNow ||
-          (actions.canStartNow && !actions.canStart)) ? (
-          <div className="mt-5 rounded-[var(--radius-control)] border border-[var(--color-warning-border)] bg-[var(--color-warning-soft)] p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <strong className="text-sm text-[var(--color-warning)]">예약 시간 전 수동 운영</strong>
-                <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                  서버의 기간 검증과 실제 시작 기록을 일치시키기 위해 해당 예약 시각도 현재로 갱신됩니다.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {actions.canOpenApplicationsNow ? (
-                  <Button disabled={busy} onClick={() => onAction('openApplicationsNow')} size="sm" variant="secondary">
-                    응모 지금 시작
-                  </Button>
-                ) : null}
-                {actions.canCloseApplicationsNow ? (
-                  <Button disabled={busy} onClick={() => onAction('closeApplicationsNow')} size="sm" variant="secondary">
-                    응모 지금 마감
-                  </Button>
-                ) : null}
-                {actions.canStartNow && !actions.canStart ? (
-                  <Button disabled={busy} onClick={() => onAction('startNow')} size="sm">
-                    일정 전에 팬미팅 시작
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        ) : null}
-        {actions.startBlockedReason ? (
-          <p className="mt-4 text-sm text-[var(--color-text-secondary)]">{actions.startBlockedReason}</p>
-        ) : null}
-        {meeting.status === 'PUBLISHED' ? (
-          <p className="mt-4 text-sm text-[var(--color-text-secondary)]">
-            응모 시작 일시({formatDateTime(meeting.application.startAt)})가 지나면 응모 접수가 열립니다.
-          </p>
-        ) : null}
-      </Card>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <Badge variant="primary">진행 현황</Badge>
-          <CardTitle as="h2" className="mt-3">팬미팅 흐름</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ol className="grid gap-3">
+      <section aria-labelledby="meeting-flow-title" className="border-t border-[var(--color-divider)] py-6">
+        <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">진행 현황</p>
+        <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-flow-title">팬미팅 흐름</h2>
+        <ol className="mt-5 border-y border-[var(--color-divider)]">
             <FlowStep
-              done={meeting.status !== 'DRAFT'}
-              description={`발행하면 팬에게 공개됩니다. ${meeting.status === 'DRAFT' ? '아직 초안입니다.' : ''}`}
-              title="1. 홍보 정보 발행"
+              current={stageIndex === -1}
+              done={stageIndex >= 0}
+              description="공개하면 팬이 팬미팅 정보와 응모 안내를 볼 수 있습니다."
+              title="1. 팬미팅 공개"
             />
             <FlowStep
-              done={['APPLICATION_OPEN', 'APPLICATION_CLOSED', 'READY', 'LIVE', 'ENDED'].includes(meeting.status)}
+              current={stageIndex === 0}
+              done={stageIndex >= 1}
               description={
                 meeting.application.enabled
                   ? `응모 기간 ${formatDateTime(meeting.application.startAt)} ~ ${formatDateTime(meeting.application.endAt)} · 모집 ${meeting.application.capacity}명`
@@ -652,53 +814,72 @@ function OverviewPanel({
               title="2. 팬 응모 접수"
             />
             <FlowStep
-              done={drawCompleted}
+              current={stageIndex === 1}
+              done={stageIndex >= 2}
               description={`추첨하면 당첨자가 참가자와 대기열로 바로 등록됩니다. 현재 확정 참가자 ${participantCount}명.`}
               title="3. 당첨자 추첨"
             />
             <FlowStep
-              done={['READY', 'LIVE', 'ENDED'].includes(meeting.status)}
+              current={stageIndex === 2}
+              done={stageIndex >= 3}
               description="결과를 발표하면 응모자 전원에게 알림이 가고 팬미팅이 시작 대기 상태가 됩니다."
               title="4. 결과 발표"
             />
             <FlowStep
-              done={['LIVE', 'ENDED'].includes(meeting.status)}
+              current={stageIndex === 3}
+              done={stageIndex >= 4}
               description={`대기열 개방 ${formatDateTime(meeting.operation.queueOpenAt)} · 1인 통화 ${formatCallDuration(meeting.operation.callDurationSec)}`}
               title="5. 팬미팅 진행"
             />
-          </ol>
-        </CardContent>
-      </Card>
+        </ol>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <Badge variant="primary">바로 가기</Badge>
-          <CardTitle as="h2" className="mt-3">연결된 관리 화면</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-2">
-          <QuickLink label="확정 참가자" to={`/manager/fan-meetings/${encodedId}/fans`} />
+      <section aria-labelledby="meeting-links-title" className="border-t border-[var(--color-divider)] py-6">
+        <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">바로 가기</p>
+        <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-links-title">연결된 관리 화면</h2>
+        <div className="mt-5 grid gap-x-5 sm:grid-cols-2">
+          <QuickLink label="참가 팬" to={`/manager/fan-meetings/${encodedId}/fans`} />
           <QuickLink label="공지 관리" to={`/manager/fan-meetings/${encodedId}/notices`} />
-          <QuickLink label="실시간 운영 모니터" to={`/manager/fan-meetings/${encodedId}/monitor`} />
+          {!solo ? (
+            <QuickLink label="실시간 운영 모니터" to={`/manager/fan-meetings/${encodedId}/monitor`} />
+          ) : null}
           <QuickLink label="결과 통계" to={`/manager/fan-meetings/${encodedId}/statistics`} />
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </div>
   )
 }
 
 /** 팬미팅 흐름의 단계 하나를 완료 여부와 함께 표시한다. */
-function FlowStep({ title, description, done }: { title: string; description: string; done: boolean }) {
+function FlowStep({
+  title,
+  description,
+  done,
+  current,
+}: {
+  title: string
+  description: string
+  done: boolean
+  current: boolean
+}) {
   return (
-    <li className="flex gap-4 rounded-2xl border border-[var(--color-divider)] p-4">
+    <li className="flex gap-4 border-b border-[var(--color-divider)] px-1 py-4 last:border-b-0">
       <span
-        className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-black ${
-          done ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--color-surface-page)] text-[var(--color-text-tertiary)]'
+        aria-hidden="true"
+        className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-black ${
+          done
+            ? 'border-[var(--color-success)] bg-[var(--color-success)] text-white'
+            : current
+              ? 'border-[var(--color-primary-coral)] bg-white text-[var(--color-primary-coral)]'
+              : 'border-[var(--color-border-control)] bg-white text-[var(--color-text-tertiary)]'
         }`}
       >
-        {done ? '✓' : ''}
+        {done ? '✓' : current ? '·' : ''}
       </span>
       <div className="min-w-0">
-        <strong className="text-sm">{title}</strong>
+        <strong className={`text-base font-extrabold ${done || current ? '' : 'text-[var(--color-text-secondary)]'}`}>
+          {title}
+        </strong>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{description}</p>
       </div>
     </li>
@@ -709,7 +890,7 @@ function FlowStep({ title, description, done }: { title: string; description: st
 function QuickLink({ label, to }: { label: string; to: string }) {
   return (
     <Link
-      className="flex min-h-12 items-center justify-between gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 text-sm font-bold hover:bg-[var(--color-surface-page)]"
+      className="flex min-h-14 items-center justify-between gap-4 whitespace-nowrap border-b border-[var(--color-divider)] px-1 text-base font-bold hover:text-[var(--color-primary-coral)]"
       to={to}
     >
       {label}
@@ -838,7 +1019,7 @@ function SettingsPanel({
     if (Object.keys(operation).length > 0) patch.operation = operation
 
     if (Object.keys(patch).length === 0) {
-      setMessage('현재 상태에서 저장할 수 있는 변경 항목이 없습니다.')
+      setMessage('지금은 저장할 수 있는 변경 내용이 없습니다.')
       return
     }
 
@@ -865,7 +1046,7 @@ function SettingsPanel({
       {basicLocked ? (
         <AlertBanner title="수정할 수 없는 항목이 있습니다" variant="info">
           {actions.applicationStarted
-            ? '응모가 시작되어 기본 정보·응모 설정·대기열 설정은 수정할 수 없습니다. 재접속 유예, 조기 시작 허용, 최대 재호출 횟수만 변경할 수 있습니다.'
+            ? '응모가 시작되어 기본 정보·응모 설정·대기열 설정은 수정할 수 없습니다. 재입장 가능 시간과 다시 호출 횟수만 변경할 수 있습니다.'
             : '진행이 시작되었거나 종료된 팬미팅은 수정할 수 없습니다.'}
         </AlertBanner>
       ) : null}
@@ -893,7 +1074,7 @@ function SettingsPanel({
           />
           <TextField
             disabled={basicLocked}
-            label="커버 이미지 URL"
+            label="대표 이미지 주소"
             maxLength={2048}
             onChange={(event) => setField('coverImageUrl', event.target.value)}
             placeholder="https://example.com/cover.jpg"
@@ -920,7 +1101,7 @@ function SettingsPanel({
         <CardContent className="grid gap-5">
           <Checkbox
             checked={form.applicationEnabled}
-            description="응모 사용 여부는 생성 시에만 정할 수 있습니다. 백엔드 수정 API는 이미 저장된 응모 일시를 지울 수 없어 여기에서는 바꿀 수 없습니다."
+            description="응모 진행 여부는 팬미팅을 만들 때 정해집니다. 지금은 변경할 수 없습니다."
             disabled
             label="팬 응모를 진행합니다."
             readOnly
@@ -1014,34 +1195,42 @@ function SettingsPanel({
 
       <Card>
         <CardHeader>
-          <Badge variant="primary">진행 정책</Badge>
-          <CardTitle as="h2" className="mt-3">당일 운영 세부 값</CardTitle>
+          <Badge variant="primary">연결 설정</Badge>
+          <CardTitle as="h2" className="mt-3">연결 및 재입장</CardTitle>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            이 세 값은 응모가 시작된 뒤에도 팬미팅 시작 전까지 변경할 수 있습니다.
+            연결이 끊기거나 입장 요청에 응답하지 않은 팬의 처리 기준을 설정합니다.
           </p>
         </CardHeader>
-        <CardContent className="grid gap-5 sm:grid-cols-3">
+        <CardContent className="grid items-start gap-5 sm:grid-cols-2">
           <TextField
+            className="pr-44"
             disabled={!actions.canEditPolicy}
-            label="재접속 허용 시간(초)"
+            endAdornment={
+              <span className="whitespace-nowrap px-3 text-sm text-[var(--color-text-muted)]">
+                초 동안 재입장 가능
+              </span>
+            }
+            helperText="통화 연결이 끊긴 팬이 다시 입장할 수 있는 시간을 설정합니다."
+            label="연결이 끊긴 후 재입장 가능 시간"
             min={0}
             onChange={(event) => setField('reconnectGraceSec', Number(event.target.value))}
+            step={1}
             type="number"
             value={form.reconnectGraceSec}
           />
           <TextField
+            className="pr-40"
             disabled={!actions.canEditPolicy}
-            label="조기 시작 허용(분)"
-            min={0}
-            onChange={(event) => setField('earlyStartMinutes', Number(event.target.value))}
-            type="number"
-            value={form.earlyStartMinutes}
-          />
-          <TextField
-            disabled={!actions.canEditPolicy}
-            label="최대 재호출 횟수"
+            endAdornment={
+              <span className="whitespace-nowrap px-3 text-sm text-[var(--color-text-muted)]">
+                회까지 다시 호출
+              </span>
+            }
+            helperText="입장 요청에 응답하지 않은 팬을 다시 호출할 수 있는 최대 횟수입니다."
+            label="응답 없는 팬 다시 호출"
             min={0}
             onChange={(event) => setField('maxRecallCount', Number(event.target.value))}
+            step={1}
             type="number"
             value={form.maxRecallCount}
           />
@@ -1059,8 +1248,8 @@ function SettingsPanel({
         <div className="flex justify-end">
           <Button
             disabled={scheduleErrors.length > 0}
-            leadingIcon={<FloppyDisk size={18} />}
             loading={saving}
+            title={scheduleErrors.length > 0 ? scheduleErrors.join(' ') : undefined}
             type="submit"
           >
             변경 내용 저장

@@ -27,7 +27,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        lazy: lazyPage(() => import('../pages/common/CommonRoutePages'), 'HomePage'),
+        lazy: lazyPage(() => import('../pages/common/LandingPage'), 'LandingPage'),
       },
       {
         Component: AuthLayout,
@@ -73,7 +73,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'fan/mypage/profile',
-        lazy: lazyPage(() => import('../pages/fan/FanProfilePage'), 'FanProfilePage'),
+        lazy: lazyPage(() => import('../pages/common/MyPage'), 'MyPage'),
       },
       {
         path: 'fan/mypage/applications',
@@ -190,10 +190,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'influencer/mypage/profile',
-        lazy: lazyPage(
-          () => import('../pages/influencer/InfluencerProfilePage'),
-          'InfluencerProfilePage',
-        ),
+        lazy: lazyPage(() => import('../pages/common/MyPage'), 'MyPage'),
       },
       {
         path: 'influencer/mypage/fan-meetings',
@@ -227,6 +224,13 @@ export const router = createBrowserRouter([
         lazy: lazyPage(
           () => import('../pages/influencer/InfluencerMyMeetingPage'),
           'InfluencerMyMeetingPage',
+        ),
+      },
+      {
+        path: 'influencer/fans',
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerMyFansPage'),
+          'InfluencerMyFansPage',
         ),
       },
       {
@@ -339,7 +343,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'events/:eventId/applications',
-            element: <LegacyEventRedirect tab="applicants" />,
+            element: <LegacyEventRedirect />,
           },
           {
             path: 'fan-meetings',
@@ -414,10 +418,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'mypage',
-            lazy: lazyPage(
-              () => import('../pages/manager/ManagerRoutePages'),
-              'ManagerMyPage',
-            ),
+            lazy: lazyPage(() => import('../pages/common/MyPage'), 'MyPage'),
           },
           {
             path: 'organization',

@@ -1,22 +1,6 @@
-import {
-  ArrowRight,
-  CalendarBlank,
-  ChartBar,
-  MagnifyingGlass,
-  UsersThree,
-  VideoCamera,
-} from '@phosphor-icons/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  AlertBanner,
-  Badge,
-  Button,
-  Card,
-  Pagination,
-  Spinner,
-  TextField,
-} from '../../components'
+import { AlertBanner, Button, Pagination, Spinner, TextField } from '../../components'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import {
@@ -24,43 +8,58 @@ import {
   type ManagerMeetingSummary,
 } from '../../api/managerMeetings'
 
-const statusContent: Record<string, { label: string; variant: 'neutral' | 'primary' | 'success' | 'danger' }> = {
-  DRAFT: { label: '작성 중', variant: 'neutral' },
-  PUBLISHED: { label: '공개', variant: 'neutral' },
-  APPLICATION_OPEN: { label: '신청 접수 중', variant: 'primary' },
-  APPLICATION_CLOSED: { label: '신청 마감', variant: 'neutral' },
-  READY: { label: '진행 준비', variant: 'primary' },
-  LIVE: { label: '진행 중', variant: 'primary' },
-  ENDED: { label: '종료', variant: 'success' },
-  CANCELED: { label: '취소', variant: 'danger' },
+const statusContent: Record<string, { label: string; className: string }> = {
+  DRAFT: { label: '작성 중', className: 'text-[var(--color-text-secondary)]' },
+  PUBLISHED: { label: '발행됨', className: 'text-[var(--color-text-secondary)]' },
+  APPLICATION_OPEN: { label: '응모 접수 중', className: 'text-[var(--color-primary-coral)]' },
+  APPLICATION_CLOSED: { label: '응모 마감', className: 'text-[var(--color-text-secondary)]' },
+  READY: { label: '시작 대기', className: 'text-[var(--color-warning)]' },
+  LIVE: { label: '진행 중', className: 'text-[var(--color-success)]' },
+  ENDED: { label: '종료', className: 'text-[var(--color-text-secondary)]' },
+  CANCELED: { label: '취소됨', className: 'text-[var(--color-error)]' },
 }
 
-const fallbackStatusContent = {
-  label: '종료',
-  variant: 'success',
-} as const
+const fallbackStatus = { label: '종료', className: 'text-[var(--color-text-secondary)]' }
 
-const pageSize = 5
+const PAGE_SIZE = 5
+/** 이 화면에서만 팬미팅을 만드는 1인 인플루언서·매니저 전용 경로다. 소속 인플루언서가 열면 라우터가 403으로 보낸다. */
+const NEW_MEETING_PATH = '/manager/fan-meetings/new'
 
-function formatScheduledAt(value: string) {
+function formatSchedule(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
 
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function errorMessage(reason: unknown) {
+  return reason instanceof ApiError || reason instanceof TypeError
+    ? reason.message
+    : '팬미팅 이력을 불러오지 못했습니다.'
+}
+
+function statusOf(meeting: ManagerMeetingSummary) {
+  // 백엔드가 새 상태를 추가해도 배지 렌더링이 중단되지 않도록 안전한 기본값을 둔다.
+  return statusContent[meeting.status ?? 'ENDED'] ?? fallbackStatus
 }
 
 export function InfluencerMeetingHistoryPage() {
-  const authToken = getAuthSession()?.accessToken
+  const authSession = getAuthSession()
+  const authToken = authSession?.accessToken
+  // 팬미팅 상세 허브(/manager/fan-meetings/{id})는 관리 권한이 있는 1인 인플루언서만 열 수 있다.
+  // 소속 인플루언서는 그 화면에 들어갈 권한이 없어 열면 라우터가 403으로 보내므로 버튼 자체를 숨긴다.
+  const canOpenDetail = authSession?.role === 'SOLO_INFLUENCER'
+  // Tailwind는 클래스 전체를 문자열 그대로 스캔해야 CSS를 생성한다. `md:${rowColumns}`처럼
+  // 접두사와 변수를 런타임에 이어 붙이면 그 조합 문자열이 소스에 그대로 없어 스타일이 생성되지
+  // 않는다(데스크톱에서도 모바일 2열로 보이던 원인). 두 분기 모두 완성된 리터럴로 둔다.
+  const desktopColumns = canOpenDetail
+    ? 'md:grid-cols-[minmax(0,1.6fr)_180px_90px_130px_130px_110px]'
+    : 'md:grid-cols-[minmax(0,1.6fr)_180px_90px_130px_130px]'
 
+  const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
+  const [page, setPage] = useState(1)
   const [meetings, setMeetings] = useState<ManagerMeetingSummary[]>([])
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
@@ -78,7 +77,7 @@ export function InfluencerMeetingHistoryPage() {
     setLoadError(undefined)
 
     void fetchMyMeetings(
-      { keyword, status: 'ENDED', page: currentPage - 1, size: pageSize },
+      { keyword, page: page - 1, size: PAGE_SIZE },
       authToken,
       controller.signal,
     )
@@ -87,226 +86,187 @@ export function InfluencerMeetingHistoryPage() {
         setTotalPages(result.totalPages)
       })
       .catch((reason: unknown) => {
-        if (controller.signal.aborted) return
-        setLoadError(
-          reason instanceof ApiError || reason instanceof TypeError
-            ? reason.message
-            : '팬미팅 이력을 불러오지 못했습니다.',
-        )
+        if (!controller.signal.aborted) setLoadError(errorMessage(reason))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
 
     return () => controller.abort()
-  }, [authToken, currentPage, keyword])
+  }, [authToken, keyword, page])
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    setKeyword(String(formData.get('meeting-title') ?? '').trim())
-    setCurrentPage(1)
+    setPage(1)
+    setKeyword(keywordInput.trim())
   }
 
-  function statusOf(meeting: ManagerMeetingSummary) {
-    // 백엔드가 새 상태를 추가해도 배지 렌더링이 중단되지 않도록 안전한 기본값을 둔다.
-    return statusContent[meeting.status ?? 'ENDED'] ?? fallbackStatusContent
+  function resetSearch() {
+    setKeywordInput('')
+    setKeyword('')
+    setPage(1)
   }
+
+  const isEmpty = !loading && meetings.length === 0
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-8">
-      <header>
-        <h1 className="text-4xl font-black tracking-[-0.045em]">나의 팬미팅 이력</h1>
-        <p className="mt-3 text-[var(--color-text-secondary)]">
-          생성하거나 진행한 1:1 영상통화 팬미팅을 확인하세요.
-        </p>
-      </header>
+    <div>
+      <h1 className="text-[25px] font-black tracking-[-0.035em]">내 팬미팅 이력</h1>
+      <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
+        생성하거나 진행한 1:1 영상통화 팬미팅을 확인하세요.
+      </p>
+
+      <div className="mt-6 flex flex-col items-stretch gap-4 border-b border-[var(--color-divider)] pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <form
+          className="flex max-w-[520px] flex-1 items-end gap-3"
+          onSubmit={handleSearch}
+          role="search"
+        >
+          <TextField
+            containerClassName="min-w-0 flex-1"
+            label="팬미팅 검색"
+            onChange={(event) => setKeywordInput(event.currentTarget.value)}
+            placeholder="팬미팅명을 입력하세요"
+            value={keywordInput}
+          />
+          <Button className="whitespace-nowrap" type="submit" variant="secondary">
+            검색
+          </Button>
+        </form>
+        <Link
+          className="mj-font-emphasis inline-flex min-h-11 items-center whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+          to={NEW_MEETING_PATH}
+        >
+          새 팬미팅
+        </Link>
+      </div>
 
       {loadError ? (
-        <AlertBanner title="팬미팅 이력을 불러오지 못했습니다" variant="error">
+        <AlertBanner className="mt-6" title="팬미팅 이력을 불러오지 못했습니다" variant="error">
           {loadError}
         </AlertBanner>
       ) : null}
 
-      <Card className="overflow-hidden">
-        {/* 팬미팅명 키워드로 이력을 검색한다 */}
-        <div className="border-b border-[var(--color-divider)] p-5 sm:p-6">
-          <form
-            className="flex w-full flex-col items-end gap-3 sm:flex-row lg:max-w-2xl"
-            onSubmit={handleSearch}
-            role="search"
-          >
-            <TextField
-              containerClassName="w-full"
-              endAdornment={
-                <MagnifyingGlass
-                  aria-hidden
-                  className="mr-3 text-[var(--color-text-tertiary)]"
-                  size={19}
-                />
-              }
-              label="팬미팅 검색"
-              name="meeting-title"
-              placeholder="팬미팅명을 입력하세요"
-              type="search"
-            />
-            <Button className="w-full sm:w-auto" type="submit" variant="secondary">
-              검색
-            </Button>
-          </form>
+      {loading ? (
+        <div className="flex min-h-72 items-center justify-center">
+          <Spinner label="팬미팅 이력을 불러오는 중" />
         </div>
-
-        {loading ? (
-          <div className="flex min-h-72 items-center justify-center">
-            <Spinner label="팬미팅 이력을 불러오는 중" />
-          </div>
-        ) : (
-          <>
-            <div className="hidden overflow-x-auto md:block">
-              <table className="min-w-[920px] w-full text-left text-sm">
-                <caption className="sr-only">인플루언서 팬미팅 이력</caption>
-                <thead className="bg-[var(--color-surface-page)] text-[var(--color-text-secondary)]">
-                  <tr>
-                    <th className="px-6 py-4 font-bold" scope="col">
-                      팬미팅
-                    </th>
-                    <th className="px-6 py-4 font-bold" scope="col">
-                      일정
-                    </th>
-                    <th className="px-6 py-4 font-bold" scope="col">
-                      상태
-                    </th>
-                    <th className="px-6 py-4 font-bold" scope="col">
-                      팬 정보
-                    </th>
-                    <th className="px-6 py-4 font-bold" scope="col">
-                      보고서
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--color-divider)]">
-                  {meetings.map((meeting) => {
-                    const status = statusOf(meeting)
-
-                    return (
-                      <tr
-                        className="transition-colors hover:bg-[var(--color-surface-page)]"
-                        key={meeting.meetingId}
-                      >
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-4">
-                            <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-page)] text-[var(--color-text-secondary)]">
-                              <VideoCamera aria-hidden size={22} weight="fill" />
-                            </span>
-                            <span>
-                              <strong className="block text-base">{meeting.title}</strong>
-                              <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">
-                                1:1 영상통화 팬미팅 · {meeting.influencerName}
-                              </span>
-                            </span>
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-5">
-                          <span className="inline-flex items-center gap-2 font-semibold text-[var(--color-text-secondary)]">
-                            <CalendarBlank aria-hidden size={19} weight="bold" />
-                            {formatScheduledAt(meeting.scheduledStartAt)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <Badge variant={status.variant}>{status.label}</Badge>
-                        </td>
-                        <td className="px-6 py-5">
-                          <Link
-                            className="inline-flex items-center gap-2 font-bold transition-colors hover:text-[var(--color-primary-coral)]"
-                            to={`/fan-meetings/${meeting.meetingId}/fans`}
-                          >
-                            <UsersThree aria-hidden size={20} weight="bold" />
-                            확정 팬리스트
-                            <ArrowRight aria-hidden size={18} weight="bold" />
-                          </Link>
-                        </td>
-                        <td className="px-6 py-5">
-                          {(meeting.status ?? 'ENDED') === 'ENDED' ? (
-                            <Link
-                              className="inline-flex items-center gap-2 font-bold transition-colors hover:text-[var(--color-primary-coral)]"
-                              to={`/fan-meetings/${meeting.meetingId}/statistics`}
-                            >
-                              <ChartBar aria-hidden size={20} weight="bold" />
-                              통계 보고서
-                              <ArrowRight aria-hidden size={18} weight="bold" />
-                            </Link>
-                          ) : (
-                            <span className="text-[var(--color-text-tertiary)]">
-                              종료 후 제공
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+      ) : isEmpty ? (
+        <div className="grid place-items-center px-6 py-20 text-center" role="status">
+          <strong className="text-xl font-extrabold tracking-[-0.03em]">
+            {keyword ? '검색 결과가 없습니다' : '아직 생성한 팬미팅이 없습니다'}
+          </strong>
+          <span className="mt-[9px] max-w-[420px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
+            {keyword
+              ? '입력한 팬미팅명을 확인하고 다시 검색해 주세요.'
+              : '새 팬미팅을 만들면 일정과 진행 상태를 이곳에서 확인할 수 있어요.'}
+          </span>
+          {keyword ? (
+            <Button className="mt-5" onClick={resetSearch} variant="secondary">
+              검색 초기화
+            </Button>
+          ) : (
+            <Link
+              className="mj-font-emphasis mt-5 inline-flex min-h-11 items-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+              to={NEW_MEETING_PATH}
+            >
+              새 팬미팅
+            </Link>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="mt-[22px]" role="table" aria-label="팬미팅 목록">
+            <div
+              className={`hidden ${desktopColumns} gap-[18px] border-b border-[var(--color-border-control)] pb-[11px] md:grid`}
+              role="row"
+            >
+              {(canOpenDetail
+                ? ['팬미팅', '일정', '상태', '팬 정보', '보고서', '상세']
+                : ['팬미팅', '일정', '상태', '팬 정보', '보고서']
+              ).map((label) => (
+                <span
+                  className="text-[13px] font-bold text-[var(--color-text-muted)]"
+                  key={label}
+                  role="columnheader"
+                >
+                  {label}
+                </span>
+              ))}
             </div>
+            {meetings.map((meeting) => {
+              const status = statusOf(meeting)
+              const ended = (meeting.status ?? 'ENDED') === 'ENDED'
 
-            <div className="divide-y divide-[var(--color-divider)] md:hidden">
-              {meetings.map((meeting) => {
-                const status = statusOf(meeting)
-
-                return (
-                  <article className="grid gap-5 p-5" key={meeting.meetingId}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <h2 className="font-extrabold">{meeting.title}</h2>
-                        <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-                          1:1 영상통화 팬미팅 · {meeting.influencerName}
-                        </p>
-                      </div>
-                      <Badge variant={status.variant}>{status.label}</Badge>
-                    </div>
-                    <p className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)]">
-                      <CalendarBlank aria-hidden size={18} weight="bold" />
-                      {formatScheduledAt(meeting.scheduledStartAt)}
-                    </p>
-                    <div className="flex flex-wrap gap-4 border-t border-[var(--color-divider)] pt-4 text-sm">
+              return (
+                <div
+                  className={`grid grid-cols-2 items-center gap-2.5 border-b border-[var(--color-border-row)] py-[15px] ${desktopColumns} md:gap-[18px]`}
+                  key={meeting.meetingId}
+                  role="row"
+                >
+                  <div className="col-span-2 min-w-0 md:col-span-1" role="cell">
+                    <strong className="block text-[17px] font-extrabold tracking-[-0.025em]">
+                      {meeting.title}
+                    </strong>
+                    <span className="mt-1 block text-sm font-medium text-[var(--color-text-muted)]">
+                      1:1 영상통화 팬미팅
+                    </span>
+                  </div>
+                  <div className="min-w-0" role="cell">
+                    <time className="text-base font-bold tabular-nums">
+                      {formatSchedule(meeting.scheduledStartAt)}
+                    </time>
+                  </div>
+                  <div className="min-w-0" role="cell">
+                    <span className={`text-sm font-extrabold ${status.className}`}>
+                      {status.label}
+                    </span>
+                  </div>
+                  <div className="min-w-0" role="cell">
+                    <Link
+                      className="mj-font-label inline-flex min-h-10 items-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-[13px] text-sm hover:border-[var(--color-text-muted)]"
+                      to={`/fan-meetings/${encodeURIComponent(meeting.meetingId)}/fans`}
+                    >
+                      참가 팬
+                    </Link>
+                  </div>
+                  <div className="min-w-0" role="cell">
+                    {ended ? (
                       <Link
-                        className="inline-flex items-center gap-1.5 font-bold"
-                        to={`/fan-meetings/${meeting.meetingId}/fans`}
+                        className="mj-font-label inline-flex min-h-10 items-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-[13px] text-sm hover:border-[var(--color-text-muted)]"
+                        to={`/fan-meetings/${encodeURIComponent(meeting.meetingId)}/statistics`}
                       >
-                        <UsersThree aria-hidden size={18} weight="bold" />
-                        확정 팬리스트
+                        통계 보고서
                       </Link>
-                      {(meeting.status ?? 'ENDED') === 'ENDED' ? (
-                        <Link
-                          className="inline-flex items-center gap-1.5 font-bold"
-                          to={`/fan-meetings/${meeting.meetingId}/statistics`}
-                        >
-                          <ChartBar aria-hidden size={18} weight="bold" />
-                          통계 보고서
-                        </Link>
-                      ) : null}
+                    ) : (
+                      <span className="whitespace-nowrap text-sm font-semibold text-[var(--color-text-muted)]">
+                        종료 후 제공
+                      </span>
+                    )}
+                  </div>
+                  {canOpenDetail ? (
+                    <div className="min-w-0" role="cell">
+                      <Link
+                        className="mj-font-label inline-flex min-h-10 items-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-[13px] text-sm hover:border-[var(--color-text-muted)]"
+                        to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}`}
+                      >
+                        상세
+                      </Link>
                     </div>
-                  </article>
-                )
-              })}
-            </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
 
-            {meetings.length === 0 ? (
-              <div className="px-6 py-16 text-center text-sm text-[var(--color-text-secondary)]">
-                {keyword
-                  ? '검색 결과가 없습니다.'
-                  : '종료된 팬미팅 이력이 없습니다.'}
-              </div>
-            ) : (
-              <Pagination
-                className="border-t border-[var(--color-divider)] px-6 py-5"
-                currentPage={currentPage}
-                onPageChange={setCurrentPage}
-                totalPages={totalPages}
-              />
-            )}
-          </>
-        )}
-      </Card>
+          <Pagination
+            className="mt-7 justify-center"
+            currentPage={page}
+            onPageChange={setPage}
+            totalPages={totalPages}
+          />
+        </>
+      )}
     </div>
   )
 }

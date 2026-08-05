@@ -1,13 +1,10 @@
-import { useParams, useSearchParams } from 'react-router-dom'
-import { getAuthSession } from '../../api/authSession'
+import { useParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components/call/VideoCallRoom'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { InfluencerCallSidePanel } from './InfluencerCallSidePanel'
 
 export function InfluencerMeetingCallPage() {
   const { fanMeetingId, callSessionId } = useParams()
-  const [searchParams] = useSearchParams()
-  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
-  const isSoloInfluencer = getAuthSession()?.role === 'SOLO_INFLUENCER'
 
   if (!fanMeetingId?.trim()) {
     return (
@@ -18,7 +15,7 @@ export function InfluencerMeetingCallPage() {
     )
   }
 
-  if (!callSessionId?.trim() && !isDesignPreview) {
+  if (!callSessionId?.trim()) {
     return (
       <InvalidRouteState
         message="실제 영상통화 입장에는 callSessionId가 필요합니다. 준비실에서 현재 통화 세션으로 입장해 주세요."
@@ -30,15 +27,14 @@ export function InfluencerMeetingCallPage() {
   return (
     <VideoCallRoom
       callSessionId={callSessionId}
-      // '진행 종료하고 나가기'는 더 이상 통화를 진행하지 않겠다는 뜻이므로 메인으로 보낸다.
-      // 혼자 운영하는 계정만 남은 팬을 계속 호출할 운영 콘솔이 있어 그곳으로 복귀한다.
-      // (소속 인플루언서는 매니저 콘솔에 접근할 수 없다.)
-      endTo={isSoloInfluencer
-        ? `/manager/fan-meetings/${encodeURIComponent(fanMeetingId)}/monitor`
-        : '/'}
+      // 통화가 끝나면 다음 팬을 호출·입장할 대기실로 복귀한다.
+      // (이전에는 소속 인플루언서를 마이페이지로 보내 대기열도, 다음 팬 입장 수단도 없는 곳에 떨어졌고,
+      //  1인 운영자의 대기열 오픈·호출도 지금은 운영 콘솔이 아니라 대기실에 있다.)
+      endTo={`/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/ready`}
       meetingId={fanMeetingId}
       participantLabel="팬 영상"
       screenId="ID-003"
+      sidePanel={<InfluencerCallSidePanel meetingId={fanMeetingId} />}
       forceEndOnLeave
       // 팬미팅 LiveKit Room은 팬미팅당 하나이므로, 팬이 교체될 때 방을 나가지 않고 머문다.
       // (이전에는 통화 세션이 끝날 때마다 방을 나가고 화면을 이탈해 차례마다 튕겨 나갔다.)
