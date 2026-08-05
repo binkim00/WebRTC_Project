@@ -35,6 +35,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   const [retryCount, setRetryCount] = useState(0)
   const [loading, setLoading] = useState(!isDesignPreview)
   const [meetingClosed, setMeetingClosed] = useState<'ENDED' | 'CANCELED'>()
+  /** 대기열에 앞으로 호출할 팬이 남아 있지 않은 상태다. */
+  const [noPendingFan, setNoPendingFan] = useState(false)
   const navigate = useNavigate()
 
   const hostStaysConnected = props.hostStaysConnected ?? false
@@ -163,10 +165,25 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       try {
         const queue = await fetchMeetingQueue(props.meetingId, authToken, signal)
         const nextCallSessionId = queue.currentCall?.callSessionId
-        if (nextCallSessionId) setActiveCallSessionId(String(nextCallSessionId))
+        if (nextCallSessionId) {
+          setActiveCallSessionId(String(nextCallSessionId))
+          setNoPendingFan(false)
+          return
+        }
+
+        // 진행 중인 통화도 없고 앞으로 호출할 팬도 없으면 더 진행할 통화가 없다.
+        // 이 상태에서 계속 대기 화면에 남기면 호스트가 나갈 시점을 알 수 없다.
+        const hasPendingFan = queue.entries.some(
+          (entry) =>
+            entry.status === 'WAITING' ||
+            entry.status === 'CALLED' ||
+            entry.status === 'IN_CALL',
+        )
+        setNoPendingFan(!hasPendingFan)
       } catch (error: unknown) {
         if (signal.aborted) return
         // 팬미팅이 끝나 대기열이 정리되면 따라갈 통화가 없다. 오류로 다루지 않는다.
+        // 이 경우 팬미팅 종료는 loadMeetingStatus가 별도로 감지한다.
         if (isQueueNotInitialized(error)) return
       }
     },
@@ -202,12 +219,21 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo) && !meetingClosed,
   })
 
+  /**
+   * 진행 중이던 통화가 끝났고 대기열에 남은 팬도 없어 더 진행할 통화가 없는 상태다.
+   *
+   * 팬이 교체되는 중(다음 팬이 대기열에 있음)에는 성립하지 않으므로, 차례가 넘어갈 때마다
+   * 통화 화면에서 튕겨 나가지 않는다. 마지막 팬까지 끝났을 때만 참이 된다.
+   */
+  const allCallsFinished =
+    hostStaysConnected && noPendingFan && sessionStatus?.status === 'ENDED'
+
   useEffect(() => {
-    if (!meetingClosed) return
+    if (!meetingClosed && !allCallsFinished) return
 
     const timer = window.setTimeout(() => navigate('/', { replace: true }), 3_000)
     return () => window.clearTimeout(timer)
-  }, [meetingClosed, navigate])
+  }, [allCallsFinished, meetingClosed, navigate])
 
   const refreshStatus = useCallback(
     async (signal: AbortSignal) => {
@@ -246,6 +272,16 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       <div className="mx-auto grid max-w-3xl gap-6 py-10">
         <AlertBanner title={meetingClosed === 'CANCELED' ? '팬미팅이 취소되었습니다' : '팬미팅이 종료되었습니다'} variant="info">
           팬미팅이 종료되어 영상통화방을 나갑니다. 잠시 후 메인 화면으로 이동합니다.
+        </AlertBanner>
+      </div>
+    )
+  }
+
+  if (allCallsFinished) {
+    return (
+      <div className="mx-auto grid max-w-3xl gap-6 py-10">
+        <AlertBanner title="영상통화가 종료되었습니다" variant="info">
+          대기열에 남은 팬이 없어 영상통화방을 나갑니다. 잠시 후 메인 화면으로 이동합니다.
         </AlertBanner>
       </div>
     )
