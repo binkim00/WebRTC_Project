@@ -42,6 +42,9 @@ const NEW_TEXT_SIZE = 72
 /** 꾸미던 상태를 자동 저장하기 전에 기다리는 시간이다. */
 const DRAFT_SAVE_DELAY_MS = 600
 
+/** 내려받기용 임시 주소를 정리하기까지 기다리는 시간이다. */
+const OBJECT_URL_RELEASE_DELAY_MS = 1_000
+
 /**
  * 고른 요소를 감싸는 점선 색을 디자인 토큰에서 읽어 온다.
  *
@@ -596,7 +599,9 @@ export function FanCardSection({
       document.body.append(anchor)
       anchor.click()
       anchor.remove()
-      URL.revokeObjectURL(url)
+      // 누르자마자 주소를 없애면 내려받기가 시작되기 전에 끊기는 브라우저가 있다.
+      // 잠시 뒤에 정리해 저장이 중간에 실패하지 않게 한다.
+      window.setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_RELEASE_DELAY_MS)
     }, 'image/png')
   }
 
