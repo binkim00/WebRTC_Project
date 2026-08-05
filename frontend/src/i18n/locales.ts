@@ -353,6 +353,33 @@ const ko = {
   'wait.tips.samePosition': '연결이 끊기면 같은 순번으로 재연결을 시도합니다.',
   'wait.change.reasonCounter': '{current}/{max}자',
 
+  // 매니저 — 팬미팅 생성: 참가자 선별 방식 (fe/dev의 CSV 등록 기능과 병합)
+  'managerCreate.selection.title': '참가자 정하는 방식',
+  'managerCreate.selection.note': '한 번 선택하면 발행 뒤에는 바꿀 수 없습니다.',
+  'managerCreate.selection.application': '응모 받기',
+  'managerCreate.selection.applicationDesc': '팬이 응모하면 마감 후 추첨해 참가자를 정합니다.',
+  'managerCreate.selection.external': 'CSV로 직접 등록',
+  'managerCreate.selection.externalDesc': '이미 정해진 명단이 있을 때 응모 없이 바로 등록합니다.',
+  'managerCreate.csv.capacityLabel': '등록 정원',
+  'managerCreate.csv.capacityHelper': 'CSV로 등록할 수 있는 최대 인원입니다.',
+  'managerCreate.csv.formatTitle': 'CSV 양식',
+  'managerCreate.csv.formatDesc':
+    '첫 줄은 머리글이고 이메일과 대기 순번 두 열이 필요합니다. 대기 순번이 통화 순서가 됩니다.',
+  'managerCreate.csv.columnEmail': '이메일',
+  'managerCreate.csv.columnPosition': '대기 순번',
+  'managerCreate.csv.downloadTemplate': '양식 다운로드',
+  'managerCreate.csv.uploadLater':
+    '실제 명단 업로드와 확정은 팬미팅을 발행한 직후 이어지는 화면에서 진행합니다.',
+  'managerCreate.form.skipForExternal':
+    'CSV로 직접 등록하는 팬미팅이라 응모 폼을 만들지 않습니다. 다음 단계로 넘어가 주세요.',
+  'managerCreate.preview.badgeExternal': '참가자 확정 예정',
+  'managerCreate.preview.badgeApplication': '모집 중',
+  'managerCreate.publish.confirmLabel': '팬미팅 정보와 홍보·응모 설정을 모두 확인했습니다.',
+  'managerCreate.publish.confirmExternal':
+    '발행하면 이어지는 화면에서 CSV로 참가자 명단을 등록할 수 있습니다.',
+  'managerCreate.publish.confirmApplication':
+    '발행하면 팬에게 즉시 공개되고 응모 시작 일시에 접수가 열립니다.',
+
   // 팬 — 팬미팅 결과·기록
   'done.invalid.title': '필수 URL 파라미터가 없습니다.',
   'done.invalid.message': 'URL에 필요한 fanMeetingId 값이 없습니다.',
@@ -1436,6 +1463,41 @@ const ko = {
   'managerRoutePages.t141': '강제 종료 실패',
   'managerRoutePages.t142': '통화를 종료했습니다',
   'managerRoutePages.t143': '서버에서 강제 종료 결과를 확인했습니다.',
+
+  // 매니저 — CSV 참가자 등록 화면 (병합분)
+  'managerExternalParticipantsPage.t1': 'URL에 필요한 fanMeetingId 값이 없습니다. 팬미팅 관리 목록에서 다시 선택해 주세요.',
+  'managerExternalParticipantsPage.t2': '필수 URL 파라미터가 없습니다',
+  'managerExternalParticipantsPage.t3': '← 팬미팅 상세로',
+  'managerExternalParticipantsPage.t4': '참가자 명단 등록',
+  'managerExternalParticipantsPage.t5': 'CSV로 준비한 명단을 올려 참가자와 대기 순번을 확정하세요. 확정하면 되돌릴 수 없습니다.',
+  'managerExternalParticipantsPage.t6': 'CSV 양식',
+  'managerExternalParticipantsPage.t7': '첫 줄은 머리글이고',
+  'managerExternalParticipantsPage.t8': '이메일',
+  'managerExternalParticipantsPage.t9': '과',
+  'managerExternalParticipantsPage.t10': '대기 순번',
+  'managerExternalParticipantsPage.t11': '두 열이 필요합니다. 대기 순번이 통화 순서가 됩니다.',
+  'managerExternalParticipantsPage.t12': '이메일',
+  'managerExternalParticipantsPage.t13': '대기 순번',
+  'managerExternalParticipantsPage.t14': '명단을 확인하지 못했습니다',
+  'managerExternalParticipantsPage.t15': '양식을 내려받지 못했습니다',
+  'managerExternalParticipantsPage.t16': '양식 다운로드',
+  'managerExternalParticipantsPage.t17': 'CSV를 업로드하면 행별 확인 결과를 볼 수 있어요.',
+  'managerExternalParticipantsPage.t18': '등록될 참가자',
+  'managerExternalParticipantsPage.t19': '행 읽음',
+  'managerExternalParticipantsPage.t20': '명 등록',
+  'managerExternalParticipantsPage.t21': '순번',
+  'managerExternalParticipantsPage.t22': '이메일',
+  'managerExternalParticipantsPage.t23': '대기 순번',
+  'managerExternalParticipantsPage.t24': '아이디(매칭)',
+  'managerExternalParticipantsPage.t25': '확인',
+  'managerExternalParticipantsPage.t26': '명단을 확정할 수 없습니다',
+  'managerExternalParticipantsPage.t27': '확정에 실패했습니다',
+  'managerExternalParticipantsPage.t28': '다시 업로드',
+  'managerExternalParticipantsPage.t29': '명단 확정',
+  'managerExternalParticipantsPage.t30': '형식 오류가 있는 행을 고친 뒤 다시 업로드하면 확정할 수 있어요.',
+  'managerExternalParticipantsPage.t31': '확정하면 참가자와 대기 순번이 만들어지고 팬미팅이 진행 준비 상태가 됩니다. 이 명단은 다시 올릴 수 없습니다.',
+  'managerExternalParticipantsPage.t32': '취소',
+  'managerExternalParticipantsPage.t33': '명단 확정',
 } as const
 
 /** 사전 키다. 한국어 사전에 있는 키만 쓸 수 있다. */

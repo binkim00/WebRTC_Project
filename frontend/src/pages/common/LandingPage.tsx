@@ -134,9 +134,10 @@ export function LandingPage() {
   }, [])
 
   return (
+    // App main의 패딩(py-8, lg:pt-10/pb-16)을 상하 각각 정확히 상쇄해야 히어로가 화면을 꽉 채운다.
     <section
       aria-labelledby="hero-title"
-      className="melly-landing -mx-4 -my-8 sm:-mx-6 lg:-mx-10 lg:-my-10"
+      className="melly-landing -mx-4 -mb-8 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mb-16 lg:-mt-10"
       ref={heroRef}
     >
       <div aria-hidden="true" className="particles" />

@@ -15,12 +15,14 @@ import { attachmentContentUrl, uploadAttachment } from '../../api/attachments'
 import { getAuthSession } from '../../api/authSession'
 import { forceEndCallSession } from '../../api/callSessions'
 import type { PageResponse } from '../../api/envelope'
+import { downloadExternalParticipantCsvTemplate } from '../../api/externalParticipants'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import {
   createEvent,
   publishFanMeeting,
   updateFanMeeting,
   type FanMeetingForm,
+  type ParticipantSelectionType,
 } from '../../api/managerOperations'
 import {
   getFanMeetingStatistics,
@@ -233,6 +235,34 @@ export function ManagerMeetingCreatePage() {
       ? { ...restoredForm, influencerId: resolvedInfluencerId }
       : restoredForm
   })
+  // 참가자를 정하는 방식이며 이전 로컬 초안에는 없을 수 있어 기본값으로 채운다.
+  const selectionType: ParticipantSelectionType = form.participantSelectionType ?? 'APPLICATION'
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
+  const [templateDownloadError, setTemplateDownloadError] = useState<string>()
+
+  /** 명단 CSV 양식을 내려받아 브라우저 다운로드로 저장한다. 팬미팅 생성 전에도 받을 수 있다. */
+  async function handleDownloadCsvTemplate() {
+    const token = getAuthSession()?.accessToken
+    if (!token || downloadingTemplate) return
+
+    setDownloadingTemplate(true)
+    setTemplateDownloadError(undefined)
+    try {
+      const { blob, fileName } = await downloadExternalParticipantCsvTemplate(token)
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = fileName
+      anchor.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch (reason) {
+      setTemplateDownloadError(
+        reason instanceof Error ? reason.message : '명단 양식을 내려받지 못했습니다.',
+      )
+    } finally {
+      setDownloadingTemplate(false)
+    }
+  }
 
   const [createdMeetingId, setCreatedMeetingId] = useState<number | undefined>(
     restoredLocalDraft?.createdMeetingId,
@@ -489,10 +519,17 @@ export function ManagerMeetingCreatePage() {
       return
     }
 
-    if (!form.application.enabled) {
+    if (
+      !form.application.enabled &&
+      !(selectionType === 'EXTERNAL_SELECTION' &&
+        Number.isInteger(form.application.capacity) &&
+        form.application.capacity > 0)
+    ) {
       setErrorTitle('참가자 등록 경로가 필요합니다')
       setError(
-        '현재 참가자를 직접 등록할 수 없어 응모를 사용하지 않는 팬미팅은 진행할 수 없습니다. 응모를 사용해 주세요.',
+        selectionType === 'EXTERNAL_SELECTION'
+          ? 'CSV로 등록할 참가자 정원을 1명 이상 입력해 주세요.'
+          : '응모를 사용하지 않는 팬미팅은 진행할 수 없습니다. 응모 받기 또는 CSV로 직접 등록 중 하나를 선택해 주세요.',
       )
       return
     }
@@ -509,6 +546,7 @@ export function ManagerMeetingCreatePage() {
 
     const payload: FanMeetingForm = {
       ...form,
+      participantSelectionType: selectionType,
       influencerId: resolvedInfluencerId ?? form.influencerId,
       description: form.description?.trim() || null,
       coverImageUrl: form.coverImageUrl?.trim() || null,
@@ -593,7 +631,13 @@ export function ManagerMeetingCreatePage() {
       clearMeetingCreateLocalDraft(session?.userId)
       allowNavigationRef.current = true
       setCreatedMeetingStatus('PUBLISHED')
-      navigate(`/manager/fan-meetings/${meetingId}`)
+      // CSV 직접 등록은 발행 직후에만 명단을 올릴 수 있어(팬미팅이 PUBLISHED 상태일 때만
+      // 허용) 일반 상세 화면 대신 명단 등록 화면으로 바로 보낸다.
+      navigate(
+        selectionType === 'EXTERNAL_SELECTION'
+          ? `/manager/fan-meetings/${meetingId}/external-participants`
+          : `/manager/fan-meetings/${meetingId}`,
+      )
     } catch (reason) {
       setErrorTitle('팬미팅 발행 실패')
       setError(
@@ -665,14 +709,23 @@ export function ManagerMeetingCreatePage() {
         setError(queueOpenError)
         return
       }
-      if (step === 3 && form.application.enabled && (!Number.isInteger(form.application.capacity) || form.application.capacity <= 0)) {
+      if (
+        step === 3 &&
+        selectionType === 'EXTERNAL_SELECTION' &&
+        (!Number.isInteger(form.application.capacity) || form.application.capacity <= 0)
+      ) {
+        setErrorTitle('입력 확인')
+        setError('CSV로 등록할 참가자 정원을 1명 이상 입력해 주세요.')
+        return
+      }
+      if (step === 3 && selectionType === 'APPLICATION' && (!Number.isInteger(form.application.capacity) || form.application.capacity <= 0)) {
         setErrorTitle('입력 확인')
         setError('모집 인원을 1명 이상 입력해 주세요.')
         return
       }
       if (
         step === 3 &&
-        form.application.enabled &&
+        selectionType === 'APPLICATION' &&
         (!form.application.startAt ||
           !form.application.endAt ||
           !form.application.resultAnnouncementAt)
@@ -681,12 +734,12 @@ export function ManagerMeetingCreatePage() {
         setError('응모 일정과 결과 발표 일시를 모두 입력해 주세요.')
         return
       }
-      if (step === 3 && questions.some((question) => !question.questionText.trim())) {
+      if (step === 3 && selectionType === 'APPLICATION' && questions.some((question) => !question.questionText.trim())) {
         setErrorTitle('입력 확인')
         setError('응모 질문 내용을 모두 입력하거나 빈 질문을 삭제해 주세요.')
         return
       }
-      if (step === 3 && scheduleErrors.length > 0) {
+      if (step === 3 && selectionType === 'APPLICATION' && scheduleErrors.length > 0) {
         setErrorTitle('입력 확인')
         setError(scheduleErrors[0])
         return
@@ -766,22 +819,21 @@ export function ManagerMeetingCreatePage() {
       !queueOpenError,
   )
   const questionsComplete = questions.every((question) => question.questionText.trim())
+  const capacityValid =
+    Number.isInteger(form.application.capacity) && form.application.capacity > 0
   const applicationScheduleComplete = Boolean(
-    !form.application.enabled ||
-      (Number.isInteger(form.application.capacity) &&
-        form.application.capacity > 0 &&
-        form.application.startAt &&
-        form.application.endAt &&
-        form.application.resultAnnouncementAt),
+    capacityValid &&
+      form.application.startAt &&
+      form.application.endAt &&
+      form.application.resultAnnouncementAt,
   )
+  const externalSelectionComplete = capacityValid
   const applicationComplete =
-    applicationScheduleComplete && scheduleErrors.length === 0 && questionsComplete
+    selectionType === 'EXTERNAL_SELECTION'
+      ? externalSelectionComplete
+      : applicationScheduleComplete && scheduleErrors.length === 0 && questionsComplete
   const publishReady =
-    basicInformationComplete &&
-    operationComplete &&
-    form.application.enabled &&
-    applicationComplete &&
-    readyToPublish
+    basicInformationComplete && operationComplete && applicationComplete && readyToPublish
   return (
     <div className="pb-10">
       <Link
@@ -1102,16 +1154,69 @@ export function ManagerMeetingCreatePage() {
             {step === 3 ? (
               <div className="grid gap-6">
                 <div className="grid gap-5 border-t border-[var(--color-divider)] pt-5">
-                  <Checkbox
-                    checked={form.application.enabled}
-                    description={t('managerRoutePages.t52')}
-                    label={t('managerRoutePages.t53')}
-                    onChange={(event) => setForm({
-                      ...form,
-                      application: { ...form.application, enabled: event.target.checked },
-                    })}
-                  />
-                  {form.application.enabled ? (
+                  {/* 참가자 선별 방식 선택(40a80d7)을 유지하고 문구만 번역 키로 바꾼다. */}
+                  <div>
+                    <h3 className="text-base font-extrabold text-[var(--color-text-primary)]">
+                      {t('managerCreate.selection.title')}
+                    </h3>
+                    <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                      {t('managerCreate.selection.note')}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      className={`rounded-[var(--radius-panel)] border p-5 text-left transition-colors ${
+                        selectionType === 'APPLICATION'
+                          ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)]'
+                          : 'border-[var(--color-divider)] hover:border-[var(--color-text-muted)]'
+                      }`}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          participantSelectionType: 'APPLICATION',
+                          application: { ...form.application, enabled: true },
+                        })
+                      }
+                      type="button"
+                    >
+                      <strong className="block text-base font-extrabold text-[var(--color-text-primary)]">
+                        {t('managerCreate.selection.application')}
+                      </strong>
+                      <span className="mt-1.5 block text-sm text-[var(--color-text-secondary)]">
+                        {t('managerCreate.selection.applicationDesc')}
+                      </span>
+                    </button>
+                    <button
+                      className={`rounded-[var(--radius-panel)] border p-5 text-left transition-colors ${
+                        selectionType === 'EXTERNAL_SELECTION'
+                          ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)]'
+                          : 'border-[var(--color-divider)] hover:border-[var(--color-text-muted)]'
+                      }`}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          participantSelectionType: 'EXTERNAL_SELECTION',
+                          application: {
+                            enabled: false,
+                            startAt: null,
+                            endAt: null,
+                            resultAnnouncementAt: null,
+                            capacity: form.application.capacity || 1,
+                          },
+                        })
+                      }
+                      type="button"
+                    >
+                      <strong className="block text-base font-extrabold text-[var(--color-primary-coral)]">
+                        {t('managerCreate.selection.external')}
+                      </strong>
+                      <span className="mt-1.5 block text-sm text-[var(--color-text-secondary)]">
+                        {t('managerCreate.selection.externalDesc')}
+                      </span>
+                    </button>
+                  </div>
+
+                  {selectionType === 'APPLICATION' ? (
                     <div className="grid gap-5 sm:grid-cols-2">
                       <TextField label={t('managerRoutePages.t54')} required reserveMessageSpace type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
                       <TextField error={applicationEndError} label={t('managerRoutePages.t55')} required reserveMessageSpace type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
@@ -1119,9 +1224,63 @@ export function ManagerMeetingCreatePage() {
                       <TextField label={t('managerRoutePages.t57')} min={1} required type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
                     </div>
                   ) : (
-                    <AlertBanner title={t('managerRoutePages.t58')} variant="warning">
-                      {t('managerRoutePages.t59')}
-                    </AlertBanner>
+                    <div className="grid gap-5">
+                      <TextField
+                        containerClassName="sm:max-w-[280px]"
+                        helperText={t('managerCreate.csv.capacityHelper')}
+                        label={t('managerCreate.csv.capacityLabel')}
+                        min={1}
+                        required
+                        type="number"
+                        value={form.application.capacity}
+                        onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })}
+                      />
+                      <div className="rounded-[var(--radius-panel)] border border-[var(--color-divider)] p-5">
+                        <h4 className="text-sm font-extrabold text-[var(--color-text-primary)]">
+                          {t('managerCreate.csv.formatTitle')}
+                        </h4>
+                        {/*
+                          "이메일"·"대기 순번"을 굵게 강조하는 문장이다. 문장 중간의 마크업은 언어별
+                          어순을 막으므로, 설명은 한 문장으로 두고 강조는 아래 예시 표가 대신한다.
+                        */}
+                        <p className="mt-1.5 text-sm text-[var(--color-text-secondary)]">
+                          {t('managerCreate.csv.formatDesc')}
+                        </p>
+                        <div className="mt-3.5 overflow-hidden rounded-[var(--radius-control)] border border-[var(--color-divider)]">
+                          <div className="grid grid-cols-2 border-b border-[var(--color-divider)] bg-[var(--color-surface-page)] px-4 py-2.5 text-sm font-bold">
+                            <span>{t('managerCreate.csv.columnEmail')}</span>
+                            <span>{t('managerCreate.csv.columnPosition')}</span>
+                          </div>
+                          <div className="grid grid-cols-2 border-b border-[var(--color-border-row)] px-4 py-2.5 text-sm">
+                            <span>fan1@example.com</span>
+                            <span>1</span>
+                          </div>
+                          <div className="grid grid-cols-2 px-4 py-2.5 text-sm">
+                            <span>fan2@example.com</span>
+                            <span>2</span>
+                          </div>
+                        </div>
+                        <div className="mt-3.5">
+                          <Button
+                            loading={downloadingTemplate}
+                            onClick={() => void handleDownloadCsvTemplate()}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            {t('managerCreate.csv.downloadTemplate')}
+                          </Button>
+                        </div>
+                        {templateDownloadError ? (
+                          <p className="mt-2 text-sm font-medium text-[var(--color-error)]" role="alert">
+                            {templateDownloadError}
+                          </p>
+                        ) : null}
+                      </div>
+                      <p className="text-sm text-[var(--color-text-secondary)]">
+                        {t('managerCreate.csv.uploadLater')}
+                      </p>
+                    </div>
                   )}
                 </div>
 
@@ -1232,7 +1391,7 @@ export function ManagerMeetingCreatePage() {
                   </>
                 ) : (
                   <p className="text-sm text-[var(--color-text-secondary)]">
-                    {t('managerRoutePages.t72')}
+                    {t('managerCreate.form.skipForExternal')}
                   </p>
                 )}
                 </div>
@@ -1251,7 +1410,12 @@ export function ManagerMeetingCreatePage() {
                         src={form.coverImageUrl}
                       />
                     ) : null}
-                    <p className="mt-4 text-sm font-extrabold text-[var(--color-primary-coral)]" role="status">{t('managerRoutePages.t74')}</p>
+                    {/* 선별 방식에 따라 미리보기 배지 문구가 달라진다(40a80d7). */}
+                    <p className="mt-4 text-sm font-extrabold text-[var(--color-primary-coral)]" role="status">
+                      {selectionType === 'EXTERNAL_SELECTION'
+                        ? t('managerCreate.preview.badgeExternal')
+                        : t('managerCreate.preview.badgeApplication')}
+                    </p>
                     <h3 className="mj-font-title mt-2 text-2xl tracking-[-0.038em] text-[var(--color-text-primary)]">{form.title}</h3>
                     <p className="mt-2 text-base font-medium text-[var(--color-text-muted)]">
                       {t('managerRoutePages.t75')} {isInfluencerAccount ? influencerNickname : `사용자 #${form.influencerId || '-'}`}
@@ -1265,17 +1429,28 @@ export function ManagerMeetingCreatePage() {
                     {[
                       ['팬미팅 시작', formatDateTime(form.scheduledStartAt)],
                       ['1인 통화 시간', formatCallDuration(form.operation.callDurationSec)],
-                      ['모집 인원', `${form.application.capacity}명`],
-                      ['응모 시작', formatDateTime(form.application.startAt)],
-                      ['응모 마감', formatDateTime(form.application.endAt)],
-                      ['결과 발표', formatDateTime(form.application.resultAnnouncementAt)],
+                      ['참가자 선정 방식', selectionType === 'EXTERNAL_SELECTION' ? 'CSV 직접 등록' : '응모 받기'],
+                      selectionType === 'EXTERNAL_SELECTION'
+                        ? ['등록 정원', `${form.application.capacity}명`]
+                        : ['모집 인원', `${form.application.capacity}명`],
+                      ...(selectionType === 'APPLICATION'
+                        ? [
+                            ['응모 시작', formatDateTime(form.application.startAt)],
+                            ['응모 마감', formatDateTime(form.application.endAt)],
+                            ['결과 발표', formatDateTime(form.application.resultAnnouncementAt)],
+                          ]
+                        : []),
                       ['대기열 오픈', formatDateTime(form.operation.queueOpenAt)],
                       ['통화 녹화', form.operation.recordingEnabled ? '사용' : '사용 안 함'],
                       ['실시간 번역', form.operation.translationEnabled ? '사용' : '사용 안 함'],
                       ['재접속 허용', form.operation.reconnectGraceSec == null ? '서비스 기본값' : `${form.operation.reconnectGraceSec}초`],
                       ['최대 재호출', form.operation.maxRecallCount == null ? '서비스 기본값' : `${form.operation.maxRecallCount}회`],
-                      ['응모 폼 안내', formDescription.trim() ? '등록' : '등록 안 함'],
-                      ['응모 질문', questions.length > 0 ? '등록' : '등록 안 함'],
+                      ...(selectionType === 'APPLICATION'
+                        ? [
+                            ['응모 폼 안내', formDescription.trim() ? '등록' : '등록 안 함'],
+                            ['응모 질문', questions.length > 0 ? '등록' : '등록 안 함'],
+                          ]
+                        : []),
                     ].map(([label, value]) => (
                       <div className="flex items-baseline justify-between gap-5 border-b border-[var(--color-border-row)] py-3" key={label}>
                         <dt className="whitespace-nowrap text-sm font-semibold text-[var(--color-text-muted)]">{label}</dt>
@@ -1285,10 +1460,15 @@ export function ManagerMeetingCreatePage() {
                   </dl>
                 </div>
 
+                {/* 발행 후 흐름이 선별 방식에 따라 달라 설명 문구도 갈린다(40a80d7). */}
                 <Checkbox
                   checked={readyToPublish}
-                  description={t('managerRoutePages.t76')}
-                  label={t('managerRoutePages.t77')}
+                  description={
+                    selectionType === 'EXTERNAL_SELECTION'
+                      ? t('managerCreate.publish.confirmExternal')
+                      : t('managerCreate.publish.confirmApplication')
+                  }
+                  label={t('managerCreate.publish.confirmLabel')}
                   onChange={(event) => setReadyToPublish(event.target.checked)}
                 />
               </div>
@@ -1310,23 +1490,27 @@ export function ManagerMeetingCreatePage() {
                       ? '진행 정책 값은 비워 두거나 0 이상의 정수로 입력해야 합니다.'
                       : queueOpenError
                 : step === 3
-                  ? !questionsComplete
-                    ? '빈 응모 질문을 작성하거나 삭제해야 다음 단계로 이동할 수 있습니다.'
-                    : !applicationScheduleComplete
-                      ? '응모 일정·결과 발표 일시·응모 정원을 모두 입력해야 다음 단계로 이동할 수 있습니다.'
-                      : scheduleErrors[0]
+                  ? selectionType === 'EXTERNAL_SELECTION'
+                    ? !externalSelectionComplete
+                      ? 'CSV로 등록할 참가자 정원을 1명 이상 입력해야 다음 단계로 이동할 수 있습니다.'
+                      : undefined
+                    : !questionsComplete
+                      ? '빈 응모 질문을 작성하거나 삭제해야 다음 단계로 이동할 수 있습니다.'
+                      : !applicationScheduleComplete
+                        ? '응모 일정·결과 발표 일시·응모 정원을 모두 입력해야 다음 단계로 이동할 수 있습니다.'
+                        : scheduleErrors[0]
                   : step === LAST_STEP
                     ? !basicInformationComplete
                       ? '팬미팅 정보의 필수 입력 항목을 모두 입력해야 발행할 수 있습니다.'
                       : !operationComplete
                         ? '영상통화 운영의 필수 설정을 모두 확인해야 발행할 수 있습니다.'
-                        : !form.application.enabled
-                          ? '응모를 사용하지 않으면 팬미팅을 발행할 수 없습니다.'
-                          : !applicationComplete
-                            ? '응모 일정과 응모 폼을 모두 확인해야 발행할 수 있습니다.'
-                            : !readyToPublish
-                              ? '팬미팅 정보 확인에 동의해야 발행할 수 있습니다.'
-                              : undefined
+                        : !applicationComplete
+                          ? selectionType === 'EXTERNAL_SELECTION'
+                            ? 'CSV로 등록할 참가자 정원을 1명 이상 입력해야 발행할 수 있습니다.'
+                            : '응모 일정과 응모 폼을 모두 확인해야 발행할 수 있습니다.'
+                          : !readyToPublish
+                            ? '팬미팅 정보 확인에 동의해야 발행할 수 있습니다.'
+                            : undefined
                     : undefined
           }
           nextDisabled={

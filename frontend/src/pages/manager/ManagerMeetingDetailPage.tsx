@@ -529,6 +529,7 @@ export function ManagerMeetingDetailPage() {
 
   const status = detail.meeting.status
   const confirmation = pendingAction ? ACTION_CONFIRMATION[pendingAction] : undefined
+  const encodedMeetingId = encodeURIComponent(meetingId)
 
   return (
     <div className="grid gap-6 pb-10">
@@ -548,6 +549,15 @@ export function ManagerMeetingDetailPage() {
         <p className="text-[var(--color-text-secondary)]">
           {detail.influencer.name} {t('managerMeetingDetailPage.t5')} {formatDateTime(detail.meeting.scheduledStartAt)}
         </p>
+        {/* 다른 관리 화면으로 가는 링크는 탭과 무관하므로 헤더에 두어 어느 탭에서도 바로 이동할 수 있게 한다. */}
+        <nav aria-label="연결된 관리 화면" className="mt-1 flex flex-wrap gap-2">
+          <QuickLink label="참가 팬" to={`/manager/fan-meetings/${encodedMeetingId}/fans`} />
+          <QuickLink label="공지 관리" to={`/manager/fan-meetings/${encodedMeetingId}/notices`} />
+          {!isSolo ? (
+            <QuickLink label="실시간 운영 모니터" to={`/manager/fan-meetings/${encodedMeetingId}/monitor`} />
+          ) : null}
+          <QuickLink label="결과 통계" to={`/manager/fan-meetings/${encodedMeetingId}/statistics`} />
+        </nav>
       </header>
 
       {error ? <AlertBanner title={t('managerMeetingDetailPage.t6')} variant="error">{error}</AlertBanner> : null}
@@ -585,7 +595,6 @@ export function ManagerMeetingDetailPage() {
           meetingId={meetingId}
           onAction={setPendingAction}
           participantCount={participantCount}
-          solo={isSolo}
         />
       ) : null}
 
@@ -675,7 +684,6 @@ function OverviewPanel({
   meetingId,
   participantCount,
   drawCompleted,
-  solo,
   onAction,
 }: {
   detail: PublicFanMeetingDetail
@@ -685,12 +693,16 @@ function OverviewPanel({
   meetingId: string
   participantCount: number
   drawCompleted: boolean
-  solo: boolean
   onAction: (action: MeetingOperationAction) => void
 }) {
   const { t } = useTranslation()
   const { meeting } = detail
   const encodedId = encodeURIComponent(meetingId)
+  // 응모형은 생성 시 응모 사용이 강제되고 CSV 직접 등록형은 응모 비활성이 강제되므로,
+  // 상세 응답에 선별 방식 필드가 없는 동안은 응모 사용 여부로 CSV형을 판별한다.
+  const isExternalSelection = !meeting.application.enabled
+  // 백엔드는 발행(PUBLISHED) 상태에서만 명단 업로드를 허용하고, 확정하면 READY로 넘어간다.
+  const canUploadExternalParticipants = isExternalSelection && meeting.status === 'PUBLISHED'
   const primaryActions: { action: MeetingOperationAction; label: string }[] = []
   if (actions.canPublish) primaryActions.push({ action: 'publish', label: '팬에게 공개' })
   if (actions.canDraw) primaryActions.push({ action: 'draw', label: '당첨자 추첨' })
@@ -716,7 +728,9 @@ function OverviewPanel({
   const actionNote = meeting.status === 'DRAFT'
     ? '팬미팅을 공개하면 팬이 팬미팅 정보와 응모 안내를 볼 수 있습니다.'
     : meeting.status === 'PUBLISHED'
-      ? `응모 시작 일시(${formatDateTime(meeting.application.startAt)})가 지나면 응모 접수가 열립니다.`
+      ? canUploadExternalParticipants
+        ? 'CSV로 참가자 명단을 등록해 확정하면 팬미팅이 진행 준비 상태가 됩니다.'
+        : `응모 시작 일시(${formatDateTime(meeting.application.startAt)})가 지나면 응모 접수가 열립니다.`
       : meeting.status === 'APPLICATION_OPEN'
         ? `응모 마감(${formatDateTime(meeting.application.endAt)})까지 팬이 응모할 수 있습니다. 현재 응모 ${applicantCount}명.`
         : meeting.status === 'APPLICATION_CLOSED' && !drawCompleted
@@ -751,7 +765,7 @@ function OverviewPanel({
 
   return (
     <div>
-      <section aria-labelledby="meeting-actions-title" className="border-t border-[var(--color-divider)] py-6">
+      <section aria-labelledby="meeting-actions-title" className="py-6">
         <div className="flex flex-col items-start justify-between gap-5 md:flex-row">
           <div className="min-w-0">
             <h2 className="text-lg font-extrabold" id="meeting-actions-title">{t('managerMeetingDetailPage.t11')}</h2>
@@ -763,6 +777,14 @@ function OverviewPanel({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
+            {canUploadExternalParticipants ? (
+              <Link
+                className="inline-flex min-h-[var(--control-height)] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] text-sm font-bold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                to={`/manager/fan-meetings/${encodedId}/external-participants`}
+              >
+                참가자 명단 등록 (CSV)
+              </Link>
+            ) : null}
             {primaryActions.map((item) => (
               <Button
                 disabled={busy}
@@ -796,7 +818,8 @@ function OverviewPanel({
         </div>
       </section>
 
-      <section aria-labelledby="meeting-flow-title" className="border-t border-[var(--color-divider)] py-6">
+      {/* 상단 구분선 제거(a31e0f0)를 유지하고, 문구는 번역 키를 쓴다. */}
+      <section aria-labelledby="meeting-flow-title" className="py-6">
         <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">{t('managerMeetingDetailPage.t14')}</p>
         <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-flow-title">{t('managerMeetingDetailPage.t15')}</h2>
         <ol className="mt-5 border-y border-[var(--color-divider)]">
@@ -836,19 +859,10 @@ function OverviewPanel({
             />
         </ol>
       </section>
-
-      <section aria-labelledby="meeting-links-title" className="border-t border-[var(--color-divider)] py-6">
-        <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">{t('managerMeetingDetailPage.t23')}</p>
-        <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-links-title">{t('managerMeetingDetailPage.t24')}</h2>
-        <div className="mt-5 grid gap-x-5 sm:grid-cols-2">
-          <QuickLink label={t('managerMeetingDetailPage.t25')} to={`/manager/fan-meetings/${encodedId}/fans`} />
-          <QuickLink label={t('managerMeetingDetailPage.t26')} to={`/manager/fan-meetings/${encodedId}/notices`} />
-          {!solo ? (
-            <QuickLink label={t('managerMeetingDetailPage.t27')} to={`/manager/fan-meetings/${encodedId}/monitor`} />
-          ) : null}
-          <QuickLink label={t('managerMeetingDetailPage.t28')} to={`/manager/fan-meetings/${encodedId}/statistics`} />
-        </div>
-      </section>
+      {/*
+        연결된 관리 화면 링크 섹션은 40a80d7에서 헤더의 nav로 옮겼다(어느 탭에서도 이동 가능).
+        여기서 되살리면 링크가 두 곳에 중복되므로 삭제를 유지한다.
+      */}
     </div>
   )
 }
@@ -889,15 +903,15 @@ function FlowStep({
   )
 }
 
-/** 상세 화면에서 다른 관리 화면으로 이동하는 링크 한 줄이다. */
+/** 상세 화면 헤더에서 다른 관리 화면으로 이동하는 링크 하나다. */
 function QuickLink({ label, to }: { label: string; to: string }) {
   return (
     <Link
-      className="flex min-h-14 items-center justify-between gap-4 whitespace-nowrap border-b border-[var(--color-divider)] px-1 text-base font-bold hover:text-[var(--color-primary-coral)]"
+      className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--color-divider)] px-3.5 text-sm font-bold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
       to={to}
     >
       {label}
-      <ArrowRight aria-hidden="true" size={17} />
+      <ArrowRight aria-hidden="true" size={14} />
     </Link>
   )
 }
@@ -1055,7 +1069,8 @@ function SettingsPanel({
         </AlertBanner>
       ) : null}
 
-      <Card>
+      {/* 진행 현황 탭과 동일하게 구역 상단 구분선 없이 여백으로만 나눈다. */}
+      <Card className="border-t-0">
         <CardHeader>
           <Badge variant="primary">{t('managerMeetingDetailPage.t30')}</Badge>
           <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t31')}</CardTitle>
@@ -1097,7 +1112,7 @@ function SettingsPanel({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-t-0">
         <CardHeader>
           <Badge variant="primary">{t('managerMeetingDetailPage.t37')}</Badge>
           <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t38')}</CardTitle>
@@ -1148,7 +1163,7 @@ function SettingsPanel({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-t-0">
         <CardHeader>
           <Badge variant="primary">{t('managerMeetingDetailPage.t45')}</Badge>
           <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t46')}</CardTitle>
@@ -1197,7 +1212,7 @@ function SettingsPanel({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-t-0">
         <CardHeader>
           <Badge variant="primary">{t('managerMeetingDetailPage.t52')}</Badge>
           <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t53')}</CardTitle>
@@ -1416,7 +1431,7 @@ function TestControlPanel({
         {t('managerMeetingDetailPage.t65')}
       </AlertBanner>
 
-      <Card>
+      <Card className="border-t-0">
         <CardHeader>
           <Badge variant="warning">{t('managerMeetingDetailPage.t66')}</Badge>
           <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t67')}</CardTitle>
