@@ -85,6 +85,21 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/email-verifications/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/email-verifications")
                                 .authenticated()
+                        // 소셜 로그인 (AUTH-009~012)
+                        // 로그인 전에 호출하는 흐름이라 열어 둔다. 신원은 URL 권한이 아니라
+                        // 공급자 인증 코드 검증과 임시 토큰으로 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/social/*/authorize-url")
+                                .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/social/*/login",
+                                "/api/v1/auth/social/signup", "/api/v1/auth/social/link").permitAll()
+                        // 소셜 계정 연결 관리 (USER-004~006)
+                        // 본인 계정의 연결만 다루므로 역할 제한 없이 로그인만 요구한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/me/social-accounts")
+                                .authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/me/social-accounts/*")
+                                .authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/users/me/social-accounts/*")
+                                .authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/v1/influencers/*/follow")
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/influencers/*/follow")

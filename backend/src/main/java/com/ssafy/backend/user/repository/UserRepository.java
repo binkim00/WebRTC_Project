@@ -37,6 +37,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByLoginId(String loginId);
 
     /**
+     * 이메일이 일치하는 사용자를 조회한다.
+     *
+     * <p>소셜 로그인에서 아직 연결되지 않은 계정을 만났을 때, 같은 이메일로 이미 가입한 회원이
+     * 있는지 확인해 신규 가입과 기존 계정 연결 중 어디로 보낼지 결정하는 데 쓴다.
+     *
+     * @param email 조회할 정규화된 이메일
+     * @return 일치하는 사용자가 있으면 해당 사용자를 담은 Optional
+     */
+    Optional<User> findByEmail(String email);
+
+    /**
      * 지정한 역할과 상태를 함께 만족하는 회원 수를 조회한다.
      *
      * @param role 집계할 역할

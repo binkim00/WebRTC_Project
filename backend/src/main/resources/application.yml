@@ -90,6 +90,25 @@ app:
     email: ${ADMIN_BOOTSTRAP_EMAIL:}
     nickname: ${ADMIN_BOOTSTRAP_NICKNAME:멜리관리자}
 
+  oauth:
+    # 프론트 콜백 주소의 공통 앞부분이다. 실제 redirect_uri 는 여기에 /{provider} 가 붙어
+    # http://localhost:5173/oauth/callback/kakao 형태가 되며, 3사 콘솔 등록값과 완전히 같아야 한다.
+    redirect-base-url: ${OAUTH_REDIRECT_BASE_URL:http://localhost:5173/oauth/callback}
+    # 소셜 인증을 마친 뒤 추가정보 입력이나 비밀번호 확인을 끝낼 때까지 결과를 보관할 시간이다.
+    pending-ttl-seconds: ${OAUTH_PENDING_TTL_SECONDS:300}
+    # 클라이언트 ID 가 비어 있는 공급자는 로그인 요청 시점에 안내와 함께 거절된다.
+    google:
+      client-id: ${OAUTH_GOOGLE_CLIENT_ID:}
+      client-secret: ${OAUTH_GOOGLE_CLIENT_SECRET:}
+    kakao:
+      # 카카오는 REST API 키가 client_id 다.
+      client-id: ${OAUTH_KAKAO_CLIENT_ID:}
+      # 클라이언트 시크릿은 REST API 키 발급 시 기본 활성화이므로 대개 필요하다.
+      client-secret: ${OAUTH_KAKAO_CLIENT_SECRET:}
+    naver:
+      client-id: ${OAUTH_NAVER_CLIENT_ID:}
+      client-secret: ${OAUTH_NAVER_CLIENT_SECRET:}
+
   email-verification:
     # 인증 링크 유효 시간이며 기본 30분이다.
     ttl-seconds: ${EMAIL_VERIFY_TTL_SECONDS:1800}

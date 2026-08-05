@@ -2,6 +2,7 @@ package com.ssafy.backend.user.service;
 
 import com.ssafy.backend.auth.exception.DuplicateEmailException;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.auth.repository.SocialAccountRepository;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
@@ -41,6 +42,7 @@ class UserProfileServiceTest {
     private UserRepository userRepository;
     private FanMeetingRepository fanMeetingRepository;
     private InfluencerProfileRepository influencerProfileRepository;
+    private SocialAccountRepository socialAccountRepository;
     private PasswordEncoder passwordEncoder;
     private LogoutService logoutService;
     private UserProfileService service;
@@ -52,11 +54,13 @@ class UserProfileServiceTest {
         userRepository = mock(UserRepository.class);
         fanMeetingRepository = mock(FanMeetingRepository.class);
         influencerProfileRepository = mock(InfluencerProfileRepository.class);
+        socialAccountRepository = mock(SocialAccountRepository.class);
         passwordEncoder = mock(PasswordEncoder.class);
         logoutService = mock(LogoutService.class);
         Clock clock = Clock.fixed(NOW.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
         service = new UserProfileService(currentUserService, userRepository, fanMeetingRepository,
-                influencerProfileRepository, passwordEncoder, logoutService, clock);
+                influencerProfileRepository, socialAccountRepository, passwordEncoder,
+                logoutService, clock);
     }
 
     /** 인증 사용자 식별자로 조회한 활성 회원의 공개 정보만 응답하는지 검증한다. */
