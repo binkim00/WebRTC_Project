@@ -252,6 +252,49 @@ timedatectl   # Time zone: Asia/Seoul (KST, +0900) 확인
 
 컨테이너는 호스트 시간대를 상속하지 않으므로 위 Compose 설정과 별개입니다.
 
+## 소셜 로그인 (구글·카카오·네이버)
+
+배포 **전에** 두 가지를 먼저 처리해야 합니다. 순서를 지키지 않으면 배포가 실패합니다.
+
+**1) DDL 선적용.** 운영 프로파일은 `ddl-auto: validate`이므로 `social_accounts` 테이블이
+없으면 스키마 검증 실패로 backend가 기동하지 못합니다.
+
+```bash
+docker compose -p project exec -T mysql \
+  mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$DB_NAME" \
+  < backend/src/main/resources/db/migration/V20260805_01__social_accounts.sql
+```
+
+**2) 운영 `.env`에 다음 키를 넣습니다.** 값을 비우면 해당 공급자만 사용 불가로
+처리되고 애플리케이션은 정상 기동합니다. `OAUTH_REDIRECT_BASE_URL`만은 비우지 마세요.
+빈 문자열이면 검증 실패로 기동하지 못합니다(Compose에 운영 기본값이 있어 미지정은 괜찮습니다).
+
+```text
+OAUTH_REDIRECT_BASE_URL=https://i15e106.p.ssafy.io/oauth/callback
+OAUTH_GOOGLE_CLIENT_ID=
+OAUTH_GOOGLE_CLIENT_SECRET=
+OAUTH_KAKAO_CLIENT_ID=
+OAUTH_KAKAO_CLIENT_SECRET=
+OAUTH_NAVER_CLIENT_ID=
+OAUTH_NAVER_CLIENT_SECRET=
+```
+
+콜백은 프론트 라우트이며 공급자 콘솔에 등록한 Redirect URI와 **문자 하나까지** 같아야
+합니다. 운영은 공급자별로 아래 세 주소를 등록합니다.
+
+```text
+https://i15e106.p.ssafy.io/oauth/callback/google
+https://i15e106.p.ssafy.io/oauth/callback/kakao
+https://i15e106.p.ssafy.io/oauth/callback/naver
+```
+
+공급자 콘솔 쪽에서 별도로 확인이 필요한 항목입니다.
+
+- 구글: OAuth 동의 화면 게시 상태가 "테스트"면 등록된 테스트 사용자만 로그인됩니다.
+- 네이버: 검수 전 "개발 중" 상태면 등록된 멤버만 로그인됩니다.
+- 카카오: `카카오 로그인 > 활성화 설정`이 ON이어야 하고, 클라이언트 시크릿은 REST API 키
+  발급 시 기본 활성화이므로 대개 값을 채워야 합니다.
+
 ## 주의사항
 
 - `archive/`는 백업/구성 보관용입니다. 운영 Compose에는 포함되지 않습니다.

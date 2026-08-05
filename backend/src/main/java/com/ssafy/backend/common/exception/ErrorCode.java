@@ -150,6 +150,32 @@ public enum ErrorCode {
     // 공통 요청 빈도 제한
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요."),
 
+    // 소셜 로그인 (AUTH-009~012, USER-004~006)
+    // 아래 메시지는 공급자 이름이나 마스킹한 이메일을 끼워 넣지 못하는 상황의 기본값이다.
+    // 서비스는 BusinessException(ErrorCode, message) 로 화면에 그대로 띄울 문구를 만들어 전달한다.
+    SOCIAL_PROVIDER_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "지원하지 않는 소셜 로그인입니다."),
+    SOCIAL_AUTH_CODE_INVALID(HttpStatus.BAD_REQUEST,
+            "소셜 인증 정보가 만료되었어요. 로그인 버튼을 다시 눌러 주세요."),
+    // 공급자 장애는 서버 밖 원인이라 502로 알리고 재시도를 안내한다.
+    SOCIAL_PROVIDER_UNAVAILABLE(HttpStatus.BAD_GATEWAY,
+            "소셜 로그인 서버와 통신하지 못했어요. 잠시 후 다시 시도해 주세요."),
+    SOCIAL_TOKEN_INVALID(HttpStatus.BAD_REQUEST,
+            "인증 후 시간이 너무 지났어요. 처음부터 다시 로그인해 주세요."),
+    // 이미 인증된 소셜 계정의 기존 계정 소유 확인 실패이므로 401이 아니라 400을 쓴다.
+    // USER_PASSWORD_MISMATCH 와 같은 이유이며, 401은 프론트가 토큰 재발급으로 오해한다.
+    SOCIAL_LINK_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "비밀번호가 일치하지 않아요."),
+    SOCIAL_EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT,
+            "이미 가입된 이메일이에요. 기존 방식으로 로그인한 뒤 마이페이지에서 연결해 주세요."),
+    SOCIAL_ACCOUNT_LINKED_TO_OTHER_USER(HttpStatus.CONFLICT,
+            "이 소셜 계정은 이미 다른 Melly 계정에 연결되어 있어요."),
+    SOCIAL_PROVIDER_ALREADY_LINKED(HttpStatus.CONFLICT,
+            "이 계정에는 이미 같은 소셜 서비스의 다른 계정이 연결되어 있어요."),
+    SOCIAL_ACCOUNT_NOT_LINKED(HttpStatus.NOT_FOUND, "연결된 소셜 계정이 없어요."),
+    // 비밀번호 설정·변경 API가 없어 소셜 전용 계정은 비밀번호를 만들 수 없다.
+    // 그래서 다른 소셜 계정 연결만 대안으로 안내한다.
+    SOCIAL_LAST_LOGIN_METHOD(HttpStatus.CONFLICT,
+            "이 연결을 해제하면 로그인할 방법이 없어져요. 다른 소셜 계정을 먼저 연결해 주세요."),
+
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 
     private final HttpStatus status;

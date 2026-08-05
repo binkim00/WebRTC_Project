@@ -7,6 +7,7 @@ import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
 import com.ssafy.backend.auth.repository.EmailVerificationTokenRepository;
+import com.ssafy.backend.auth.repository.SocialAccountRepository;
 import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.device.repository.DeviceCheckRepository;
@@ -82,6 +83,9 @@ class FanMeetingQueueSecurityTest {
 
     @MockitoBean
     private EmailVerificationTokenRepository emailVerificationTokenRepository;
+
+    @MockitoBean
+    private SocialAccountRepository socialAccountRepository;
 
     @MockitoBean
     private QueueCommandService commandService;

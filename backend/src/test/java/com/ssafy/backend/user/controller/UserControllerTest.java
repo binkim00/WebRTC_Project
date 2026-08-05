@@ -1,6 +1,8 @@
 package com.ssafy.backend.user.controller;
 
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.common.exception.BusinessException;
+import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.exception.GlobalExceptionHandler;
 import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.UserRole;
@@ -128,18 +130,27 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.success").value(true));
     }
 
-    /** 비밀번호를 비운 탈퇴 요청을 컨트롤러 검증에서 거부하는지 검증한다. */
+    /**
+     * 비밀번호를 비운 탈퇴 요청이 400과 원인 코드로 거부되는지 검증한다.
+     *
+     * <p>검증 위치가 DTO에서 서비스로 옮겨졌다. 소셜 로그인만 사용하는 계정은 비밀번호가 없고
+     * 설정할 방법도 없어 {@code @NotBlank}로 두면 탈퇴 자체가 불가능해지기 때문이다.
+     * 클라이언트가 보는 계약(400 + USER_PASSWORD_MISMATCH)은 그대로인지 확인한다.
+     */
     @Test
     void rejectsWithdrawalWithoutPassword() throws Exception {
+        when(userProfileService.withdraw(any(), any(), any()))
+                .thenThrow(new BusinessException(ErrorCode.USER_PASSWORD_MISMATCH,
+                        "본인 확인을 위해 비밀번호를 입력해 주세요."));
+
         mockMvc.perform(delete("/api/v1/users/me")
                         .header("Authorization", "Bearer access-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"password":"   "}
                                 """))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(userProfileService);
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("USER_PASSWORD_MISMATCH"));
     }
 
     /** PATCH 요청 DTO가 명세의 수정 가능 필드만 갖는지 검증한다. */

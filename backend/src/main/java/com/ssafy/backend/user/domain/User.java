@@ -22,6 +22,15 @@ public class User extends BaseTimeEntity {
     private static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
     private static final String WITHDRAWN_PASSWORD = "WITHDRAWN";
 
+    /**
+     * 소셜 로그인만 사용하는 계정의 비밀번호 자리표시자다.
+     *
+     * <p>{@code password_hash}가 NOT NULL이라 값을 비울 수 없다. BCrypt 형식이 아닌 문자열을 넣어
+     * 어떤 비밀번호로도 매칭되지 않게 만든다. 컬럼을 nullable로 바꾸면 기존 로그인·탈퇴 흐름을
+     * 모두 다시 검토해야 하므로 {@link #WITHDRAWN_PASSWORD}와 같은 방식을 따른다.
+     */
+    private static final String SOCIAL_ONLY_PASSWORD = "SOCIAL_ONLY";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id", nullable = false)
@@ -89,6 +98,36 @@ public class User extends BaseTimeEntity {
     public static User createActive(String loginId, String email, String encodedPassword, String nickname,
                                     UserRole role, PreferredLanguage preferredLanguage) {
         return new User(loginId, email, encodedPassword, nickname, role, preferredLanguage);
+    }
+
+    /**
+     * 소셜 로그인만 사용하는 신규 회원을 생성한다.
+     *
+     * <p>비밀번호를 받지 않고 매칭되지 않는 자리표시자를 넣는다. 이 계정은 아이디·비밀번호 로그인으로
+     * 들어올 수 없고 연결된 소셜 계정으로만 인증한다.
+     *
+     * @param loginId 공급자 식별자로 만든 합성 로그인 ID
+     * @param email 공급자에게 받았거나 사용자가 입력한 이메일
+     * @param nickname 사용자가 정한 표시 이름
+     * @param role 부여할 역할
+     * @param preferredLanguage 선호 언어
+     * @return 비밀번호로 로그인할 수 없는 ACTIVE 회원
+     */
+    public static User createSocialOnly(String loginId, String email, String nickname,
+                                        UserRole role, PreferredLanguage preferredLanguage) {
+        return new User(loginId, email, SOCIAL_ONLY_PASSWORD, nickname, role, preferredLanguage);
+    }
+
+    /**
+     * 비밀번호 없이 소셜 로그인만으로 인증하는 계정인지 반환한다.
+     *
+     * <p>본인 확인에 비밀번호를 요구하는 흐름(회원탈퇴)에서 이 계정을 예외 처리하는 데 쓴다.
+     * 비밀번호를 설정할 방법이 없는 계정에 비밀번호를 요구하면 탈퇴 자체가 불가능해진다.
+     *
+     * @return 소셜 전용 계정이면 {@code true}
+     */
+    public boolean isSocialOnly() {
+        return SOCIAL_ONLY_PASSWORD.equals(this.password);
     }
 
     /**

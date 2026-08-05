@@ -221,6 +221,20 @@ services:
       EMAIL_VERIFY_BASE_URL: ${EMAIL_VERIFY_BASE_URL}
       DEVICE_TOKEN_SECURE: ${DEVICE_TOKEN_SECURE}
 
+      # 소셜 로그인(구글·카카오·네이버).
+      # 콜백은 프론트 라우트라 운영에서는 https://<도메인>/oauth/callback 을 써야 하고,
+      # 3사 콘솔에 등록한 Redirect URI 와 문자 하나까지 같아야 한다.
+      # 값을 비우면 해당 공급자만 사용 불가로 처리되고 애플리케이션은 정상 기동한다.
+      # 빈 문자열이 들어오면 Spring 이 기본값으로 되돌리지 않고 @NotBlank 검증에서 기동이 실패한다.
+      # 그래서 여기서 운영 기본값을 지정한다.
+      OAUTH_REDIRECT_BASE_URL: ${OAUTH_REDIRECT_BASE_URL:-https://i15e106.p.ssafy.io/oauth/callback}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET}
+      OAUTH_KAKAO_CLIENT_ID: ${OAUTH_KAKAO_CLIENT_ID}
+      OAUTH_KAKAO_CLIENT_SECRET: ${OAUTH_KAKAO_CLIENT_SECRET}
+      OAUTH_NAVER_CLIENT_ID: ${OAUTH_NAVER_CLIENT_ID}
+      OAUTH_NAVER_CLIENT_SECRET: ${OAUTH_NAVER_CLIENT_SECRET}
+
       APPLICATION_EMAIL_VERIFICATION_REQUIRED: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:-false}
 
     volumes:
