@@ -691,6 +691,16 @@ export function FanMeetingListPage() {
                             ? '다운로드 준비 중'
                             : '영상 다운로드'}
                         </button>
+                        {/*
+                          통화 사진은 통화가 끝나고 하루만 브라우저에 남는다. 기간이 지났는지는
+                          카드 화면이 서버 시각으로 확인하므로 여기서는 입구만 열어 둔다.
+                        */}
+                        <Link
+                          className="mj-font-label mt-3 ml-2 inline-flex min-h-[46px] items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-[18px] text-[15px] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+                          to={`/fan/fan-meetings/${item.application.meetingId}/cards/${item.recording.callSessionId}`}
+                        >
+                          기념 카드 만들기
+                        </Link>
                       </>
                     ) : (
                       <>

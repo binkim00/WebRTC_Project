@@ -77,6 +77,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'fan/fan-meetings/:fanMeetingId/cards/:callSessionId',
+        lazy: lazyPage(() => import('../pages/fan/FanCardPage'), 'FanCardPage'),
+      },
+      {
         path: 'fan/fan-meetings/:fanMeetingId/waiting',
         lazy: lazyPage(
           () => import('../pages/fan/FanMeetingWaitingPage'),

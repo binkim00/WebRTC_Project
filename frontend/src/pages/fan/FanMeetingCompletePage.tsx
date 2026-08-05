@@ -18,7 +18,6 @@ import {
 } from '../../api/pendingRecordings'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { AlertBanner, Button, Spinner } from '../../components'
-import { FanCardSection } from '../../components/fanCard/FanCardSection'
 import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
@@ -124,7 +123,6 @@ export function FanMeetingCompletePage() {
   const [playbackUrl, setPlaybackUrl] = useState<string>()
   const [recordingEnabled, setRecordingEnabled] = useState<boolean>()
   const [influencerName, setInfluencerName] = useState<string>()
-  const [detailTitle, setDetailTitle] = useState<string>()
   const [callOrder, setCallOrder] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string>()
@@ -194,8 +192,6 @@ export function FanMeetingCompletePage() {
         setRecordings(allRecordings)
         setRecordingEnabled(meeting?.meeting.operation.recordingEnabled)
         setInfluencerName(meeting?.influencer.name)
-        // 기념 카드에 넣을 제목이라 녹화 유무와 무관하게 보관한다.
-        setDetailTitle(meeting?.meeting.title)
         setCallOrder(application?.callOrder ?? null)
 
         const matched = allRecordings.find(
@@ -364,11 +360,6 @@ export function FanMeetingCompletePage() {
   const eyebrowDate = formatDate(
     currentRecording?.completedAt ?? new Date().toISOString(),
   )
-  // 기념 카드에 넣을 제목이다. 녹화 요약을 우선하고, 없으면 넘겨받은 값과 상세 조회 결과를 차례로 쓴다.
-  const cardMeetingTitle = currentRecording?.meetingTitle
-    ?? routeState?.meetingTitle
-    ?? detailTitle
-    ?? '팬미팅'
   // 통화가 끝나면 대기열 응답에서 callSessionId가 사라지므로 통화 화면이 넘겨 준 값을 우선 쓰고,
   // 새로고침 등으로 라우터 state가 없으면 녹화 정보에서 되찾는다.
   const fanCardSessionId = routeState?.callSessionId
@@ -579,16 +570,25 @@ export function FanMeetingCompletePage() {
           </p>
         </section>
 
-        {/* 기념 카드는 녹화와 무관하므로 녹화가 없거나 실패해도 제공한다. */}
+        {/*
+          기념 카드는 녹화와 무관하므로 녹화가 없거나 실패해도 제공한다.
+          만들기 화면은 스티커를 끌어 옮길 자리가 필요해 따로 두고, 여기서는 들어가는
+          입구만 보여 준다.
+        */}
         {session && fanCardSessionId ? (
-          <FanCardSection
-            authToken={session.accessToken}
-            callSessionId={fanCardSessionId}
-            dateLabel={eyebrowDate}
-            fanNickname={session.nickname}
-            influencerName={influencerName ?? '인플루언서'}
-            meetingTitle={cardMeetingTitle}
-          />
+          <section className="mt-10 rounded-[var(--radius-panel)] border border-[var(--color-divider)] p-6">
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">기념 카드 만들기</h2>
+            <p className="mt-2 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
+              통화에서 인상 깊었던 한마디와 남긴 사진으로 카드를 만들어 보세요.
+              사진은 통화가 끝나고 하루 동안만 이 기기에 보관합니다.
+            </p>
+            <Link
+              className="mj-font-label mt-4 inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] font-bold text-white hover:opacity-90"
+              to={`/fan/fan-meetings/${fanMeetingId}/cards/${fanCardSessionId}`}
+            >
+              기념 카드 만들러 가기
+            </Link>
+          </section>
         ) : null}
       </div>
 

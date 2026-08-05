@@ -11,7 +11,11 @@ import {
   saveFanCard,
   type FanCardCandidates,
 } from '../../api/fanCards'
-import { getCapturedPhotos, MAX_PHOTOS_PER_CARD } from '../../api/capturedPhotos'
+import {
+  getCapturedPhotos,
+  getFanCardDraft,
+  saveFanCardDraft,
+} from '../../api/capturedPhotos'
 import { AlertBanner, Button, Card } from '..'
 import {
   drawFanCard,
@@ -20,45 +24,14 @@ import {
   type FanCardFont,
   type FanCardLayout,
 } from './fanCardCanvas'
-import {
-  CARD_STICKER_CATEGORIES,
-  cardStickerName,
-  cardStickerUrl,
-} from './cardStickers'
+import { FanCardQuotePicker } from './FanCardQuotePicker'
+import { FanCardLayoutPicker } from './FanCardLayoutPicker'
+import { photoCountOf } from './fanCardLayoutOptions'
+import { FanCardFontPicker } from './FanCardFontPicker'
+import { FanCardStickerPanel } from './FanCardStickerPanel'
 
 /** AI 추천 문구가 생성 중일 때 다시 조회하는 간격이다. */
 const SUGGESTION_POLL_INTERVAL_MS = 3_000
-
-type LayoutOption = {
-  /** 레이아웃 값이며 undefined는 사진 없는 문구 전용 카드다. */
-  key?: FanCardLayout
-  label: string
-  /** 이 레이아웃이 쓰는 사진 수 */
-  photoCount: number
-}
-
-/** 팬이 고를 수 있는 카드 모양이다. 사진이 있을 때만 노출한다. */
-const LAYOUT_OPTIONS: readonly LayoutOption[] = [
-  { key: 'INSTA', label: '인스타 프레임', photoCount: 1 },
-  { key: 'POLAROID', label: '폴라로이드', photoCount: 1 },
-  { key: 'FOURCUT', label: '네컷 2×2', photoCount: MAX_PHOTOS_PER_CARD },
-  { key: 'FOURCUT_VERTICAL', label: '네컷 세로', photoCount: MAX_PHOTOS_PER_CARD },
-  { key: 'FOURCUT_HORIZONTAL', label: '네컷 가로', photoCount: MAX_PHOTOS_PER_CARD },
-  { key: undefined, label: '사진 없이 문구만', photoCount: 0 },
-]
-
-/**
- * 팬이 고를 수 있는 글꼴이다.
- *
- * <p>previewFamily는 버튼 라벨을 그 글꼴로 보여 주기 위한 값이며, 카드에 실제로 쓰는
- * 글꼴은 fanCardCanvas가 키로 정한다.
- */
-const FONT_OPTIONS: readonly { key: FanCardFont; label: string; previewFamily?: string }[] = [
-  { key: 'DEFAULT', label: '기본' },
-  { key: 'ROUND', label: '둥글둥글', previewFamily: '"Jua"' },
-  { key: 'HANDWRITING', label: '손글씨', previewFamily: '"Gaegu"' },
-  { key: 'HEADLINE', label: '또렷하게', previewFamily: '"Do Hyeon"' },
-]
 
 /** 새로 얹는 스티커의 한 변 길이다. 카드 폭의 6분의 1쯤이라 한눈에 보인다. */
 const NEW_STICKER_SIZE = 180
@@ -66,9 +39,25 @@ const NEW_STICKER_SIZE = 180
 /** 새로 얹는 글자의 크기다. */
 const NEW_TEXT_SIZE = 72
 
-/** 팬이 조절할 수 있는 크기 범위다. */
-const MIN_DECORATION_SIZE = 48
-const MAX_DECORATION_SIZE = 420
+/** 꾸미던 상태를 자동 저장하기 전에 기다리는 시간이다. */
+const DRAFT_SAVE_DELAY_MS = 600
+
+/**
+ * 고른 요소를 감싸는 점선 색을 디자인 토큰에서 읽어 온다.
+ *
+ * <p>캔버스에는 CSS 변수를 그대로 넣을 수 없어 값을 꺼내 쓴다. 이렇게 해 두면 토큰만
+ * 바꿔도 미리보기 표시 색이 화면 강조색과 함께 움직인다.
+ *
+ * @returns 캔버스에 쓸 색 문자열
+ */
+function resolveSelectionColor(): string {
+  if (typeof globalThis.getComputedStyle !== 'function') return '#c93634'
+  const token = globalThis
+    .getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-primary-coral')
+    .trim()
+  return token || '#c93634'
+}
 
 /**
  * 화면에서 누른 지점을 카드 안의 좌표로 바꾼다.
@@ -126,16 +115,6 @@ function findDecorationAt(
   return undefined
 }
 
-/**
- * 레이아웃이 쓰는 사진 수를 알려 준다.
- *
- * @param layout 확인할 레이아웃이며 undefined면 문구 전용이다
- * @returns 필요한 사진 수
- */
-function photoCountOf(layout: FanCardLayout | undefined): number {
-  return LAYOUT_OPTIONS.find((option) => option.key === layout)?.photoCount ?? 0
-}
-
 type FanCardSectionProps = {
   /** 카드를 만들 통화 세션 식별자 */
   callSessionId: string
@@ -173,19 +152,24 @@ export function FanCardSection({
   const [saving, setSaving] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [photoBitmaps, setPhotoBitmaps] = useState<readonly ImageBitmap[]>([])
+  const [photoBlobs, setPhotoBlobs] = useState<readonly Blob[]>([])
   const [photoUrls, setPhotoUrls] = useState<readonly string[]>([])
+  /**
+   * 카드에 넣기로 한 사진만 풀어 둔다.
+   *
+   * <p>PNG를 ImageBitmap 으로 풀면 장당 4MB 가까이 차지해, 찍은 것을 모두 풀면 휴대폰에서
+   * 버겁다. 고른 것만 남기고 빠진 것은 곧바로 닫아 최대 네 장만 메모리에 둔다.
+   */
+  const bitmapCacheRef = useRef(new Map<number, ImageBitmap>())
   const [layout, setLayout] = useState<FanCardLayout>()
   const [selectedPhotoIndexes, setSelectedPhotoIndexes] = useState<readonly number[]>([])
   const [fontKey, setFontKey] = useState<FanCardFont>('DEFAULT')
   const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
   const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
-  const [stickerCategoryKey, setStickerCategoryKey] = useState(
-    CARD_STICKER_CATEGORIES[0]?.key ?? 'heart',
-  )
-  const [decorationTextInput, setDecorationTextInput] = useState('')
   const decorationCounterRef = useRef(0)
   const draggingRef = useRef<{ id: string; offsetX: number; offsetY: number }>(undefined)
+  /** 보관해 둔 상태를 다 불러왔는지. 불러오기 전에 저장하면 초기값이 덮어쓴다. */
+  const draftLoadedRef = useRef(false)
 
   const selectedDecoration = decorations.find(
     (decoration) => decoration.id === selectedDecorationId,
@@ -297,37 +281,69 @@ export function FanCardSection({
   useEffect(() => {
     let active = true
     const createdUrls: string[] = []
-    let createdBitmaps: ImageBitmap[] = []
+    const cache = bitmapCacheRef.current
 
-    getCapturedPhotos(callSessionId)
-      .then(async (stored) => {
-        if (!active || !stored || stored.photos.length === 0) return
+    // 사진과 꾸미던 상태를 함께 불러온다. 따로 부르면 어느 쪽이 늦게 오느냐에 따라
+    // 기본값이 복원한 상태를 덮어써 팬이 꾸며 둔 것이 사라진다.
+    Promise.all([getCapturedPhotos(callSessionId), getFanCardDraft(callSessionId)])
+      .then(([stored, draft]) => {
+        if (!active) return
 
-        createdBitmaps = await Promise.all(
-          stored.photos.map((photo) => createImageBitmap(photo)),
-        )
-        if (!active) {
-          for (const bitmap of createdBitmaps) bitmap.close()
-          return
+        if (stored && stored.photos.length > 0) {
+          // 여기서는 풀지 않고 원본만 들고 있는다. 팔레트 미리보기는 objectURL 로 충분하고,
+          // 실제로 푸는 것은 카드에 넣기로 한 사진뿐이다.
+          for (const photo of stored.photos) createdUrls.push(URL.createObjectURL(photo))
+          setPhotoBlobs(stored.photos)
+          setPhotoUrls(createdUrls)
         }
 
-        for (const photo of stored.photos) createdUrls.push(URL.createObjectURL(photo))
-        setPhotoBitmaps(createdBitmaps)
-        setPhotoUrls(createdUrls)
-        // 사진이 있으면 프레임 카드를 기본으로 보여 준다.
-        setLayout('INSTA')
-        setSelectedPhotoIndexes([0])
+        if (draft) {
+          setLayout(draft.layout)
+          setFontKey(draft.fontKey)
+          setSelectedPhotoIndexes(draft.selectedPhotoIndexes)
+          setDecorations(draft.decorations)
+          // 이어 붙일 식별자가 겹치지 않게 이미 쓴 번호 뒤에서 시작한다.
+          decorationCounterRef.current = draft.decorations.length
+        } else if (stored && stored.photos.length > 0) {
+          // 사진이 있으면 프레임 카드를 기본으로 보여 준다.
+          setLayout('INSTA')
+          setSelectedPhotoIndexes([0])
+        }
+
+        draftLoadedRef.current = true
       })
       .catch(() => {
         // 사진을 못 읽어도 문구 카드는 만들 수 있으므로 조용히 넘어간다.
+        draftLoadedRef.current = true
       })
 
     return () => {
       active = false
       for (const url of createdUrls) URL.revokeObjectURL(url)
-      for (const bitmap of createdBitmaps) bitmap.close()
+      for (const bitmap of cache.values()) bitmap.close()
+      cache.clear()
     }
   }, [callSessionId])
+
+  // 꾸미던 상태를 자동으로 보관한다. 끌어 옮기는 동안 값이 계속 바뀌므로 잠시 멈췄을 때만
+  // 저장해 쓰기 횟수를 줄인다. 복원이 끝나기 전에는 저장하지 않는다. 초기값이 저장해 둔
+  // 것을 덮어쓰기 때문이다.
+  useEffect(() => {
+    if (!draftLoadedRef.current) return
+
+    const timer = window.setTimeout(() => {
+      void saveFanCardDraft({
+        callSessionId,
+        layout,
+        fontKey,
+        selectedPhotoIndexes: [...selectedPhotoIndexes],
+        decorations: [...decorations],
+        savedAt: new Date().toISOString(),
+      }).catch(() => undefined)
+    }, DRAFT_SAVE_DELAY_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [callSessionId, decorations, fontKey, layout, selectedPhotoIndexes])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -366,26 +382,62 @@ export function FanCardSection({
     return () => window.clearTimeout(timer)
   }, [candidates])
 
+  /**
+   * 카드에 넣기로 한 사진만 그릴 수 있는 형태로 푼다.
+   *
+   * <p>고른 것만 풀고 빠진 것은 곧바로 닫아, 찍은 장수가 늘어도 메모리가 함께 늘지 않게
+   * 한다. 이미 푼 사진은 다시 풀지 않는다.
+   *
+   * @returns 고른 순서대로 정렬한 사진
+   */
+  const resolveSelectedPhotos = useCallback(async (): Promise<ImageBitmap[]> => {
+    const cache = bitmapCacheRef.current
+
+    for (const [index, bitmap] of [...cache]) {
+      if (!selectedPhotoIndexes.includes(index)) {
+        bitmap.close()
+        cache.delete(index)
+      }
+    }
+
+    const photos: ImageBitmap[] = []
+    for (const index of selectedPhotoIndexes) {
+      const cached = cache.get(index)
+      if (cached) {
+        photos.push(cached)
+        continue
+      }
+
+      const blob = photoBlobs[index]
+      if (!blob) continue
+      const bitmap = await createImageBitmap(blob)
+      cache.set(index, bitmap)
+      photos.push(bitmap)
+    }
+    return photos
+  }, [photoBlobs, selectedPhotoIndexes])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !selectedText) return
 
     let active = true
-    const photos = selectedPhotoIndexes
-      .map((index) => photoBitmaps[index])
-      .filter((photo): photo is ImageBitmap => Boolean(photo))
 
-    void drawFanCard(canvas, {
-      text: selectedText,
-      meetingTitle,
-      influencerName,
-      fanNickname,
-      dateLabel,
-      layout,
-      photos,
-      fontKey,
-      decorations,
-    })
+    void resolveSelectedPhotos()
+      .then((photos) => {
+        if (!active) return undefined
+        return drawFanCard(canvas, {
+          text: selectedText,
+          meetingTitle,
+          influencerName,
+          fanNickname,
+          dateLabel,
+          layout,
+          photos,
+          fontKey,
+          decorations,
+        })
+      })
       .then(() => {
         // 고른 요소를 알아볼 수 있게 점선을 두른다. 이 표시는 미리보기에만 그리고
         // 내려받을 때는 따로 그린 캔버스를 쓰므로 저장본에는 남지 않는다.
@@ -403,7 +455,7 @@ export function FanCardSection({
         ctx.rotate(selectedDecoration.rotation)
         ctx.setLineDash([14, 10])
         ctx.lineWidth = 4
-        ctx.strokeStyle = '#ff5a5f'
+        ctx.strokeStyle = resolveSelectionColor()
         ctx.strokeRect(-halfWidth - 8, -half - 8, halfWidth * 2 + 16, half * 2 + 16)
         ctx.restore()
       })
@@ -422,9 +474,8 @@ export function FanCardSection({
     influencerName,
     layout,
     meetingTitle,
-    photoBitmaps,
+    resolveSelectedPhotos,
     selectedDecoration,
-    selectedPhotoIndexes,
     selectedText,
   ])
 
@@ -456,10 +507,10 @@ export function FanCardSection({
         const trimmed = current.slice(0, need)
         if (trimmed.length > 0) return trimmed
         // 아직 고른 사진이 없으면 앞에서부터 필요한 만큼 자동으로 채워 준다.
-        return photoBitmaps.slice(0, need).map((_, index) => index)
+        return photoBlobs.slice(0, need).map((_, index) => index)
       })
     },
-    [layout, photoBitmaps],
+    [layout, photoBlobs],
   )
 
   /**
@@ -511,11 +562,9 @@ export function FanCardSection({
     if (!selectedText) return
 
     const canvas = document.createElement('canvas')
-    const photos = selectedPhotoIndexes
-      .map((index) => photoBitmaps[index])
-      .filter((photo): photo is ImageBitmap => Boolean(photo))
 
     try {
+      const photos = await resolveSelectedPhotos()
       await drawFanCard(canvas, {
         text: selectedText,
         meetingTitle,
@@ -551,9 +600,6 @@ export function FanCardSection({
     }, 'image/png')
   }
 
-  const aiSuggestions = candidates?.aiSuggestions ?? []
-  const quotes = candidates?.influencerQuotes ?? []
-  const hasAnyCandidate = aiSuggestions.length > 0 || quotes.length > 0
 
   return (
     <section className="mt-8">
@@ -563,184 +609,33 @@ export function FanCardSection({
             기념 카드 만들기
           </h2>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            {photoBitmaps.length > 0
+            {photoBlobs.length > 0
               ? '통화에서 인상 깊었던 한마디와 남긴 사진으로 카드를 만들 수 있어요.'
               : '통화에서 인상 깊었던 한마디를 골라 카드로 간직할 수 있어요.'}
           </p>
         </header>
 
-        {loadError ? (
-          <AlertBanner className="mt-4" title="문구를 불러오지 못했습니다" variant="error">
-            <p>{loadError}</p>
-            <Button
-              className="mt-3"
-              onClick={() => setReloadKey((key) => key + 1)}
-              size="sm"
-              variant="secondary"
-            >
-              다시 불러오기
-            </Button>
-          </AlertBanner>
-        ) : null}
+        <FanCardQuotePicker
+          candidates={candidates}
+          loadError={loadError}
+          onRetry={() => setReloadKey((key) => key + 1)}
+          onSelect={setSelectedText}
+          selectedText={selectedText}
+        />
 
-        {!loadError && !candidates ? (
-          <p className="mt-4 text-sm text-[var(--color-text-secondary)]">
-            문구를 불러오고 있습니다.
-          </p>
-        ) : null}
-
-        {candidates && !hasAnyCandidate ? (
-          <p className="mt-4 text-sm text-[var(--color-text-secondary)]">
-            {candidates.suggestionStatus === 'GENERATING'
-              ? 'AI가 추천 문구를 고르고 있습니다. 잠시만 기다려 주세요.'
-              : '이번 통화에서는 카드로 만들 문구를 찾지 못했어요.'}
-          </p>
-        ) : null}
-
-        {aiSuggestions.length > 0 ? (
-          <div className="mt-6">
-            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-              AI 추천 문구
-            </h3>
-            <ul className="mt-3 grid gap-2">
-              {aiSuggestions.map((suggestion) => (
-                <li key={`ai:${suggestion}`}>
-                  <CandidateButton
-                    badge="AI 추천"
-                    onSelect={() => setSelectedText(suggestion)}
-                    selected={selectedText === suggestion}
-                    text={suggestion}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {quotes.length > 0 ? (
-          <div className="mt-6">
-            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-              {aiSuggestions.length > 0
-                ? '직접 고르기'
-                : '통화에서 나온 말 중에 고르기'}
-              {candidates?.suggestionStatus === 'GENERATING' ? (
-                <span className="ml-2 font-normal text-[var(--color-text-secondary)]">
-                  AI 추천을 기다리는 동안 먼저 고를 수 있어요
-                </span>
-              ) : null}
-            </h3>
-            <ul className="mt-3 grid max-h-72 gap-2 overflow-y-auto">
-              {quotes.map((quote) => (
-                <li key={quote.subtitleId}>
-                  <CandidateButton
-                    onSelect={() => setSelectedText(quote.text)}
-                    selected={selectedText === quote.text}
-                    subText={quote.translatedText ?? undefined}
-                    text={quote.text}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {selectedText && photoBitmaps.length > 0 ? (
-          <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
-            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-              카드 모양 고르기
-            </h3>
-            <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-              통화 중에 남긴 사진 {photoBitmaps.length}장으로 카드를 만들 수 있어요.
-            </p>
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {LAYOUT_OPTIONS.map((option) => (
-                <li key={option.label}>
-                  <button
-                    aria-pressed={layout === option.key}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 motion-reduce:transition-none ${
-                      layout === option.key
-                        ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
-                        : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)]'
-                    }`}
-                    onClick={() => changeLayout(option.key)}
-                    type="button"
-                  >
-                    {option.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            {photoCountOf(layout) > 0 ? (
-              <div className="mt-5">
-                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
-                  사진 고르기
-                  <span className="ml-2 font-normal text-[var(--color-text-secondary)]">
-                    {selectedPhotoIndexes.length}/{photoCountOf(layout)}장 선택
-                  </span>
-                </h4>
-                <ul className="mt-3 grid grid-cols-4 gap-2">
-                  {photoUrls.map((url, index) => {
-                    const order = selectedPhotoIndexes.indexOf(index)
-                    const chosen = order >= 0
-                    return (
-                      <li key={url}>
-                        <button
-                          aria-label={`${index + 1}번째 사진${chosen ? ' 선택 해제' : ' 선택'}`}
-                          aria-pressed={chosen}
-                          className={`relative block w-full overflow-hidden rounded-[var(--radius-control)] border-2 transition-colors duration-200 motion-reduce:transition-none ${
-                            chosen
-                              ? 'border-[var(--color-primary-coral)]'
-                              : 'border-transparent hover:border-[var(--color-border-control)]'
-                          }`}
-                          onClick={() => togglePhoto(index)}
-                          type="button"
-                        >
-                          <img alt="" className="block aspect-video w-full object-cover" src={url} />
-                          {chosen && photoCountOf(layout) > 1 ? (
-                            <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-[var(--color-primary-coral)] text-[11px] font-bold text-white">
-                              {order + 1}
-                            </span>
-                          ) : null}
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-                {selectedPhotoIndexes.length < photoCountOf(layout) ? (
-                  <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
-                    남은 칸은 빈 자리로 나옵니다. 원하는 사진을 더 골라 주세요.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+        {selectedText && photoBlobs.length > 0 ? (
+          <FanCardLayoutPicker
+            layout={layout}
+            onLayoutChange={changeLayout}
+            onTogglePhoto={togglePhoto}
+            photoUrls={photoUrls}
+            selectedPhotoIndexes={selectedPhotoIndexes}
+          />
         ) : null}
 
         {selectedText ? (
           <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
-            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-              글꼴 고르기
-            </h3>
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {FONT_OPTIONS.map((option) => (
-                <li key={option.key}>
-                  <button
-                    aria-pressed={fontKey === option.key}
-                    className={`rounded-full border px-3 py-1.5 text-sm transition-colors duration-200 motion-reduce:transition-none ${
-                      fontKey === option.key
-                        ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
-                        : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)]'
-                    }`}
-                    onClick={() => setFontKey(option.key)}
-                    style={option.previewFamily ? { fontFamily: option.previewFamily } : undefined}
-                    type="button"
-                  >
-                    {option.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
 
             <h3 className="mt-6 text-sm font-semibold text-[var(--color-text-primary)]">
               카드 미리보기
@@ -759,130 +654,14 @@ export function FanCardSection({
               role="img"
             />
 
-            <div className="mt-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
-                  스티커로 꾸미기
-                </h4>
-                <p className="text-xs text-[var(--color-text-secondary)]">
-                  {decorations.length > 0
-                    ? '카드 위에서 끌어 옮길 수 있어요.'
-                    : '눌러서 카드에 올려 보세요.'}
-                </p>
-              </div>
-
-              <ul className="mt-3 flex flex-wrap gap-1.5">
-                {CARD_STICKER_CATEGORIES.map((category) => (
-                  <li key={category.key}>
-                    <button
-                      aria-pressed={stickerCategoryKey === category.key}
-                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors duration-200 motion-reduce:transition-none ${
-                        stickerCategoryKey === category.key
-                          ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
-                          : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)]'
-                      }`}
-                      onClick={() => setStickerCategoryKey(category.key)}
-                      type="button"
-                    >
-                      {category.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-
-              <ul className="mt-3 grid grid-cols-6 gap-1.5 sm:grid-cols-8">
-                {(CARD_STICKER_CATEGORIES.find(
-                  (category) => category.key === stickerCategoryKey,
-                )?.stickers ?? []).map((sticker) => (
-                  <li key={sticker.code}>
-                    <button
-                      className="block w-full rounded-[var(--radius-control)] p-1.5 transition-colors duration-200 hover:bg-[var(--color-surface-page)] motion-reduce:transition-none"
-                      onClick={() => addDecoration('STICKER', sticker.code)}
-                      title={sticker.name}
-                      type="button"
-                    >
-                      <img
-                        alt={sticker.name}
-                        className="block aspect-square w-full"
-                        loading="lazy"
-                        src={cardStickerUrl(sticker.code)}
-                      />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <input
-                  aria-label="카드에 올릴 글자"
-                  className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 py-2 text-sm"
-                  maxLength={20}
-                  onChange={(event) => setDecorationTextInput(event.target.value)}
-                  placeholder="카드에 올릴 짧은 글자"
-                  type="text"
-                  value={decorationTextInput}
-                />
-                <Button
-                  disabled={!decorationTextInput.trim()}
-                  onClick={() => {
-                    addDecoration('TEXT', decorationTextInput.trim())
-                    setDecorationTextInput('')
-                  }}
-                  size="sm"
-                  variant="secondary"
-                >
-                  글자 올리기
-                </Button>
-              </div>
-
-              {selectedDecoration ? (
-                <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                      {selectedDecoration.kind === 'STICKER'
-                        ? cardStickerName(selectedDecoration.content)
-                        : `“${selectedDecoration.content}”`}
-                      <span className="ml-2 font-normal text-[var(--color-text-secondary)]">
-                        선택됨
-                      </span>
-                    </p>
-                    <Button onClick={removeSelectedDecoration} size="sm" variant="secondary">
-                      떼어내기
-                    </Button>
-                  </div>
-
-                  <label className="mt-3 block text-xs font-semibold text-[var(--color-text-secondary)]">
-                    크기
-                    <input
-                      className="mt-1 block w-full"
-                      max={MAX_DECORATION_SIZE}
-                      min={MIN_DECORATION_SIZE}
-                      onChange={(event) =>
-                        updateSelectedDecoration({ size: Number(event.target.value) })
-                      }
-                      type="range"
-                      value={selectedDecoration.size}
-                    />
-                  </label>
-
-                  <label className="mt-2 block text-xs font-semibold text-[var(--color-text-secondary)]">
-                    기울기
-                    <input
-                      className="mt-1 block w-full"
-                      max={180}
-                      min={-180}
-                      onChange={(event) =>
-                        updateSelectedDecoration({
-                          rotation: (Number(event.target.value) * Math.PI) / 180,
-                        })
-                      }
-                      type="range"
-                      value={Math.round((selectedDecoration.rotation * 180) / Math.PI)}
-                    />
-                  </label>
-                </div>
-              ) : null}
-            </div>
+            <FanCardStickerPanel
+              decorationCount={decorations.length}
+              onAddSticker={(code) => addDecoration('STICKER', code)}
+              onAddText={(text) => addDecoration('TEXT', text)}
+              onRemoveSelected={removeSelectedDecoration}
+              onUpdateSelected={updateSelectedDecoration}
+              selectedDecoration={selectedDecoration}
+            />
 
             {saveError ? (
               <AlertBanner className="mt-4" title="카드를 처리하지 못했습니다" variant="error">
@@ -897,11 +676,7 @@ export function FanCardSection({
             ) : null}
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <Button
-                loading={saving}
-                onClick={() => void handleSave()}
-                size="lg"
-              >
+              <Button loading={saving} onClick={() => void handleSave()} size="lg">
                 {savedText ? '이 문구로 다시 저장' : '카드 저장하기'}
               </Button>
               <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
@@ -912,48 +687,5 @@ export function FanCardSection({
         ) : null}
       </Card>
     </section>
-  )
-}
-
-type CandidateButtonProps = {
-  /** 후보 문구 */
-  text: string
-  /** 문구 아래에 덧붙일 번역문 */
-  subText?: string
-  /** 문구 앞에 붙일 표시 */
-  badge?: string
-  /** 선택 상태 */
-  selected: boolean
-  /** 문구를 골랐을 때 호출한다 */
-  onSelect: () => void
-}
-
-/** 문구 후보 하나를 고를 수 있는 버튼이다. */
-function CandidateButton({ text, subText, badge, selected, onSelect }: CandidateButtonProps) {
-  return (
-    <button
-      aria-pressed={selected}
-      className={`w-full rounded-[var(--radius-control)] border p-3 text-left transition-colors duration-200 motion-reduce:transition-none ${
-        selected
-          ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)]'
-          : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] hover:bg-[var(--color-surface-page)]'
-      }`}
-      onClick={onSelect}
-      type="button"
-    >
-      {badge ? (
-        <span className="mb-1 inline-block rounded-full bg-[var(--color-primary-coral-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--color-primary-coral)]">
-          {badge}
-        </span>
-      ) : null}
-      <span className="block text-sm font-medium text-[var(--color-text-primary)]">
-        {text}
-      </span>
-      {subText ? (
-        <span className="mt-1 block text-xs text-[var(--color-text-secondary)]">
-          {subText}
-        </span>
-      ) : null}
-    </button>
   )
 }
