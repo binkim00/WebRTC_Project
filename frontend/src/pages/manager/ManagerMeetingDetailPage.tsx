@@ -139,19 +139,23 @@ const ACTION_CONFIRMATION: Record<
     description: '응모자 전원에게 알림이 전송됩니다.',
     confirmLabel: '결과 발표',
   },
+  // 아래 셋은 예약해 둔 일정을 앞당기는 명령이라, 무엇이 바뀌는지와 되돌리는 방법을 함께 알린다.
   openApplicationsNow: {
-    title: '응모 접수를 지금 시작할까요?',
-    description: '응모 시작 시각이 현재로 변경되며, 지난 마감 시각은 기존 응모 기간만큼 연장됩니다.',
-    confirmLabel: '응모 시작',
+    title: '예정보다 일찍 응모를 시작할까요?',
+    description: '예약해 둔 응모 시작 시각이 지금으로 바뀝니다.'
+      + ' 마감 시각이 이미 지났다면 원래 접수 기간만큼 미뤄집니다.'
+      + ' 되돌리려면 응모 설정에서 시각을 다시 정해야 합니다.',
+    confirmLabel: '지금 시작',
   },
   closeApplicationsNow: {
-    title: '응모 접수를 지금 마감할까요?',
-    description: '마감 이후에는 새 응모를 받을 수 없습니다.',
-    confirmLabel: '응모 마감',
+    title: '예정보다 일찍 응모를 마감할까요?',
+    description: '예약해 둔 마감 시각이 지금으로 바뀌고, 마감한 뒤에는 새 응모를 받을 수 없습니다.',
+    confirmLabel: '지금 마감',
   },
   startNow: {
     title: '팬미팅을 지금 시작할까요?',
-    description: '예정 시작 시각이 현재로 변경되고 확정 참가자에게 즉시 영향을 줍니다.',
+    description: '대기실이 즉시 열려 확정 참가자가 바로 들어옵니다.'
+      + ' 예정 시작 시각은 기록에 그대로 남습니다.',
     confirmLabel: '지금 시작',
   },
 }
@@ -477,22 +481,13 @@ export function ManagerMeetingDetailPage() {
           : action === 'closeApplicationsNow'
             ? 'APPLICATION_CLOSED'
             : 'LIVE'
-        await transitionFanMeetingImmediately(
-          meetingId,
-          currentStatus,
-          targetStatus,
-          token,
-          {
-            applicationStartAt: detail.meeting.application.startAt,
-            applicationEndAt: detail.meeting.application.endAt,
-          },
-        )
+        await transitionFanMeetingImmediately(meetingId, currentStatus, targetStatus, token)
         setMessage(
           action === 'openApplicationsNow'
             ? '응모 접수를 즉시 시작하고 응모 시작 시각을 현재로 갱신했습니다.'
             : action === 'closeApplicationsNow'
               ? '응모 접수를 즉시 마감하고 응모 마감 시각을 현재로 갱신했습니다.'
-              : '팬미팅을 즉시 시작하고 예정 시작 시각을 현재로 갱신했습니다.',
+              : '대기실을 열고 팬미팅을 시작했습니다.',
         )
       }
       await load()

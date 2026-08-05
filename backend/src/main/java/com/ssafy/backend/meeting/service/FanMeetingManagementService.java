@@ -42,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -210,6 +211,119 @@ public class FanMeetingManagementService {
             throw new BusinessException(ErrorCode.FAN_MEETING_STATE_CONFLICT);
         }
         meeting.publish(LocalDateTime.now(clock));
+        return response(meeting);
+    }
+
+    /**
+     * 예정 시각을 기다리지 않고 응모 접수를 지금 시작한다.
+     *
+     * <p>응모 서비스는 상태와 접수 기간을 함께 보므로 상태만 바꾸면 팬이 응모할 수 없다.
+     * 그래서 접수 시작 시각을 현재로 당긴다. 마감 시각이 이미 지났거나 없으면 원래 잡아 둔
+     * 접수 기간만큼 뒤로 미루고, 그마저 알 수 없으면 하루를 준다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 응모를 시작한 팬미팅 관리 정보
+     * @throws BusinessException 공개 상태가 아니거나 권한이 없는 경우
+     */
+    @Transactional
+    public FanMeetingManagementResponse openApplications(
+            Long meetingId, AuthenticatedUser principal
+    ) {
+        User actor = currentUserService.requireActiveUser(principal);
+        FanMeeting meeting = requireMeetingForUpdate(meetingId);
+        requireManagerOrSolo(meeting, actor);
+        MeetingApplicationSetting application = requireApplicationSetting(meetingId);
+
+        try {
+            meeting.openApplications();
+        } catch (IllegalStateException exception) {
+            throw new BusinessException(ErrorCode.FAN_MEETING_STATE_CONFLICT);
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        application.update(application.isEnabled(), now,
+                resolveCloseAt(application, now),
+                application.getResultAnnouncementAt(), application.getCapacity());
+        return response(meeting);
+    }
+
+    /**
+     * 앞당겨 접수를 시작할 때 쓸 마감 시각을 정한다.
+     *
+     * @param application 현재 응모 설정
+     * @param now 접수를 시작하는 시각
+     * @return 그대로 쓸 수 있으면 기존 마감 시각, 아니면 새로 계산한 시각
+     */
+    private LocalDateTime resolveCloseAt(MeetingApplicationSetting application, LocalDateTime now) {
+        LocalDateTime closeAt = application.getApplicationCloseAt();
+        if (closeAt != null && closeAt.isAfter(now)) {
+            return closeAt;
+        }
+
+        LocalDateTime openAt = application.getApplicationOpenAt();
+        if (openAt != null && closeAt != null && closeAt.isAfter(openAt)) {
+            return now.plus(Duration.between(openAt, closeAt));
+        }
+        return now.plusDays(1);
+    }
+
+    /**
+     * 예정 시각을 기다리지 않고 응모 접수를 지금 마감한다.
+     *
+     * <p>마감 시각도 현재로 맞춰, 상태는 마감인데 접수 기간은 남아 있는 어긋난 상태를
+     * 만들지 않는다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 응모를 마감한 팬미팅 관리 정보
+     * @throws BusinessException 응모 중이 아니거나 권한이 없는 경우
+     */
+    @Transactional
+    public FanMeetingManagementResponse closeApplications(
+            Long meetingId, AuthenticatedUser principal
+    ) {
+        User actor = currentUserService.requireActiveUser(principal);
+        FanMeeting meeting = requireMeetingForUpdate(meetingId);
+        requireManagerOrSolo(meeting, actor);
+        MeetingApplicationSetting application = requireApplicationSetting(meetingId);
+
+        try {
+            meeting.closeApplications();
+        } catch (IllegalStateException exception) {
+            throw new BusinessException(ErrorCode.FAN_MEETING_STATE_CONFLICT);
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        application.update(application.isEnabled(), application.getApplicationOpenAt(), now,
+                application.getResultAnnouncementAt(), application.getCapacity());
+        return response(meeting);
+    }
+
+    /**
+     * 대기실을 지금 연다.
+     *
+     * <p>팬미팅 상태는 바꾸지 않는다. 시작 전에도 참가자가 미리 들어와 장비를 점검할 수
+     * 있도록 오픈 시각만 현재로 당긴다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 대기실을 연 팬미팅 관리 정보
+     * @throws BusinessException 권한이 없는 경우
+     */
+    @Transactional
+    public FanMeetingManagementResponse openWaitingRoom(
+            Long meetingId, AuthenticatedUser principal
+    ) {
+        User actor = currentUserService.requireActiveUser(principal);
+        FanMeeting meeting = requireMeetingForUpdate(meetingId);
+        requireManagerOrSolo(meeting, actor);
+        MeetingOperationSetting operation = requireOperationSetting(meetingId);
+
+        operation.update(LocalDateTime.now(clock), operation.getCallDurationSec(),
+                operation.isRecordingEnabled(), operation.isTranslationEnabled(),
+                operation.getReconnectGraceSec(), operation.getEarlyStartMinutes(),
+                operation.getMaxRecallCount());
         return response(meeting);
     }
 

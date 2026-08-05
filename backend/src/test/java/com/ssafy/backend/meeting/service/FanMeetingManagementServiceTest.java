@@ -570,6 +570,110 @@ class FanMeetingManagementServiceTest {
     }
 
     /** 고정 시계가 가리키는 현재 시각을 반환한다. */
+    /**
+     * 예정보다 일찍 응모를 시작하면 접수 시작 시각도 현재로 당겨지는지 검증한다.
+     *
+     * <p>응모 서비스가 상태와 기간을 함께 보므로, 상태만 바뀌면 팬이 여전히 응모할 수 없다.
+     */
+    @Test
+    void openApplicationsMovesOpenTimeToNow() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = publishedMeeting(solo);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        MeetingApplicationSetting application = applicationSetting(meeting);
+        when(fanMeetingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(meeting));
+        when(applicationSettingRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(operationSettingRepository.findById(1L))
+                .thenReturn(Optional.of(operationSetting(meeting)));
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+
+        FanMeetingManagementResponse response = service.openApplications(1L, principal);
+
+        assertThat(response.status()).isEqualTo(FanMeetingStatus.APPLICATION_OPEN);
+        assertThat(meeting.getStatus()).isEqualTo(FanMeetingStatus.APPLICATION_OPEN);
+        assertThat(application.getApplicationOpenAt()).isEqualTo(now());
+        // 마감이 아직 미래(now+2d)라 그대로 둔다.
+        assertThat(application.getApplicationCloseAt()).isEqualTo(now().plusDays(2));
+    }
+
+    /** 마감 시각이 이미 지난 팬미팅을 열면 원래 접수 기간만큼 마감이 미뤄지는지 검증한다. */
+    @Test
+    void openApplicationsExtendsClosingWhenAlreadyPast() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = publishedMeeting(solo);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        // 접수 기간이 이틀이었지만 둘 다 지나 버린 팬미팅이다.
+        MeetingApplicationSetting application = MeetingApplicationSetting.create(
+                meeting, true, now().minusDays(3), now().minusDays(1), now().plusDays(3), 20
+        );
+        when(fanMeetingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(meeting));
+        when(applicationSettingRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(operationSettingRepository.findById(1L))
+                .thenReturn(Optional.of(operationSetting(meeting)));
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+
+        service.openApplications(1L, principal);
+
+        assertThat(application.getApplicationOpenAt()).isEqualTo(now());
+        assertThat(application.getApplicationCloseAt()).isEqualTo(now().plusDays(2));
+    }
+
+    /** 공개 상태가 아닌 팬미팅의 응모 시작 요청이 상태 충돌로 거부되는지 검증한다. */
+    @Test
+    void openApplicationsRejectsWhenNotPublished() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = draftMeeting(null, solo);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        stubMeetingWithSettings(meeting);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+
+        assertThatThrownBy(() -> service.openApplications(1L, principal))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FAN_MEETING_STATE_CONFLICT);
+        assertThat(meeting.getStatus()).isEqualTo(FanMeetingStatus.DRAFT);
+    }
+
+    /** 예정보다 일찍 응모를 마감하면 마감 시각도 현재로 맞춰지는지 검증한다. */
+    @Test
+    void closeApplicationsMovesCloseTimeToNow() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = publishedMeeting(solo);
+        meeting.openApplications();
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        MeetingApplicationSetting application = applicationSetting(meeting);
+        when(fanMeetingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(meeting));
+        when(applicationSettingRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(operationSettingRepository.findById(1L))
+                .thenReturn(Optional.of(operationSetting(meeting)));
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+
+        FanMeetingManagementResponse response = service.closeApplications(1L, principal);
+
+        assertThat(response.status()).isEqualTo(FanMeetingStatus.APPLICATION_CLOSED);
+        assertThat(application.getApplicationCloseAt()).isEqualTo(now());
+    }
+
+    /** 대기실을 즉시 열어도 팬미팅 상태는 그대로 두고 오픈 시각만 당기는지 검증한다. */
+    @Test
+    void openWaitingRoomMovesOpenTimeWithoutChangingStatus() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = publishedMeeting(solo);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        MeetingOperationSetting operation = operationSetting(meeting);
+        when(fanMeetingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(meeting));
+        when(applicationSettingRepository.findById(1L))
+                .thenReturn(Optional.of(applicationSetting(meeting)));
+        when(operationSettingRepository.findById(1L)).thenReturn(Optional.of(operation));
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+
+        service.openWaitingRoom(1L, principal);
+
+        assertThat(operation.getWaitingRoomOpenAt()).isEqualTo(now());
+        // 통화 시간 같은 나머지 운영 설정은 건드리지 않는다.
+        assertThat(operation.getCallDurationSec()).isEqualTo(120);
+        assertThat(meeting.getStatus()).isEqualTo(FanMeetingStatus.PUBLISHED);
+    }
+
     private LocalDateTime now() {
         return LocalDateTime.now(Clock.fixed(NOW, SEOUL));
     }

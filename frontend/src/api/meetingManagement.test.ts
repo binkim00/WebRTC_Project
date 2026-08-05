@@ -19,57 +19,58 @@ function okResponse(status: string) {
 }
 
 describe('transitionFanMeetingImmediately', () => {
-  it('응모 즉시 시작은 서버 기간 검증을 통과하도록 KST 시작 시각도 현재로 변경한다', async () => {
+  it('응모 즉시 시작은 운영 명령 하나로 처리한다', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse('APPLICATION_OPEN'))
     vi.stubGlobal('fetch', fetchMock)
 
-    await transitionFanMeetingImmediately(
-      7,
-      'PUBLISHED',
-      'APPLICATION_OPEN',
-      'token',
-      {
-        applicationStartAt: '2026-08-04T09:00:00',
-        applicationEndAt: '2026-08-05T09:00:00',
-        now: new Date('2026-08-03T03:00:00.000Z'),
-      },
-    )
+    await transitionFanMeetingImmediately(7, 'PUBLISHED', 'APPLICATION_OPEN', 'token')
 
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toMatch(/\/api\/v1\/fan-meetings\/7\/test-control$/)
-    expect(JSON.parse(String(init.body))).toEqual({
-      status: 'APPLICATION_OPEN',
-      applicationOpenAt: '2026-08-03T12:00:00.000',
-    })
+    expect(url).toMatch(/\/api\/v1\/fan-meetings\/7\/applications\/open$/)
+    expect(init.method).toBe('POST')
+    // 접수 기간을 다시 잡는 일은 서버가 하므로 화면은 본문을 보내지 않는다.
+    expect(init.body).toBeUndefined()
   })
 
-  it('일정 전 즉시 시작은 예정 시각을 현재로 맞춘 뒤 정식 start 명령을 호출한다', async () => {
+  it('응모 즉시 마감도 운영 명령 하나로 처리한다', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse('APPLICATION_CLOSED'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await transitionFanMeetingImmediately(7, 'APPLICATION_OPEN', 'APPLICATION_CLOSED', 'token')
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toMatch(/\/api\/v1\/fan-meetings\/7\/applications\/close$/)
+  })
+
+  it('일정 전 즉시 시작은 대기실을 먼저 열고 정식 start 명령을 호출한다', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(okResponse('READY'))
       .mockResolvedValueOnce(okResponse('LIVE'))
     vi.stubGlobal('fetch', fetchMock)
 
-    await transitionFanMeetingImmediately(
-      8,
-      'READY',
-      'LIVE',
-      'token',
-      { now: new Date('2026-08-03T03:00:00.000Z') },
-    )
+    await transitionFanMeetingImmediately(8, 'READY', 'LIVE', 'token')
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const firstCall = fetchMock.mock.calls[0]
     const secondCall = fetchMock.mock.calls[1]
     if (!firstCall || !secondCall) throw new Error('예상한 두 API 요청이 실행되지 않았습니다.')
 
-    expect(firstCall[0]).toMatch(/\/api\/v1\/fan-meetings\/8\/test-control$/)
-    expect(JSON.parse(String((firstCall[1] as RequestInit).body))).toEqual({
-      scheduledStartAt: '2026-08-03T12:00:00.000',
-      waitingRoomOpenAt: '2026-08-03T12:00:00.000',
-    })
+    expect(firstCall[0]).toMatch(/\/api\/v1\/fan-meetings\/8\/waiting-room\/open$/)
     expect(secondCall[0]).toMatch(/\/api\/v1\/fan-meetings\/8\/start$/)
     expect((secondCall[1] as RequestInit).method).toBe('POST')
+  })
+
+  it('되돌아가는 전환은 서버에 요청하지 않고 막는다', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      transitionFanMeetingImmediately(7, 'APPLICATION_CLOSED', 'APPLICATION_OPEN', 'token'),
+    ).rejects.toBeInstanceOf(TypeError)
+
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
@@ -103,11 +104,9 @@ describe('startFanMeetingWithOpenWaitingRoom', () => {
     const [openCall, startCall] = fetchMock.mock.calls
     if (!openCall || !startCall) throw new Error('예상한 두 API 요청이 실행되지 않았습니다.')
 
-    expect(openCall[0]).toMatch(/\/api\/v1\/fan-meetings\/9\/test-control$/)
-    // 오픈 시각만 보내 다른 운영 설정은 서버가 기존 값으로 유지하게 한다.
-    expect(Object.keys(JSON.parse(String((openCall[1] as RequestInit).body)))).toEqual([
-      'waitingRoomOpenAt',
-    ])
+    expect(openCall[0]).toMatch(/\/api\/v1\/fan-meetings\/9\/waiting-room\/open$/)
+    // 오픈 시각은 서버가 정하므로 화면은 본문을 보내지 않는다.
+    expect((openCall[1] as RequestInit).body).toBeUndefined()
     expect(startCall[0]).toMatch(/\/api\/v1\/fan-meetings\/9\/start$/)
   })
 

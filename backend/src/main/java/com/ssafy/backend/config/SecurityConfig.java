@@ -172,6 +172,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/applications/draw",
                                 "/api/v1/fan-meetings/*/applications/results/publish")
                                 .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
+                        // 예정 시각보다 일찍 접수를 열고 닫거나 대기실을 여는 운영 명령
+                        .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/applications/open",
+                                "/api/v1/fan-meetings/*/applications/close",
+                                "/api/v1/fan-meetings/*/waiting-room/open")
+                                .hasAnyRole("MANAGER", "SOLO_INFLUENCER")
 
                         // 대기 순서 변경 (QUEUE-005, QREQ-001~003)
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/queue-entries/*/position")

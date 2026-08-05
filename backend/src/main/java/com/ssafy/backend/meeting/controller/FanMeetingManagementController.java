@@ -79,6 +79,51 @@ public class FanMeetingManagementController {
     }
 
     /**
+     * 예정 시각을 기다리지 않고 응모 접수를 지금 시작한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 응모를 시작한 팬미팅 관리 정보
+     */
+    @PostMapping("/applications/open")
+    public ApiResponse<FanMeetingManagementResponse> openApplications(
+            @PathVariable Long meetingId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(managementService.openApplications(meetingId, principal));
+    }
+
+    /**
+     * 예정 시각을 기다리지 않고 응모 접수를 지금 마감한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 응모를 마감한 팬미팅 관리 정보
+     */
+    @PostMapping("/applications/close")
+    public ApiResponse<FanMeetingManagementResponse> closeApplications(
+            @PathVariable Long meetingId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(managementService.closeApplications(meetingId, principal));
+    }
+
+    /**
+     * 대기실을 지금 연다. 팬미팅 상태는 그대로 둔다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 대기실을 연 팬미팅 관리 정보
+     */
+    @PostMapping("/waiting-room/open")
+    public ApiResponse<FanMeetingManagementResponse> openWaitingRoom(
+            @PathVariable Long meetingId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(managementService.openWaitingRoom(meetingId, principal));
+    }
+
+    /**
      * 공개 후 진행 전 팬미팅을 취소한다.
      *
      * @param meetingId 팬미팅 식별자

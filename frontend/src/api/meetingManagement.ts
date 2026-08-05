@@ -61,13 +61,6 @@ export type ImmediateFanMeetingStatus =
   | 'APPLICATION_CLOSED'
   | 'LIVE'
 
-export type ImmediateTransitionContext = {
-  applicationStartAt?: string | null
-  applicationEndAt?: string | null
-  /** 테스트에서 전환 시각을 고정할 때 사용한다. */
-  now?: Date
-}
-
 /**
  * 현재 백엔드가 제공하는 강제 전환 API를 운영 UI에서 안전하게 제한하기 위한 순방향 표다.
  *
@@ -177,14 +170,9 @@ export async function controlFanMeetingForTest(
 /**
  * 예약 시각만 우회해 다음 운영 상태로 즉시 전환한다.
  *
- * 백엔드에 정식 transition 엔드포인트가 아직 없어 기존 `/test-control`을 제한적으로 사용한다.
- * 서버의 실제 기간 검증과 시작 기록을 만족시키기 위해 해당 예약 시각을 현재로 맞춘 뒤 순방향
- * 상태만 허용한다. 정식 명령 API가 추가되면 이 함수 내부만 교체하면 된다.
+ * 접수 기간과 대기실 오픈 시각을 다시 잡는 일은 서버의 운영 명령이 맡는다. 상태와 기간이
+ * 어긋나면 팬이 응모하거나 입장할 수 없으므로 한 트랜잭션에서 함께 바뀌어야 한다.
  */
-function toServerLocalDateTime(date: Date): string {
-  // KST는 일광 절약 시간이 없으므로 UTC에 9시간을 더해 offset 없는 서버 LocalDateTime을 만든다.
-  return new Date(date.getTime() + 9 * 60 * 60_000).toISOString().slice(0, 23)
-}
 
 /**
  * 서버가 보낸 LocalDateTime 문자열을 밀리초로 바꾼다.
@@ -212,12 +200,26 @@ export function isWaitingRoomOpen(queueOpenAt?: string | null, now = Date.now())
   return Number.isFinite(openAt) && now >= openAt
 }
 
+/**
+ * 예약 시각을 기다리지 않고 다음 운영 상태로 넘긴다.
+ *
+ * <p>서버의 운영 명령이 상태와 함께 접수 기간·대기실 오픈 시각까지 맞춰 주므로 화면은
+ * 목표 상태만 정하면 된다. 여기서는 되돌아가거나 종료 상태를 되살리는 조합을 미리 막고,
+ * 최종 권한과 상태 검증은 서버가 다시 한다.
+ *
+ * @param meetingId 팬미팅 식별자
+ * @param currentStatus 지금 상태
+ * @param targetStatus 넘어갈 상태
+ * @param authToken 액세스 토큰
+ * @param signal 요청 취소 신호
+ * @returns 전환된 팬미팅 관리 정보
+ * @throws TypeError 순방향으로 허용하지 않는 조합인 경우
+ */
 export async function transitionFanMeetingImmediately(
   meetingId: string | number,
   currentStatus: FanMeetingStatus,
   targetStatus: ImmediateFanMeetingStatus,
   authToken: string,
-  context: ImmediateTransitionContext = {},
   signal?: AbortSignal,
 ): Promise<FanMeetingManagementResponse> {
   const allowedTargets = IMMEDIATE_TRANSITIONS[currentStatus]
@@ -227,55 +229,19 @@ export async function transitionFanMeetingImmediately(
     )
   }
 
-  const now = context.now ?? new Date()
-  const nowValue = toServerLocalDateTime(now)
-
   if (targetStatus === 'APPLICATION_OPEN') {
-    const originalStart = serverLocalDateTimeMs(context.applicationStartAt)
-    const originalEnd = serverLocalDateTimeMs(context.applicationEndAt)
-    const originalDuration = originalEnd - originalStart
-    const closeAt = Number.isFinite(originalEnd) && originalEnd > now.getTime()
-      ? undefined
-      : toServerLocalDateTime(
-          new Date(
-            now.getTime() +
-              (Number.isFinite(originalDuration) && originalDuration > 0
-                ? originalDuration
-                : 24 * 60 * 60_000),
-          ),
-        )
-
-    // 응모 서비스가 상태와 기간을 모두 검사하므로 시작 시각도 현재로 옮긴다.
-    return controlFanMeetingForTest(
-      meetingId,
-      {
-        status: targetStatus,
-        applicationOpenAt: nowValue,
-        ...(closeAt ? { applicationCloseAt: closeAt } : {}),
-      },
-      authToken,
-      signal,
-    )
+    // 접수 시작·마감 시각을 다시 잡는 일은 서버가 한다. 상태와 기간이 어긋나면 팬이
+    // 응모할 수 없으므로 한 트랜잭션에서 함께 처리해야 한다.
+    return postCommand(meetingId, 'applications/open', authToken, signal)
   }
 
   if (targetStatus === 'APPLICATION_CLOSED') {
-    // 실제 마감 기록과 상태가 어긋나지 않도록 예약 마감 시각도 현재로 맞춘다.
-    return controlFanMeetingForTest(
-      meetingId,
-      { status: targetStatus, applicationCloseAt: nowValue },
-      authToken,
-      signal,
-    )
+    return postCommand(meetingId, 'applications/close', authToken, signal)
   }
 
-  // LIVE 강제 지정은 actualStartAt을 기록하지 않으므로 시작 시각을 현재로 옮긴 뒤 정식 start 명령을 호출한다.
-  await controlFanMeetingForTest(
-    meetingId,
-    // 즉시 시작 시 대기열 오픈도 현재 시각으로 맞춰야 참가자가 바로 입장할 수 있다.
-    { scheduledStartAt: nowValue, waitingRoomOpenAt: nowValue },
-    authToken,
-    signal,
-  )
+  // 정식 시작 명령은 대기실 오픈 시각을 건드리지 않는다. 먼저 대기실을 열어야 참가자가
+  // 바로 들어올 수 있다.
+  await postCommand(meetingId, 'waiting-room/open', authToken, signal)
   return startFanMeeting(meetingId, authToken, signal)
 }
 
@@ -285,12 +251,7 @@ export function openWaitingRoomImmediately(
   authToken: string,
   signal?: AbortSignal,
 ): Promise<FanMeetingManagementResponse> {
-  return controlFanMeetingForTest(
-    meetingId,
-    { waitingRoomOpenAt: toServerLocalDateTime(new Date()) },
-    authToken,
-    signal,
-  )
+  return postCommand(meetingId, 'waiting-room/open', authToken, signal)
 }
 
 /**
