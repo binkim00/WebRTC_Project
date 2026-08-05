@@ -106,7 +106,7 @@ class DeepLVoiceAdapter(STTAdapter):
         """POST /v3/voice/realtime로 세션 생성. (streaming_url, token) 반환."""
         body = {
             "source_language": source_lang,
-            "source_language_mode": fixed,
+            "source_language_mode": "fixed",
             "target_languages": [self._target_lang],
             "source_media_content_type": "audio/pcm;encoding=s16le;rate=48000",
         }

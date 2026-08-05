@@ -324,6 +324,17 @@ async def my_agent(ctx: JobContext) -> None:
                 participant.identity, influencer_lang,
             )
 
+            # 팬이 인플루언서보다 먼저 입장한 경우: start_fan_call 시점엔 트랙이 없어
+            # 인플루언서 STT가 시작되지 못했다. 활성 통화가 있고 STT가 아직 없으면 여기서 한 번만 시작.
+            if current_call and (
+                current_call.influencer_audio_task is None
+                or current_call.influencer_audio_task.done()
+            ):
+                current_call.influencer_audio_task = asyncio.create_task(
+                    _run_influencer_stt()
+                )
+                logger.info("인플루언서 STT 지연 시작 (팬 먼저 입장 케이스)")
+
         elif role == "FAN":
             # 팬 입장 → 통화 상태 생성 후 STT 시작
             async def fan_stt_loop() -> None:
