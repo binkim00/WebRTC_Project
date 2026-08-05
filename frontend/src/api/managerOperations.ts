@@ -47,6 +47,14 @@ export type OperationSettingRequest = {
  * 현재 백엔드의 `POST /api/v1/fan-meetings` 요청 본문 구조이다.
  * 엔드포인트 이름과 달리 프런트에서는 홍보·응모 이벤트를 등록할 때 사용한다.
  */
+/**
+ * 참가자를 정하는 방식이다. 백엔드 `ParticipantSelectionType` enum과 같은 값을 쓴다.
+ *
+ * - `APPLICATION`: 멜리 안에서 응모를 받고 추첨으로 참가자를 정한다.
+ * - `EXTERNAL_SELECTION`: 외부에서 이미 선별한 명단을 CSV로 등록한다.
+ */
+export type ParticipantSelectionType = 'APPLICATION' | 'EXTERNAL_SELECTION'
+
 export type FanMeetingCreateRequest = {
   influencerId: number
   title: string
@@ -138,6 +146,23 @@ function normalizeCoverImageUrl(value: string | null): string | null {
 }
 
 /** 서버 요청 전에 필수 값과 숫자 범위를 검사해 잘못된 요청을 빠르게 차단한다. */
+/**
+ * 응모 사용 여부에서 참가자 선별 방식을 정한다.
+ *
+ * 이 값을 보내지 않으면 백엔드가 `APPLICATION`으로 간주하고, 그 상태에서 응모가 꺼져 있으면
+ * "Application based meetings require enabled applications."로 **생성 자체를 거부**한다.
+ * (FanMeetingService.validateParticipantSelection) 그래서 외부 선별 팬미팅은 이 필드 없이는
+ * 만들 수 없었다.
+ *
+ * 별도 입력을 만들지 않고 응모 토글에서 파생시킨다. 백엔드 검증이 요구하는 조합
+ * (APPLICATION↔응모 켜짐, EXTERNAL_SELECTION↔응모 꺼짐)이 어긋날 수 없기 때문이다.
+ */
+function resolveParticipantSelectionType(
+  payload: FanMeetingCreateRequest,
+): ParticipantSelectionType {
+  return payload.application.enabled ? 'APPLICATION' : 'EXTERNAL_SELECTION'
+}
+
 function assertFanMeetingCreateRequest(payload: FanMeetingCreateRequest) {
   normalizeCoverImageUrl(payload.coverImageUrl)
 
@@ -192,6 +217,7 @@ export async function createEvent(
   // 응모를 사용하지 않아도 capacity는 @NotNull이므로 0을 보내고,
   // 날짜는 null이어야 서비스의 비활성 응모 검증을 통과한다.
   const requestBody = {
+    participantSelectionType: resolveParticipantSelectionType(payload),
     influencerId: payload.influencerId,
     title: payload.title.trim(),
     description: payload.description?.trim() || null,
@@ -255,6 +281,7 @@ export async function updateFanMeeting(
   assertFanMeetingCreateRequest(payload)
 
   const requestBody = {
+    participantSelectionType: resolveParticipantSelectionType(payload),
     influencerId: payload.influencerId,
     title: payload.title.trim(),
     description: payload.description?.trim() || null,

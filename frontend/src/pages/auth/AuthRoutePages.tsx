@@ -13,35 +13,37 @@ import {
 } from '../../api/auth'
 import { maskEmail } from '../../api/emailVerifications'
 import { isEmailVerificationEnabled } from '../../config/features'
-import { AlertBanner, EmailVerificationNotice } from '../../components'
+import { AlertBanner, EmailVerificationNotice, SocialLoginButtons } from '../../components'
+import { useTranslation, type TranslationKey } from '../../i18n'
 
 const languageOptions = [
   { label: '한국어', value: 'KOREAN' },
   { label: 'English', value: 'ENGLISH' },
 ] as const
 
-/** 화면 라벨은 서비스 전반의 명칭(1인 인플루언서)을 따르고 값은 백엔드 enum을 그대로 쓴다. */
-const roleOptions: readonly { label: string; value: SignupRole; note: string }[] = [
+/**
+ * 역할 선택 옵션이다. 값은 백엔드 enum을 그대로 쓰고, 라벨·설명은 **사전 키**로 들고 있는다.
+ *
+ * 이 배열은 모듈 상수라 훅을 쓸 수 없고 언어가 바뀔 때 다시 만들 수도 없다. 그래서 번역은
+ * 항목을 그리는 컴포넌트가 수행한다. (appHeaderNavigation과 같은 방식)
+ */
+const roleOptions: readonly {
+  value: SignupRole
+  labelKey: TranslationKey
+  noteKey: TranslationKey
+}[] = [
+  { value: 'FAN', labelKey: 'signup.role.fan', noteKey: 'signup.role.fan.note' },
   {
-    label: '팬',
-    value: 'FAN',
-    note: '좋아하는 크리에이터의 이벤트에 응모하고 1:1 영상 팬미팅에 참여합니다.',
-  },
-  {
-    label: '인플루언서',
     value: 'INFLUENCER',
-    note: '소속 조직의 매니저가 만든 팬미팅을 진행합니다. 가입 후 조직 초대를 받아 합류하세요.',
+    labelKey: 'signup.role.influencer',
+    noteKey: 'signup.role.influencer.note',
   },
   {
-    label: '1인 인플루언서',
     value: 'SOLO_INFLUENCER',
-    note: '소속 조직 없이 팬미팅을 직접 만들고 진행합니다.',
+    labelKey: 'signup.role.soloInfluencer',
+    noteKey: 'signup.role.soloInfluencer.note',
   },
-  {
-    label: '매니저',
-    value: 'MANAGER',
-    note: '조직을 만들고 인플루언서를 초대해 팬미팅 운영을 관리합니다.',
-  },
+  { value: 'MANAGER', labelKey: 'signup.role.manager', noteKey: 'signup.role.manager.note' },
 ]
 
 function isPreferredLanguage(value: string): value is PreferredLanguage {
@@ -72,6 +74,7 @@ function FieldError({ children }: { children: ReactNode }) {
 }
 
 export function LoginPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -121,7 +124,7 @@ export function LoginPage() {
       setSubmitError(
         error instanceof ApiError || error instanceof TypeError
           ? error.message
-          : '로그인 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('login.failed'),
       )
     } finally {
       setLoading(false)
@@ -132,16 +135,16 @@ export function LoginPage() {
     <main className="mx-auto grid w-full max-w-[1100px] items-center gap-9 py-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-[72px] lg:py-16">
       <section aria-labelledby="lg-intro" className="min-w-0">
         <p className="text-[13px] font-extrabold tracking-[0.08em] text-[var(--color-primary-coral)]">
-          MELLY FAN MEETING
+          {t('login.eyebrow')}
         </p>
         <h1
           className="mt-4 text-[clamp(2rem,3.6vw,2.75rem)] font-black leading-[1.16] tracking-[-0.05em] text-[var(--color-text-primary)] [text-wrap:balance]"
           id="lg-intro"
         >
-          다시 만나서 반가워요
+          {t('login.heading')}
         </h1>
         <p className="mt-4 max-w-[38ch] text-lg font-medium leading-[1.7] text-[var(--color-text-body)]">
-          로그인하고 좋아하는 인플루언서의 이벤트와 신청한 팬미팅을 확인해 보세요.
+          {t('login.lead')}
         </p>
       </section>
 
@@ -150,17 +153,17 @@ export function LoginPage() {
         className="min-w-0 rounded-xl border border-[var(--color-divider)] p-7"
       >
         <h2 className="text-[22px] font-extrabold tracking-[-0.032em]" id="lg-form">
-          로그인
+          {t('login.formTitle')}
         </h2>
         <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-tertiary)]">
-          MELLY 계정 정보를 입력해 주세요.
+          {t('login.formLead')}
         </p>
 
         {notice ? (
           <AlertBanner
             className="mt-5"
             onDismiss={() => setNotice(undefined)}
-            title="안내"
+            title={t('login.noticeTitle')}
             variant="info"
           >
             {notice}
@@ -170,21 +173,21 @@ export function LoginPage() {
         <form className="mt-6" onSubmit={(event) => void handleSubmit(event)}>
           <label className="block">
             <span className="block text-sm font-bold text-[var(--color-text-primary)]">
-              아이디
+              {t('login.loginId')}
             </span>
             <input
               autoComplete="username"
               className="mt-2 min-h-[50px] w-full rounded-lg border border-[var(--color-border-control)] bg-white px-[13px] text-base font-semibold text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
               name="loginId"
               onChange={(event) => setLoginId(event.currentTarget.value)}
-              placeholder="아이디를 입력해 주세요"
+              placeholder={t('login.loginIdPlaceholder')}
               value={loginId}
             />
           </label>
 
           <label className="mt-[18px] block">
             <span className="block text-sm font-bold text-[var(--color-text-primary)]">
-              비밀번호
+              {t('login.password')}
             </span>
             <span className="relative mt-2 block">
               <input
@@ -192,12 +195,12 @@ export function LoginPage() {
                 className="min-h-[50px] w-full rounded-lg border border-[var(--color-border-control)] bg-white pl-[13px] pr-[52px] text-base font-semibold text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
                 name="password"
                 onChange={(event) => setPassword(event.currentTarget.value)}
-                placeholder="비밀번호를 입력해 주세요"
+                placeholder={t('login.passwordPlaceholder')}
                 type={showPassword ? 'text' : 'password'}
                 value={password}
               />
               <button
-                aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
+                aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
                 aria-pressed={showPassword}
                 className="absolute right-1.5 top-1/2 grid min-h-11 min-w-11 -translate-y-1/2 place-items-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
                 onClick={() => setShowPassword((visible) => !visible)}
@@ -217,10 +220,10 @@ export function LoginPage() {
               aria-disabled="true"
               className="cursor-not-allowed whitespace-nowrap text-[15px] font-bold text-[var(--color-text-tertiary)]"
               disabled
-              title="비밀번호 재설정 API가 제공되면 사용할 수 있습니다."
+              title={t('login.forgotPasswordTitle')}
               type="button"
             >
-              비밀번호 찾기 준비 중
+              {t('login.forgotPasswordPending')}
             </button>
           </div>
 
@@ -240,17 +243,29 @@ export function LoginPage() {
                 : 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-tertiary)]'
             }`}
             disabled={!canSubmit}
-            title={filled ? undefined : '아이디와 비밀번호를 입력해 주세요.'}
+            title={filled ? undefined : t('login.fillBoth')}
             type="submit"
           >
-            {loading ? '로그인 중' : '로그인'}
+            {loading ? t('login.submitting') : t('login.submit')}
           </button>
         </form>
 
+        {/*
+          소셜 로그인. 아이디·비밀번호 입력과 구분되도록 구분선과 안내를 두고 아래에 배치한다.
+          가입 여부에 따라 서버가 흐름을 정하므로(LOGIN·SIGNUP_REQUIRED·LINK_REQUIRED)
+          버튼 문구는 "시작하기"로 두어 로그인과 가입을 함께 안내한다.
+        */}
+        <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
+          <p className="mb-3 text-center text-[13px] font-bold text-[var(--color-text-tertiary)]">
+            {t('login.socialDivider')}
+          </p>
+          <SocialLoginButtons />
+        </div>
+
         <p className="mt-5 border-t border-[var(--color-divider)] pt-[18px] text-[15px] font-medium text-[var(--color-text-tertiary)]">
-          아직 MELLY 계정이 없나요?{' '}
+          {t('login.noAccount')}{' '}
           <Link className="font-extrabold text-[var(--color-primary-coral)]" to="/signup">
-            회원가입
+            {t('login.goSignup')}
           </Link>
         </p>
       </section>
@@ -269,6 +284,7 @@ type SignupPhase =
   | { kind: 'verifying'; email: string; role: SignupRole }
 
 export function SignupPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [loginId, setLoginId] = useState('')
@@ -293,25 +309,25 @@ export function SignupPage() {
 
   // dc.html의 blur 검증 흐름 그대로, 각 필드의 오류 문구를 계산한다.
   const emailError = !email.trim()
-    ? '이메일을 입력해 주세요.'
+    ? t('signup.error.email')
     : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-      ? '올바른 이메일 형식을 입력해 주세요.'
+      ? t('signup.error.emailFormat')
       : ''
-  const loginIdError = loginId.trim() ? '' : '아이디를 입력해 주세요.'
-  const nicknameError = nickname.trim() ? '' : '닉네임을 입력해 주세요.'
+  const loginIdError = loginId.trim() ? '' : t('signup.error.loginId')
+  const nicknameError = nickname.trim() ? '' : t('signup.error.nickname')
   const passwordError = !password
-    ? '비밀번호를 입력해 주세요.'
+    ? t('signup.error.password')
     : !/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(password)
-      ? '영문과 숫자를 포함해 8자 이상 입력해 주세요.'
+      ? t('signup.error.passwordRule')
       : ''
   const passwordConfirmError = !passwordConfirm
-    ? '비밀번호를 다시 입력해 주세요.'
+    ? t('signup.error.passwordConfirm')
     : passwordConfirm === password
       ? ''
-      : '비밀번호가 일치하지 않습니다.'
-  const languageError = isPreferredLanguage(language) ? '' : '선호 언어를 선택해 주세요.'
-  const roleError = role ? '' : '역할을 선택해 주세요.'
-  const termsError = termsAgreed && privacyAgreed ? '' : '필수 약관에 동의해 주세요.'
+      : t('signup.error.passwordMismatch')
+  const languageError = isPreferredLanguage(language) ? '' : t('signup.error.language')
+  const roleError = role ? '' : t('signup.error.role')
+  const termsError = termsAgreed && privacyAgreed ? '' : t('signup.error.terms')
 
   const allValid =
     !emailError &&
@@ -392,7 +408,7 @@ export function SignupPage() {
       setSubmitError(
         error instanceof ApiError || error instanceof TypeError
           ? error.message
-          : '회원가입 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('signup.failed'),
       )
     } finally {
       setLoading(false)
@@ -437,10 +453,10 @@ export function SignupPage() {
           MELLY FAN MEETING
         </p>
         <h1 className="mt-3.5 text-[32px] font-black tracking-[-0.045em] text-[var(--color-text-primary)] [text-wrap:balance]">
-          가입이 완료되었어요
+          {t('signup.verify.heading')}
         </h1>
         <p className="mt-3 text-[17px] font-medium leading-[1.7] text-[var(--color-text-body)]">
-          마지막으로 이메일 인증만 마치면 바로 로그인할 수 있어요.
+          {t('signup.verify.lead')}
         </p>
 
         <section className="mt-8 rounded-xl border border-[var(--color-divider)] p-7">
@@ -448,7 +464,7 @@ export function SignupPage() {
             autoSend
             email={phase.email}
             onVerified={() =>
-              leaveVerifyingPhase('이메일 인증이 완료되었어요. 이제 로그인해 주세요.')
+              leaveVerifyingPhase(t('signup.verify.done'))
             }
           />
         </section>
@@ -468,7 +484,7 @@ export function SignupPage() {
           }
           type="button"
         >
-          나중에 인증하고 로그인하러 가기
+          {t('signup.verify.later')}
         </button>
       </main>
     )
@@ -480,10 +496,10 @@ export function SignupPage() {
         MELLY FAN MEETING
       </p>
       <h1 className="mt-3.5 text-[32px] font-black tracking-[-0.045em] text-[var(--color-text-primary)] [text-wrap:balance]">
-        MELLY에서 팬미팅을 시작해 보세요
+        {t('signup.heading')}
       </h1>
       <p className="mt-3 text-[17px] font-medium leading-[1.7] text-[var(--color-text-body)]">
-        계정을 만들고 좋아하는 인플루언서의 이벤트와 팬미팅에 참여할 수 있어요.
+        {t('signup.lead')}
       </p>
 
       <section
@@ -491,21 +507,21 @@ export function SignupPage() {
         className="mt-8 border-t border-[var(--color-divider)] pt-7"
       >
         <h2 className="text-[22px] font-extrabold tracking-[-0.032em]" id="su-form">
-          회원가입
+          {t('signup.formTitle')}
         </h2>
         <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-tertiary)]">
-          아래 정보를 입력해 MELLY 계정을 만들어 주세요.
+          {t('signup.formLead')}
         </p>
       </section>
 
       <form className="mt-6" onSubmit={(event) => void handleSubmit(event)}>
         <p className="mb-5 text-sm font-semibold text-[var(--color-text-tertiary)]">
-          <span className="text-[var(--color-primary-coral)]">*</span> 표시는 필수 입력
-          항목입니다.
+          <span className="text-[var(--color-primary-coral)]">*</span>{' '}
+          {t('signup.requiredNote')}
         </p>
 
         <label className="block">
-          <FieldLabel>이메일</FieldLabel>
+          <FieldLabel>{t('signup.email')}</FieldLabel>
           <input
             aria-invalid={show('email', emailError)}
             autoComplete="email"
@@ -522,14 +538,14 @@ export function SignupPage() {
         <div className="mt-[18px] grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block">
-              <FieldLabel>아이디</FieldLabel>
+              <FieldLabel>{t('signup.loginId')}</FieldLabel>
               <input
                 aria-invalid={show('loginId', loginIdError)}
                 autoComplete="username"
                 className={`${signupInputClass} ${fieldBorderClass(show('loginId', loginIdError))}`}
                 onBlur={markTouched('loginId')}
                 onChange={(event) => setLoginId(event.currentTarget.value)}
-                placeholder="아이디를 입력해 주세요"
+                placeholder={t('signup.loginIdPlaceholder')}
                 value={loginId}
               />
             </label>
@@ -537,14 +553,14 @@ export function SignupPage() {
           </div>
           <div>
             <label className="block">
-              <FieldLabel>닉네임</FieldLabel>
+              <FieldLabel>{t('signup.nickname')}</FieldLabel>
               <input
                 aria-invalid={show('nickname', nicknameError)}
                 autoComplete="nickname"
                 className={`${signupInputClass} ${fieldBorderClass(show('nickname', nicknameError))}`}
                 onBlur={markTouched('nickname')}
                 onChange={(event) => setNickname(event.currentTarget.value)}
-                placeholder="닉네임을 입력해 주세요"
+                placeholder={t('signup.nicknamePlaceholder')}
                 value={nickname}
               />
             </label>
@@ -553,7 +569,7 @@ export function SignupPage() {
         </div>
 
         <label className="mt-[18px] block">
-          <FieldLabel>비밀번호</FieldLabel>
+          <FieldLabel>{t('signup.password')}</FieldLabel>
           <span className="relative mt-2 block">
             <input
               aria-invalid={show('password', passwordError)}
@@ -561,7 +577,7 @@ export function SignupPage() {
               className={`${signupInputClass} mt-0 pr-[52px] ${fieldBorderClass(show('password', passwordError))}`}
               onBlur={markTouched('password')}
               onChange={(event) => setPassword(event.currentTarget.value)}
-              placeholder="비밀번호를 입력해 주세요"
+              placeholder={t('signup.passwordPlaceholder')}
               type={showPassword ? 'text' : 'password'}
               value={password}
             />
@@ -572,12 +588,12 @@ export function SignupPage() {
           <FieldError>{passwordError}</FieldError>
         ) : (
           <p className="mt-[7px] text-sm font-medium text-[var(--color-text-tertiary)]">
-            영문과 숫자를 조합해 8자 이상 입력해 주세요.
+            {t('signup.passwordHint')}
           </p>
         )}
 
         <label className="mt-[18px] block">
-          <FieldLabel>비밀번호 확인</FieldLabel>
+          <FieldLabel>{t('signup.passwordConfirm')}</FieldLabel>
           <span className="relative mt-2 block">
             <input
               aria-invalid={show('passwordConfirm', passwordConfirmError)}
@@ -585,7 +601,7 @@ export function SignupPage() {
               className={`${signupInputClass} mt-0 pr-[52px] ${fieldBorderClass(show('passwordConfirm', passwordConfirmError))}`}
               onBlur={markTouched('passwordConfirm')}
               onChange={(event) => setPasswordConfirm(event.currentTarget.value)}
-              placeholder="비밀번호를 다시 입력해 주세요"
+              placeholder={t('signup.passwordConfirmPlaceholder')}
               type={showPasswordConfirm ? 'text' : 'password'}
               value={passwordConfirm}
             />
@@ -601,7 +617,7 @@ export function SignupPage() {
         ) : null}
 
         <label className="mt-[18px] block">
-          <FieldLabel>선호 언어</FieldLabel>
+          <FieldLabel>{t('signup.language')}</FieldLabel>
           <select
             aria-invalid={show('language', languageError)}
             className={`mt-2 min-h-[50px] w-full rounded-lg border bg-white px-[11px] text-base font-semibold text-[var(--color-text-primary)] outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)] ${fieldBorderClass(show('language', languageError))}`}
@@ -609,7 +625,7 @@ export function SignupPage() {
             onChange={(event) => setLanguage(event.currentTarget.value)}
             value={language}
           >
-            <option value="">언어를 선택해 주세요</option>
+            <option value="">{t('signup.languagePlaceholder')}</option>
             {languageOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -621,7 +637,7 @@ export function SignupPage() {
 
         <fieldset className="mt-[22px] border-0 p-0">
           <legend className="p-0 text-sm font-bold text-[var(--color-text-primary)]">
-            역할 <span className="text-[var(--color-primary-coral)]">*</span>
+            {t('signup.role')} <span className="text-[var(--color-primary-coral)]">*</span>
           </legend>
           <div className="mt-2.5 flex flex-wrap gap-2">
             {roleOptions.map((option) => {
@@ -641,7 +657,7 @@ export function SignupPage() {
                   }}
                   type="button"
                 >
-                  {option.label}
+                  {t(option.labelKey)}
                 </button>
               )
             })}
@@ -652,7 +668,7 @@ export function SignupPage() {
             aria-live="polite"
             className="mt-2.5 text-sm font-medium leading-[1.6] text-[var(--color-text-tertiary)]"
           >
-            {selectedRole.note}
+            {t(selectedRole.noteKey)}
           </p>
         ) : null}
         {show('role', roleError) ? <FieldError>{roleError}</FieldError> : null}
@@ -670,7 +686,8 @@ export function SignupPage() {
                 type="checkbox"
               />
               <span className="text-[15px] font-semibold leading-[1.5] text-[var(--color-text-primary)]">
-                이용약관에 동의합니다. <span className="text-[var(--color-primary-coral)]">*</span>
+                {t('signup.agreeTerms')}{' '}
+                <span className="text-[var(--color-primary-coral)]">*</span>
               </span>
             </label>
             <button
@@ -697,7 +714,7 @@ export function SignupPage() {
                 type="checkbox"
               />
               <span className="text-[15px] font-semibold leading-[1.5] text-[var(--color-text-primary)]">
-                개인정보 처리방침에 동의합니다.{' '}
+                {t('signup.agreePrivacy')}{' '}
                 <span className="text-[var(--color-primary-coral)]">*</span>
               </span>
             </label>
@@ -739,20 +756,20 @@ export function SignupPage() {
           disabled={!canSubmit}
           type="submit"
         >
-          {loading ? '가입 처리 중' : '회원가입'}
+          {loading ? t('signup.submitting') : t('signup.submit')}
         </button>
         <p
           aria-live="polite"
           className="mt-3 text-sm font-semibold leading-[1.6] text-[var(--color-text-tertiary)]"
         >
-          {allValid ? '입력이 모두 확인되었습니다.' : '필수 항목을 모두 입력하면 가입할 수 있어요.'}
+          {allValid ? t('signup.allValid') : t('signup.fillRequired')}
         </p>
       </form>
 
       <p className="mt-6 border-t border-[var(--color-divider)] pt-[18px] text-[15px] font-medium text-[var(--color-text-tertiary)]">
-        이미 계정이 있나요?{' '}
+        {t('signup.hasAccount')}{' '}
         <Link className="font-extrabold text-[var(--color-primary-coral)]" to="/login">
-          로그인
+          {t('signup.goLogin')}
         </Link>
       </p>
     </main>
