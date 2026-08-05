@@ -37,6 +37,9 @@ type RoleContent = {
 const languageOptions = [
   { label: '한국어', value: 'KOREAN' },
   { label: 'English', value: 'ENGLISH' },
+  { label: '日本語', value: 'JAPANESE' },
+  { label: '中文', value: 'CHINESE' },
+  { label: 'Tiếng Việt', value: 'VIETNAMESE' },
 ] as const
 
 /** 역할별 정적 문구·메뉴다. dc.html의 ROLES 객체와 값이 같다. */

@@ -11,6 +11,8 @@ import com.ssafy.backend.config.SecurityConfig;
 import com.ssafy.backend.post.dto.NoticeCreateResponse;
 import com.ssafy.backend.post.dto.NoticeDetailResponse;
 import com.ssafy.backend.post.dto.NoticeSummaryResponse;
+import com.ssafy.backend.post.dto.PostDeleteResponse;
+import com.ssafy.backend.post.dto.PostUpdateResponse;
 import com.ssafy.backend.post.service.PostCommandService;
 import com.ssafy.backend.post.service.PostQueryService;
 import org.junit.jupiter.api.Test;
@@ -30,7 +32,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,6 +55,10 @@ class NoticeSecurityTest {
 
     private static final String CREATE_BODY = """
             {"title":"공지 제목","content":"공지 본문"}
+            """;
+
+    private static final String UPDATE_BODY = """
+            {"title":"새 제목"}
             """;
 
     @Autowired
@@ -89,6 +97,111 @@ class NoticeSecurityTest {
         mockMvc.perform(get("/api/v1/service-notices/100"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.noticeId").value(100));
+    }
+
+    /** 인증 정보가 없으면 서비스 공지 작성이 HTTP 401을 반환하는지 검증한다. */
+    @Test
+    void rejectsUnauthenticatedServiceNoticeCreation() throws Exception {
+        mockMvc.perform(post("/api/v1/service-notices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CREATE_BODY))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(postCommandService);
+    }
+
+    /** 팬미팅 공지를 쓸 수 있는 MANAGER도 서비스 공지 작성에서 HTTP 403을 받는지 검증한다. */
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void rejectsManagerFromServiceNoticeCreation() throws Exception {
+        mockMvc.perform(post("/api/v1/service-notices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CREATE_BODY))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(postCommandService);
+    }
+
+    /** SOLO_INFLUENCER 역할은 서비스 공지 작성에서 HTTP 403을 받는지 검증한다. */
+    @Test
+    @WithMockUser(roles = "SOLO_INFLUENCER")
+    void rejectsSoloInfluencerFromServiceNoticeCreation() throws Exception {
+        mockMvc.perform(post("/api/v1/service-notices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CREATE_BODY))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(postCommandService);
+    }
+
+    /** ADMIN 역할은 서비스 공지 작성 Controller까지 접근하고 HTTP 201을 받는지 검증한다. */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void allowsAdminToCreateServiceNotice() throws Exception {
+        when(postCommandService.createServiceNotice(any(), isNull()))
+                .thenReturn(new NoticeCreateResponse(
+                        100L, null, "공지 제목", LocalDateTime.of(2026, 8, 5, 10, 0)
+                ));
+
+        mockMvc.perform(post("/api/v1/service-notices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CREATE_BODY))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.noticeId").value(100))
+                .andExpect(jsonPath("$.data.meetingId").doesNotExist());
+    }
+
+    /** MANAGER 역할은 서비스 공지 수정에서 HTTP 403을 받는지 검증한다. */
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void rejectsManagerFromServiceNoticeUpdate() throws Exception {
+        mockMvc.perform(patch("/api/v1/service-notices/100")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(UPDATE_BODY))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(postCommandService);
+    }
+
+    /** ADMIN 역할은 서비스 공지 수정 Controller까지 접근하고 HTTP 200을 받는지 검증한다. */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void allowsAdminToUpdateServiceNotice() throws Exception {
+        when(postCommandService.updateServiceNotice(eq(100L), any(), isNull()))
+                .thenReturn(new PostUpdateResponse(
+                        100L, null, "새 제목", "본문", LocalDateTime.of(2026, 8, 5, 11, 0)
+                ));
+
+        mockMvc.perform(patch("/api/v1/service-notices/100")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(UPDATE_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.postId").value(100));
+    }
+
+    /** MANAGER 역할은 서비스 공지 삭제에서 HTTP 403을 받는지 검증한다. */
+    @Test
+    @WithMockUser(roles = "MANAGER")
+    void rejectsManagerFromServiceNoticeDeletion() throws Exception {
+        mockMvc.perform(delete("/api/v1/service-notices/100"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(postCommandService);
+    }
+
+    /** ADMIN 역할은 서비스 공지 삭제 Controller까지 접근하고 HTTP 200을 받는지 검증한다. */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void allowsAdminToDeleteServiceNotice() throws Exception {
+        when(postCommandService.deleteServiceNotice(eq(100L), isNull()))
+                .thenReturn(new PostDeleteResponse(
+                        100L, "PUBLISHED", LocalDateTime.of(2026, 8, 5, 12, 0)
+                ));
+
+        mockMvc.perform(delete("/api/v1/service-notices/100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PUBLISHED"));
     }
 
     /** 인증 없이 팬미팅 공지 목록을 조회할 수 있는지 검증한다. */

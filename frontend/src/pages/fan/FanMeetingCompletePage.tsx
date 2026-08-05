@@ -18,6 +18,7 @@ import {
 } from '../../api/pendingRecordings'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { AlertBanner, Button, Spinner } from '../../components'
+import { FanCardSection } from '../../components/fanCard/FanCardSection'
 import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
@@ -114,6 +115,8 @@ export function FanMeetingCompletePage() {
   const routeState = location.state as {
     meetingTitle?: string
     pendingRecordingSessionId?: string
+    /** 통화 화면이 넘겨 준 세션 식별자다. 기념 카드는 통화 세션 단위로 만든다. */
+    callSessionId?: string
   } | null
   const [session] = useState(() => getAuthSession())
   const [recordings, setRecordings] = useState<RecordingSummaryResponse[]>()
@@ -121,6 +124,7 @@ export function FanMeetingCompletePage() {
   const [playbackUrl, setPlaybackUrl] = useState<string>()
   const [recordingEnabled, setRecordingEnabled] = useState<boolean>()
   const [influencerName, setInfluencerName] = useState<string>()
+  const [detailTitle, setDetailTitle] = useState<string>()
   const [callOrder, setCallOrder] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string>()
@@ -190,6 +194,8 @@ export function FanMeetingCompletePage() {
         setRecordings(allRecordings)
         setRecordingEnabled(meeting?.meeting.operation.recordingEnabled)
         setInfluencerName(meeting?.influencer.name)
+        // 기념 카드에 넣을 제목이라 녹화 유무와 무관하게 보관한다.
+        setDetailTitle(meeting?.meeting.title)
         setCallOrder(application?.callOrder ?? null)
 
         const matched = allRecordings.find(
@@ -358,6 +364,17 @@ export function FanMeetingCompletePage() {
   const eyebrowDate = formatDate(
     currentRecording?.completedAt ?? new Date().toISOString(),
   )
+  // 기념 카드에 넣을 제목이다. 녹화 요약을 우선하고, 없으면 넘겨받은 값과 상세 조회 결과를 차례로 쓴다.
+  const cardMeetingTitle = currentRecording?.meetingTitle
+    ?? routeState?.meetingTitle
+    ?? detailTitle
+    ?? '팬미팅'
+  // 통화가 끝나면 대기열 응답에서 callSessionId가 사라지므로 통화 화면이 넘겨 준 값을 우선 쓰고,
+  // 새로고침 등으로 라우터 state가 없으면 녹화 정보에서 되찾는다.
+  const fanCardSessionId = routeState?.callSessionId
+    ?? (currentRecording
+      ? String(currentRecording.callSessionId)
+      : routeState?.pendingRecordingSessionId)
   // 완료 시각 최신순이다. 완료되지 않아 시각을 모르는 기록은 completedTime이 0을 주어 뒤로 밀린다.
   const archive = [...(recordings ?? [])].sort(
     (left, right) => completedTime(right.completedAt) - completedTime(left.completedAt),
@@ -561,6 +578,18 @@ export function FanMeetingCompletePage() {
             {memo ? `“${memo}”` : '남긴 말이 없어요.'}
           </p>
         </section>
+
+        {/* 기념 카드는 녹화와 무관하므로 녹화가 없거나 실패해도 제공한다. */}
+        {session && fanCardSessionId ? (
+          <FanCardSection
+            authToken={session.accessToken}
+            callSessionId={fanCardSessionId}
+            dateLabel={eyebrowDate}
+            fanNickname={session.nickname}
+            influencerName={influencerName ?? '인플루언서'}
+            meetingTitle={cardMeetingTitle}
+          />
+        ) : null}
       </div>
 
       <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] min-[1081px]:w-[min(100%-88px,1240px)]">

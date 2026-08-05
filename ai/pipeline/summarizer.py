@@ -42,30 +42,48 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", GMS_API_KEY)
 MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """당신은 인플루언서의 팬미팅 보조 AI입니다.
-    인플루언서와 팬의 대화 자막을 분석하여 인플루언서가 팬을 기억하는 데 도움이 되는 메모 초안을 작성합니다."""
+    인플루언서와 팬의 대화 자막을 분석하여 인플루언서가 팬을 기억하는 데 도움이 되는 메모 초안을 작성하고,
+    팬이 기념 카드로 간직할 문구 후보를 골라 줍니다."""
 
 USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 자막입니다.
 
     [대화 내용]
     {subtitles}
 
-    다음 기준으로 팬에 대한 메모 초안을 작성해주세요:
+    다음 두 가지를 작성해주세요.
+
+    1) 팬에 대한 메모 초안 (인플루언서용)
     - 팬의 근황, 성취, 특별한 사건 (졸업, 수상, 취업 등)
     - 팬의 관심사, 좋아하는 것
     - 팬이 인플루언서에게 바라는 것, 다음에 하고 싶은 것
     - 인플루언서가 기억하면 좋을 특이사항
 
+    2) 팬이 기념 카드로 간직할 문구 후보 3개 (팬용)
+    - 반드시 **인플루언서가 실제로 한 말**에서만 고릅니다. 팬의 발화는 쓰지 않습니다.
+    - 자막 문장을 거의 그대로 쓰고, 말끝이 잘렸으면 자연스럽게만 다듬습니다.
+      인플루언서가 하지 않은 말을 새로 만들어내지 않습니다.
+    - 팬이 나중에 다시 읽을 때 기분이 좋아지는 따뜻한 문장을 고릅니다.
+    - 각 문구는 60자 이내로 합니다.
+    - 전화번호, 이메일, 주소, 계정 아이디, 실명처럼 개인정보가 담긴 문장은 제외합니다.
+    - 고를 만한 문장이 없으면 빈 배열로 둡니다.
+
     반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:
     {{
     "summary": "2~4문장의 메모 초안",
-    "keywords": ["핵심키워드1", "핵심키워드2"]
+    "keywords": ["핵심키워드1", "핵심키워드2"],
+    "card_candidates": ["문구1", "문구2", "문구3"]
     }}
 
     대화 내용이 너무 짧거나 특별한 내용이 없으면:
     {{
     "summary": "특별한 내용 없음",
-    "keywords": []
+    "keywords": [],
+    "card_candidates": []
     }}"""
+
+# 팬 카드 문구 후보 제한. 프롬프트에 같은 값을 명시하지만 모델이 어길 수 있어 저장 전에 다시 자른다.
+CARD_CANDIDATE_MAX_COUNT = 3
+CARD_CANDIDATE_MAX_LENGTH = 60
 
 
 #추후 db호출 구조에 따라 수정
@@ -77,6 +95,32 @@ def _format_subtitles(subtitles: list[dict]) -> str:
         if text:
             lines.append(f"{role}: {text}")
     return "\n".join(lines) if lines else "(대화 내용 없음)"
+
+
+def _sanitize_card_candidates(raw) -> list[str]:
+    """
+    모델이 준 팬 카드 문구 후보를 저장 가능한 형태로 정리한다.
+
+    프롬프트로 개수와 길이를 지시하지만 모델이 지키지 않을 수 있고, 팬에게 그대로 노출되는
+    값이라 문자열이 아닌 항목·빈 문장·중복을 걸러내고 개수와 길이를 강제한다.
+    """
+    if not isinstance(raw, list):
+        return []
+
+    candidates: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if not text or len(text) > CARD_CANDIDATE_MAX_LENGTH:
+            continue
+        if text in candidates:
+            continue
+        candidates.append(text)
+        if len(candidates) >= CARD_CANDIDATE_MAX_COUNT:
+            break
+
+    return candidates
 
 
 def _parse_response(content: str) -> dict | None:
@@ -324,15 +368,17 @@ async def generate_summary(subtitles: list[dict], model: str = MODEL) -> dict | 
             system_prompt=SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.3,
-            max_tokens=500,
+            # 요약과 함께 팬 카드 문구 후보까지 받으므로 응답이 잘리지 않게 여유를 둔다.
+            max_tokens=800,
         )
         result = _parse_response(content)
 
         if result:
             logger.info(
-                "요약 생성 완료 model=%s keywords=%s summary=%s",
+                "요약 생성 완료 model=%s keywords=%s card_candidates=%s summary=%s",
                 model,
                 result.get("keywords"),
+                result.get("card_candidates"),
                 result.get("summary", "")[:50],
             )
 
@@ -375,12 +421,14 @@ async def generate_and_save_summary(
 
     summary = result.get("summary", "")
     keywords = result.get("keywords", [])
+    card_candidates = _sanitize_card_candidates(result.get("card_candidates"))
 
     logger.info(
-        "요약 결과 call_session_id=%s summary=%s keywords=%s",
+        "요약 결과 call_session_id=%s summary=%s keywords=%s card_candidates=%s",
         call_session_id,
         summary,
         keywords,
+        card_candidates,
     )
 
     await queries.complete_call_summary(
@@ -388,6 +436,7 @@ async def generate_and_save_summary(
         call_session_id=call_session_id,
         summary=summary,
         keywords=keywords,
+        card_candidates=card_candidates,
     )
     logger.info("요약 저장 완료 call_session_id=%s", call_session_id)
 

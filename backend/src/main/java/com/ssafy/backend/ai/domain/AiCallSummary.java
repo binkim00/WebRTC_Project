@@ -48,6 +48,13 @@ public class AiCallSummary extends BaseCreatedTimeEntity {
     @Column(name = "keywords", columnDefinition = "TEXT")
     private String keywords;
 
+    /**
+     * 팬이 기념 카드 문구를 고를 때 보여줄 후보이며 JSON 배열 형태의 문자열이다.
+     * 요약과 같은 모델 호출에서 함께 생성되므로 Agent가 이 열까지 한 번에 채운다.
+     */
+    @Column(name = "card_candidates", columnDefinition = "TEXT")
+    private String cardCandidates;
+
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 

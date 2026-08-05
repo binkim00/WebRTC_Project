@@ -28,6 +28,13 @@ DEEPL_SESSION_URL = "https://api.deepl.com/v3/voice/realtime"
 # 이 시간(초) 동안 새 concluded가 안 오면 "문장 끝"으로 판단, 추후 테스트 후 수정하기
 SENTENCE_TIMEOUT = 1.5
 
+# 우리 언어 코드 → DeepL Voice 언어 코드.
+# v3는 소문자 BCP-47을 쓰므로 대부분 그대로지만, 중국어만 간체/번체를 구분해야 한다.
+# 매핑에 없는 코드는 그대로 넘겨 DeepL이 판단하게 둔다.
+DEEPL_LANG_CODES = {
+    "zh": "zh-Hans",
+}
+
 
 class DeepLVoiceAdapter(STTAdapter):
 
@@ -103,12 +110,20 @@ class DeepLVoiceAdapter(STTAdapter):
 
     # ── 내부 메서드 ───────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _to_deepl_lang(lang: str) -> str:
+        """우리 언어 코드 → DeepL 언어 코드 변환. 매핑에 없으면 그대로 사용한다."""
+        return DEEPL_LANG_CODES.get(lang, lang)
+
     async def _create_session(self, source_lang: str) -> tuple[str, str]:
-        """POST /v3/voice/realtime로 세션 생성. (streaming_url, token) 반환."""
+        """POST /v3/voice/realtime로 세션 생성. (streaming_url, token) 반환.
+
+        DB·자막 push에는 우리 언어 코드를 그대로 쓰고, DeepL 코드 변환은 이 요청 경계에서만 한다.
+        """
         body = {
-            "source_language": source_lang,
+            "source_language": self._to_deepl_lang(source_lang),
             "source_language_mode": "fixed",
-            "target_languages": [self._target_lang],
+            "target_languages": [self._to_deepl_lang(self._target_lang)],
             "source_media_content_type": "audio/pcm;encoding=s16le;rate=48000",
         }
         headers = {

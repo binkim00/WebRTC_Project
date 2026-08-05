@@ -1,6 +1,8 @@
 package com.ssafy.backend;
 
 import com.ssafy.backend.ai.repository.AiCallSummaryRepository;
+import com.ssafy.backend.ai.repository.AiSubtitleRepository;
+import com.ssafy.backend.ai.repository.FanCardRepository;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
@@ -115,6 +117,12 @@ class BackendApplicationTests {
 
     @MockitoBean
     private AiCallSummaryRepository aiCallSummaryRepository;
+
+    @MockitoBean
+    private AiSubtitleRepository aiSubtitleRepository;
+
+    @MockitoBean
+    private FanCardRepository fanCardRepository;
 
     @MockitoBean
     private PostRepository postRepository;

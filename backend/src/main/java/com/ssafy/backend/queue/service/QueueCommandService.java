@@ -259,12 +259,15 @@ public class QueueCommandService {
      * 회원 선호 언어를 AI Agent와 약속한 짧은 언어 코드로 변환한다.
      *
      * @param preferredLanguage 회원의 선호 언어
-     * @return KOREAN은 ko, ENGLISH는 en
+     * @return KOREAN은 ko, ENGLISH는 en, JAPANESE는 ja, CHINESE는 zh, VIETNAMESE는 vi
      */
     private String toLanguageCode(PreferredLanguage preferredLanguage) {
         return switch (preferredLanguage) {
             case KOREAN -> "ko";
             case ENGLISH -> "en";
+            case JAPANESE -> "ja";
+            case CHINESE -> "zh";
+            case VIETNAMESE -> "vi";
         };
     }
 

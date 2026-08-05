@@ -18,6 +18,9 @@ import { AlertBanner, EmailVerificationNotice } from '../../components'
 const languageOptions = [
   { label: '한국어', value: 'KOREAN' },
   { label: 'English', value: 'ENGLISH' },
+  { label: '日本語', value: 'JAPANESE' },
+  { label: '中文', value: 'CHINESE' },
+  { label: 'Tiếng Việt', value: 'VIETNAMESE' },
 ] as const
 
 /** 화면 라벨은 서비스 전반의 명칭(1인 인플루언서)을 따르고 값은 백엔드 enum을 그대로 쓴다. */
@@ -44,8 +47,9 @@ const roleOptions: readonly { label: string; value: SignupRole; note: string }[]
   },
 ]
 
+// 선택지가 늘어나도 검증이 뒤처지지 않도록 languageOptions를 그대로 기준으로 삼는다.
 function isPreferredLanguage(value: string): value is PreferredLanguage {
-  return value === 'KOREAN' || value === 'ENGLISH'
+  return languageOptions.some((option) => option.value === value)
 }
 
 const signupInputClass =

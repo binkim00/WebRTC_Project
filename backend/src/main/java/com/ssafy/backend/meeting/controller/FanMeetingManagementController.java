@@ -3,7 +3,6 @@ package com.ssafy.backend.meeting.controller;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.meeting.dto.FanMeetingManagementResponse;
-import com.ssafy.backend.meeting.dto.FanMeetingTestControlRequest;
 import com.ssafy.backend.meeting.dto.FanMeetingUpdateRequest;
 import com.ssafy.backend.meeting.service.FanMeetingManagementService;
 import jakarta.validation.Valid;
@@ -47,16 +46,6 @@ public class FanMeetingManagementController {
             @Valid @RequestBody FanMeetingUpdateRequest request
     ) {
         return ApiResponse.success(managementService.update(meetingId, principal, request));
-    }
-
-    /** 테스트용 상태와 일정을 강제로 변경한다. */
-    @PatchMapping("/test-control")
-    public ApiResponse<FanMeetingManagementResponse> controlForTest(
-            @PathVariable Long meetingId,
-            @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody FanMeetingTestControlRequest request
-    ) {
-        return ApiResponse.success(managementService.controlForTest(meetingId, principal, request));
     }
 
     /**

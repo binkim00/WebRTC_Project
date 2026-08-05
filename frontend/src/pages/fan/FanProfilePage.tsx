@@ -26,15 +26,21 @@ import {
   WithdrawAccountSection,
 } from '../../components'
 
-// 백엔드 PreferredLanguage Enum(KOREAN, ENGLISH)과 동일한 값만 사용한다.
+// 백엔드 PreferredLanguage Enum(KOREAN, ENGLISH, JAPANESE, CHINESE, VIETNAMESE)과 동일한 값만 사용한다.
 const preferredLanguageOptions = [
   { label: '한국어', value: 'KOREAN' },
   { label: 'English', value: 'ENGLISH' },
+  { label: '日本語', value: 'JAPANESE' },
+  { label: '中文', value: 'CHINESE' },
+  { label: 'Tiếng Việt', value: 'VIETNAMESE' },
 ]
 
 const preferredLanguageLabels: Record<string, string> = {
   KOREAN: '한국어',
   ENGLISH: 'English',
+  JAPANESE: '日本語',
+  CHINESE: '中文',
+  VIETNAMESE: 'Tiếng Việt',
 }
 
 const activityItems = [

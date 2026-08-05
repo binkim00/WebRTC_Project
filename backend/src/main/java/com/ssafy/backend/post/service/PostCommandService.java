@@ -57,6 +57,40 @@ public class PostCommandService {
     }
 
     /**
+     * 서비스 운영자가 작성한 서비스 공지를 공개 상태로 저장한다(POST-003c).
+     *
+     * <p>서비스 전체에 노출되는 공지라 팬미팅 단위 운영자가 아니라 ADMIN만 작성할 수 있다.
+     * 팬미팅 공지가 팬미팅 소유권을 다시 확인하는 것과 같은 기준으로, URL 역할 검사와 별개로
+     * 서비스 계층에서도 역할을 한 번 더 검증한다.
+     *
+     * <p>서비스 공지는 대상 팬미팅이 없으므로 {@code meeting_id}는 NULL로 저장된다.
+     *
+     * <p>{@code attachmentIds}를 보내면 미리 업로드한 첨부파일(ATTACH-001)을 보낸 순서대로
+     * 이 공지에 연결한다. 첨부 연결이 실패하면 공지 저장도 함께 롤백된다.
+     *
+     * @param request 제목·본문과 연결할 첨부파일 식별자를 담은 작성 요청
+     * @param principal 로그인 사용자 정보
+     * @return 생성된 공지 정보
+     * @throws BusinessException 활성 사용자가 아니거나 ADMIN이 아니거나
+     *                           첨부파일을 연결할 수 없는 경우
+     */
+    @Transactional
+    public NoticeCreateResponse createServiceNotice(NoticeCreateRequest request,
+                                                    AuthenticatedUser principal) {
+        User author = requireAdmin(principal);
+
+        Post notice = Post.createNotice(
+                author, null, PostType.SERVICE_NOTICE,
+                request.title().trim(), request.content().trim()
+        );
+        // 첨부 연결은 게시글 식별자를 사용하므로 저장 이후에 처리한다.
+        Post saved = postRepository.save(notice);
+        attachmentLinkService.replaceLinks(
+                saved, request.attachmentIds(), author, LocalDateTime.now(clock));
+        return NoticeCreateResponse.from(saved);
+    }
+
+    /**
      * 해당 팬미팅 운영자가 작성한 팬미팅 공지를 공개 상태로 저장한다.
      *
      * <p>URL 역할 검사만으로는 다른 팬미팅의 운영자를 걸러낼 수 없으므로
@@ -119,6 +153,56 @@ public class PostCommandService {
                 author, meeting, request.title().trim(), request.content().trim()
         );
         return CommunityPostCreateResponse.from(postRepository.save(post));
+    }
+
+    /**
+     * 작성한 서비스 운영자가 서비스 공지를 부분 수정한다(POST-004c).
+     *
+     * <p>수정 권한은 팬미팅 공지와 같은 기준인 작성자 본인 또는 ADMIN이며, 서비스 공지는
+     * ADMIN만 작성하므로 실질적으로는 ADMIN 전용이다.
+     *
+     * <p>{@code attachmentIds}를 보내면 그 목록이 첨부 연결 상태 전체를 대신하므로, 목록에서
+     * 빠진 기존 첨부는 해제되고 빈 목록을 보내면 모든 첨부가 해제된다. 보내지 않으면 그대로 둔다.
+     *
+     * @param noticeId 공지 식별자
+     * @param request 수정할 제목·본문과 첨부파일 식별자를 담은 요청
+     * @param principal 로그인 사용자 정보
+     * @return 수정된 공지 정보
+     * @throws BusinessException 공지가 없거나 서비스 공지가 아니거나 수정 권한이 없거나
+     *                           첨부파일을 연결할 수 없는 경우
+     */
+    @Transactional
+    public PostUpdateResponse updateServiceNotice(Long noticeId, PostUpdateRequest request,
+                                                  AuthenticatedUser principal) {
+        User actor = currentUserService.requireActiveUser(principal);
+        Post notice = requireVisiblePost(noticeId, PostType.SERVICE_NOTICE);
+        requireNoticeModifier(notice, actor);
+
+        notice.update(trimmedOrNull(request.title()), trimmedOrNull(request.content()));
+        attachmentLinkService.replaceLinks(
+                notice, request.attachmentIds(), actor, LocalDateTime.now(clock));
+        return PostUpdateResponse.from(notice);
+    }
+
+    /**
+     * 작성한 서비스 운영자가 서비스 공지를 삭제한다(POST-005c).
+     *
+     * <p>실제 행을 지우지 않는다. 작성자 본인이 삭제하면 삭제 시각을 기록하고,
+     * 작성자가 아닌 ADMIN이 내리면 상태만 숨김으로 바꾼다.
+     *
+     * @param noticeId 공지 식별자
+     * @param principal 로그인 사용자 정보
+     * @return 삭제 처리 결과
+     * @throws BusinessException 공지가 없거나 서비스 공지가 아니거나 삭제 권한이 없는 경우
+     */
+    @Transactional
+    public PostDeleteResponse deleteServiceNotice(Long noticeId, AuthenticatedUser principal) {
+        User actor = currentUserService.requireActiveUser(principal);
+        Post notice = requireVisiblePost(noticeId, PostType.SERVICE_NOTICE);
+        requireNoticeModifier(notice, actor);
+
+        removeByActor(notice, actor);
+        return PostDeleteResponse.from(notice);
     }
 
     /**
@@ -290,6 +374,24 @@ public class PostCommandService {
             throw new BusinessException(ErrorCode.POST_NOT_FOUND);
         }
         return post;
+    }
+
+    /**
+     * 서비스 공지를 작성할 수 있는 서비스 운영자인지 검증한다.
+     *
+     * <p>서비스 공지는 팬미팅에 속하지 않아 {@link MeetingAccessService}로 소유권을 확인할 수
+     * 없으므로 역할만으로 판정한다.
+     *
+     * @param principal 로그인 사용자 정보
+     * @return 검증을 통과한 ADMIN 사용자
+     * @throws BusinessException 활성 사용자가 아니거나 ADMIN이 아닌 경우
+     */
+    private User requireAdmin(AuthenticatedUser principal) {
+        User user = currentUserService.requireActiveUser(principal);
+        if (user.getRole() != UserRole.ADMIN) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        return user;
     }
 
     /**

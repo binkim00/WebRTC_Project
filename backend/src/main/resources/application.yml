@@ -64,6 +64,10 @@ livekit:
   test-token-enabled: ${LIVEKIT_TEST_TOKEN_ENABLED:false}
 
 app:
+  test-control:
+    # 개발·통합 테스트에서만 팬미팅 상태를 강제로 변경하는 API를 등록한다.
+    enabled: ${TEST_CONTROL_ENABLED:false}
+
   application:
     # 응모 전 이메일 인증을 강제한다. 현재 배포 환경에서는 임시로 비활성화한다.
     email-verification-required: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:false}
@@ -76,6 +80,15 @@ app:
   auth:
     login-max-failures: ${LOGIN_MAX_FAILURES:5}
     login-block-duration: ${LOGIN_BLOCK_DURATION:900}
+
+  admin-bootstrap:
+    # ADMIN은 회원가입으로 만들 수 없고 시드 SQL은 local 프로파일에서만 실행된다. DB를 초기화하는
+    # 환경에서 기동할 때 활성 ADMIN이 하나도 없으면 아래 값으로 계정을 하나 만든다.
+    # 아이디·비밀번호·이메일 중 하나라도 비면 아무 계정도 만들지 않는다.
+    login-id: ${ADMIN_BOOTSTRAP_LOGIN_ID:}
+    password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+    email: ${ADMIN_BOOTSTRAP_EMAIL:}
+    nickname: ${ADMIN_BOOTSTRAP_NICKNAME:멜리관리자}
 
   oauth:
     # 프론트 콜백 주소의 공통 앞부분이다. 실제 redirect_uri 는 여기에 /{provider} 가 붙어

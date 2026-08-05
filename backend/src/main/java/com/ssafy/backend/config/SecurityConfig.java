@@ -204,6 +204,15 @@ public class SecurityConfig {
                                 "/api/v1/fan-meetings/*/community/posts",
                                 "/api/v1/community/posts/*",
                                 "/api/v1/community/posts/*/comments").permitAll()
+                        // 서비스 공지 작성·수정·삭제 (POST-003c, POST-004c, POST-005c)
+                        // 서비스 전체에 노출되는 공지라 팬미팅 운영자가 아니라 서비스 운영자만
+                        // 다룰 수 있다. 작성자 본인 여부는 PostCommandService 가 다시 검증한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/service-notices")
+                                .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/service-notices/*")
+                                .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/service-notices/*")
+                                .hasRole("ADMIN")
                         // 공지·커뮤니티 작성 (POST-003)
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/notices",
                                 "/api/v1/fan-meetings/*/community/posts")
@@ -256,6 +265,13 @@ public class SecurityConfig {
                                 .hasAnyRole("MANAGER", "SOLO_INFLUENCER", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/moderations/*/review")
                                 .hasAnyRole("MANAGER", "SOLO_INFLUENCER", "ADMIN")
+
+                        // 통화 기념 카드 — 팬 본인의 기념물이므로 운영자·인플루언서는 접근하지 못한다.
+                        // 통화 당사자 여부는 FanCardService 에서 다시 검증한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/fan-card-candidates")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/call-sessions/*/fan-card")
+                                .hasRole("FAN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)

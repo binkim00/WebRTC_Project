@@ -149,6 +149,57 @@ class QueueCommandServiceTest {
     }
 
     /**
+     * 한국어·영어 외의 선호 언어도 짧은 언어 코드로 변환해 CallSession과 Agent 배치에 담는지 검증한다.
+     */
+    @Test
+    void callsQueueEntryWithNonDefaultLanguages() {
+        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        MeetingAccessService accessService = mock(MeetingAccessService.class);
+        MeetingOperationSettingRepository settingRepository =
+                mock(MeetingOperationSettingRepository.class);
+        QueueEntryRepository entryRepository = mock(QueueEntryRepository.class);
+        CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
+        QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        QueueQueryService queryService = mock(QueueQueryService.class);
+        QueueInitializationService initializationService = mock(QueueInitializationService.class);
+        LiveKitAgentDispatchService agentDispatchService = mock(LiveKitAgentDispatchService.class);
+        QueueCommandService service = new QueueCommandService(
+                currentUserService, accessService, settingRepository, entryRepository,
+                callSessionRepository, realtimeStore, queryService, initializationService,
+                agentDispatchService, CLOCK);
+        User manager = mock(User.class);
+        FanMeeting meeting = mock(FanMeeting.class);
+        Participant participant = mock(Participant.class);
+        User fan = mock(User.class);
+        User influencer = mock(User.class);
+        when(participant.getAssignedOrder()).thenReturn(1);
+        when(participant.getFan()).thenReturn(fan);
+        when(fan.getPreferredLanguage()).thenReturn(PreferredLanguage.JAPANESE);
+        when(meeting.getInfluencer()).thenReturn(influencer);
+        when(influencer.getPreferredLanguage()).thenReturn(PreferredLanguage.VIETNAMESE);
+        QueueEntry entry = spy(QueueEntry.create(meeting, participant));
+        ReflectionTestUtils.setField(entry, "id", 7L);
+        entry.enter(LocalDateTime.of(2026, 7, 27, 0, 50));
+        when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(manager);
+        when(entryRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(entry));
+        when(meeting.getId()).thenReturn(1L);
+        when(realtimeStore.claimEntry(1L, 7L)).thenReturn(QueueClaimResult.CLAIMED);
+        when(callSessionRepository.saveAndFlush(any(CallSession.class)))
+                .thenAnswer(invocation -> {
+                    CallSession callSession = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(callSession, "id", 100L);
+                    return callSession;
+                });
+
+        service.call(7L, PRINCIPAL);
+
+        ArgumentCaptor<CallSession> captor = ArgumentCaptor.forClass(CallSession.class);
+        verify(callSessionRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getFanLanguage()).isEqualTo("ja");
+        verify(agentDispatchService).ensureDispatched("meeting-room-1", 100L, "vi");
+    }
+
+    /**
      * 재호출 시 새 CallSession을 만들지 않고 최초 호출에서 생성한 세션을 재사용하며
      * 같은 Room에 자막 Agent 배치를 한 번만 요청하는지 검증한다.
      */
