@@ -196,45 +196,35 @@ export function CallStage({
         </figcaption>
       </figure>
 
-      {/* 실시간 자막 — 켜져 있을 때만 중앙 하단에 표시한다. */}
+      {/*
+        실시간 자막 — 켜져 있을 때만 중앙 하단에 표시한다.
+        상대가 말한 **가장 최근 한 문장**만 온다(subtitleChannel이 내 발화를 걸러내고 1줄만 남긴다).
+        그래도 map으로 그리는 이유는 유지 줄 수를 늘리고 싶을 때 이 컴포넌트를 고치지 않아도 되게 하려는 것이다.
+      */}
       {captionEnabled && captionLines?.length ? (
         <div
           aria-live="polite"
           className="absolute bottom-[18px] left-1/2 z-10 max-w-[min(70%,620px)] -translate-x-1/2 rounded-lg bg-[rgb(15_17_21/84%)] px-4 py-[11px] text-center"
         >
-          {captionLines.map((line, index) => {
-            const isCurrent = index === captionLines.length - 1
-            return (
-              <p
-                className={index ? 'mt-1.5' : ''}
-                // 자막 식별자를 우선 쓴다. 발화 내용으로만 식별하면 같은 말("네")이 반복될 때
-                // key가 겹쳐 React가 다른 줄로 인식하지 못한다.
-                key={line.id ?? `${line.speaker}:${line.text}`}
-              >
-                <strong className="text-sm font-extrabold text-white/75">{line.speaker}</strong>
-                <span
-                  className={cn(
-                    'mt-[3px] block text-lg font-semibold leading-[1.45]',
-                    // 지나간 대사는 흐리게 남겨 현재 발화가 어느 줄인지 위치와 명도로 함께 구분한다.
-                    isCurrent ? 'text-white' : 'text-white/55',
-                  )}
-                >
-                  {line.text}
+          {captionLines.map((line, index) => (
+            <p
+              className={index ? 'mt-1.5' : ''}
+              // 자막 식별자를 우선 쓴다. 발화 내용으로만 식별하면 같은 말("네")이 반복될 때
+              // key가 겹쳐 React가 다른 줄로 인식하지 못한다.
+              key={line.id ?? `${line.speaker}:${line.text}`}
+            >
+              <strong className="text-sm font-extrabold text-white/75">{line.speaker}</strong>
+              <span className="mt-[3px] block text-lg font-semibold leading-[1.45] text-white">
+                {line.text}
+              </span>
+              {/* 번역문은 원문을 대체하지 않고 아래에 덧붙인다. 원문과 구분되게 한 단계 흐리게 둔다. */}
+              {line.translatedText ? (
+                <span className="mt-[3px] block text-base font-semibold leading-[1.45] text-white/80">
+                  {line.translatedText}
                 </span>
-                {/* 번역문은 원문을 대체하지 않고 아래에 덧붙인다. 원문과 구분되게 한 단계 흐리게 둔다. */}
-                {line.translatedText ? (
-                  <span
-                    className={cn(
-                      'mt-[3px] block text-base font-semibold leading-[1.45]',
-                      isCurrent ? 'text-white/80' : 'text-white/45',
-                    )}
-                  >
-                    {line.translatedText}
-                  </span>
-                ) : null}
-              </p>
-            )
-          })}
+              ) : null}
+            </p>
+          ))}
         </div>
       ) : null}
 
