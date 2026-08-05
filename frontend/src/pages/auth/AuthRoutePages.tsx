@@ -36,6 +36,9 @@ import {
 const languageOptions = [
   { label: '한국어', value: 'KOREAN' },
   { label: 'English', value: 'ENGLISH' },
+  { label: '日本語', value: 'JAPANESE' },
+  { label: '中文', value: 'CHINESE' },
+  { label: 'Tiếng Việt', value: 'VIETNAMESE' },
 ] as const
 
 const roleOptions = [
@@ -45,8 +48,9 @@ const roleOptions = [
   { label: '솔로 인플루언서', value: 'SOLO_INFLUENCER' },
 ] as const
 
+// 선택지가 늘어나도 검증이 뒤처지지 않도록 languageOptions를 그대로 기준으로 삼는다.
 function isPreferredLanguage(value: string): value is PreferredLanguage {
-  return value === 'KOREAN' || value === 'ENGLISH'
+  return languageOptions.some((option) => option.value === value)
 }
 
 export function LoginPage() {

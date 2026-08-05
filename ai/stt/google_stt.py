@@ -127,5 +127,6 @@ class GoogleSTTAdapter(STTAdapter):
             "en": "en-US",
             "ja": "ja-JP",
             "zh": "zh-CN",
+            "vi": "vi-VN",
         }
         return mapping.get(lang, lang)

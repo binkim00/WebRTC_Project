@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Base64;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -157,6 +158,28 @@ class LiveKitAccessTokenServiceTest {
                 .contains("\"role\":\"INFLUENCER\"")
                 .contains("\"influencer_lang\":\"en\"")
                 .doesNotContain("\"influencer_lang\":\"ko\"");
+    }
+
+    /**
+     * 한국어·영어 외에 추가한 선호 언어도 약속한 짧은 언어 코드로 토큰에 담기는지 검증한다.
+     */
+    @Test
+    void issuesHostTokenForAdditionalPreferredLanguages() {
+        when(currentUserService.requireActiveUser(any())).thenReturn(host);
+        Map<PreferredLanguage, String> expectedCodes = Map.of(
+                PreferredLanguage.JAPANESE, "ja",
+                PreferredLanguage.CHINESE, "zh",
+                PreferredLanguage.VIETNAMESE, "vi"
+        );
+
+        expectedCodes.forEach((preferredLanguage, expectedCode) -> {
+            when(host.getPreferredLanguage()).thenReturn(preferredLanguage);
+
+            String payload = decodePayload(service.issue(
+                    CALL_SESSION_ID, new AuthenticatedUser(12L, UserRole.INFLUENCER)).accessToken());
+
+            assertThat(payload).contains("\"influencer_lang\":\"" + expectedCode + "\"");
+        });
     }
 
     /**

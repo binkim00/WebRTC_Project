@@ -20,7 +20,12 @@ export type SignupRole =
   | 'INFLUENCER'
   | 'MANAGER'
   | 'SOLO_INFLUENCER'
-export type PreferredLanguage = 'KOREAN' | 'ENGLISH'
+export type PreferredLanguage =
+  | 'KOREAN'
+  | 'ENGLISH'
+  | 'JAPANESE'
+  | 'CHINESE'
+  | 'VIETNAMESE'
 
 export function isSignupRole(value: unknown): value is SignupRole {
   return (

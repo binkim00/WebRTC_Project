@@ -2046,6 +2046,9 @@ export function ManagerMyPage() {
             options={[
               { value: 'KOREAN', label: '한국어' },
               { value: 'ENGLISH', label: '영어' },
+              { value: 'JAPANESE', label: '일본어' },
+              { value: 'CHINESE', label: '중국어' },
+              { value: 'VIETNAMESE', label: '베트남어' },
             ]}
             value={preferredLanguage}
           />

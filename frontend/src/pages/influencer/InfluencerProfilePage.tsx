@@ -28,6 +28,9 @@ import {
 const languageOptions = [
   { label: '한국어', value: 'KOREAN' },
   { label: 'English', value: 'ENGLISH' },
+  { label: '日本語', value: 'JAPANESE' },
+  { label: '中文', value: 'CHINESE' },
+  { label: 'Tiếng Việt', value: 'VIETNAMESE' },
 ] as const
 
 function languageLabel(value: string) {
