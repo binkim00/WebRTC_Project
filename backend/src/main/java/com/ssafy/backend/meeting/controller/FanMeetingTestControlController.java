@@ -7,6 +7,7 @@ import com.ssafy.backend.meeting.dto.FanMeetingTestControlRequest;
 import com.ssafy.backend.meeting.service.FanMeetingManagementService;
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/fan-meetings/{meetingId}")
 @ConditionalOnProperty(prefix = "app.test-control", name = "enabled", havingValue = "true")
+@Profile("!prod")
 public class FanMeetingTestControlController {
 
     private final FanMeetingManagementService managementService;

@@ -3,3 +3,10 @@ spring:
     hibernate:
       # 운영 DB 스키마는 검증만 하며 변경은 명시적 마이그레이션으로 수행한다.
       ddl-auto: validate
+
+# 운영 환경에는 개발용 API 탐색 화면과 OpenAPI 문서를 노출하지 않는다.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
