@@ -17,7 +17,7 @@ import {
   getPendingRecording,
 } from '../../api/pendingRecordings'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
-import { AlertBanner, Button } from '../../components'
+import { AlertBanner, Button, Spinner } from '../../components'
 import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
@@ -54,10 +54,33 @@ function formatSpokenDuration(seconds: number | null | undefined): string | unde
   return rest > 0 ? `${minutes}분 ${rest}초` : `${minutes}분`
 }
 
-/** 영상 보관 만료까지 남은 일수다. 지났으면 0을 준다. */
-function remainingDays(availableUntil: string): number {
-  const diff = new Date(availableUntil).getTime() - Date.now()
-  return Math.max(0, Math.ceil(diff / DAY_MS))
+/**
+ * 영상 보관 만료까지 남은 일수다. 지났으면 0을 준다.
+ *
+ * 백엔드는 녹화가 아직 완료되지 않았거나(요청·egress 진행 중) 실패한 경우 `availableUntil`을
+ * 내려주지 않는다. 그때 0일을 반환하면 "곧 삭제됨"이라는 잘못된 정보가 되므로,
+ * **모르는 상태는 null로 구분해** 호출하는 쪽이 표기를 생략할 수 있게 한다.
+ */
+function remainingDays(availableUntil: string | null | undefined): number | null {
+  if (!availableUntil) return null
+
+  const until = new Date(availableUntil).getTime()
+  if (Number.isNaN(until)) return null
+
+  return Math.max(0, Math.ceil((until - Date.now()) / DAY_MS))
+}
+
+/**
+ * 기록 정렬용 시각(ms)이다. 값이 없거나 해석할 수 없으면 0을 준다.
+ *
+ * `completedAt`은 녹화가 완료된 뒤에만 채워지므로, 아직 완료되지 않은 기록은 시각을 알 수 없다.
+ * 0을 주어 목록 끝으로 밀어 두면 완료된 기록의 최신순 정렬이 흔들리지 않는다.
+ */
+function completedTime(completedAt: string | null | undefined): number {
+  if (!completedAt) return 0
+
+  const time = new Date(completedAt).getTime()
+  return Number.isNaN(time) ? 0 : time
 }
 
 /** 대기실에서 저장한 "하고 싶은 말"을 읽는다. 팬 측 메모 API가 아직 없어 브라우저 보관값을 쓴다. */
@@ -293,7 +316,8 @@ export function FanMeetingCompletePage() {
   const proc = loading || (Boolean(currentRecording) && !isReady && !isExpired)
   const durationSec = detail?.durationSec ?? currentRecording?.durationSec ?? null
   const spokenDuration = formatSpokenDuration(durationSec)
-  const daysLeft = currentRecording ? remainingDays(currentRecording.availableUntil) : null
+  // 보관 기한을 모르는 경우(녹화 미완료·실패)도 null이 되어 아래 recMeta에서 표기를 생략한다.
+  const daysLeft = remainingDays(currentRecording?.availableUntil)
 
   const headline = proc
     ? '기록을 만들고 있어요'
@@ -334,9 +358,9 @@ export function FanMeetingCompletePage() {
   const eyebrowDate = formatDate(
     currentRecording?.completedAt ?? new Date().toISOString(),
   )
+  // 완료 시각 최신순이다. 완료되지 않아 시각을 모르는 기록은 completedTime이 0을 주어 뒤로 밀린다.
   const archive = [...(recordings ?? [])].sort(
-    (left, right) =>
-      new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
+    (left, right) => completedTime(right.completedAt) - completedTime(left.completedAt),
   )
 
   return (
@@ -378,7 +402,55 @@ export function FanMeetingCompletePage() {
               />
               <MellySeal dimmed={false} size="lg" />
             </>
-          ) : null}
+          ) : (
+            /*
+              영상이 없을 때의 자리다. 이전에는 아무것도 그리지 않아 통화 종료 직후 이 화면에서
+              560px 높이의 빈 회색 면만 마주하게 됐다. 통화를 마치고 처음 보는 화면이므로
+              지금 무슨 일이 일어나는지(저장 중·녹화 없음·보관 종료)를 상태에 맞게 알려 준다.
+            */
+            <div className="absolute inset-0 grid place-items-center px-8 text-center">
+              <div className="grid justify-items-center gap-4">
+                {proc ? (
+                  <>
+                    {/* 저장이 진행 중임을 움직임으로 알린다. 정지된 안내문만으로는 멈춘 것처럼 보인다. */}
+                    <Spinner label="녹화 영상을 저장하는 중" size="lg" />
+                    <div>
+                      <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
+                        오늘의 기록을 만들고 있어요
+                      </strong>
+                      <p className="mt-2 max-w-[34ch] text-base font-medium leading-[1.65] text-[var(--color-text-muted)]">
+                        저장이 끝나면 이 자리에서 영상을 바로 볼 수 있어요. 화면을 닫지 말아 주세요.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <img
+                      alt=""
+                      className="size-[104px] object-contain opacity-60"
+                      src={moldEmptyImage}
+                    />
+                    <div>
+                      <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
+                        {isExpired
+                          ? '영상 보관이 종료되었어요'
+                          : noRecordingMeeting
+                            ? '이 팬미팅은 녹화하지 않았어요'
+                            : '저장된 영상이 없어요'}
+                      </strong>
+                      <p className="mt-2 max-w-[34ch] text-base font-medium leading-[1.65] text-[var(--color-text-muted)]">
+                        {isExpired
+                          ? '영상은 보관 기간이 지나 삭제되었지만, 함께한 시간과 남긴 말은 그대로 남아 있어요.'
+                          : noRecordingMeeting
+                            ? '운영 설정에 따라 녹화하지 않는 팬미팅이었어요. 함께한 시간과 남긴 말은 기록에 남습니다.'
+                            : '영상을 찾지 못했어요. 아래 안내를 확인해 주세요.'}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col px-5 pb-8 pt-[26px] sm:px-[26px] sm:pb-9 sm:pt-[30px] min-[1081px]:pb-11 min-[1081px]:pl-10 min-[1081px]:pr-11 min-[1081px]:pt-[46px]">
@@ -568,7 +640,12 @@ export function FanMeetingCompletePage() {
                       <p
                         className={`mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-bold ${expired ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-warning)]'}`}
                       >
-                        {expired ? '영상 보관 종료' : `영상 ${days}일 남음`}{' '}
+                        {/* days가 null이면 보관 기한이 아직 정해지지 않은 것이라 남은 일수를 단정하지 않는다. */}
+                        {expired
+                          ? '영상 보관 종료'
+                          : days === null
+                            ? '영상 저장 처리 중'
+                            : `영상 ${days}일 남음`}{' '}
                         <span className="font-medium text-[var(--color-text-muted)]">
                           {note || !expired ? '· 사진과 메모는 계속 보관' : '· 기록만 남음'}
                         </span>

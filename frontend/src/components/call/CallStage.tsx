@@ -4,7 +4,12 @@ import { cn } from '../ui/cn'
 /** 화자 이름이 붙은 자막 한 줄이다. */
 export type CaptionLine = {
   speaker: string
+  /** 화자가 말한 원문이며 항상 표시한다. */
   text: string
+  /** 번역문이 있을 때만 원문 아래에 덧붙이는 보조 줄이다. */
+  translatedText?: string
+  /** 줄을 구분할 안정적인 식별자다. 같은 문장이 반복돼도 React key가 겹치지 않게 한다. */
+  id?: string
 }
 
 /** 영상 위를 덮는 연결 상태 안내다. connecting·disconnected에서만 연결 리듬을 보여 준다. */
@@ -197,24 +202,39 @@ export function CallStage({
           aria-live="polite"
           className="absolute bottom-[18px] left-1/2 z-10 max-w-[min(70%,620px)] -translate-x-1/2 rounded-lg bg-[rgb(15_17_21/84%)] px-4 py-[11px] text-center"
         >
-          {captionLines.map((line, index) => (
-            <p
-              className={index ? 'mt-1.5' : ''}
-              // 자막은 갱신되며 내용이 바뀌므로 배열 순서가 아니라 발화 내용으로 식별한다.
-              key={`${line.speaker}:${line.text}`}
-            >
-              <strong className="text-sm font-extrabold text-white/75">{line.speaker}</strong>
-              <span
-                className={cn(
-                  'mt-[3px] block text-lg font-semibold leading-[1.45]',
-                  // 지나간 대사는 흐리게 남겨 현재 발화가 어느 줄인지 위치와 명도로 함께 구분한다.
-                  index === captionLines.length - 1 ? 'text-white' : 'text-white/55',
-                )}
+          {captionLines.map((line, index) => {
+            const isCurrent = index === captionLines.length - 1
+            return (
+              <p
+                className={index ? 'mt-1.5' : ''}
+                // 자막 식별자를 우선 쓴다. 발화 내용으로만 식별하면 같은 말("네")이 반복될 때
+                // key가 겹쳐 React가 다른 줄로 인식하지 못한다.
+                key={line.id ?? `${line.speaker}:${line.text}`}
               >
-                {line.text}
-              </span>
-            </p>
-          ))}
+                <strong className="text-sm font-extrabold text-white/75">{line.speaker}</strong>
+                <span
+                  className={cn(
+                    'mt-[3px] block text-lg font-semibold leading-[1.45]',
+                    // 지나간 대사는 흐리게 남겨 현재 발화가 어느 줄인지 위치와 명도로 함께 구분한다.
+                    isCurrent ? 'text-white' : 'text-white/55',
+                  )}
+                >
+                  {line.text}
+                </span>
+                {/* 번역문은 원문을 대체하지 않고 아래에 덧붙인다. 원문과 구분되게 한 단계 흐리게 둔다. */}
+                {line.translatedText ? (
+                  <span
+                    className={cn(
+                      'mt-[3px] block text-base font-semibold leading-[1.45]',
+                      isCurrent ? 'text-white/80' : 'text-white/45',
+                    )}
+                  >
+                    {line.translatedText}
+                  </span>
+                ) : null}
+              </p>
+            )
+          })}
         </div>
       ) : null}
 
