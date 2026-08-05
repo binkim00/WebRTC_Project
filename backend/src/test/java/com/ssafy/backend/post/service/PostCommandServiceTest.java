@@ -53,6 +53,8 @@ class PostCommandServiceTest {
 
     private static final AuthenticatedUser MANAGER_PRINCIPAL =
             new AuthenticatedUser(1L, UserRole.MANAGER);
+    private static final AuthenticatedUser ADMIN_PRINCIPAL =
+            new AuthenticatedUser(9L, UserRole.ADMIN);
     private static final long MEETING_ID = 10L;
 
     private CurrentUserService currentUserService;
@@ -72,6 +74,97 @@ class PostCommandServiceTest {
                 currentUserService, meetingAccessService, postRepository,
                 new AttachmentLinkService(attachmentRepository), CLOCK
         );
+    }
+
+    /** ADMIN이 작성한 서비스 공지가 SERVICE_NOTICE·PUBLISHED로 팬미팅 없이 저장되는지 검증한다. */
+    @Test
+    void savesServiceNoticeWithoutMeeting() {
+        User admin = user(9L, UserRole.ADMIN);
+        when(currentUserService.requireActiveUser(ADMIN_PRINCIPAL)).thenReturn(admin);
+        when(postRepository.save(any(Post.class))).thenAnswer(invocation -> {
+            Post saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 500L);
+            ReflectionTestUtils.setField(saved, "createdAt", LocalDateTime.of(2026, 8, 5, 10, 0));
+            return saved;
+        });
+
+        NoticeCreateResponse response = commandService.createServiceNotice(
+                new NoticeCreateRequest("  서비스 공지  ", "  공지 본문  ", null), ADMIN_PRINCIPAL
+        );
+
+        ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
+        verify(postRepository).save(captor.capture());
+        Post saved = captor.getValue();
+        assertThat(saved.getType()).isEqualTo(PostType.SERVICE_NOTICE);
+        assertThat(saved.getStatus()).isEqualTo(PostStatus.PUBLISHED);
+        assertThat(saved.getMeeting()).isNull();
+        assertThat(saved.getAuthor()).isSameAs(admin);
+        assertThat(saved.getTitle()).isEqualTo("서비스 공지");
+        assertThat(saved.getContent()).isEqualTo("공지 본문");
+        assertThat(response.noticeId()).isEqualTo(500L);
+        assertThat(response.meetingId()).isNull();
+        // 서비스 공지는 팬미팅에 속하지 않으므로 팬미팅 권한을 확인하지 않는다.
+        verify(meetingAccessService, never()).requireOperator(anyLong(), any(User.class));
+    }
+
+    /** 팬미팅 공지를 쓸 수 있는 MANAGER도 서비스 공지는 작성하지 못하는지 검증한다. */
+    @Test
+    void rejectsServiceNoticeCreationByNonAdmin() {
+        User manager = user(1L, UserRole.MANAGER);
+        when(currentUserService.requireActiveUser(MANAGER_PRINCIPAL)).thenReturn(manager);
+
+        assertThatThrownBy(() -> commandService.createServiceNotice(
+                new NoticeCreateRequest("제목", "본문", null), MANAGER_PRINCIPAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+        verify(postRepository, never()).save(any(Post.class));
+    }
+
+    /** 서비스 공지 수정이 보내지 않은 항목을 유지하고 공백을 제거하는지 검증한다. */
+    @Test
+    void updatesServiceNoticeWithProvidedFieldsOnly() {
+        User admin = user(9L, UserRole.ADMIN);
+        Post notice = serviceNotice(9L);
+        when(currentUserService.requireActiveUser(ADMIN_PRINCIPAL)).thenReturn(admin);
+        when(postRepository.findDetailById(500L)).thenReturn(Optional.of(notice));
+
+        PostUpdateResponse response = commandService.updateServiceNotice(
+                500L, new PostUpdateRequest("  새 제목  ", null, null), ADMIN_PRINCIPAL
+        );
+
+        assertThat(notice.getTitle()).isEqualTo("새 제목");
+        assertThat(notice.getContent()).isEqualTo("본문");
+        assertThat(response.postId()).isEqualTo(500L);
+        assertThat(response.meetingId()).isNull();
+    }
+
+    /** 작성한 ADMIN의 서비스 공지 삭제가 고정 시계 기준 논리 삭제로 처리되는지 검증한다. */
+    @Test
+    void softDeletesServiceNoticeByAuthor() {
+        User admin = user(9L, UserRole.ADMIN);
+        Post notice = serviceNotice(9L);
+        when(currentUserService.requireActiveUser(ADMIN_PRINCIPAL)).thenReturn(admin);
+        when(postRepository.findDetailById(500L)).thenReturn(Optional.of(notice));
+
+        PostDeleteResponse response = commandService.deleteServiceNotice(500L, ADMIN_PRINCIPAL);
+
+        assertThat(notice.getDeletedAt()).isEqualTo(DELETED_AT);
+        assertThat(response.status()).isEqualTo("PUBLISHED");
+        assertThat(response.deletedAt()).isEqualTo(DELETED_AT);
+    }
+
+    /** 팬미팅 공지를 서비스 공지 경로로 다루면 유형 불일치 오류가 발생하는지 검증한다. */
+    @Test
+    void rejectsMeetingNoticeThroughServiceNoticePath() {
+        User admin = user(9L, UserRole.ADMIN);
+        when(currentUserService.requireActiveUser(ADMIN_PRINCIPAL)).thenReturn(admin);
+        when(postRepository.findDetailById(300L)).thenReturn(Optional.of(notice(1L)));
+
+        assertThatThrownBy(() -> commandService.deleteServiceNotice(300L, ADMIN_PRINCIPAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.POST_TYPE_MISMATCH);
     }
 
     /** 운영자가 작성한 팬미팅 공지가 MEETING_NOTICE·PUBLISHED로 저장되는지 검증한다. */
@@ -457,6 +550,16 @@ class PostCommandServiceTest {
                 PostType.MEETING_NOTICE, "공지 제목", "본문"
         );
         ReflectionTestUtils.setField(notice, "id", 300L);
+        return notice;
+    }
+
+    /** 지정한 작성자의 서비스 공지를 생성한다. */
+    private Post serviceNotice(Long authorId) {
+        Post notice = Post.createNotice(
+                user(authorId, UserRole.ADMIN), null,
+                PostType.SERVICE_NOTICE, "서비스 공지", "본문"
+        );
+        ReflectionTestUtils.setField(notice, "id", 500L);
         return notice;
     }
 

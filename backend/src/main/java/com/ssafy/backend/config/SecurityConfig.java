@@ -189,6 +189,15 @@ public class SecurityConfig {
                                 "/api/v1/fan-meetings/*/community/posts",
                                 "/api/v1/community/posts/*",
                                 "/api/v1/community/posts/*/comments").permitAll()
+                        // 서비스 공지 작성·수정·삭제 (POST-003c, POST-004c, POST-005c)
+                        // 서비스 전체에 노출되는 공지라 팬미팅 운영자가 아니라 서비스 운영자만
+                        // 다룰 수 있다. 작성자 본인 여부는 PostCommandService 가 다시 검증한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/service-notices")
+                                .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/service-notices/*")
+                                .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/service-notices/*")
+                                .hasRole("ADMIN")
                         // 공지·커뮤니티 작성 (POST-003)
                         .requestMatchers(HttpMethod.POST, "/api/v1/fan-meetings/*/notices",
                                 "/api/v1/fan-meetings/*/community/posts")
