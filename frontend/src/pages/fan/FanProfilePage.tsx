@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
+import { getEmailVerificationStatus } from '../../api/emailVerifications'
 import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
 import { isEmailVerificationEnabled } from '../../config/features'
 import {
@@ -84,6 +85,30 @@ export function FanProfilePage() {
 
     return () => controller.abort()
   }, [])
+
+  // /users/me가 emailVerified를 내려주지 않는 백엔드에서도 인증 안내를 띄울 수 있도록
+  // 전용 상태 조회로 한 번 더 확인한다. 기능이 없는 백엔드는 실패하고 안내는 계속 숨는다.
+  useEffect(() => {
+    if (!isEmailVerificationEnabled) return
+    if (!profile || profile.emailVerified !== undefined) return
+
+    const token = getAuthSession()?.accessToken
+    if (!token) return
+
+    const controller = new AbortController()
+    void getEmailVerificationStatus(token, controller.signal)
+      .then((status) => {
+        if (controller.signal.aborted) return
+        setProfile((current) =>
+          current ? { ...current, emailVerified: status.emailVerified } : current,
+        )
+      })
+      .catch(() => {
+        // 인증 안내는 부가 정보이므로 조회 실패는 조용히 넘긴다.
+      })
+
+    return () => controller.abort()
+  }, [profile])
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
