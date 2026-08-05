@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertBanner, Button, Dialog, MediaDevicePreview } from '../../components'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
-import { openWaitingRoomImmediately, serverLocalDateTimeMs } from '../../api/meetingManagement'
+import {
+  endFanMeeting,
+  openWaitingRoomImmediately,
+  serverLocalDateTimeMs,
+} from '../../api/meetingManagement'
 import {
   callQueueEntry,
   fetchFanMemos,
@@ -16,7 +20,10 @@ import {
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import { getMeetingNotice, getMeetingNotices } from '../../api/notices'
+import { isQueueNotInitialized } from '../../api/queue'
 import { useMediaDeviceCheck } from '../../hooks/useMediaDeviceCheck'
+import { useNowTicker } from '../../hooks/useNowTicker'
+import { usePolling } from '../../hooks/usePolling'
 
 type DeviceCheckResult = {
   cameraOk?: boolean
@@ -24,6 +31,9 @@ type DeviceCheckResult = {
   speakerOk?: boolean
   networkOk?: boolean
 }
+
+/** 팬미팅 종료를 알린 뒤 메인으로 자동 이동하기까지 기다리는 시간이다. */
+const MEETING_CLOSED_REDIRECT_MS = 5_000
 
 /** 장비 점검 페이지가 저장한 결과를 읽는다. 없으면 점검 전으로 간주한다. */
 function readDeviceCheck(meetingId?: string): DeviceCheckResult | null {
@@ -79,12 +89,19 @@ export function InfluencerMeetingReadyPage() {
   const [currentFanMemo, setCurrentFanMemo] = useState<FanMemo>()
   const [notice, setNotice] = useState<{ title: string; body: string }>()
   const [error, setError] = useState<string>()
-  const [now, setNow] = useState(() => Date.now())
   const [openQueueConfirm, setOpenQueueConfirm] = useState(false)
   const [openingQueue, setOpeningQueue] = useState(false)
   const [openQueueError, setOpenQueueError] = useState<string>()
   const [callingNext, setCallingNext] = useState(false)
   const [callError, setCallError] = useState<string>()
+  // 팬미팅 종료 확인 대화상자와 진행 상태다.
+  const [endDialogOpen, setEndDialogOpen] = useState(false)
+  const [ending, setEnding] = useState(false)
+  const [endError, setEndError] = useState<string>()
+  // 종료 안내 후 자동 이동할 시각이다. 렌더마다 다시 계산되면 안 되므로 ref로 고정한다.
+  const closedRedirectAtRef = useRef<number | undefined>(undefined)
+  // 대기열 오픈 시각 도달 여부와 진행 시간을 초 단위로 다시 계산하기 위한 시계다.
+  const now = useNowTicker(1_000)
   // 1인 운영자는 통화 중 운영 콘솔을 볼 수 없으므로 대기열 오픈도 대기실에서 처리한다.
   const isSolo = getAuthSession()?.role === 'SOLO_INFLUENCER'
 
@@ -109,31 +126,61 @@ export function InfluencerMeetingReadyPage() {
   const cameraBroken =
     mediaStatus !== 'idle' && mediaStatus !== 'requesting' && !isCameraLive
 
-  useEffect(() => {
+  /**
+   * 팬미팅 상세를 다시 읽는다.
+   *
+   * 이전에는 마운트 시 한 번만 조회해서, 매니저가 팬미팅을 종료해도 대기실은 계속
+   * 진행 중인 것처럼 보였다. 종료를 인플루언서가 알 수 있어야 하므로 주기적으로 갱신한다.
+   */
+  const loadMeeting = useCallback(async (signal?: AbortSignal) => {
     if (!fanMeetingId) return
 
     const session = getAuthSession()
     if (!session) return
 
-    const controller = new AbortController()
-
-    void fetchPublicFanMeetingDetail(
-      Number(fanMeetingId),
-      session.accessToken,
-      controller.signal,
-    )
-      .then(setDetail)
-      .catch((reason: unknown) => {
-        if (controller.signal.aborted) return
-        setError(
-          reason instanceof ApiError || reason instanceof TypeError
-            ? reason.message
-            : '팬미팅 정보를 불러오지 못했습니다.',
-        )
-      })
-
-    return () => controller.abort()
+    try {
+      setDetail(
+        await fetchPublicFanMeetingDetail(Number(fanMeetingId), session.accessToken, signal),
+      )
+    } catch (reason: unknown) {
+      if (signal?.aborted) return
+      setError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : '팬미팅 정보를 불러오지 못했습니다.',
+      )
+    }
   }, [fanMeetingId])
+
+  // 종료·취소를 늦게 알아차리지 않도록 10초마다 상태를 확인한다.
+  usePolling(loadMeeting, { intervalMs: 10_000 })
+
+  /** 팬미팅이 끝났거나 취소되어 더 이상 통화를 진행할 수 없는 상태다. */
+  const isMeetingClosed =
+    detail?.meeting.status === 'ENDED' || detail?.meeting.status === 'CANCELED'
+
+  /**
+   * 팬미팅이 종료되면 안내를 보여 준 뒤 메인으로 보낸다.
+   *
+   * 종료된 대기실에 계속 머물면 할 수 있는 일이 없다. 다만 즉시 이동하면 왜 화면이 바뀌었는지
+   * 알 수 없으므로, 종료를 알리고 잠깐 읽을 시간을 준 뒤 이동한다.
+   */
+  useEffect(() => {
+    if (!isMeetingClosed) return
+    if (closedRedirectAtRef.current !== undefined) return
+
+    closedRedirectAtRef.current = Date.now() + MEETING_CLOSED_REDIRECT_MS
+    const timer = window.setTimeout(
+      () => navigate('/', { replace: true }),
+      MEETING_CLOSED_REDIRECT_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [isMeetingClosed, navigate])
+
+  /** 자동 이동까지 남은 초. 종료 상태가 아니면 undefined다. */
+  const closedRedirectRemainingSec = closedRedirectAtRef.current === undefined
+    ? undefined
+    : Math.max(0, Math.ceil((closedRedirectAtRef.current - now) / 1000))
 
   // 운영 공지 최신 1건 — 시작 시간 변경 같은 안내를 입장 전에 보여 준다.
   useEffect(() => {
@@ -172,6 +219,13 @@ export function InfluencerMeetingReadyPage() {
       setError(undefined)
     } catch (reason) {
       if (signal?.aborted) return
+      // 팬미팅이 종료되면 Redis 대기열이 정리되어 오픈 전과 같은 409가 돌아온다.
+      // 장애가 아니므로 빈 대기열로 두고 오류를 띄우지 않는다.
+      if (isQueueNotInitialized(reason)) {
+        setQueue(undefined)
+        setError(undefined)
+        return
+      }
       setError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
@@ -179,11 +233,6 @@ export function InfluencerMeetingReadyPage() {
       )
     }
   }, [fanMeetingId])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   /** 대기열 오픈 시각(밀리초). 상세 정보를 아직 불러오지 못했으면 undefined다. */
   const queueOpenAtMs = useMemo(() => {
@@ -197,21 +246,12 @@ export function InfluencerMeetingReadyPage() {
 
   // 대기열 정보를 3초마다 폴링한다. 오픈 전에는 백엔드가 QUEUE_NOT_INITIALIZED 오류를
   // 반환하므로 폴링하지 않고, 오픈 시각이 지나면 자동으로 폴링을 시작한다.
-  useEffect(() => {
-    if (isBeforeQueueOpen) return
-
-    const controller = new AbortController()
-    void loadCurrentCall(controller.signal)
-
-    const timer = window.setInterval(() => {
-      void loadCurrentCall(controller.signal)
-    }, 3_000)
-
-    return () => {
-      controller.abort()
-      window.clearInterval(timer)
-    }
-  }, [isBeforeQueueOpen, loadCurrentCall])
+  // usePolling은 직렬 폴링이라 응답이 밀려도 오래된 대기열이 최신 화면을 덮지 않는다.
+  // 종료·취소된 뒤에는 대기열이 정리되어 조회할 것이 없으므로 폴링도 멈춘다.
+  usePolling(loadCurrentCall, {
+    intervalMs: 3_000,
+    enabled: !isBeforeQueueOpen && !isMeetingClosed,
+  })
 
   const entries = useMemo(() => queue?.entries ?? [], [queue?.entries])
 
@@ -313,16 +353,48 @@ export function InfluencerMeetingReadyPage() {
 
   const handleEnterCall = () => {
     if (!fanMeetingId) return
+    // 종료된 팬미팅에서는 서버가 LiveKit Room을 이미 삭제했으므로 입장을 막는다.
+    if (isMeetingClosed) return
     if (!isDeviceChecked || cameraBroken || !queue?.currentCall) return
     navigate(
       `/influencer/fan-meetings/${fanMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`,
     )
   }
 
+  /**
+   * 팬미팅 전체를 종료한다.
+   *
+   * 백엔드 `end`는 담당 매니저 또는 진행 인플루언서를 허용한다. 지금까지 프론트가 매니저
+   * 콘솔에만 종료 버튼을 두어 소속 인플루언서는 자기 팬미팅을 끝낼 방법이 없었다.
+   */
+  async function handleEndMeeting() {
+    if (!fanMeetingId || ending) return
+
+    const session = getAuthSession()
+    if (!session) return
+
+    setEnding(true)
+    setEndError(undefined)
+    try {
+      await endFanMeeting(fanMeetingId, session.accessToken)
+      // 폴링을 기다리지 않고 즉시 종료 상태를 반영한다.
+      await loadMeeting()
+      setEndDialogOpen(false)
+    } catch (reason: unknown) {
+      setEndError(
+        reason instanceof ApiError || reason instanceof TypeError
+          ? reason.message
+          : '팬미팅을 종료하지 못했습니다.',
+      )
+    } finally {
+      setEnding(false)
+    }
+  }
+
   /** 다음 대기 팬을 호출하고, 직접 통화하는 1인 운영자이므로 바로 통화 화면으로 들어간다. */
   async function handleCallNext(target: { queueEntryId: string; nickname: string }) {
     const session = getAuthSession()
-    if (!fanMeetingId || !session || callingNext) return
+    if (!fanMeetingId || !session || callingNext || isMeetingClosed) return
 
     setCallingNext(true)
     setCallError(undefined)
@@ -361,7 +433,7 @@ export function InfluencerMeetingReadyPage() {
   // dc.html의 5상태(ready/connection/unchecked/no-fan/last)를 실제 상태에 대응시킨다.
   const noFan = !queue?.currentCall
   const isLastFan = Boolean(queue?.currentCall && !nextEntry)
-  const blocked = cameraBroken || !isDeviceChecked || noFan
+  const blocked = cameraBroken || !isDeviceChecked || noFan || isMeetingClosed
 
   // 1인 운영자는 대기 팬을 대기실에서 직접 호출한다. 호출 API가 팬미팅 상태를 검사하지
   // 않으므로 조기 세션 생성을 막기 위해 LIVE를 프론트에서 확인한다. (운영 콘솔과 동일 규칙)
@@ -403,8 +475,27 @@ export function InfluencerMeetingReadyPage() {
 
   return (
     <div>
+      {/* 종료·취소는 오류가 아니라 확정된 결과이므로 다른 안내보다 먼저 알린다 */}
+      {isMeetingClosed ? (
+        <AlertBanner
+          className="mb-6"
+          title={
+            detail?.meeting.status === 'CANCELED'
+              ? '팬미팅이 취소되었습니다'
+              : '팬미팅이 종료되었습니다'
+          }
+          variant="info"
+        >
+          더 이상 통화를 진행할 수 없습니다. 대기열과 통화 방이 모두 정리되었으니 진행 결과는
+          팬미팅 이력에서 확인해 주세요.
+          {closedRedirectRemainingSec !== undefined
+            ? ` ${closedRedirectRemainingSec}초 뒤 메인으로 이동합니다.`
+            : ''}
+        </AlertBanner>
+      ) : null}
+
       {/* 대기열 오픈 전에는 오류 대신 오픈 예정 안내를 표시한다 */}
-      {isBeforeQueueOpen ? (
+      {!isMeetingClosed && isBeforeQueueOpen ? (
         <div className="mb-6 grid gap-3">
           <AlertBanner title="대기열이 아직 열리지 않았습니다" variant="info">
             {formatScheduledAt(detail?.meeting.operation.queueOpenAt ?? undefined)} 오픈
@@ -726,8 +817,52 @@ export function InfluencerMeetingReadyPage() {
               </p>
             </>
           )}
+
+          {/* 소속 인플루언서는 매니저 콘솔에 접근할 수 없으므로 이 화면에서 직접 종료해야 한다. */}
+          {!isMeetingClosed && meetingLive ? (
+            <button
+              className="mj-font-label mt-4 flex min-h-[46px] w-full items-center justify-center rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[15px] text-[var(--color-error)] transition-colors hover:border-[var(--color-error)]"
+              onClick={() => {
+                setEndError(undefined)
+                setEndDialogOpen(true)
+              }}
+              type="button"
+            >
+              팬미팅 종료
+            </button>
+          ) : null}
+          {endError ? (
+            <p className="mt-2 text-sm font-medium text-[var(--color-error)]" role="alert">
+              {endError}
+            </p>
+          ) : null}
         </aside>
       </div>
+
+      <Dialog
+        description="진행 중인 모든 통화가 강제로 마감되고 대기열이 정리됩니다. 종료하면 되돌릴 수 없습니다."
+        footer={
+          <>
+            <Button disabled={ending} onClick={() => setEndDialogOpen(false)} variant="secondary">
+              취소
+            </Button>
+            <Button loading={ending} onClick={() => void handleEndMeeting()} variant="danger">
+              종료하기
+            </Button>
+          </>
+        }
+        onOpenChange={(open) => {
+          if (!open && !ending) setEndDialogOpen(false)
+        }}
+        open={endDialogOpen}
+        title="팬미팅을 종료할까요?"
+      >
+        {endError ? (
+          <AlertBanner title="팬미팅을 종료하지 못했습니다" variant="error">
+            {endError}
+          </AlertBanner>
+        ) : null}
+      </Dialog>
 
       <Dialog
         description="당첨된 팬이 장비 점검 후 대기실에서 기다릴 수 있습니다. 오픈한 대기열은 다시 닫을 수 없습니다."

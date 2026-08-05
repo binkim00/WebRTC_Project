@@ -2,6 +2,11 @@ import { ArrowLeft } from '@phosphor-icons/react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
+import {
+  callDurationSecToMinutesInput,
+  formatCallDuration,
+  validateCallDurationSec,
+} from './callDuration'
 import { saveApplicationForm } from '../../api/applications'
 import { attachmentContentUrl, uploadAttachment } from '../../api/attachments'
 import { getAuthSession } from '../../api/authSession'
@@ -45,6 +50,7 @@ import {
   readMeetingCreateLocalDraft,
   writeMeetingCreateLocalDraft,
   type DraftFormQuestion,
+  type MeetingCreateLocalDraft,
 } from './managerMeetingCreateDraft'
 
 /** 매니저 페이지의 제목, 설명, 선택적 뒤로가기 링크를 같은 형태로 표시한다. */
@@ -196,7 +202,17 @@ export function ManagerMeetingCreatePage() {
   const isInfluencerAccount = session?.role === 'INFLUENCER' || session?.role === 'SOLO_INFLUENCER'
   const resolvedInfluencerId = isInfluencerAccount ? session?.userId : undefined
   const influencerNickname = isInfluencerAccount ? session?.nickname : undefined
-  const restoredLocalDraftRef = useRef(readMeetingCreateLocalDraft(session?.userId))
+  // 새로고침 직후 첫 렌더부터 로컬 초안을 사용해 빈 폼이 초안을 덮어쓰지 않게 한다.
+  //
+  // useRef의 인자는 첫 렌더에서만 쓰이지만 **매 렌더마다 평가**되므로, 여기서 직접
+  // readMeetingCreateLocalDraft를 호출하면 렌더마다 localStorage 읽기·JSON 파싱이 반복되고
+  // 손상된 초안일 때는 removeItem 부작용까지 매번 실행된다. 지연 초기화로 한 번만 읽는다.
+  const restoredLocalDraftRef = useRef<MeetingCreateLocalDraft | undefined>(undefined)
+  const restoredDraftLoadedRef = useRef(false)
+  if (!restoredDraftLoadedRef.current) {
+    restoredDraftLoadedRef.current = true
+    restoredLocalDraftRef.current = readMeetingCreateLocalDraft(session?.userId)
+  }
   const restoredLocalDraft = restoredLocalDraftRef.current
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<FanMeetingForm>(() => {
@@ -239,12 +255,121 @@ export function ManagerMeetingCreatePage() {
       })
   }, [isInfluencerAccount, session?.accessToken])
   // 응모 폼은 팬미팅 생성 응답의 meetingId가 나온 뒤에야 저장할 수 있어 마법사 안에 상태로 들고 있는다.
-  const [questions, setQuestions] = useState<DraftFormQuestion[]>(restoredLocalDraft?.questions ?? [])
-  const [formDescription, setFormDescription] = useState(restoredLocalDraft?.formDescription ?? '')
-  const nextQuestionKey = useRef(nextDraftQuestionKey(restoredLocalDraft?.questions ?? []))
-  const [localDraftSavedAt, setLocalDraftSavedAt] = useState<string | undefined>(restoredLocalDraft?.savedAt)
-  const [localDraftSaveError, setLocalDraftSaveError] = useState(false)
+  const [questions, setQuestions] = useState<DraftFormQuestion[]>(
+    restoredLocalDraft?.questions ?? [],
+  )
+  const [formDescription, setFormDescription] = useState(
+    restoredLocalDraft?.formDescription ?? '',
+  )
+  const nextQuestionKey = useRef(
+    nextDraftQuestionKey(restoredLocalDraft?.questions ?? []),
+  )
+  const [localDraftState, setLocalDraftState] = useState<
+    'idle' | 'restored' | 'saving' | 'saved' | 'error'
+  >(restoredLocalDraft ? 'restored' : 'idle')
+  const [localDraftSavedAt, setLocalDraftSavedAt] = useState<string | undefined>(
+    restoredLocalDraft?.savedAt,
+  )
+  /**
+   * 서버 저장이 실패한 뒤 브라우저 임시 저장을 중단한 상태다.
+   *
+   * 실패한 시도가 초안을 남기면 다음 방문에서 그 초안이 복구되고, 초안에 담긴 createdMeetingId
+   * 때문에 새 팬미팅을 만들 수 없는 상태로 이어진다. 그래서 실패하면 저장된 초안을 지우고
+   * 더 이상 기록하지 않는다. 화면의 입력값은 그대로 두어 바로 고쳐 다시 시도할 수 있다.
+   */
+  const [localDraftBlocked, setLocalDraftBlocked] = useState(false)
+  /** 초안을 버린 직후 복구 배너를 숨기기 위한 표시다. */
+  const [localDraftDiscarded, setLocalDraftDiscarded] = useState(false)
+  /** 복구된 초안이 가리키던 팬미팅을 더 이상 수정할 수 없어 연결을 끊었을 때의 안내다. */
+  const [staleDraftLinkNotice, setStaleDraftLinkNotice] = useState<string>()
   const allowNavigationRef = useRef(false)
+  // 통화 시간은 선택형 UI로 초 단위 값을 직접 고르지만, 초안 폐기 시 표시값 복원을 위해
+  // 분 단위 표시 문자열도 함께 유지한다.
+  const [, setCallDurationMinutesInput] = useState(() =>
+    callDurationSecToMinutesInput(form.operation.callDurationSec),
+  )
+
+  /**
+   * 브라우저 임시 초안을 버리고 마법사를 처음 상태로 되돌린다.
+   *
+   * 복구된 초안에는 이미 만들어 둔 팬미팅의 createdMeetingId가 담길 수 있다. 그 값이 남아 있으면
+   * 저장 시 createEvent(신규 생성) 대신 updateFanMeeting(기존 수정)으로 분기하므로,
+   * 아무리 새로 입력해도 **새 팬미팅이 만들어지지 않는다.** 그래서 초안을 버릴 때는
+   * createdMeetingId까지 반드시 함께 비워야 한다.
+   *
+   * 마법사가 들고 있는 초안 관련 상태를 하나도 남기지 않고 초기화한다.
+   */
+  function discardLocalDraft() {
+    clearMeetingCreateLocalDraft(session?.userId)
+
+    const emptyForm = createInitialMeetingForm(resolvedInfluencerId)
+    setStep(0)
+    setForm(emptyForm)
+    setCallDurationMinutesInput(callDurationSecToMinutesInput(emptyForm.operation.callDurationSec))
+    setQuestions([])
+    setFormDescription('')
+    nextQuestionKey.current = 1
+    // 이 두 값을 비워야 다음 저장이 신규 생성으로 분기한다.
+    setCreatedMeetingId(undefined)
+    setCreatedMeetingStatus(undefined)
+    setLocalDraftState('idle')
+    setLocalDraftSavedAt(undefined)
+    setLocalDraftBlocked(false)
+    setLocalDraftDiscarded(true)
+    setError(undefined)
+    setErrorTitle('입력 확인')
+    // 마운트 시 한 번 읽은 복구 초안도 비워 복구 배너가 남지 않게 한다.
+    restoredLocalDraftRef.current = undefined
+    setStaleDraftLinkNotice(undefined)
+  }
+
+  /**
+   * 복구된 초안이 가리키는 팬미팅이 아직 이 마법사가 수정해도 되는 대상인지 확인한다.
+   *
+   * 초안에 담긴 createdMeetingId는 저장 분기를 createEvent(신규)에서 updateFanMeeting(수정)으로
+   * 바꾼다. 그런데 그 팬미팅은 그동안 다른 화면에서 삭제되었거나 이미 발행·진행·종료되었을 수 있고,
+   * 복구 시점에는 서버 상태를 확인하지 않고 무조건 'DRAFT'로 단정했다. 그 결과 두 가지 사고가 났다.
+   *
+   * 1. 삭제된 팬미팅을 계속 PATCH해 저장이 영구히 실패하는 교착
+   * 2. 이미 팬에게 공개된 팬미팅을 새 팬미팅 내용으로 조용히 덮어쓰는 사고
+   *    (응모 폼도 전체 교체되어 기존 질문이 사라진다)
+   *
+   * 편집 가능한 DRAFT가 아니면 연결을 끊어 다음 저장이 신규 생성으로 흐르게 한다.
+   */
+  useEffect(() => {
+    const linkedMeetingId = restoredLocalDraft?.createdMeetingId
+    if (!linkedMeetingId) return
+
+    const token = getAuthSession()?.accessToken
+    if (!token) return
+
+    const controller = new AbortController()
+
+    const detachStaleLink = (message: string) => {
+      setCreatedMeetingId(undefined)
+      setCreatedMeetingStatus(undefined)
+      setStaleDraftLinkNotice(message)
+    }
+
+    void fetchPublicFanMeetingDetail(linkedMeetingId, token, controller.signal)
+      .then((detail) => {
+        if (controller.signal.aborted) return
+        // 아직 초안이면 원래 의도대로 그 초안을 이어서 수정한다.
+        if (detail.meeting.status === 'DRAFT') return
+
+        detachStaleLink(
+          `임시 초안에 연결된 팬미팅(ID ${linkedMeetingId})은 이미 초안 단계를 지났습니다. 덮어쓰지 않도록 연결을 끊었으니, 저장하면 새 팬미팅으로 만들어집니다.`,
+        )
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return
+        detachStaleLink(
+          `임시 초안에 연결된 팬미팅(ID ${linkedMeetingId})을 찾을 수 없습니다. 삭제되었을 수 있어 연결을 끊었으니, 저장하면 새 팬미팅으로 만들어집니다.`,
+        )
+      })
+
+    return () => controller.abort()
+  }, [restoredLocalDraft?.createdMeetingId])
   const scheduleErrors = getScheduleErrors(toScheduleInput(form))
   const applicationEndError = scheduleErrors.find((message) =>
     message.startsWith('응모 마감'),
@@ -255,14 +380,14 @@ export function ManagerMeetingCreatePage() {
   const queueOpenError = scheduleErrors.find((message) =>
     message.startsWith('대기열 오픈'),
   )
-  const hasUnsavedContent = hasMeaningfulMeetingDraft(
+  const hasLocalDraftContent = hasMeaningfulMeetingDraft(
     form,
     questions,
     formDescription,
     step,
     createdMeetingId,
   )
-  const shouldWarnOnLeave = hasUnsavedContent && createdMeetingStatus !== 'PUBLISHED'
+  const shouldWarnOnLeave = hasLocalDraftContent && createdMeetingStatus !== 'PUBLISHED'
   const shouldWarnOnLeaveRef = useRef(shouldWarnOnLeave)
   shouldWarnOnLeaveRef.current = shouldWarnOnLeave
   const navigationBlocker = useBlocker(
@@ -275,14 +400,17 @@ export function ManagerMeetingCreatePage() {
   /** 작성 내용은 서버에 보내지 않고 현재 로그인 사용자의 브라우저에만 자동 저장한다. */
   useEffect(() => {
     if (createdMeetingStatus === 'PUBLISHED') return
+    // 저장에 실패한 뒤에는 초안을 남기지 않는다. 실패한 시도가 남긴 초안이 다음 방문을 막는다.
+    if (localDraftBlocked) return
 
-    if (!hasUnsavedContent) {
+    if (!hasLocalDraftContent) {
       clearMeetingCreateLocalDraft(session?.userId)
+      setLocalDraftState('idle')
       setLocalDraftSavedAt(undefined)
-      setLocalDraftSaveError(false)
       return
     }
 
+    setLocalDraftState('saving')
     const timer = window.setTimeout(() => {
       const savedAt = writeMeetingCreateLocalDraft(session?.userId, {
         step,
@@ -291,8 +419,9 @@ export function ManagerMeetingCreatePage() {
         formDescription,
         createdMeetingId,
       })
-      setLocalDraftSavedAt(savedAt)
-      setLocalDraftSaveError(!savedAt)
+
+      setLocalDraftState(savedAt ? 'saved' : 'error')
+      if (savedAt) setLocalDraftSavedAt(savedAt)
     }, LOCAL_DRAFT_SAVE_DELAY_MS)
 
     return () => window.clearTimeout(timer)
@@ -301,7 +430,8 @@ export function ManagerMeetingCreatePage() {
     createdMeetingStatus,
     form,
     formDescription,
-    hasUnsavedContent,
+    hasLocalDraftContent,
+    localDraftBlocked,
     questions,
     session?.userId,
     step,
@@ -405,6 +535,13 @@ export function ManagerMeetingCreatePage() {
       return
     }
 
+    const durationError = validateCallDurationSec(payload.operation.callDurationSec)
+    if (durationError) {
+      setErrorTitle('입력 확인')
+      setError(durationError)
+      return
+    }
+
     setSubmitting(true)
     setError(undefined)
     try {
@@ -419,6 +556,9 @@ export function ManagerMeetingCreatePage() {
         await updateFanMeeting(meetingId, payload, token)
         setCreatedMeetingStatus('DRAFT')
       }
+
+      // 저장이 성공했으므로 실패로 중단했던 임시 저장을 다시 켠다.
+      setLocalDraftBlocked(false)
 
       // 응모를 사용할 때만 폼을 저장한다. 질문이 없어도 안내 문구는 남길 수 있다.
       if (form.application.enabled) {
@@ -450,6 +590,13 @@ export function ManagerMeetingCreatePage() {
           ? reason.message
           : '팬미팅 발행에 실패했습니다.',
       )
+      // 실패한 시도는 브라우저에 초안을 남기지 않는다. 남겨 두면 다음 방문에서 자동 복구되고,
+      // 초안에 담긴 createdMeetingId 때문에 새 팬미팅을 만들 수 없는 상태가 된다.
+      // 화면의 입력값은 유지하므로 값을 고쳐 바로 다시 시도할 수 있다.
+      clearMeetingCreateLocalDraft(session?.userId)
+      setLocalDraftBlocked(true)
+      setLocalDraftState('idle')
+      setLocalDraftSavedAt(undefined)
     } finally {
       setSubmitting(false)
     }
@@ -553,7 +700,11 @@ export function ManagerMeetingCreatePage() {
     setCreatedMeetingStatus(undefined)
     setReadyToPublish(false)
     setLocalDraftSavedAt(undefined)
-    setLocalDraftSaveError(false)
+    setLocalDraftState('idle')
+    setLocalDraftBlocked(false)
+    setLocalDraftDiscarded(false)
+    setStaleDraftLinkNotice(undefined)
+    restoredLocalDraftRef.current = undefined
     setError(undefined)
     setStep(0)
     setNewStartDialogOpen(false)
@@ -562,6 +713,26 @@ export function ManagerMeetingCreatePage() {
   /** 저장하지 않고 나가기를 확인하면 사용자가 선택한 이동을 계속한다. */
   function proceedBlockedNavigation() {
     if (navigationBlocker.state !== 'blocked') return
+
+    // 저장 실패로 임시 저장을 중단한 상태라면 이탈할 때도 초안을 남기지 않는다.
+    if (!localDraftBlocked) {
+      writeMeetingCreateLocalDraft(session?.userId, {
+        step,
+        form,
+        questions,
+        formDescription,
+        createdMeetingId,
+      })
+    }
+    allowNavigationRef.current = true
+    navigationBlocker.proceed()
+  }
+
+  /** 초안을 남기지 않고 이탈한다. 이렇게 나가면 다음 방문에서 빈 상태로 시작한다. */
+  function discardAndLeave() {
+    if (navigationBlocker.state !== 'blocked') return
+
+    clearMeetingCreateLocalDraft(session?.userId)
     allowNavigationRef.current = true
     navigationBlocker.proceed()
   }
@@ -619,25 +790,63 @@ export function ManagerMeetingCreatePage() {
       <div className="mt-6.5">
         <Stepper labels={STEP_LABELS} onStepChange={setStep} step={step} />
       </div>
-      {localDraftSavedAt || localDraftSaveError ? (
+      {localDraftState !== 'idle' || localDraftBlocked ? (
         <div
           className="mt-5 flex flex-col gap-5 rounded-[var(--radius-control)] border border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] p-5 sm:flex-row sm:items-center sm:justify-between"
           role="status"
         >
           <div className="min-w-0">
             <strong className="block text-lg font-extrabold text-[var(--color-text-primary)]">
-              {localDraftSaveError ? '브라우저 초안을 저장하지 못했습니다' : '브라우저 초안을 이어서 작성 중입니다'}
+              {localDraftBlocked
+                ? '저장 실패로 임시 저장을 중단했습니다'
+                : localDraftState === 'error'
+                  ? '브라우저 초안을 저장하지 못했습니다'
+                  : '브라우저 초안을 이어서 작성 중입니다'}
             </strong>
             <span className="mt-1 block text-sm font-medium text-[var(--color-text-muted)]">
-              {localDraftSaveError
-                ? '브라우저 저장소를 사용할 수 있는지 확인해 주세요.'
-                : `이 기기에 자동 저장됨 ${formatDateTime(localDraftSavedAt)}`}
+              {localDraftBlocked
+                ? '화면의 입력값은 그대로이니 원인을 고쳐 다시 저장하면 임시 저장도 재개됩니다.'
+                : localDraftState === 'error'
+                  ? '브라우저 저장소를 사용할 수 있는지 확인해 주세요.'
+                  : localDraftState === 'saving'
+                    ? '이 기기에 자동 저장 중…'
+                    : localDraftSavedAt
+                      ? `이 기기에 자동 저장됨 ${formatDateTime(localDraftSavedAt)}`
+                      : '입력을 시작하면 이 브라우저에 자동 저장됩니다.'}
             </span>
           </div>
           <Button onClick={() => setNewStartDialogOpen(true)} variant="outline">
             새로 시작
           </Button>
         </div>
+      ) : null}
+
+      {restoredLocalDraft ? (
+        <AlertBanner className="mt-4" title="브라우저 임시 초안을 복구했습니다" variant="success">
+          <p>
+            {formatDateTime(restoredLocalDraft.savedAt)}에 저장한 STEP {restoredLocalDraft.step + 1}의
+            입력을 이어서 표시합니다. 서버에 저장한 초안은 ‘초안 확인’에서 별도로 불러올 수 있습니다.
+            {restoredLocalDraft.createdMeetingId
+              ? ` 이 초안은 이미 만들어진 팬미팅(ID ${restoredLocalDraft.createdMeetingId})과 연결되어 있어, 저장하면 새로 만들지 않고 그 팬미팅을 수정합니다.`
+              : ''}
+          </p>
+          {/* 초안을 버릴 수단이 없으면 복구된 createdMeetingId 때문에 새 팬미팅을 만들 수 없다. */}
+          <div className="mt-3">
+            <Button onClick={discardLocalDraft} size="sm" variant="secondary">
+              초안 버리고 새로 만들기
+            </Button>
+          </div>
+        </AlertBanner>
+      ) : localDraftDiscarded ? (
+        <AlertBanner className="mt-4" title="임시 초안을 버렸습니다" variant="info">
+          빈 상태에서 새 팬미팅을 만들 수 있습니다.
+        </AlertBanner>
+      ) : null}
+
+      {staleDraftLinkNotice ? (
+        <AlertBanner className="mt-4" title="이전 팬미팅과의 연결을 끊었습니다" variant="warning">
+          {staleDraftLinkNotice}
+        </AlertBanner>
       ) : null}
       <form className="grid gap-5" onSubmit={submit}>
         <fieldset className="contents">
@@ -1030,7 +1239,7 @@ export function ManagerMeetingCreatePage() {
                   <dl className="grid content-start">
                     {[
                       ['팬미팅 시작', formatDateTime(form.scheduledStartAt)],
-                      ['1인 통화 시간', `${form.operation.callDurationSec}초`],
+                      ['1인 통화 시간', formatCallDuration(form.operation.callDurationSec)],
                       ['모집 인원', `${form.application.capacity}명`],
                       ['응모 시작', formatDateTime(form.application.startAt)],
                       ['응모 마감', formatDateTime(form.application.endAt)],
@@ -1183,6 +1392,10 @@ export function ManagerMeetingCreatePage() {
               variant="outline"
             >
               계속 작성
+            </Button>
+            {/* 초안을 남기지 않고 나갈 수단이 없으면 다음 방문에서 또 복구되어 새로 만들 수 없다. */}
+            <Button onClick={discardAndLeave} variant="ghost">
+              초안 버리고 나가기
             </Button>
             <Button onClick={proceedBlockedNavigation} variant="danger">
               저장하지 않고 나가기

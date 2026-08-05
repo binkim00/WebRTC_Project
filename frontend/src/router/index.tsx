@@ -30,13 +30,6 @@ export const router = createBrowserRouter([
         lazy: lazyPage(() => import('../pages/common/LandingPage'), 'LandingPage'),
       },
       {
-        path: 'examples/yestalgia-home',
-        lazy: lazyPage(
-          () => import('../pages/common/YestalgiaHomeExamplePage'),
-          'YestalgiaHomeExamplePage',
-        ),
-      },
-      {
         Component: AuthLayout,
         children: [
           {

@@ -51,10 +51,20 @@ function formatRemaining(announceAt: string): string {
   return `${days}일 ${hours}시간`
 }
 
+function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
+  return (
+    detail?.meeting.status === 'READY' ||
+    detail?.meeting.status === 'LIVE' ||
+    detail?.meeting.status === 'ENDED'
+  )
+}
+
 export function FanApplicationResultPage() {
   const { meetingId } = useParams()
   const [application, setApplication] = useState<MyApplicationResponse | null>()
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
+  // 발표 절차(READY 전환) 전에는 추첨 결과가 응답에 실려 있어도 화면에 공개하지 않는다.
+  const [resultPublished, setResultPublished] = useState<boolean>()
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -71,10 +81,31 @@ export function FanApplicationResultPage() {
 
     setApplication(undefined)
     setError(undefined)
+    setResultPublished(undefined)
 
     void getMyApplication(meetingId, session.accessToken, controller.signal)
-      .then((result) => {
+      .then(async (result) => {
         setApplication(result)
+        if (
+          result &&
+          (result.applicationStatus === 'SELECTED' ||
+            result.applicationStatus === 'NOT_SELECTED')
+        ) {
+          try {
+            const detail = await fetchPublicFanMeetingDetail(
+              Number(meetingId),
+              session.accessToken,
+              controller.signal,
+            )
+            setResultPublished(isResultPublished(detail))
+          } catch {
+            if (controller.signal.aborted) return
+            // 공개 여부를 확인하지 못하면 결과를 숨기는 쪽으로 처리한다.
+            setResultPublished(false)
+          }
+        } else {
+          setResultPublished(true)
+        }
         setError(undefined)
       })
       .catch((reason: unknown) => {
@@ -129,8 +160,8 @@ export function FanApplicationResultPage() {
     )
   }
 
-  // dc.html의 로딩 스켈레톤이다.
-  if (application === undefined) {
+  // dc.html의 로딩 스켈레톤이다. 결과 공개 여부 확인이 끝나기 전에도 결과를 노출하지 않는다.
+  if (application === undefined || resultPublished === undefined) {
     return (
       <div
         aria-busy="true"
@@ -173,7 +204,8 @@ export function FanApplicationResultPage() {
   const resultAnnounceAt = detail?.meeting.application.resultAnnouncementAt ?? null
 
   // 당첨 — 표현 강도 8, Signature S1(전체 폭 포트레이트)
-  if (application.applicationStatus === 'SELECTED') {
+  // 발표 절차 전(resultPublished false)에는 추첨이 끝났어도 아래 발표 대기 화면을 유지한다.
+  if (resultPublished && application.applicationStatus === 'SELECTED') {
     // 장비 점검을 마쳐야 하는 실질 기한은 대기실 개방 시각이다. 미설정이면 팬미팅 시작 시각으로 안내한다.
     const deviceCheckDeadline = operation?.queueOpenAt ?? application.scheduledStartAt
 
@@ -263,7 +295,7 @@ export function FanApplicationResultPage() {
   }
 
   // 미당첨 — 표현 강도 3, 제스처 없음
-  if (application.applicationStatus === 'NOT_SELECTED') {
+  if (resultPublished && application.applicationStatus === 'NOT_SELECTED') {
     const capacity = detail?.meeting.application.capacity
 
     return (

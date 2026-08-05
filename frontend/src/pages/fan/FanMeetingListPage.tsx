@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
@@ -12,6 +12,7 @@ import {
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import { isWaitingRoomOpen, serverLocalDateTimeMs } from '../../api/meetingManagement'
+import { usePolling } from '../../hooks/usePolling'
 import { enterQueue, interpretQueueEnterError } from '../../api/queue'
 import {
   getAllMyRecordings,
@@ -27,6 +28,7 @@ type FanMeetingListStatus = 'upcoming' | 'completed'
 type FanMeetingListItem = {
   application: MyApplicationSummaryResponse
   detail?: PublicFanMeetingDetail
+  detailNotFound?: boolean
   listStatus: FanMeetingListStatus
   recording?: RecordingSummaryResponse
 }
@@ -72,6 +74,16 @@ function isToday(value: string): boolean {
 function remainingDays(availableUntil: string): number {
   const diff = new Date(availableUntil).getTime() - Date.now()
   return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)))
+}
+
+function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
+  // 추첨 상태와 결과 공개 상태는 다르므로 READY 이후에만 팬 목록에 노출한다.
+  return (
+    detail?.meeting.status === 'READY' ||
+    detail?.meeting.status === 'LIVE' ||
+    detail?.meeting.status === 'ENDED' ||
+    detail?.meeting.status === 'CANCELED'
+  )
 }
 
 function parsePage(value: string | null): number {
@@ -162,6 +174,14 @@ export function FanMeetingListPage() {
               } catch (error: unknown) {
                 if (controller.signal.aborted) throw error
                 detailFailureCount += 1
+                const detailNotFound = error instanceof ApiError && error.status === 404
+                return {
+                  application,
+                  detail,
+                  recording: recordingByMeetingId.get(application.meetingId),
+                  detailNotFound,
+                  listStatus: 'completed',
+                }
               }
 
               const recording = recordingByMeetingId.get(application.meetingId)
@@ -169,6 +189,7 @@ export function FanMeetingListPage() {
                 application,
                 detail,
                 recording,
+                detailNotFound: false,
                 // 상세 조회 실패 시에도 서버에 녹화가 있으면 완료 내역으로 안전하게 분류한다.
                 listStatus:
                   isCompletedStatus(detail?.meeting.status) || recording
@@ -188,7 +209,14 @@ export function FanMeetingListPage() {
               .join(' '),
           )
         }
-        setItems(enrichedItems)
+        // 결과 공개 전 응모는 숨기되, 상세 조회 장애는 녹화가 있으면 완료 내역으로 보존한다.
+        setItems(
+          enrichedItems.filter((item) =>
+            item.detail
+              ? isResultPublished(item.detail)
+              : !item.detailNotFound && Boolean(item.recording),
+          ),
+        )
       } catch (error: unknown) {
         if (controller.signal.aborted) return
         setListError(
@@ -258,30 +286,26 @@ export function FanMeetingListPage() {
     return () => window.clearTimeout(timer)
   }, [nextQueueOpenAtMs])
 
-  useEffect(() => {
-    if (waitingCount === 0) return
-
-    // 운영자가 대기열을 수동으로 열면 오픈 시각이 과거로 바뀌어 위 예약 타이머가 걸리지 않는다.
-    // 화면 복귀와 느린 주기 두 경로로 그 변경을 따라잡는다.
+  // 운영자가 대기열을 수동으로 열면 오픈 시각이 과거로 바뀌어 위 예약 타이머가 걸리지 않는다.
+  // 화면 복귀와 느린 주기 두 경로로 그 변경을 따라잡는다.
+  const reloadInBackground = useCallback(() => {
+    // 실제 조회 완료 시점을 기준으로 제한한다. 최초 로드나 수동 새로고침 직후라면 건너뛴다.
+    // (폴링 주기가 아니라 lastLoadedAtRef를 기준으로 해야 중복 조회를 정확히 막을 수 있어
+    //  이 스로틀은 usePolling으로 옮기지 않고 콜백 안에 남겨 둔다.)
     const MIN_RELOAD_INTERVAL_MS = 15_000
-    const reloadInBackground = () => {
-      // 보이지 않는 탭에서는 갱신해도 볼 수 없으므로 요청을 아낀다.
-      if (document.visibilityState !== 'visible') return
-      if (Date.now() - lastLoadedAtRef.current < MIN_RELOAD_INTERVAL_MS) return
-      backgroundReloadRef.current = true
-      setReloadKey((key) => key + 1)
-    }
+    if (Date.now() - lastLoadedAtRef.current < MIN_RELOAD_INTERVAL_MS) return
+    backgroundReloadRef.current = true
+    setReloadKey((key) => key + 1)
+  }, [])
 
-    window.addEventListener('focus', reloadInBackground)
-    document.addEventListener('visibilitychange', reloadInBackground)
-    const interval = window.setInterval(reloadInBackground, 30_000)
-
-    return () => {
-      window.removeEventListener('focus', reloadInBackground)
-      document.removeEventListener('visibilitychange', reloadInBackground)
-      window.clearInterval(interval)
-    }
-  }, [waitingCount])
+  // pauseWhenHidden으로 보이지 않는 탭에서는 요청을 아끼고, refreshOnFocus로 화면 복귀 시 즉시 따라잡는다.
+  usePolling(reloadInBackground, {
+    intervalMs: 30_000,
+    enabled: waitingCount > 0,
+    immediate: false,
+    pauseWhenHidden: true,
+    refreshOnFocus: true,
+  })
 
   const upcomingCount = useMemo(
     () => items.filter((item) => item.listStatus === 'upcoming').length,

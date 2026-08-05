@@ -2,11 +2,11 @@ import {
   RoomAudioRenderer,
   VideoTrack,
   useConnectionState,
+  useDataChannel,
   useLocalParticipant,
   useParticipants,
   useRoomContext,
   useTracks,
-  useTranscriptions,
 } from '@livekit/components-react'
 import { UserCircleIcon } from '@phosphor-icons/react'
 import { ConnectionState, Track } from 'livekit-client'
@@ -24,6 +24,12 @@ import { useCallRecording } from '../../hooks/useCallRecording'
 import { AlertBanner } from '../feedback'
 import { CallStage } from './CallStage'
 import { EndCallDialog } from './EndCallDialog'
+import {
+  SUBTITLE_DATA_TOPIC,
+  appendSubtitleLine,
+  parseSubtitlePayload,
+  type SubtitleLine,
+} from './subtitleChannel'
 import type { MediaAction, VideoCallRoomProps } from './types'
 import { useRemainingTime } from './useRemainingTime'
 
@@ -33,6 +39,13 @@ type ConnectedCallRoomProps = VideoCallRoomProps & {
   recordingPolicyError?: string
   /** 팬미팅 운영 설정의 1인당 통화 시간(초)이며 상세를 못 읽었으면 undefined다. */
   callDurationSec?: number
+  /**
+   * 의도치 않게 연결이 끊겨 새 토큰으로 다시 입장해야 할 때 호출한다.
+   *
+   * 호스트는 팬미팅 내내 한 토큰으로 머무는데 LiveKit 토큰 TTL은 15분이다.
+   * 긴 팬미팅에서 연결이 끊기면 만료된 토큰으로는 재입장할 수 없어 재발급이 필요하다.
+   */
+  onReconnectNeeded?: () => void
 }
 
 export function ConnectedCallRoom({
@@ -46,6 +59,8 @@ export function ConnectedCallRoom({
     recordingPolicyError,
     callDurationSec,
     sidePanel,
+    hostStaysConnected,
+    onReconnectNeeded,
 }: ConnectedCallRoomProps) {
   const navigate = useNavigate()
   const room = useRoomContext()
@@ -53,7 +68,6 @@ export function ConnectedCallRoom({
   const participants = useParticipants()
   const cameraTracks = useTracks([Track.Source.Camera])
   const microphoneTracks = useTracks([Track.Source.Microphone])
-  const transcriptions = useTranscriptions()
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant()
   const [endDialogOpen, setEndDialogOpen] = useState(false)
   const [captionEnabled, setCaptionEnabled] = useState(true)
@@ -62,6 +76,10 @@ export function ConnectedCallRoom({
   const [departurePending, setDeparturePending] = useState(false)
   // 자동 종료가 폴링·틱마다 반복 실행되지 않도록 한 번만 통과시킨다.
   const autoEndStartedRef = useRef(false)
+  // 한 번이라도 연결된 뒤에 끊긴 경우만 재입장 대상으로 본다. 최초 연결 전 Disconnected와 구분한다.
+  const wasConnectedRef = useRef(false)
+  // 우리가 의도적으로 방을 떠나는 중이면 재입장하지 않는다.
+  const leavingRef = useRef(false)
   const isConnected = connectionState === ConnectionState.Connected
   const isReconnecting =
     connectionState === ConnectionState.Reconnecting ||
@@ -79,31 +97,54 @@ export function ConnectedCallRoom({
     participantLabel.replace(/\s*영상$/, '')
 
   /**
-   * 자막 스트림을 화자 이름이 붙은 최근 대사 목록으로 만든다.
+   * 자막 AI가 데이터 채널로 보내는 대사를 모은다.
    *
-   * LiveKit은 같은 발화를 갱신하며 여러 번 보내므로 스트림 식별자로 마지막 값만 남긴다.
-   * 마지막 한 줄만 쓰면 이전 대사가 즉시 사라져 읽을 시간이 없으므로 최근 세 줄을 유지한다.
+   * 자막은 LiveKit 기본 transcription API로 오지 않는다. AI 워커가
+   * `publish_data(topic="subtitle")`로 직접 만든 JSON을 보내므로 그 토픽을 구독해야 한다.
+   * (이전에는 `useTranscriptions()`를 썼는데, 워커가 그 경로로 아무것도 publish하지 않아
+   *  에이전트가 정상 동작해도 자막이 영원히 비어 있었다.)
    */
-  const captionLines = useMemo(() => {
-    const byStream = new Map<string, { speaker: string; text: string }>()
-    for (const transcription of transcriptions) {
-      const text = transcription.text.trim()
-      if (!text) continue
-
-      const { identity } = transcription.participantInfo
-      const speaker =
-        identity === localParticipant.identity
-          ? '나'
-          : participants.find((participant) => participant.identity === identity)?.name
-            || remoteName
-      byStream.set(transcription.streamInfo.id, { speaker, text })
-    }
-
-    return [...byStream.values()].slice(-3)
-  }, [localParticipant.identity, participants, remoteName, transcriptions])
+  const [subtitleLines, setSubtitleLines] = useState<SubtitleLine[]>([])
 
   // 백엔드 업로드 권한(FAN)과 팬미팅의 실제 녹화 설정이 모두 맞을 때만 녹화한다.
   const [authSession] = useState(() => getAuthSession())
+
+  // 팬과 호스트 1:1 통화이므로, 내가 말한 대사가 아니면 항상 상대방이 말한 것이다.
+  const subtitleSpeakerNames = useMemo(
+    () => ({ influencer: remoteName, fan: remoteName }),
+    [remoteName],
+  )
+
+  // 핸들러 identity가 바뀌면 데이터 채널 구독이 다시 걸릴 수 있고, 그 틈에 도착한 자막을
+  // 놓칠 수 있다. 하필 그 시점이 상대 이름이 채워지는 통화 시작 직후여서 첫 대사가 사라진다.
+  // 최신 값은 ref로 읽어 콜백 identity를 영구히 고정한다.
+  const viewerRoleRef = useRef(authSession?.role)
+  viewerRoleRef.current = authSession?.role
+  const subtitleSpeakerNamesRef = useRef(subtitleSpeakerNames)
+  subtitleSpeakerNamesRef.current = subtitleSpeakerNames
+
+  const handleSubtitleMessage = useCallback((message: { payload: Uint8Array }) => {
+    const payload = parseSubtitlePayload(message.payload)
+    if (!payload) return
+
+    setSubtitleLines((current) =>
+      appendSubtitleLine(
+        current,
+        payload,
+        viewerRoleRef.current,
+        subtitleSpeakerNamesRef.current,
+      ),
+    )
+  }, [])
+
+  useDataChannel(SUBTITLE_DATA_TOPIC, handleSubtitleMessage)
+
+  useEffect(() => {
+    // 팬이 교체되면 이전 팬의 대사를 비운다.
+    // 호스트는 팬미팅 내내 같은 방에 머물기 때문에 화면이 저절로 초기화되지 않아,
+    // 통화 세션이 바뀔 때 직접 지워야 이전 팬의 자막이 새 통화에 남지 않는다.
+    setSubtitleLines([])
+  }, [callSessionId])
   const {
     stopAndUpload,
     retryUpload,
@@ -186,6 +227,10 @@ export function ConnectedCallRoom({
         }
       }
 
+      // 호스트는 팬미팅 내내 같은 방을 쓴다. 통화만 끝내고 방에 머물러 다음 팬을 기다린다.
+      // 상태 폴링이 ENDED를 확인하면 화면이 대기 상태로 바뀐다.
+      if (hostStaysConnected) return
+
       await room.disconnect()
       if (!recordingSaved) {
         setDeparturePending(true)
@@ -193,8 +238,28 @@ export function ConnectedCallRoom({
       }
       navigate(endTo)
     },
-    [authSession, callSessionId, endTo, forceEndOnLeave, navigate, room, stopAndUpload],
+    [
+      authSession,
+      callSessionId,
+      endTo,
+      forceEndOnLeave,
+      hostStaysConnected,
+      navigate,
+      room,
+      stopAndUpload,
+    ],
   )
+
+  /**
+   * 방을 완전히 떠난다.
+   *
+   * 호스트는 통화 종료(finishCall)와 팬미팅 진행 종료를 구분해야 하므로 별도 경로로 둔다.
+   */
+  const leaveRoom = useCallback(async () => {
+    leavingRef.current = true
+    await room.disconnect()
+    navigate(endTo)
+  }, [endTo, navigate, room])
 
   async function handleRecordingRetry() {
     const uploaded = await retryUpload()
@@ -227,6 +292,12 @@ export function ConnectedCallRoom({
       return
     }
 
+    // 호스트는 팬이 교체될 때마다 세션이 ENDED가 된다. 여기서 방을 나가고 화면을 이탈하면
+    // 차례가 넘어갈 때마다 통화 화면에서 튕겨 나가므로, 방을 유지한 채 다음 팬을 기다린다.
+    if (hostStaysConnected) {
+      return
+    }
+
     void stopAndUpload().then(async (recordingSaved) => {
       await room.disconnect()
       if (recordingSaved) {
@@ -235,11 +306,31 @@ export function ConnectedCallRoom({
         setDeparturePending(true)
       }
     })
-  }, [endTo, navigate, room, sessionStatus.status, stopAndUpload])
+  }, [endTo, hostStaysConnected, navigate, room, sessionStatus.status, stopAndUpload])
+
+  useEffect(() => {
+    if (isConnected) wasConnectedRef.current = true
+  }, [isConnected])
+
+  useEffect(() => {
+    if (!hostStaysConnected || !onReconnectNeeded) return
+    if (connectionState !== ConnectionState.Disconnected) return
+    // 최초 연결 전이거나 우리가 나가는 중이면 재입장 대상이 아니다.
+    if (!wasConnectedRef.current || leavingRef.current) return
+
+    // 토큰 TTL(15분)이 지나면 기존 토큰으로는 다시 못 붙으므로 새로 발급받아 재입장한다.
+    wasConnectedRef.current = false
+    onReconnectNeeded()
+  }, [connectionState, hostStaysConnected, onReconnectNeeded])
+
+  /** 호스트가 방에 머문 채 다음 팬 배정을 기다리는 상태다. */
+  const waitingForNextFan = Boolean(hostStaysConnected) && sessionStatus.status === 'ENDED'
 
   let connectionLabel = '연결 중'
 
-  if (isConnected && remoteParticipants.length > 0) {
+  if (waitingForNextFan) {
+    connectionLabel = '다음 팬 대기 중'
+  } else if (isConnected && remoteParticipants.length > 0) {
     connectionLabel = '연결 완료'
   } else if (isConnected) {
     connectionLabel = '입장 대기'
@@ -333,7 +424,7 @@ export function ConnectedCallRoom({
       <CallStage
         cameraEnabled={isCameraEnabled}
         captionEnabled={captionEnabled}
-        captionLines={captionLines}
+        captionLines={subtitleLines}
         connected={isConnected}
         connectionLabel={connectionLabel}
         deviceAlert={deviceAlert}
@@ -357,6 +448,13 @@ export function ConnectedCallRoom({
 
       {footNote ? (
         <p className="text-[15px] font-medium leading-[1.6] text-white/65">{footNote}</p>
+      ) : null}
+
+      {waitingForNextFan ? (
+        <AlertBanner title="다음 팬을 기다리고 있습니다" variant="info">
+          통화방 연결은 그대로 유지됩니다. 대기실에서 다음 팬을 호출하면 이 화면에서 바로 이어서
+          통화할 수 있습니다.
+        </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && recordingPolicyError ? (
@@ -408,7 +506,11 @@ export function ConnectedCallRoom({
       ) : null}
 
       <EndCallDialog
-        onConfirm={() => void finishCall(true)}
+        onConfirm={() => {
+          setEndDialogOpen(false)
+          void finishCall(true)
+        }}
+        onLeaveRoom={hostStaysConnected ? () => void leaveRoom() : undefined}
         onOpenChange={setEndDialogOpen}
         open={endDialogOpen}
       />

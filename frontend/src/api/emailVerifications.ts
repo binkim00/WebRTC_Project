@@ -62,7 +62,7 @@ export async function resendEmailVerification(
  */
 export async function confirmEmailVerification(
   token: string,
-  authToken: string,
+  authToken?: string,
   signal?: AbortSignal,
 ): Promise<EmailVerificationStatus> {
   const response = await apiRequest<unknown>('/api/v1/auth/email-verifications/confirm', {

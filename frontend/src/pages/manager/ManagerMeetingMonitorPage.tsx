@@ -39,6 +39,7 @@ import {
   getQueueChangeRequests,
   type QueueChangeRequestSummaryResponse,
 } from '../../api/queueManagement'
+import { isQueueNotInitialized } from '../../api/queue'
 import { AlertBanner, Badge, Button, Card, Spinner } from '../../components'
 import { getAvailableActions } from './meetingLifecycle'
 
@@ -109,6 +110,10 @@ export function ManagerMeetingMonitorPage() {
   const [requestBusyId, setRequestBusyId] = useState<number>()
   // 대기열 오픈 안내는 실패가 아니라 경고이므로 loadQueue가 지우는 error와 분리해 보관한다.
   const [waitingRoomWarning, setWaitingRoomWarning] = useState<string>()
+  // 대기열이 아직 없거나 종료로 정리된 상태를 오류와 구분해 안내로만 보여 준다.
+  // 문구는 렌더 시점에 팬미팅 상태로 결정한다. 대기열 조회와 상태 조회가 병렬로 나가므로
+  // catch 안에서 문구를 확정하면 meetingStatus가 아직 undefined인 상태로 잘못 판단할 수 있다.
+  const [queueUnavailable, setQueueUnavailable] = useState(false)
 
   // 폴링과 수동 새로고침이 겹치면 이전 요청을 취소해 오래된 응답이 최신 화면을 덮지 않게 한다.
   const queueRequestIdRef = useRef(0)
@@ -157,8 +162,22 @@ export function ManagerMeetingMonitorPage() {
       if (controller.signal.aborted || requestId !== queueRequestIdRef.current) return
       setQueue(response)
       setError(undefined)
+      setQueueUnavailable(false)
     } catch (reason) {
       if (controller.signal.aborted || requestId !== queueRequestIdRef.current) return
+      // 대기열을 아직 열지 않았거나, 팬미팅 종료 처리가 Redis 대기열을 정리한 상태다.
+      // 운영 작업이 실패한 게 아니므로 오류 배너 대신 안내로 보여 주고 빈 대기열로 둔다.
+      // (종료 직후 이 오류가 "대기열 작업을 완료할 수 없습니다"로 뜨던 문제를 막는다.)
+      if (isQueueNotInitialized(reason)) {
+        setQueue({ entries: [] })
+        setError(undefined)
+        setQueueUnavailable(true)
+        if (reason instanceof ApiError && reason.code === 'FAN_MEETING_ALREADY_ENDED') {
+          setMeetingStatus('ENDED')
+        }
+        return
+      }
+      setQueueUnavailable(false)
       setError(reason instanceof ApiError ? reason.message : '대기열 정보를 불러오지 못했습니다.')
     } finally {
       if (requestId === queueRequestIdRef.current) {
@@ -396,7 +415,17 @@ export function ManagerMeetingMonitorPage() {
           ? '대기열 오픈 시각이 아직 지나지 않아 팬이 대기실에 입장할 수 없습니다. ‘대기열 지금 오픈’을 눌러 주세요.'
           : undefined,
       )
-      await Promise.all([loadQueue(), loadMeetingStatus()])
+      if (action === 'end') {
+        // 종료 처리로 백엔드가 Redis 대기열을 삭제하므로, 종료 직후 대기열을
+        // 다시 조회하면 QUEUE_NOT_INITIALIZED가 반환된다. 이를 운영 오류로
+        // 표시하지 않고 종료된 팬미팅의 정상 상태로 즉시 반영한다.
+        setQueue({ entries: [] })
+        setQueueUnavailable(true)
+        setError(undefined)
+        await loadMeetingStatus()
+      } else {
+        await Promise.all([loadQueue(), loadMeetingStatus()])
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '팬미팅 상태 변경에 실패했습니다.')
     } finally {
@@ -441,13 +470,14 @@ export function ManagerMeetingMonitorPage() {
   async function decideRequest(request: QueueChangeRequestSummaryResponse, decision: 'APPROVED' | 'REJECTED') {
     if (busyEntryId !== undefined || requestBusyId !== undefined) return
 
-    let rejectionReason: string | undefined
+    // 거절 사유는 받지 않는다. 백엔드 DTO가 rejectionReason을 받기는 하지만
+    // "현재 스키마에는 저장하지 않는다"고 명시되어 있어 값이 그대로 버려지고,
+    // 팬에게 전달할 알림 경로도 아직 없다. 사유를 물으면 전달된다고 오해하게 되므로
+    // 백엔드가 저장·알림을 지원할 때까지 승인과 같은 확인만 받는다.
     if (decision === 'APPROVED') {
       if (!window.confirm(`${request.nickname}님의 순서 변경 요청을 승인할까요? 승인하면 대기열 마지막 순서로 이동합니다.`)) return
-    } else {
-      const input = window.prompt('거절 사유를 입력해 주세요. (선택)', '')
-      if (input === null) return
-      rejectionReason = input.trim() || undefined
+    } else if (!window.confirm(`${request.nickname}님의 순서 변경 요청을 거절할까요?`)) {
+      return
     }
 
     const token = getAuthSession()?.accessToken
@@ -459,7 +489,7 @@ export function ManagerMeetingMonitorPage() {
     setRequestBusyId(request.requestId)
     setError(undefined)
     try {
-      await decideQueueChangeRequest(request.requestId, { decision, rejectionReason }, token)
+      await decideQueueChangeRequest(request.requestId, { decision }, token)
       await Promise.all([loadQueue(), loadChangeRequests()])
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '순서 변경 요청 처리에 실패했습니다.')
@@ -485,6 +515,46 @@ export function ManagerMeetingMonitorPage() {
     Boolean(statusError) ||
     !lifecycleActions.canStartNow ||
     lifecycleActions.canStart
+  /**
+   * 대기열 조회가 409로 실패한 이유를 팬미팅 상태로 구분해 정확히 안내한다.
+   *
+   * 백엔드는 Redis 대기열 키가 없으면 원인을 구분하지 않고 QUEUE_NOT_INITIALIZED 하나만 준다.
+   * 그런데 키가 없는 상황은 성격이 전혀 다른 셋으로 갈린다.
+   *   1. 아직 추첨을 하지 않았다 (대기열은 추첨 시 initializeAfterDraw로 만들어진다)
+   *   2. 팬미팅이 종료되어 정리됐다 (종료 처리가 clearMeeting으로 키를 지운다)
+   *   3. 팬미팅이 취소됐다
+   * 이전에는 셋을 "대기열이 없습니다. 팬미팅을 종료했거나 아직 대기열을 열지 않았습니다."
+   * 한 문장으로 뭉쳐, 종료도 아니고 대기열 문제도 아닌 상황에서 잘못된 안내를 보여 줬다.
+   *
+   * 참가자는 추첨으로 생성되므로 participantCount === 0을 '추첨 전'의 근거로 쓴다.
+   */
+  const queueUnavailableNotice = useMemo(() => {
+    if (!queueUnavailable) return undefined
+
+    if (meetingStatus === 'ENDED') {
+      return {
+        title: '팬미팅이 종료되었습니다',
+        body: '대기열과 통화 방이 모두 정리되었습니다. 진행 결과는 통계 화면에서 확인할 수 있습니다.',
+      }
+    }
+    if (meetingStatus === 'CANCELED') {
+      return {
+        title: '팬미팅이 취소되었습니다',
+        body: '취소된 팬미팅은 대기열을 운영하지 않습니다.',
+      }
+    }
+    if (participantCount === 0) {
+      return {
+        title: '아직 대기열이 만들어지지 않았습니다',
+        body: '당첨자 추첨을 실행하면 참가자와 대기열이 함께 만들어집니다. 응모 관리에서 추첨을 먼저 진행해 주세요.',
+      }
+    }
+    return {
+      title: '대기열을 아직 사용할 수 없습니다',
+      body: '참가자는 확정되었지만 대기열이 준비되지 않았습니다. 잠시 후 자동으로 다시 조회합니다.',
+    }
+  }, [meetingStatus, participantCount, queueUnavailable])
+
   const endDisabled = lifecycleBusy || queueMutationBusy || Boolean(statusError) || !lifecycleActions.canEnd
   const encodedMeetingId = encodeURIComponent(fanMeetingId ?? '')
   const currentCallEntry = queue.currentCall
@@ -561,6 +631,11 @@ export function ManagerMeetingMonitorPage() {
       {isPreview ? <AlertBanner title="개발 미리보기" variant="warning">대기열 상태 변경은 현재 화면에만 반영됩니다.</AlertBanner> : null}
       {statusError ? <AlertBanner title="상태 변경 기능이 잠겼습니다" variant="warning">{statusError}</AlertBanner> : null}
       {waitingRoomWarning ? <AlertBanner title="팬이 아직 대기실에 입장할 수 없습니다" variant="warning">{waitingRoomWarning}</AlertBanner> : null}
+      {queueUnavailableNotice ? (
+        <AlertBanner title={queueUnavailableNotice.title} variant="info">
+          {queueUnavailableNotice.body}
+        </AlertBanner>
+      ) : null}
       {error ? <AlertBanner title="대기열 작업을 완료할 수 없습니다" variant="error">{error}</AlertBanner> : null}
 
       {isSoloInfluencer ? (

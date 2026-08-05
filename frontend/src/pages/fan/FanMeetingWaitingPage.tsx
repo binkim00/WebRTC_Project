@@ -7,9 +7,15 @@ import {
   fetchPublicFanMeetingDetail,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
-import { enterQueue, getMyQueue, type QueueSnapshotResponse } from '../../api/queue'
+import {
+  enterQueue,
+  getMyQueue,
+  isQueueNotInitialized,
+  type QueueSnapshotResponse,
+} from '../../api/queue'
 import { getMeetingNotice, getMeetingNotices } from '../../api/notices'
 import { createQueueChangeRequest } from '../../api/queueManagement'
+import { usePolling } from '../../hooks/usePolling'
 
 /** 호출 후 입장할 수 있는 시간(초)이다. 정책 문구(30초)와 같은 값을 쓴다. */
 const CALL_WINDOW_SEC = 30
@@ -195,6 +201,12 @@ export function FanMeetingWaitingPage() {
       }
     } catch (reason) {
       if (signal?.aborted) return
+      // 대기열 미초기화·종료 정리는 연결 장애가 아니므로 재연결 상태로 세지 않는다.
+      if (isQueueNotInitialized(reason)) {
+        setQueueSnapshot(undefined)
+        setQueueError('팬미팅이 종료되었거나 아직 대기열을 열지 않았습니다.')
+        return
+      }
       // 일시적 실패 한 번으로 화면을 바꾸지 않고, 연속 실패가 쌓이면 재연결 상태로 전환한다.
       pollFailCountRef.current += 1
       if (pollFailCountRef.current >= 2) setPollBroken(true)
@@ -212,24 +224,9 @@ export function FanMeetingWaitingPage() {
     return () => controller.abort()
   }, [loadMeetingInfo])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    let active = true
-    let timer: number | undefined
-
-    // 이전 요청이 끝난 뒤 다음 요청을 예약해 느린 네트워크에서 응답 순서가 뒤집히지 않게 한다.
-    const poll = async () => {
-      await loadQueueState(controller.signal)
-      if (active) timer = window.setTimeout(() => void poll(), 3_000)
-    }
-    void poll()
-
-    return () => {
-      active = false
-      controller.abort()
-      if (timer !== undefined) window.clearTimeout(timer)
-    }
-  }, [loadQueueState])
+  // 대기 순번은 실시간성이 중요하므로 3초마다 갱신한다.
+  // usePolling은 직렬 폴링이라 느린 네트워크에서도 응답 순서가 뒤집히지 않는다.
+  usePolling(loadQueueState, { intervalMs: 3_000 })
 
   // 운영 공지 — 게시된 공지만 내려오는 공개 API를 쓰고, 본문은 상세에서 보강한다.
   useEffect(() => {
@@ -618,6 +615,18 @@ export function FanMeetingWaitingPage() {
           <p aria-live="polite" className="mt-3 text-[15px] font-semibold text-[var(--color-text-muted)]">
             {stateContent.helper}
           </p>
+
+          {/* backend가 순번 변경 대상별로 저장한 안내 문구를 대기 화면에도 표시한다. */}
+          {queueSnapshot?.lastChangeReason ? (
+            <AlertBanner className="mt-5" title="대기 순번이 변경되었습니다" variant="info">
+              <p>{queueSnapshot.lastChangeReason}</p>
+              {queueSnapshot.lastChangedAt ? (
+                <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                  반영 시각: {new Date(queueSnapshot.lastChangedAt).toLocaleString('ko-KR')}
+                </p>
+              ) : null}
+            </AlertBanner>
+          ) : null}
 
           <div className="mt-[30px] border-t border-[var(--color-divider)] pt-6">
             <div className="flex items-end justify-between gap-4">

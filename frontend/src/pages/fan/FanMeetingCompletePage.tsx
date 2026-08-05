@@ -18,6 +18,7 @@ import {
 } from '../../api/pendingRecordings'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { AlertBanner, Button } from '../../components'
+import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -348,7 +349,7 @@ export function FanMeetingCompletePage() {
           {!proc && playbackUrl ? (
             <>
               {/* 통화 기록 영상이 그대로 이 기록의 사진 자리에 안착한다. (S3 Signature) */}
-              <video
+              <RecordingVideo
                 className="absolute inset-0 size-full bg-black object-cover motion-safe:animate-[mj-settle-in_560ms_cubic-bezier(0.16,1,0.3,1)_both]"
                 controls
                 controlsList="nodownload"
@@ -356,7 +357,7 @@ export function FanMeetingCompletePage() {
                 src={playbackUrl}
               >
                 브라우저가 영상 재생을 지원하지 않습니다. 아래 다운로드 버튼을 이용해 주세요.
-              </video>
+              </RecordingVideo>
               <span
                 aria-hidden="true"
                 className="mj-seam-glow pointer-events-none absolute inset-y-0 right-0 hidden w-[88px] min-[1081px]:block"
