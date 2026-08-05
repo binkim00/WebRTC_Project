@@ -481,8 +481,11 @@ export function ManagerMeetingDetailPage() {
           : action === 'closeApplicationsNow'
             ? 'APPLICATION_CLOSED'
             : 'LIVE'
-        // 일정 계산은 서버가 한다. 프론트가 넘길 값이 없다.
-        await transitionFanMeetingImmediately(meetingId, currentStatus, targetStatus, token)
+        // 응모 열기·마감은 서버가 일정을 계산한다. "지금 시작"만 예정 시각이 필요하다
+        // (그 시각 전에 시작하려면 조기 시작 폭을 넓혀야 서버가 허용한다).
+        await transitionFanMeetingImmediately(meetingId, currentStatus, targetStatus, token, {
+          scheduledStartAt: detail.meeting.scheduledStartAt,
+        })
         setMessage(
           action === 'openApplicationsNow'
             ? t('managerMeetingDetailPage.t88')

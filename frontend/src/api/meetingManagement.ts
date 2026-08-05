@@ -213,8 +213,18 @@ export async function transitionFanMeetingImmediately(
   currentStatus: FanMeetingStatus,
   targetStatus: ImmediateFanMeetingStatus,
   authToken: string,
-  signal?: AbortSignal,
+  options: {
+    /**
+     * 팬미팅 예정 시작 일시다. 예정 시각 **전에** 시작하려면 필요하다.
+     *
+     * 서버 `start()`는 `now >= 예정시각 - earlyStartMinutes`일 때만 시작을 허용한다. 이 값이
+     * 없으면 조기 시작 폭을 계산할 수 없어, 예정 시각 전에는 서버가 시작을 거절한다.
+     */
+    scheduledStartAt?: string | null
+    signal?: AbortSignal
+  } = {},
 ): Promise<FanMeetingManagementResponse> {
+  const { scheduledStartAt, signal } = options
   const allowedTargets = IMMEDIATE_TRANSITIONS[currentStatus]
   if (!allowedTargets?.includes(targetStatus)) {
     throw new TypeError(
@@ -232,16 +242,54 @@ export async function transitionFanMeetingImmediately(
   }
 
   /*
-   * 지금 시작 — 대기실을 먼저 열고 정식 start 명령을 호출한다.
+   * 지금 시작 — 조기 시작 폭을 넓힌 뒤 대기실을 열고 정식 start 명령을 호출한다.
    *
-   * **예정 시작 시각은 건드리지 않는다.** `waiting-room/open`이 대기실 오픈 시각만 지금으로
-   * 옮기므로 팬이 바로 입장할 수 있고, 확정 참가자에게 예정 시각이 바뀐 것처럼 보이지 않는다.
+   * 신설된 `waiting-room/open`은 대기실 오픈 시각만 지금으로 옮기고 **예정 시작 시각은 건드리지
+   * 않는다.** 그래서 예정 시각이 아직 오지 않았으면 `start()`의 시간 조건에 걸려
+   * `FAN_MEETING_START_NOT_ALLOWED`로 거절된다. "지금 시작"은 바로 그 시각 전에 쓰는 기능이므로,
+   * 예정 시각까지 남은 만큼 `earlyStartMinutes`를 넓혀 서버가 허용하는 범위로 만든다.
    *
+   * `earlyStartMinutes`를 쓰는 이유: 응모가 시작된 뒤에도 바꿀 수 있는 몇 안 되는 운영 설정이라
+   * READY 상태에서도 PATCH가 통과한다(`hasApplicationRestrictedChanges`가 막지 않는다).
+   * 예정 시각 자체를 옮기지 않으므로 확정 참가자에게 안내된 시각도 그대로 남는다.
+   */
+  const earlyStartMinutes = minutesUntil(scheduledStartAt)
+  if (earlyStartMinutes !== undefined) {
+    try {
+      await patchFanMeeting(
+        meetingId,
+        { operation: { earlyStartMinutes } },
+        authToken,
+        signal,
+      )
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') throw cause
+      // 넓히지 못했더라도 시작을 시도한다. 이미 예정 시각이 지난 경우라면 그대로 성공하고,
+      // 아니라면 서버의 시작 거절 메시지가 원인을 더 정확히 알려 준다.
+    }
+  }
+
+  /*
    * 대기실 열기가 실패하면 시작하지 않고 그대로 오류를 올린다. 팬이 들어올 수 없는 상태로
    * 팬미팅을 진행 중으로 만들어 두는 것보다, 시작되지 않는 편이 낫다.
    */
   await postCommand(meetingId, 'waiting-room/open', authToken, signal)
   return startFanMeeting(meetingId, authToken, signal)
+}
+
+/**
+ * 지금부터 예정 시작 시각까지 남은 분을 올림해 돌려준다.
+ *
+ * 조기 시작 허용 폭(`earlyStartMinutes`)으로 쓴다. 경계에서 밀리지 않도록 1분을 더한다.
+ * 예정 시각을 알 수 없거나 이미 지났으면 넓힐 필요가 없어 undefined다.
+ */
+function minutesUntil(scheduledStartAt?: string | null): number | undefined {
+  const scheduledStartMs = serverLocalDateTimeMs(scheduledStartAt)
+  if (!Number.isFinite(scheduledStartMs)) return undefined
+
+  const diffMs = scheduledStartMs - Date.now()
+  if (diffMs <= 0) return undefined
+  return Math.ceil(diffMs / 60_000) + 1
 }
 
 /**

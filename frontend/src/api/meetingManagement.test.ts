@@ -92,23 +92,53 @@ describe('transitionFanMeetingImmediately', () => {
     )
   })
 
-  it('지금 시작은 대기실을 먼저 열고 start를 호출하며 예정 시각은 건드리지 않는다', async () => {
+  it('예정 시각이 지났으면 대기실만 열고 start를 호출한다', async () => {
     const fetchMock = stubFetch('LIVE')
 
-    await transitionFanMeetingImmediately(8, 'READY', 'LIVE', 'token')
+    // 이미 시작 시각이 지났으면 조기 시작 폭을 넓힐 필요가 없다.
+    await transitionFanMeetingImmediately(8, 'READY', 'LIVE', 'token', {
+      scheduledStartAt: '2020-01-01T00:00:00',
+    })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    const [openCall, startCall] = fetchMock.mock.calls
-    if (!openCall || !startCall) throw new Error('예상한 두 API 요청이 실행되지 않았습니다.')
+    expect(fetchMock.mock.calls[0]?.[0]).toMatch(
+      /\/api\/v1\/fan-meetings\/8\/waiting-room\/open$/,
+    )
+    expect(fetchMock.mock.calls[1]?.[0]).toMatch(/\/api\/v1\/fan-meetings\/8\/start$/)
+  })
+
+  it('예정 시각 전 지금 시작은 조기 시작 폭을 먼저 넓힌다', async () => {
+    /*
+     * 서버 start()는 `now >= 예정시각 - earlyStartMinutes`만 허용한다. 이 PATCH가 빠지면
+     * "지금 시작"이 FAN_MEETING_START_NOT_ALLOWED로 거절되므로 호출 순서까지 고정한다.
+     */
+    const fetchMock = stubFetch('LIVE')
+    /*
+     * 서버가 주는 예정 시각은 타임존 표기가 없는 KST 벽시계 문자열이다. 그래서 UTC 기준
+     * toISOString을 그대로 쓰면 KST로 해석되며 9시간 앞당겨져 "이미 지난 시각"이 된다.
+     * 지금부터 3시간 뒤를 KST 벽시계로 적으려면 UTC에 9시간을 더한 값을 잘라 써야 한다.
+     */
+    const scheduledStartAt = new Date(Date.now() + (3 + 9) * 60 * 60_000)
+      .toISOString()
+      .slice(0, 19)
+
+    await transitionFanMeetingImmediately(8, 'READY', 'LIVE', 'token', { scheduledStartAt })
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    const [patchCall, openCall, startCall] = fetchMock.mock.calls
+    if (!patchCall || !openCall || !startCall) {
+      throw new Error('예상한 세 API 요청이 실행되지 않았습니다.')
+    }
+
+    expect(patchCall[0]).toMatch(/\/api\/v1\/fan-meetings\/8$/)
+    expect((patchCall[1] as RequestInit).method).toBe('PATCH')
+    const patchBody = JSON.parse(String((patchCall[1] as RequestInit).body))
+    // 예정 시각까지 남은 만큼 넓힌다. 예정 시각 자체는 바꾸지 않는다.
+    expect(patchBody.operation.earlyStartMinutes).toBeGreaterThanOrEqual(180)
+    expect(patchBody).not.toHaveProperty('scheduledStartAt')
 
     expect(openCall[0]).toMatch(/\/api\/v1\/fan-meetings\/8\/waiting-room\/open$/)
     expect(startCall[0]).toMatch(/\/api\/v1\/fan-meetings\/8\/start$/)
-    // 예정 시작 시각을 옮기던 PATCH가 사라졌는지 확인한다.
-    expect(
-      fetchMock.mock.calls.some(
-        (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
-      ),
-    ).toBe(false)
   })
 
   it('명령이 없는 역방향·건너뛰기 조합은 요청 없이 거부한다', async () => {
