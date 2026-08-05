@@ -1,11 +1,9 @@
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components/call/VideoCallRoom'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
 export function FanMeetingCallPage() {
   const { fanMeetingId, callSessionId } = useParams()
-  const [searchParams] = useSearchParams()
-  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
 
   if (!fanMeetingId?.trim()) {
     return (
@@ -16,7 +14,7 @@ export function FanMeetingCallPage() {
     )
   }
 
-  if (!callSessionId?.trim() && !isDesignPreview) {
+  if (!callSessionId?.trim()) {
     return (
       <InvalidRouteState
         message="실제 영상통화 입장에는 callSessionId가 필요합니다. 대기 화면에서 배정받은 통화 세션으로 입장해 주세요."

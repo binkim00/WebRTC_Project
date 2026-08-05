@@ -1,7 +1,6 @@
 import {
   ArrowsClockwise,
   ArrowsDownUp,
-  Camera,
   CheckCircle,
   Clock,
   MonitorPlay,
@@ -10,7 +9,6 @@ import {
   Play,
   Stop,
   UserMinus,
-  UsersThree,
   VideoCamera,
   Warning,
 } from '@phosphor-icons/react'
@@ -644,22 +642,14 @@ export function ManagerMeetingMonitorPage() {
         <Card className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-extrabold">솔로 운영 바로가기</h2>
+              <h2 className="text-lg font-extrabold">1인 운영은 대기실에서</h2>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                장비 점검, 팬 정보와 메모, 통화 준비를 이 운영 화면에서 이어서 처리하세요.
+                대기열 오픈, 장비 점검, 팬 정보와 메모, 통화 입장을 대기실에서 이어서 처리하세요.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Link className={consoleLinkClass} to={`/influencer/fan-meetings/${encodedMeetingId}/device-check`}>
-                <Camera aria-hidden size={18} weight="bold" />장비 점검
-              </Link>
-              <Link className={consoleLinkClass} to={`/influencer/fan-meetings/${encodedMeetingId}/fans`}>
-                <UsersThree aria-hidden size={18} weight="bold" />팬 목록·메모
-              </Link>
-              <Link className={consoleLinkClass} to={`/influencer/fan-meetings/${encodedMeetingId}/ready`}>
-                <VideoCamera aria-hidden size={18} weight="bold" />통화 준비실
-              </Link>
-            </div>
+            <Link className={consoleLinkClass} to={`/influencer/fan-meetings/${encodedMeetingId}/ready`}>
+              <VideoCamera aria-hidden size={18} weight="bold" />대기실로 이동
+            </Link>
           </div>
         </Card>
       ) : null}

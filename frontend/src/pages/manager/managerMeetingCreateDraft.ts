@@ -21,11 +21,10 @@ export type MeetingCreateLocalDraft = {
   form: FanMeetingForm
   questions: DraftFormQuestion[]
   formDescription: string
-  /** 서버 초안을 한 번 저장한 뒤 새 팬미팅이 중복 생성되지 않도록 ID도 함께 복구한다. */
+  /** 발행 도중 생성된 서버 DRAFT를 중복 생성하지 않도록 식별자를 함께 보존한다. */
   createdMeetingId?: number
 }
 
-/** 로그인 사용자별로 생성 초안이 섞이지 않게 저장소 키를 만든다. */
 function storageKey(userId: number): string {
   return `${LOCAL_DRAFT_PREFIX}:${userId}`
 }
@@ -44,7 +43,6 @@ function isOptionalNullableNumber(value: unknown): value is number | null | unde
   return value === undefined || value === null || (typeof value === 'number' && Number.isFinite(value))
 }
 
-/** 오래되었거나 손상된 JSON을 폼 상태로 사용하지 않도록 필수 구조를 검사한다. */
 function isFanMeetingForm(value: unknown): value is FanMeetingForm {
   const form = asRecord(value)
   const application = asRecord(form?.application)
@@ -99,7 +97,7 @@ function isMeetingCreateLocalDraft(value: unknown): value is MeetingCreateLocalD
       typeof draft.step === 'number' &&
       Number.isInteger(draft.step) &&
       draft.step >= 0 &&
-      draft.step <= 3 &&
+      draft.step <= 4 &&
       isFanMeetingForm(draft.form) &&
       Array.isArray(draft.questions) &&
       draft.questions.every(isDraftQuestion) &&
@@ -173,7 +171,7 @@ export function hasMeaningfulMeetingDraft(
   )
 }
 
-/** 사용자 계정의 로컬 생성 초안을 읽는다. 저장소 접근이 막혀 있으면 조용히 건너뛴다. */
+/** 사용자 계정의 브라우저 초안을 읽는다. */
 export function readMeetingCreateLocalDraft(userId?: number): MeetingCreateLocalDraft | undefined {
   if (!userId || typeof window === 'undefined') return undefined
 
@@ -184,7 +182,6 @@ export function readMeetingCreateLocalDraft(userId?: number): MeetingCreateLocal
     const parsed: unknown = JSON.parse(serialized)
     if (isMeetingCreateLocalDraft(parsed)) return parsed
 
-    // 다른 버전 또는 손상된 초안은 반복해서 복구를 시도하지 않도록 제거한다.
     window.localStorage.removeItem(storageKey(userId))
     return undefined
   } catch {
@@ -192,7 +189,7 @@ export function readMeetingCreateLocalDraft(userId?: number): MeetingCreateLocal
   }
 }
 
-/** 단계 이동과 입력 변경을 브라우저 로컬 저장소에 원자적으로 기록한다. */
+/** 입력 변경을 사용자별 브라우저 저장소에 기록한다. */
 export function writeMeetingCreateLocalDraft(
   userId: number | undefined,
   draft: Omit<MeetingCreateLocalDraft, 'version' | 'savedAt'>,
@@ -200,21 +197,18 @@ export function writeMeetingCreateLocalDraft(
   if (!userId || typeof window === 'undefined') return undefined
 
   const savedAt = new Date().toISOString()
-  const value: MeetingCreateLocalDraft = {
-    ...draft,
-    version: LOCAL_DRAFT_VERSION,
-    savedAt,
-  }
-
   try {
-    window.localStorage.setItem(storageKey(userId), JSON.stringify(value))
+    window.localStorage.setItem(
+      storageKey(userId),
+      JSON.stringify({ ...draft, version: LOCAL_DRAFT_VERSION, savedAt }),
+    )
     return savedAt
   } catch {
     return undefined
   }
 }
 
-/** 발행 성공 또는 사용자의 명시적 초기화 뒤에는 복구 초안을 제거한다. */
+/** 발행 성공 또는 새로 시작할 때 브라우저 초안을 제거한다. */
 export function clearMeetingCreateLocalDraft(userId?: number): boolean {
   if (!userId || typeof window === 'undefined') return true
 

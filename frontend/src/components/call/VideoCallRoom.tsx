@@ -1,6 +1,6 @@
 import { LiveKitRoom } from '@livekit/components-react'
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import {
   getCallSessionStatus,
@@ -16,14 +16,11 @@ import { Badge } from '../data-display'
 import { AlertBanner } from '../feedback'
 import { Button } from '../ui/Button'
 import { ConnectedCallRoom } from './ConnectedCallRoom'
-import { PreviewCallRoom } from './PreviewCallRoom'
 import type { VideoCallRoomProps } from './types'
 
 export type { VideoCallRoomProps } from './types'
 
 export function VideoCallRoom(props: VideoCallRoomProps) {
-  const [searchParams] = useSearchParams()
-  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
   const [connectionInfo, setConnectionInfo] = useState<LiveKitAccessTokenResponse>()
   const [sessionStatus, setSessionStatus] = useState<CallSessionStatusResponse>()
   const [connectionError, setConnectionError] = useState<string>()
@@ -33,7 +30,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   // 통화 시작 전에는 서버의 남은 시간이 0이라 카운트다운 대기 값으로 쓸 설정 값이 필요하다.
   const [callDurationSec, setCallDurationSec] = useState<number>()
   const [retryCount, setRetryCount] = useState(0)
-  const [loading, setLoading] = useState(!isDesignPreview)
+  const [loading, setLoading] = useState(true)
   const [meetingClosed, setMeetingClosed] = useState<'ENDED' | 'CANCELED'>()
   /** 대기열에 앞으로 호출할 팬이 남아 있지 않은 상태다. */
   const [noPendingFan, setNoPendingFan] = useState(false)
@@ -60,10 +57,6 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
   const loadConnectionInfo = useCallback(
     async (signal: AbortSignal) => {
-      if (isDesignPreview) {
-        return
-      }
-
       if (!connectSessionId) {
         setConnectionError('통화 연결에 필요한 callSessionId가 없습니다.')
         setLoading(false)
@@ -131,7 +124,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         }
       }
     },
-    [connectSessionId, isDesignPreview, props.meetingId],
+    [connectSessionId, props.meetingId],
   )
 
   useEffect(() => {
@@ -192,7 +185,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
   usePolling(followCurrentCall, {
     intervalMs: 3_000,
-    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo),
+    enabled: hostStaysConnected && Boolean(connectionInfo),
   })
 
   // 통화 세션이 끝난 것과 팬미팅 전체가 끝난 것은 다르다. 호스트는 통화방에
@@ -216,7 +209,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
   usePolling(loadMeetingStatus, {
     intervalMs: 3_000,
-    enabled: hostStaysConnected && !isDesignPreview && Boolean(connectionInfo) && !meetingClosed,
+    enabled: hostStaysConnected && Boolean(connectionInfo) && !meetingClosed,
   })
 
   /**
@@ -260,12 +253,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   // 차례가 바뀌면 activeCallSessionId가 변해 즉시 새 세션 상태를 읽는다.
   usePolling(refreshStatus, {
     intervalMs: 5_000,
-    enabled: !isDesignPreview && Boolean(activeCallSessionId) && Boolean(connectionInfo),
+    enabled: Boolean(activeCallSessionId) && Boolean(connectionInfo),
   })
-
-  if (isDesignPreview) {
-    return <PreviewCallRoom {...props} />
-  }
 
   if (meetingClosed) {
     return (

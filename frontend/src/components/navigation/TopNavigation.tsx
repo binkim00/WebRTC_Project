@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { cn } from '../ui/cn'
+import { NotificationBell } from './NotificationBell'
 
 export type NavigationItem = {
   label: ReactNode
@@ -65,11 +66,22 @@ export function TopNavigation({
   }
 
   const navigationLinks = (mobile = false) =>
-    items.map((item) => (
+    items.map((item) => {
+      // 알림 항목은 데스크톱에서 화면 이동 대신 벨+드롭다운 패널로 동작한다.
+      // 좁은 화면 메뉴에서는 패널을 겹칠 자리가 없어 기존 전체 화면 링크를 유지한다.
+      if (item.to === '/notifications' && !mobile) {
+        return (
+          <span className="flex items-center" key="desktop-notification-bell">
+            <NotificationBell />
+          </span>
+        )
+      }
+
+      return (
       <NavLink
         className={({ isActive }) =>
           cn(
-            'relative inline-flex min-h-11 items-center whitespace-nowrap px-1 text-[15px] font-semibold',
+            'mj-font-label relative inline-flex min-h-11 items-center whitespace-nowrap px-1 text-[15px]',
             'transition-colors duration-200 motion-reduce:transition-none',
             "after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:rounded-t-[3px] after:bg-transparent after:content-['']",
             isActive
@@ -87,7 +99,8 @@ export function TopNavigation({
       >
         {item.label}
       </NavLink>
-    ))
+      )
+    })
 
   return (
     <header
@@ -101,24 +114,24 @@ export function TopNavigation({
       </a>
       <div className="relative mx-auto flex h-full w-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
         <Link
-          className="shrink-0 text-[28px] font-black tracking-[-0.055em] text-[var(--color-text-primary)]"
+          className="mj-font-title shrink-0 text-[28px] tracking-[-0.06em] text-[var(--color-text-primary)]"
           to={brandTo}
         >
           {brand}
         </Link>
         {centerContent ? (
-          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center md:flex">
+          <div className="absolute left-1/2 hidden -translate-x-1/2 items-center lg:flex">
             {centerContent}
           </div>
         ) : (
-          <nav aria-label={ariaLabel} className="hidden h-full items-stretch gap-8 md:flex lg:gap-10">
+          <nav aria-label={ariaLabel} className="hidden h-full items-stretch gap-10 lg:flex">
             {navigationLinks()}
           </nav>
         )}
-        {actions ? <div className="hidden shrink-0 items-center gap-2 md:flex">{actions}</div> : null}
+        {actions ? <div className="hidden shrink-0 items-center gap-2 lg:flex">{actions}</div> : null}
         {hasMobileMenu ? (
           <details
-            className="relative md:hidden"
+            className="relative lg:hidden"
             onKeyDown={handleMobileMenuKeyDown}
             onToggle={(event) => setMobileMenuOpen(event.currentTarget.open)}
             open={mobileMenuOpen}
@@ -128,7 +141,7 @@ export function TopNavigation({
               aria-controls={mobileMenuId}
               aria-expanded={mobileMenuOpen}
               aria-label={`모바일 메뉴 ${mobileMenuOpen ? '닫기' : '열기'}`}
-              className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] [&::-webkit-details-marker]:hidden"
+              className="mj-font-label inline-flex min-h-11 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-sm text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] [&::-webkit-details-marker]:hidden"
               ref={mobileMenuButtonRef}
             >
               메뉴

@@ -58,6 +58,7 @@ export function ConnectedCallRoom({
     recordingEnabled,
     recordingPolicyError,
     callDurationSec,
+    sidePanel,
     hostStaysConnected,
     onReconnectNeeded,
 }: ConnectedCallRoomProps) {
@@ -85,13 +86,6 @@ export function ConnectedCallRoom({
     connectionState === ConnectionState.SignalReconnecting
   const remaining = useRemainingTime(sessionStatus, callDurationSec)
   const remoteParticipants = participants.filter((participant) => !participant.isLocal)
-  /**
-   * 자막 AI가 Room에 들어와 있는지 여부다.
-   *
-   * 자막이 안 보일 때 "AI가 아직 안 들어옴"과 "들어왔는데 대사가 없음"을 화면에서 구분해,
-   * 디스패치 문제인지 STT 문제인지 바로 좁힐 수 있게 한다.
-   */
-  const isSubtitleAgentPresent = participants.some((participant) => participant.isAgent)
   const remoteParticipant = remoteParticipants[0]
   const remoteCameraTrack = cameraTracks.find((track) => !track.participant.isLocal)
   const localCameraTrack = cameraTracks.find((track) => track.participant.isLocal)
@@ -341,10 +335,56 @@ export function ConnectedCallRoom({
   } else if (isConnected) {
     connectionLabel = '입장 대기'
   } else if (isReconnecting) {
-    connectionLabel = '재연결 중'
+    connectionLabel = '연결 끊김'
   } else if (connectionState === ConnectionState.Disconnected) {
     connectionLabel = '연결 종료'
   }
+
+  // dc.html의 connecting·disconnected 오버레이. 연결이 정상이면 아무것도 덮지 않는다.
+  const overlay = isReconnecting
+    ? {
+        title: '연결이 끊어졌어요',
+        description: '현재 화면을 유지한 채 연결 상태를 확인하고 있습니다.',
+        showLink: true,
+      }
+    : connectionState === ConnectionState.Connecting
+      ? {
+          title: '영상통화를 연결하고 있어요',
+          description: '잠시만 기다려 주세요.',
+          showLink: true,
+        }
+      : connectionState === ConnectionState.Disconnected && !departurePending
+        ? {
+            title: '연결이 끊어졌어요',
+            description: '현재 팬 정보는 그대로 유지됩니다.',
+            showLink: false,
+            actionLabel: '다시 연결',
+            // LiveKit 자동 복구가 끝내 실패한 상태라, 토큰 발급부터 다시 시작한다.
+            onAction: () => window.location.reload(),
+          }
+        : undefined
+
+  // dc.html의 device-error — 통화를 가리지 않고 상단 배너로 원인과 복구 행동을 준다.
+  const deviceAlert = mediaError
+    ? {
+        title: '장치를 확인해 주세요',
+        description: mediaError,
+        actionLabel: '장치 재확인',
+        onAction: () => {
+          setMediaError(undefined)
+          void localParticipant.setCameraEnabled(true).catch(() => undefined)
+          void localParticipant.setMicrophoneEnabled(true).catch(() => undefined)
+        },
+      }
+    : undefined
+
+  const footNote = mediaError
+    ? '장치 문제가 계속되면 팬미팅을 나간 뒤 장비 점검을 다시 진행해 주세요.'
+    : isReconnecting
+      ? '통화 시간은 연결이 복구된 뒤부터 다시 계산됩니다.'
+      : authSession?.role === 'FAN' && recordingEnabled
+        ? '통화가 끝나면 녹화 영상이 저장되고, 남긴 말과 함께 기록에 보관됩니다.'
+        : undefined
 
   const remoteVideo = remoteCameraTrack ? (
     <VideoTrack
@@ -374,7 +414,12 @@ export function ConnectedCallRoom({
     )
 
   return (
-    <div className="grid gap-4">
+    // 어두운 콘솔 — 헤더 아래를 통째로 다크 면으로 칠한다. (강도 1, 코랄 0회)
+    <div className="-mx-3 -my-5 min-h-[calc(100dvh-var(--service-header-height))] bg-[var(--color-surface-dark)] px-4 pb-8 pt-[22px] sm:-mx-6 sm:px-6 lg:-mx-10 lg:-my-6 lg:px-10">
+      <div
+        className={`mx-auto grid w-full items-start gap-[22px] ${sidePanel ? 'max-w-[1320px] min-[941px]:grid-cols-[minmax(0,1fr)_260px]' : 'max-w-[1240px]'}`}
+      >
+      <div className="grid min-w-0 gap-4">
       <RoomAudioRenderer />
       <CallStage
         cameraEnabled={isCameraEnabled}
@@ -382,6 +427,7 @@ export function ConnectedCallRoom({
         captionLines={subtitleLines}
         connected={isConnected}
         connectionLabel={connectionLabel}
+        deviceAlert={deviceAlert}
         localVideo={localVideo}
         mediaAction={mediaAction}
         microphoneEnabled={isMicrophoneEnabled}
@@ -389,43 +435,25 @@ export function ConnectedCallRoom({
         onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
         onLeave={() => setEndDialogOpen(true)}
         onMicrophoneToggle={() => void toggleMicrophone()}
+        overlay={overlay}
         participantLabel={participantLabel}
+        remoteName={remoteName}
         remoteVideo={remoteVideo}
         // 통화 시작 전에는 아직 줄어들 남은 시간이 없으므로 설정된 통화 시간임을 밝힌다.
         timeLabel={remaining.counting ? '남은 시간' : '통화 시간'}
+        // 종료 직전에는 타이머가 경고색으로 바뀌어 마무리를 준비하게 한다.
+        timeUrgent={remaining.counting && remaining.label <= '00:05'}
         timeValue={remaining.label}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--color-text-secondary)]">
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <p>
-            팬미팅 ID:{' '}
-            <span className="font-mono text-[var(--color-text-primary)]">{meetingId}</span>
-          </p>
-          <p>
-            통화 세션 ID:{' '}
-            <span className="font-mono text-[var(--color-text-primary)]">{callSessionId}</span>
-          </p>
-        </div>
-        <p>
-          {subtitleLines.length
-            ? '실시간 자막을 표시하고 있습니다.'
-            : isSubtitleAgentPresent
-              ? '자막 AI가 입장했습니다. 첫 대사를 기다리고 있습니다.'
-              : '자막 AI가 아직 Room에 들어오지 않아 자막을 표시할 수 없습니다.'}
-        </p>
-      </div>
+      {footNote ? (
+        <p className="text-[15px] font-medium leading-[1.6] text-white/65">{footNote}</p>
+      ) : null}
 
       {waitingForNextFan ? (
         <AlertBanner title="다음 팬을 기다리고 있습니다" variant="info">
-          통화방 연결은 그대로 유지됩니다. 운영 화면에서 다음 팬을 호출하면 이 화면에서
-          바로 이어서 통화할 수 있습니다.
-        </AlertBanner>
-      ) : null}
-
-      {mediaError ? (
-        <AlertBanner title="장비 상태를 변경하지 못했습니다" variant="error">
-          {mediaError}
+          통화방 연결은 그대로 유지됩니다. 대기실에서 다음 팬을 호출하면 이 화면에서 바로 이어서
+          통화할 수 있습니다.
         </AlertBanner>
       ) : null}
 
@@ -486,6 +514,10 @@ export function ConnectedCallRoom({
         onOpenChange={setEndDialogOpen}
         open={endDialogOpen}
       />
+      </div>
+
+      {sidePanel}
+      </div>
     </div>
   )
 }

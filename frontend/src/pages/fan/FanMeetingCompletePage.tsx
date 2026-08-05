@@ -1,439 +1,593 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
+import moldEmptyImage from '../../assets/jelly-mold-empty.png'
 import { getAuthSession } from '../../api/auth'
+import { getMyApplication } from '../../api/applications'
 import {
-    findMyRecordingByMeeting,
-    getRecordingDetail,
-    issueRecordingDownloadUrl,
-    resolveRecordingContentUrl,
-    retryPendingRecordingUpload,
-    type RecordingDetailResponse,
-    type RecordingSummaryResponse,
+  getAllMyRecordings,
+  getRecordingDetail,
+  issueRecordingDownloadUrl,
+  resolveRecordingContentUrl,
+  retryPendingRecordingUpload,
+  type RecordingDetailResponse,
+  type RecordingSummaryResponse,
 } from '../../api/recordings'
 import {
-    findPendingRecordingByMeeting,
-    getPendingRecording,
+  findPendingRecordingByMeeting,
+  getPendingRecording,
 } from '../../api/pendingRecordings'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
-import { AlertBanner, Button, Card, CardContent } from '../../components'
+import { AlertBanner, Button } from '../../components'
 import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
-function formatDateTime(iso: string | null | undefined): string {
-    if (!iso) return '-'
-    const date = new Date(iso)
+const DAY_MS = 24 * 60 * 60 * 1000
 
-    if (Number.isNaN(date.getTime())) {
-        return iso
-    }
-
-    const pad = (value: number) => String(value).padStart(2, '0')
-
-    return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+function pad(value: number) {
+  return String(value).padStart(2, '0')
 }
 
-/** 바이트 크기를 사람이 읽기 쉬운 단위로 바꾼다. */
-function formatFileSize(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes <= 0) return '-'
-    const units = ['B', 'KB', 'MB', 'GB']
-    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-    return `${(bytes / 1024 ** exponent).toFixed(exponent === 0 ? 0 : 1)}${units[exponent]}`
+/** 2026.08.02 */
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '-'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
 
-/** 초 단위 재생 시간을 분:초 형식으로 바꾼다. */
-function formatDuration(seconds: number | null): string {
-    if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return '-'
-    const minutes = Math.floor(seconds / 60)
-    return `${minutes}분 ${String(Math.floor(seconds % 60)).padStart(2, '0')}초`
+/** 01:52 — 함께한 시간·기록 카드의 통화 길이 표기다. */
+function formatClock(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) {
+    return '--:--'
+  }
+  return `${pad(Math.floor(seconds / 60))}:${pad(Math.floor(seconds % 60))}`
+}
+
+/** 1분 52초 — 제목 문장에 쓰는 표기다. */
+function formatSpokenDuration(seconds: number | null | undefined): string | undefined {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) {
+    return undefined
+  }
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.floor(seconds % 60)
+  if (minutes === 0) return `${rest}초`
+  return rest > 0 ? `${minutes}분 ${rest}초` : `${minutes}분`
+}
+
+/** 영상 보관 만료까지 남은 일수다. 지났으면 0을 준다. */
+function remainingDays(availableUntil: string): number {
+  const diff = new Date(availableUntil).getTime() - Date.now()
+  return Math.max(0, Math.ceil(diff / DAY_MS))
+}
+
+/** 대기실에서 저장한 "하고 싶은 말"을 읽는다. 팬 측 메모 API가 아직 없어 브라우저 보관값을 쓴다. */
+function readFanNote(meetingId: string | number): string {
+  try {
+    return window.sessionStorage.getItem(`melly-fan-note:${meetingId}`)?.trim() ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/** MELLY 씰 — 기록물 썸네일에만 허용된 젤리 표현이다. 영상이 만료된 기록은 흐려진다. */
+function MellySeal({ dimmed, size }: { dimmed: boolean; size: 'lg' | 'sm' }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`absolute grid place-items-center rounded-full font-black tracking-[-0.05em] text-white ${
+        size === 'lg'
+          ? 'left-5 top-5 size-[30px] text-sm shadow-[0_2px_12px_rgb(23_24_29/28%)]'
+          : 'left-[11px] top-[11px] size-[22px] text-[11px]'
+      } ${dimmed ? 'bg-[var(--color-primary-coral)]/70' : 'bg-[var(--color-primary-coral)]'}`}
+    >
+      M
+    </span>
+  )
 }
 
 export function FanMeetingCompletePage() {
-    const { fanMeetingId } = useParams()
-    const location = useLocation()
-    const routeState = location.state as {
-        meetingTitle?: string
-        pendingRecordingSessionId?: string
-    } | null
-    const [session] = useState(() => getAuthSession())
-    const [recording, setRecording] = useState<RecordingSummaryResponse | null>(null)
-    const [detail, setDetail] = useState<RecordingDetailResponse>()
-    const [playbackUrl, setPlaybackUrl] = useState<string>()
-    const [recordingEnabled, setRecordingEnabled] = useState<boolean>()
-    const [loading, setLoading] = useState(true)
-    const [loadError, setLoadError] = useState<string>()
-    const [downloading, setDownloading] = useState(false)
-    const [downloadError, setDownloadError] = useState<string>()
-    const [reloadKey, setReloadKey] = useState(0)
-    const [pendingRecordingAvailable, setPendingRecordingAvailable] = useState(false)
-    const [pendingRecordingSessionId, setPendingRecordingSessionId] = useState<string>()
-    const [retryingPendingRecording, setRetryingPendingRecording] = useState(false)
-    const [pendingRecordingError, setPendingRecordingError] = useState<string>()
+  const { fanMeetingId } = useParams()
+  const location = useLocation()
+  const routeState = location.state as {
+    meetingTitle?: string
+    pendingRecordingSessionId?: string
+  } | null
+  const [session] = useState(() => getAuthSession())
+  const [recordings, setRecordings] = useState<RecordingSummaryResponse[]>()
+  const [detail, setDetail] = useState<RecordingDetailResponse>()
+  const [playbackUrl, setPlaybackUrl] = useState<string>()
+  const [recordingEnabled, setRecordingEnabled] = useState<boolean>()
+  const [influencerName, setInfluencerName] = useState<string>()
+  const [callOrder, setCallOrder] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string>()
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState<string>()
+  const [reloadKey, setReloadKey] = useState(0)
+  const [pendingRecordingAvailable, setPendingRecordingAvailable] = useState(false)
+  const [pendingRecordingSessionId, setPendingRecordingSessionId] = useState<string>()
+  const [retryingPendingRecording, setRetryingPendingRecording] = useState(false)
+  const [pendingRecordingError, setPendingRecordingError] = useState<string>()
 
-    useEffect(() => {
-        let active = true
-        const pendingSessionId = routeState?.pendingRecordingSessionId
-        const pendingRequest = pendingSessionId
-            ? getPendingRecording(pendingSessionId)
-            : fanMeetingId
-                ? findPendingRecordingByMeeting(fanMeetingId)
-                : Promise.resolve(undefined)
+  useEffect(() => {
+    let active = true
+    const pendingSessionId = routeState?.pendingRecordingSessionId
+    const pendingRequest = pendingSessionId
+      ? getPendingRecording(pendingSessionId)
+      : fanMeetingId
+        ? findPendingRecordingByMeeting(fanMeetingId)
+        : Promise.resolve(undefined)
 
-        void pendingRequest
-            .then((pending) => {
-                if (!active) return
-                setPendingRecordingAvailable(Boolean(pending))
-                setPendingRecordingSessionId(pending?.callSessionId)
-            })
-            .catch(() => {
-                if (active) {
-                    setPendingRecordingError('브라우저에 보관된 녹화 영상을 확인하지 못했습니다.')
-                }
-            })
-
-        return () => {
-            active = false
+    void pendingRequest
+      .then((pending) => {
+        if (!active) return
+        setPendingRecordingAvailable(Boolean(pending))
+        setPendingRecordingSessionId(pending?.callSessionId)
+      })
+      .catch(() => {
+        if (active) {
+          setPendingRecordingError('브라우저에 보관된 녹화 영상을 확인하지 못했습니다.')
         }
-    }, [fanMeetingId, routeState?.pendingRecordingSessionId])
+      })
 
-    useEffect(() => {
-        if (!fanMeetingId?.trim() || !session) {
-            setLoading(false)
-            return
-        }
+    return () => {
+      active = false
+    }
+  }, [fanMeetingId, routeState?.pendingRecordingSessionId])
 
-        const abortController = new AbortController()
-        setLoading(true)
-        setLoadError(undefined)
-        setDownloadError(undefined)
-        setRecording(null)
-        setDetail(undefined)
-        setRecordingEnabled(undefined)
-        setPlaybackUrl(undefined)
-
-        Promise.all([
-            // 첫 페이지에 없다는 이유로 녹화가 없다고 판단하지 않고 실제 목록의 모든 페이지를 확인한다.
-            findMyRecordingByMeeting(
-                fanMeetingId,
-                session.accessToken,
-                abortController.signal,
-            ),
-            fetchPublicFanMeetingDetail(
-                Number(fanMeetingId),
-                session.accessToken,
-                abortController.signal,
-            ).catch((error: unknown) => {
-                if (abortController.signal.aborted) throw error
-                // 녹화 목록은 독립 API이므로 상세 정책 조회 실패가 영상 조회까지 막지 않게 한다.
-                return undefined
-            }),
-        ])
-            .then(async ([matched, meeting]) => {
-                setRecordingEnabled(meeting?.meeting.operation.recordingEnabled)
-                setRecording(matched ?? null)
-                if (!matched) return
-
-                // 목록 요약만으로는 재생 가능 여부가 최신이 아닐 수 있어 상세로 한 번 더 확인한다.
-                const loaded = await getRecordingDetail(
-                    matched.recordingId,
-                    session.accessToken,
-                    abortController.signal,
-                )
-                if (abortController.signal.aborted) return
-                setDetail(loaded)
-
-                // 재생과 다운로드에 같은 서명 토큰을 쓰므로 준비되면 미리 한 번만 발급한다.
-                if (loaded.playable) {
-                    try {
-                        const signedUrl = await issueRecordingDownloadUrl(
-                            matched.recordingId,
-                            session.accessToken,
-                            abortController.signal,
-                        )
-                        if (abortController.signal.aborted) return
-                        setPlaybackUrl(resolveRecordingContentUrl(signedUrl))
-                    } catch (error: unknown) {
-                        if (abortController.signal.aborted) return
-                        // 재생 링크 발급 실패가 녹화 상세와 다운로드 버튼까지 숨기지는 않게 한다.
-                        setDownloadError(
-                            error instanceof Error
-                                ? `재생 링크를 준비하지 못했습니다: ${error.message}`
-                                : '재생 링크를 준비하지 못했습니다.',
-                        )
-                    }
-                }
-            })
-            .catch((error: unknown) => {
-                if (error instanceof DOMException && error.name === 'AbortError') {
-                    return
-                }
-
-                setLoadError(
-                    error instanceof Error ? error.message : '녹화 정보를 불러오지 못했습니다.',
-                )
-            })
-            .finally(() => {
-                if (!abortController.signal.aborted) {
-                    setLoading(false)
-                }
-            })
-
-        return () => abortController.abort()
-    }, [fanMeetingId, reloadKey, session])
-
-    async function handlePendingRecordingRetry() {
-        const pendingSessionId = pendingRecordingSessionId
-        if (!pendingSessionId || !session) return
-
-        setRetryingPendingRecording(true)
-        setPendingRecordingError(undefined)
-        try {
-            const uploaded = await retryPendingRecordingUpload(
-                pendingSessionId,
-                session.accessToken,
-            )
-            if (!uploaded) {
-                setPendingRecordingError('임시 보관된 녹화 파일을 찾을 수 없습니다.')
-                return
-            }
-            setPendingRecordingAvailable(false)
-            setReloadKey((key) => key + 1)
-        } catch (error: unknown) {
-            setPendingRecordingError(
-                error instanceof Error ? error.message : '녹화 영상 재업로드에 실패했습니다.',
-            )
-        } finally {
-            setRetryingPendingRecording(false)
-        }
+  useEffect(() => {
+    if (!fanMeetingId?.trim() || !session) {
+      setLoading(false)
+      return
     }
 
-    async function handleDownload() {
-        if (!recording || !session) {
-            return
-        }
+    const abortController = new AbortController()
+    setLoading(true)
+    setLoadError(undefined)
+    setDownloadError(undefined)
+    setRecordings(undefined)
+    setDetail(undefined)
+    setRecordingEnabled(undefined)
+    setPlaybackUrl(undefined)
 
-        setDownloading(true)
-        setDownloadError(undefined)
+    // 기록 목록(아카이브)과 이번 팬미팅의 녹화를 한 번의 전체 조회로 함께 얻는다.
+    Promise.all([
+      getAllMyRecordings(session.accessToken, abortController.signal),
+      fetchPublicFanMeetingDetail(
+        Number(fanMeetingId),
+        session.accessToken,
+        abortController.signal,
+      ).catch(() => undefined),
+      // 내 순번은 응모 응답에만 있으며, 없어도 화면 표시는 막지 않는다.
+      getMyApplication(fanMeetingId, session.accessToken, abortController.signal).catch(
+        () => null,
+      ),
+    ])
+      .then(async ([allRecordings, meeting, application]) => {
+        setRecordings(allRecordings)
+        setRecordingEnabled(meeting?.meeting.operation.recordingEnabled)
+        setInfluencerName(meeting?.influencer.name)
+        setCallOrder(application?.callOrder ?? null)
 
-        try {
-            // 재생용으로 받아 둔 토큰이 있어도 다운로드 시점에 새로 발급해 만료를 피한다.
-            const signedUrl = await issueRecordingDownloadUrl(
-                recording.recordingId,
-                session.accessToken,
-            )
-            const anchor = document.createElement('a')
-            anchor.href = resolveRecordingContentUrl(signedUrl, true)
-            anchor.download = detail?.fileName || recording.fileName || 'recording'
-            anchor.rel = 'noopener'
-            // 비동기 서명 발급 뒤에도 팝업 차단 영향을 받지 않도록 실제 링크 클릭으로 내려받는다.
-            document.body.append(anchor)
-            anchor.click()
-            anchor.remove()
-        } catch (error: unknown) {
-            setDownloadError(
-                error instanceof Error ? error.message : '다운로드 링크 발급에 실패했습니다.',
-            )
-        } finally {
-            setDownloading(false)
-        }
-    }
-
-    if (!fanMeetingId?.trim()) {
-        return (
-            <InvalidRouteState
-                message="URL에 필요한 fanMeetingId 값이 없습니다."
-                title="필수 URL 파라미터가 없습니다."
-            />
+        const matched = allRecordings.find(
+          (item) => String(item.meetingId) === String(fanMeetingId),
         )
+        if (!matched) return
+
+        // 목록 요약만으로는 재생 가능 여부가 최신이 아닐 수 있어 상세로 한 번 더 확인한다.
+        const loaded = await getRecordingDetail(
+          matched.recordingId,
+          session.accessToken,
+          abortController.signal,
+        )
+        if (abortController.signal.aborted) return
+        setDetail(loaded)
+
+        if (loaded.playable) {
+          try {
+            const signedUrl = await issueRecordingDownloadUrl(
+              matched.recordingId,
+              session.accessToken,
+              abortController.signal,
+            )
+            if (abortController.signal.aborted) return
+            setPlaybackUrl(resolveRecordingContentUrl(signedUrl))
+          } catch (error: unknown) {
+            if (abortController.signal.aborted) return
+            // 재생 링크 발급 실패가 녹화 정보와 다운로드 버튼까지 숨기지는 않게 한다.
+            setDownloadError(
+              error instanceof Error
+                ? `재생 링크를 준비하지 못했습니다: ${error.message}`
+                : '재생 링크를 준비하지 못했습니다.',
+            )
+          }
+        }
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setLoadError(
+          error instanceof Error ? error.message : '녹화 정보를 불러오지 못했습니다.',
+        )
+      })
+      .finally(() => {
+        if (!abortController.signal.aborted) setLoading(false)
+      })
+
+    return () => abortController.abort()
+  }, [fanMeetingId, reloadKey, session])
+
+  const memo = useMemo(
+    () => (fanMeetingId ? readFanNote(fanMeetingId) : ''),
+    [fanMeetingId],
+  )
+
+  async function handlePendingRecordingRetry() {
+    const pendingSessionId = pendingRecordingSessionId
+    if (!pendingSessionId || !session) return
+
+    setRetryingPendingRecording(true)
+    setPendingRecordingError(undefined)
+    try {
+      const uploaded = await retryPendingRecordingUpload(pendingSessionId, session.accessToken)
+      if (!uploaded) {
+        setPendingRecordingError('임시 보관된 녹화 파일을 찾을 수 없습니다.')
+        return
+      }
+      setPendingRecordingAvailable(false)
+      setReloadKey((key) => key + 1)
+    } catch (error: unknown) {
+      setPendingRecordingError(
+        error instanceof Error ? error.message : '녹화 영상 재업로드에 실패했습니다.',
+      )
+    } finally {
+      setRetryingPendingRecording(false)
     }
+  }
 
-    // 상세를 받았으면 상세의 playable을 우선하고, 아직이면 목록 요약값을 쓴다.
-    const isRecordingReady = Boolean(detail?.playable ?? recording?.playable)
-    const meetingTitle = recording?.meetingTitle ?? routeState?.meetingTitle ?? '팬미팅'
-    const endedAt = recording?.completedAt
+  const currentRecording = recordings?.find(
+    (item) => String(item.meetingId) === String(fanMeetingId),
+  )
 
-    let recordingTitle = '녹화 영상이 없습니다'
-    let recordingDescription = recordingEnabled === false
-        ? '이 팬미팅은 녹화하지 않도록 설정되어 있습니다.'
-        : '이번 팬미팅의 녹화 영상이 아직 저장되지 않았습니다.'
-    let recordingVariant: 'success' | 'info' | 'error' = 'info'
+  async function handleDownload() {
+    if (!currentRecording || !session) return
 
-    if (!session) {
-        recordingTitle = '로그인이 필요합니다'
-        recordingDescription = '녹화 영상 정보를 확인하려면 로그인해 주세요.'
-        recordingVariant = 'error'
-    } else if (loading) {
-        recordingTitle = '녹화 정보를 확인하고 있습니다'
-        recordingDescription = '잠시만 기다려 주세요.'
-    } else if (loadError) {
-        recordingTitle = '녹화 정보를 불러오지 못했습니다'
-        recordingDescription = loadError
-        recordingVariant = 'error'
-    } else if (isRecordingReady) {
-        recordingTitle = '녹화 영상 저장이 완료되었습니다'
-        recordingDescription = '아래에서 녹화 영상을 확인하고 다운로드할 수 있어요.'
-        recordingVariant = 'success'
-    } else if (recording?.status === 'EXPIRED') {
-        recordingTitle = '녹화 영상 보관 기간이 끝났습니다'
-        recordingDescription = '보관 기간이 지나 더 이상 재생하거나 다운로드할 수 없습니다.'
-    } else if (recording) {
-        recordingTitle = '녹화 영상을 저장하고 있습니다'
-        recordingDescription = '잠시만 기다려 주세요. 저장이 완료되면 이 화면에 표시됩니다.'
+    setDownloading(true)
+    setDownloadError(undefined)
+
+    try {
+      // 재생용으로 받아 둔 토큰이 있어도 다운로드 시점에 새로 발급해 만료를 피한다.
+      const signedUrl = await issueRecordingDownloadUrl(
+        currentRecording.recordingId,
+        session.accessToken,
+      )
+      const anchor = document.createElement('a')
+      anchor.href = resolveRecordingContentUrl(signedUrl, true)
+      anchor.download = detail?.fileName || currentRecording.fileName || 'recording'
+      anchor.rel = 'noopener'
+      // 비동기 서명 발급 뒤에도 팝업 차단 영향을 받지 않도록 실제 링크 클릭으로 내려받는다.
+      document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+    } catch (error: unknown) {
+      setDownloadError(
+        error instanceof Error ? error.message : '다운로드 링크 발급에 실패했습니다.',
+      )
+    } finally {
+      setDownloading(false)
     }
+  }
 
-    // 공통 App이 main 랜드마크를 제공하므로 완료 콘텐츠는 일반 컨테이너로 둔다.
+  if (!fanMeetingId?.trim()) {
     return (
-        <div className="mx-auto w-full max-w-5xl">
-            <Card>
-                <CardContent className="p-6 sm:p-10 lg:p-14">
-                    <section className="border-b border-[var(--color-divider)] pb-10 text-center">
-                        <div
-                            aria-hidden="true"
-                            className="mx-auto flex size-14 items-center justify-center rounded-[var(--radius-panel)] bg-[var(--color-success-soft)] text-2xl font-bold text-[var(--color-success)]"
-                        >
-                            ✓
-                        </div>
-                        <h1 className="mt-6 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-                            팬미팅이 종료되었습니다
-                        </h1>
-                        <p className="mt-3 text-[var(--color-text-secondary)]">
-                            소중한 시간을 함께해 주셔서 감사합니다.
-                        </p>
-                    </section>
-                    <section
-                        aria-live="polite"
-                        className="pt-8"
-                    >
-                        <AlertBanner
-                            title={recordingTitle}
-                            variant={recordingVariant}
-                        >
-                            <p>{recordingDescription}</p>
-                            {loadError ? (
-                                <Button
-                                    className="mt-3"
-                                    onClick={() => setReloadKey((key) => key + 1)}
-                                    size="sm"
-                                    variant="secondary"
-                                >
-                                    녹화 정보 다시 불러오기
-                                </Button>
-                            ) : null}
-                        </AlertBanner>
-                    </section>
-                    {pendingRecordingAvailable || pendingRecordingError ? (
-                        <section aria-live="polite" className="pt-4">
-                            <AlertBanner
-                                title="브라우저에 보관된 녹화 영상이 있습니다"
-                                variant={pendingRecordingError ? 'error' : 'warning'}
-                            >
-                                <p>
-                                    {pendingRecordingError
-                                        ?? '통화 화면에서 업로드하지 못한 영상을 서버에 다시 저장해 주세요.'}
-                                </p>
-                                {pendingRecordingAvailable ? (
-                                    <Button
-                                        className="mt-3"
-                                        loading={retryingPendingRecording}
-                                        onClick={() => void handlePendingRecordingRetry()}
-                                        size="sm"
-                                        variant="secondary"
-                                    >
-                                        녹화 영상 다시 업로드
-                                    </Button>
-                                ) : null}
-                            </AlertBanner>
-                        </section>
-                    ) : null}
-                    {isRecordingReady && recording && (
-                        <section className="mt-8 grid gap-6 lg:grid-cols-2">
-                            <Card className="p-6">
-                                <div className="min-w-0">
-                                    {playbackUrl ? (
-                                        <RecordingVideo
-                                            className="aspect-video w-full rounded-[var(--radius-panel)] bg-black"
-                                            controls
-                                            controlsList="nodownload"
-                                            preload="metadata"
-                                            src={playbackUrl}
-                                        >
-                                            브라우저가 영상 재생을 지원하지 않습니다. 아래 다운로드 버튼을 이용해 주세요.
-                                        </RecordingVideo>
-                                    ) : (
-                                        <div className="flex aspect-video items-center justify-center rounded-[var(--radius-panel)] bg-[var(--color-divider)] text-[var(--color-text-secondary)]">
-                                            재생 링크를 준비하고 있습니다
-                                        </div>
-                                    )}
-                                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <strong className="text-[var(--color-text-primary)]">
-                                            {meetingTitle}
-                                        </strong>
-
-                                        {endedAt ? (
-                                            <time className="text-sm text-[var(--color-text-secondary)]"
-                                                dateTime={endedAt}
-                                            >
-                                                {formatDateTime(endedAt)}
-                                            </time>
-                                        ) : null}
-                                    </div>
-                                    {detail ? (
-                                        <dl className="mt-4 grid gap-2 border-t border-[var(--color-divider)] pt-4 text-sm">
-                                            <div className="flex justify-between">
-                                                <dt className="text-[var(--color-text-secondary)]">재생 시간</dt>
-                                                <dd className="font-semibold">{formatDuration(detail.durationSec)}</dd>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <dt className="text-[var(--color-text-secondary)]">파일 크기</dt>
-                                                <dd className="font-semibold">{formatFileSize(detail.fileSizeBytes)}</dd>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <dt className="text-[var(--color-text-secondary)]">파일명</dt>
-                                                <dd className="min-w-0 truncate pl-4 font-semibold">{detail.fileName}</dd>
-                                            </div>
-                                        </dl>
-                                    ) : null}
-                                </div>
-                            </Card>
-
-                            <div className="flex flex-col gap-4">
-                                <div className="rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] p-6">
-                                    <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
-                                        다운로드 유의사항
-                                    </h2>
-                                    <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">
-                                        영상은 마이페이지의 팬미팅 히스토리에서{' '}
-                                        {formatDateTime(recording.availableUntil)}까지 유지됩니다.
-                                        기간 안에 필요한 영상을 다운로드해 주세요.
-                                    </p>
-                                </div>
-
-                                {downloadError ? (
-                                    <AlertBanner title="다운로드에 실패했습니다" variant="error">
-                                        {downloadError}
-                                    </AlertBanner>
-                                ) : null}
-
-                                <div className="mt-auto grid gap-3">
-                                    <Button
-                                        className="w-full"
-                                        loading={downloading}
-                                        onClick={() => void handleDownload()}
-                                        size="lg"
-                                    >
-                                        녹화 영상 다운로드
-                                    </Button>
-                                    <Link
-                                        className="inline-flex min-h-[var(--control-height-final-cta)] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-6 py-2.5 font-semibold text-[var(--color-text-primary)] transition-colors duration-200 hover:bg-[var(--color-surface-page)] active:bg-[var(--color-divider)] motion-reduce:transition-none"
-                                        to="/fan/mypage/fan-meetings?status=completed"
-                                    >
-                                        마이페이지로 이동
-                                    </Link>
-                                </div>
-                            </div>
-                        </section>
-                    )}
-                </CardContent>
-            </Card>
-        </div>
+      <InvalidRouteState
+        message="URL에 필요한 fanMeetingId 값이 없습니다."
+        title="필수 URL 파라미터가 없습니다."
+      />
     )
+  }
+
+  const isReady = Boolean((detail?.playable ?? currentRecording?.playable) && !loading)
+  const isExpired = currentRecording?.status === 'EXPIRED'
+  const noRecordingMeeting = recordingEnabled === false && !currentRecording
+  // dc.html의 두 단계 — 처리 중(proc) / 완료(done). 만료·녹화 없음은 실제 상태에 맞춰 변형한다.
+  const proc = loading || (Boolean(currentRecording) && !isReady && !isExpired)
+  const durationSec = detail?.durationSec ?? currentRecording?.durationSec ?? null
+  const spokenDuration = formatSpokenDuration(durationSec)
+  const daysLeft = currentRecording ? remainingDays(currentRecording.availableUntil) : null
+
+  const headline = proc
+    ? '기록을 만들고 있어요'
+    : influencerName && spokenDuration
+      ? `${influencerName}님과 ${spokenDuration}를 함께했어요`
+      : '팬미팅을 함께했어요'
+  const subline = proc
+    ? '녹화 영상과 사진을 정리하는 중입니다. 잠시만 기다려 주세요.'
+    : noRecordingMeeting
+      ? '이 팬미팅은 녹화하지 않도록 설정되어 있습니다.'
+      : '통화 화면이 이 기록의 영상으로 저장되었습니다.'
+
+  const recTitle = proc
+    ? '녹화 영상 저장 중'
+    : isExpired
+      ? '녹화 영상 보관 종료'
+      : noRecordingMeeting
+        ? '녹화하지 않는 팬미팅'
+        : '녹화 영상 저장 완료'
+  const recMeta = proc
+    ? '처리 중'
+    : isExpired
+      ? '영상 보관 종료'
+      : noRecordingMeeting
+        ? ''
+        : daysLeft !== null
+          ? `영상 ${daysLeft}일 남음`
+          : ''
+  const downloadDisabled = proc || isExpired || noRecordingMeeting || downloading
+  const downloadLabel = proc
+    ? '저장 중'
+    : isExpired
+      ? '영상 보관 종료'
+      : noRecordingMeeting
+        ? '녹화 영상 없음'
+        : '녹화 영상 다운로드'
+
+  const eyebrowDate = formatDate(
+    currentRecording?.completedAt ?? new Date().toISOString(),
+  )
+  const archive = [...(recordings ?? [])].sort(
+    (left, right) =>
+      new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
+  )
+
+  return (
+    <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
+      <section
+        aria-label="팬미팅 결과"
+        className="grid items-stretch border-b border-[var(--color-divider)] min-[1081px]:grid-cols-[minmax(0,1fr)_504px]"
+      >
+        <div className="relative min-h-[min(52vw,420px)] overflow-hidden bg-[var(--color-surface-muted)] min-[1081px]:min-h-[560px]">
+          {!proc && playbackUrl ? (
+            <>
+              {/* 통화 기록 영상이 그대로 이 기록의 사진 자리에 안착한다. (S3 Signature) */}
+              <RecordingVideo
+                className="absolute inset-0 size-full bg-black object-cover motion-safe:animate-[mj-settle-in_560ms_cubic-bezier(0.16,1,0.3,1)_both]"
+                controls
+                controlsList="nodownload"
+                preload="metadata"
+                src={playbackUrl}
+              >
+                브라우저가 영상 재생을 지원하지 않습니다. 아래 다운로드 버튼을 이용해 주세요.
+              </RecordingVideo>
+              <span
+                aria-hidden="true"
+                className="mj-seam-glow pointer-events-none absolute inset-y-0 right-0 hidden w-[88px] min-[1081px]:block"
+                style={{
+                  opacity: 0.62,
+                  background:
+                    'linear-gradient(90deg, rgba(232,97,92,0) 0%, rgba(232,97,92,0.16) 62%, rgba(217,66,63,0.34) 100%)',
+                }}
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 hidden w-[3px] min-[1081px]:block"
+                style={{
+                  opacity: 0.9,
+                  background:
+                    'linear-gradient(180deg, rgba(232,97,92,0.25) 0%, rgba(217,66,63,0.95) 42%, rgba(232,97,92,0.35) 100%)',
+                }}
+              />
+              <MellySeal dimmed={false} size="lg" />
+            </>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col px-5 pb-8 pt-[26px] sm:px-[26px] sm:pb-9 sm:pt-[30px] min-[1081px]:pb-11 min-[1081px]:pl-10 min-[1081px]:pr-11 min-[1081px]:pt-[46px]">
+          <p className="text-sm font-bold text-[var(--color-text-muted)]">
+            {callOrder !== null ? `${eyebrowDate} · ${callOrder}번째` : eyebrowDate}
+          </p>
+          <h1 className="mt-3.5 text-[clamp(28px,2.9vw,38px)] font-black leading-[1.15] tracking-[-0.048em] [text-wrap:balance]">
+            {headline}
+          </h1>
+          <p className="mt-4 text-[17px] font-medium leading-[1.7] text-[var(--color-text-body)]">
+            {subline}
+          </p>
+
+          <div className="mt-[30px] border-t border-[var(--color-divider)] pt-6">
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">함께한 시간</p>
+            <p className="mt-1.5 text-[40px] font-black leading-none tracking-[-0.045em] tabular-nums">
+              {formatClock(durationSec)}
+            </p>
+          </div>
+
+          <div className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px]">
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 className="text-[17px] font-extrabold tracking-[-0.03em]">{recTitle}</h2>
+              {recMeta ? (
+                <span
+                  className={`whitespace-nowrap text-sm font-bold ${proc || isExpired ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-warning)]'}`}
+                >
+                  {recMeta}
+                </span>
+              ) : null}
+            </div>
+            {noRecordingMeeting ? null : (
+              <p className="mt-2.5 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
+                영상은 <strong className="font-extrabold text-[var(--color-text-primary)]">5일 후 삭제</strong>
+                되고, 사진과 남긴 말은 계속 남습니다.
+              </p>
+            )}
+            <button
+              className={`mj-font-emphasis mt-5 min-h-14 w-full rounded-[10px] border text-[17px] transition-colors ${
+                downloadDisabled
+                  ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
+                  : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:bg-[var(--color-primary-coral-hover)]'
+              }`}
+              disabled={downloadDisabled}
+              onClick={() => void handleDownload()}
+              type="button"
+            >
+              {downloading ? '다운로드 준비 중' : downloadLabel}
+            </button>
+            <Link
+              className="mj-font-label mt-1.5 flex min-h-11 w-full items-center justify-center text-[15px] text-[var(--color-text-muted)] hover:text-[var(--color-primary-coral)]"
+              to="/fan/mypage/fan-meetings?status=completed"
+            >
+              기록 전체 보기
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <div className="mx-auto w-[min(100%-40px,1240px)] pt-12 min-[1081px]:w-[min(100%-88px,1240px)]">
+        {loadError ? (
+          <AlertBanner className="mb-8" title="녹화 정보를 불러오지 못했습니다" variant="error">
+            <p>{loadError}</p>
+            <Button
+              className="mt-3"
+              onClick={() => setReloadKey((key) => key + 1)}
+              size="sm"
+              variant="secondary"
+            >
+              녹화 정보 다시 불러오기
+            </Button>
+          </AlertBanner>
+        ) : null}
+        {pendingRecordingAvailable || pendingRecordingError ? (
+          <AlertBanner
+            className="mb-8"
+            title="브라우저에 보관된 녹화 영상이 있습니다"
+            variant={pendingRecordingError ? 'error' : 'warning'}
+          >
+            <p>
+              {pendingRecordingError
+                ?? '통화 화면에서 업로드하지 못한 영상을 서버에 다시 저장해 주세요.'}
+            </p>
+            {pendingRecordingAvailable ? (
+              <Button
+                className="mt-3"
+                loading={retryingPendingRecording}
+                onClick={() => void handlePendingRecordingRetry()}
+                size="sm"
+                variant="secondary"
+              >
+                녹화 영상 다시 업로드
+              </Button>
+            ) : null}
+          </AlertBanner>
+        ) : null}
+        {downloadError ? (
+          <AlertBanner className="mb-8" title="다운로드에 실패했습니다" variant="error">
+            {downloadError}
+          </AlertBanner>
+        ) : null}
+
+        <section aria-labelledby="mj-said-title" className="max-w-[56ch]">
+          <h2 className="text-base font-extrabold tracking-[-0.025em]" id="mj-said-title">
+            내가 남긴 말
+          </h2>
+          <p className="mt-3.5 text-[22px] font-medium leading-[1.7]">
+            {memo ? `“${memo}”` : '남긴 말이 없어요.'}
+          </p>
+        </section>
+      </div>
+
+      <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] min-[1081px]:w-[min(100%-88px,1240px)]">
+        <section
+          aria-labelledby="mj-arch-title"
+          className="mt-14 border-t border-[var(--color-divider)] pt-7"
+        >
+          <div className="flex items-baseline justify-between gap-6">
+            <h2 className="text-[22px] font-black tracking-[-0.032em]" id="mj-arch-title">
+              팬미팅 기록
+            </h2>
+            <span className="text-[15px] font-semibold text-[var(--color-text-muted)]">
+              {`${archive.length}개`}
+            </span>
+          </div>
+
+          {archive.length === 0 ? (
+            <div className="mt-6 grid place-items-center px-6 py-16 text-center">
+              <img alt="" className="size-[104px] object-contain opacity-60" src={moldEmptyImage} />
+              <strong className="mt-4 text-[19px] font-extrabold tracking-[-0.03em]">
+                아직 기록이 없어요
+              </strong>
+              <span className="mt-2 max-w-[400px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
+                팬미팅을 마치면 그날의 사진과 남긴 말이 여기에 쌓입니다.
+              </span>
+              <Link
+                className="mj-font-emphasis mt-5 inline-flex min-h-12 items-center rounded-[10px] bg-[var(--color-primary-coral)] px-[22px] text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                to="/fan/events"
+              >
+                팬미팅 둘러보기
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="mt-[26px] grid grid-cols-1 gap-[30px] sm:grid-cols-2 lg:grid-cols-3">
+                {archive.map((item, index) => {
+                  const isLatest = index === 0
+                  const expired = item.status === 'EXPIRED' || !item.playable
+                  const note = readFanNote(item.meetingId)
+                  const days = remainingDays(item.availableUntil)
+
+                  return (
+                    <article key={item.recordingId}>
+                      <figure className="relative m-0 overflow-hidden rounded-[10px] bg-[var(--color-surface-muted)]">
+                        <div
+                          aria-label="사진이 저장되지 않은 기록"
+                          className="grid aspect-[16/10] w-full place-items-center bg-[var(--color-surface-page)]"
+                          role="img"
+                        >
+                          <span className="text-sm font-semibold text-[var(--color-text-muted)]">
+                            사진 없음
+                          </span>
+                        </div>
+                        {isLatest ? (
+                          <span
+                            aria-hidden="true"
+                            className="absolute inset-y-0 right-0 w-[2px]"
+                            style={{
+                              background:
+                                'linear-gradient(180deg, rgba(232,97,92,0.2) 0%, rgba(217,66,63,0.9) 46%, rgba(232,97,92,0.3) 100%)',
+                            }}
+                          />
+                        ) : null}
+                        <MellySeal dimmed={!isLatest} size="sm" />
+                      </figure>
+                      <h3 className="mt-[15px] text-lg font-extrabold tracking-[-0.03em]">
+                        {item.meetingTitle}
+                      </h3>
+                      <p className="mt-1.5 text-[15px] font-medium tabular-nums text-[var(--color-text-muted)]">
+                        {formatDate(item.completedAt)} · {formatClock(item.durationSec)}
+                      </p>
+                      <p
+                        className={`mt-2.5 text-[15px] font-medium leading-[1.65] ${note ? 'text-[var(--color-text-body)]' : 'text-[var(--color-text-muted)]'}`}
+                      >
+                        {note ? `“${note}”` : '남긴 말 없음'}
+                      </p>
+                      <p
+                        className={`mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-bold ${expired ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-warning)]'}`}
+                      >
+                        {expired ? '영상 보관 종료' : `영상 ${days}일 남음`}{' '}
+                        <span className="font-medium text-[var(--color-text-muted)]">
+                          {note || !expired ? '· 사진과 메모는 계속 보관' : '· 기록만 남음'}
+                        </span>
+                      </p>
+                    </article>
+                  )
+                })}
+              </div>
+
+              <p className="mt-[34px] border-t border-[var(--color-divider)] pt-[22px] text-base font-medium text-[var(--color-text-muted)]">
+                다음 팬미팅을 마치면 여기에 새 기록이 추가됩니다.{' '}
+                <Link className="font-bold text-[var(--color-primary-coral)]" to="/fan/events">
+                  팬미팅 둘러보기
+                </Link>
+              </p>
+            </>
+          )}
+        </section>
+      </div>
+    </div>
+  )
 }

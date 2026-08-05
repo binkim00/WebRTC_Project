@@ -172,8 +172,8 @@ export function ManagerApplicationFormPanel({
           <Badge variant="primary">응모 폼</Badge>
           <CardTitle as="h2" className="mt-3">팬 응모 질문 구성</CardTitle>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            저장하면 질문 목록 전체가 교체되며, 목록에서 제거한 기존 질문은 삭제됩니다.
-            답변 형식은 백엔드가 허용하는 주관식 두 가지만 사용할 수 있습니다.
+            저장한 질문의 내용과 순서가 팬의 응모 화면에 반영됩니다.
+            답변은 단답형과 장문형 중에서 선택할 수 있습니다.
           </p>
         </CardHeader>
         <CardContent className="grid gap-5">
@@ -275,7 +275,7 @@ export function ManagerApplicationFormPanel({
         </CardContent>
       </Card>
 
-      {error ? <AlertBanner title="응모 폼 처리 실패" variant="error">{error}</AlertBanner> : null}
+      {error ? <AlertBanner title="응모 폼 작업을 완료하지 못했습니다" variant="error">{error}</AlertBanner> : null}
       {message ? (
         <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 결과" variant="success">
           {message}

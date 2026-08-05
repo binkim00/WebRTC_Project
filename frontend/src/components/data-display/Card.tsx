@@ -10,12 +10,12 @@ export function Card({ interactive, selected, className, ...props }: CardProps) 
   return (
     <div
       className={cn(
-        'rounded-[var(--radius-panel)] border bg-[var(--color-surface-panel)]',
+        'border-0 border-t bg-transparent',
         selected
-          ? 'border-[var(--color-primary-coral)] shadow-[0_0_0_3px_var(--color-primary-coral-soft-border)]'
-          : 'border-[var(--color-border-panel)] shadow-[var(--shadow-panel)]',
+          ? 'border-[var(--color-primary-coral)]'
+          : 'border-[var(--color-divider)]',
         interactive &&
-          'transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-primary-coral-soft-border)] motion-reduce:transition-none',
+          'transition-colors duration-200 hover:border-[var(--color-primary-coral)] motion-reduce:transition-none',
         className,
       )}
       {...props}
@@ -26,7 +26,7 @@ export function Card({ interactive, selected, className, ...props }: CardProps) 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn('border-b border-[var(--color-divider)] p-5 sm:p-6', className)}
+      className={cn('p-5 sm:p-6', className)}
       {...props}
     />
   )

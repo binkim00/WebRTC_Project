@@ -63,8 +63,7 @@ export function Dialog({
       aria-describedby={description ? descriptionId : undefined}
       aria-labelledby={titleId}
       className={cn(
-        'm-auto w-[min(32rem,calc(100vw-2rem))] rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-0 text-[var(--color-text-primary)] shadow-[var(--shadow-modal)]',
-        'backdrop:bg-[rgb(23_24_29/48%)]',
+        'mj-dialog m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-0 text-[var(--color-text-primary)] shadow-[var(--shadow-modal)]',
         className,
       )}
       onCancel={handleCancel}
@@ -74,7 +73,10 @@ export function Dialog({
     >
       <div className="flex items-start justify-between gap-4 border-b border-[var(--color-divider)] p-5 sm:p-6">
         <div>
-          <h2 className="text-xl font-bold text-[var(--color-text-primary)]" id={titleId}>
+          <h2
+            className="mj-font-emphasis text-xl text-[var(--color-text-primary)]"
+            id={titleId}
+          >
             {title}
           </h2>
           {description ? (
