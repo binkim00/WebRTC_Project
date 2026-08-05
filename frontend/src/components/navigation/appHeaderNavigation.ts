@@ -32,6 +32,16 @@ const managerNavigation = [
   { labelKey: 'nav.manager.mypage', to: '/manager/mypage' },
 ] as const satisfies readonly AppHeaderNavigationItem[]
 
+/**
+ * 서비스 운영자(ADMIN) 메뉴다.
+ *
+ * 팬미팅을 만들거나 진행하지 않으므로 운영 화면을 넣지 않고, 서비스 단위 업무인
+ * 전체 공지 관리만 둔다. 알림은 팬미팅 진행 알림이라 운영자에게 의미가 없어 제외한다.
+ */
+const adminNavigation = [
+  { labelKey: 'nav.admin.serviceNotices', to: '/admin/service-notices' },
+] as const satisfies readonly AppHeaderNavigationItem[]
+
 /** 역할별 전역 네비게이션의 단일 출처다. 화면에서는 별도 배열을 만들지 않는다. */
 export const APP_HEADER_NAVIGATION: Readonly<
   Record<LoginRole, readonly AppHeaderNavigationItem[]>
@@ -40,6 +50,7 @@ export const APP_HEADER_NAVIGATION: Readonly<
   INFLUENCER: influencerNavigation,
   SOLO_INFLUENCER: influencerNavigation,
   MANAGER: managerNavigation,
+  ADMIN: adminNavigation,
 }
 
 export function getAppHeaderNavigation(role: LoginRole): readonly AppHeaderNavigationItem[] {

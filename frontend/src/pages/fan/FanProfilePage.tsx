@@ -9,6 +9,7 @@ import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
+import { PREFERRED_LANGUAGE_OPTIONS, preferredLanguageLabel } from '../../api/auth'
 import { getAuthSession } from '../../api/authSession'
 import { getEmailVerificationStatus } from '../../api/emailVerifications'
 import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
@@ -25,34 +26,37 @@ import {
   TextField,
   WithdrawAccountSection,
 } from '../../components'
+import { useTranslation, type TranslationKey } from '../../i18n'
 
-// 백엔드 PreferredLanguage Enum(KOREAN, ENGLISH)과 동일한 값만 사용한다.
-const preferredLanguageOptions = [
-  { label: '한국어', value: 'KOREAN' },
-  { label: 'English', value: 'ENGLISH' },
-]
 
-const preferredLanguageLabels: Record<string, string> = {
-  KOREAN: '한국어',
-  ENGLISH: 'English',
-}
-
+/**
+ * 마이페이지 활동 바로가기다.
+ *
+ * 문장 대신 **사전 키**를 들고 있다. 이 배열은 모듈 로드 시 한 번만 만들어지므로 여기서 번역하면
+ * 처음 언어로 굳는다. 렌더 시점에 `t(item.titleKey)`로 옮긴다.
+ */
 const activityItems = [
   {
-    title: '응모한 이벤트',
-    description: '내가 응모한 이벤트를 확인해 보세요.',
+    titleKey: 'fanProfilePage.activity.applications',
+    descriptionKey: 'fanProfilePage.activity.applicationsDesc',
     to: '/fan/mypage/applications',
     icon: Ticket,
   },
   {
-    title: '팬미팅',
-    description: '신청한 팬미팅 목록으로 이동합니다.',
+    titleKey: 'fanProfilePage.activity.fanMeetings',
+    descriptionKey: 'fanProfilePage.activity.fanMeetingsDesc',
     to: '/fan/mypage/fan-meetings?status=upcoming',
     icon: VideoCamera,
   },
-] as const
+] as const satisfies readonly {
+  titleKey: TranslationKey
+  descriptionKey: TranslationKey
+  to: string
+  icon: unknown
+}[]
 
 export function FanProfilePage() {
+  const { t } = useTranslation()
   const [profile, setProfile] = useState<UserProfile>()
   const [loadError, setLoadError] = useState<string>()
   const [isEditing, setIsEditing] = useState(false)
@@ -65,7 +69,7 @@ export function FanProfilePage() {
     const session = getAuthSession()
 
     if (!session) {
-      setLoadError('프로필을 확인하려면 먼저 로그인해 주세요.')
+      setLoadError(t('fanProfilePage.t22'))
       return () => controller.abort()
     }
 
@@ -79,11 +83,13 @@ export function FanProfilePage() {
         setLoadError(
           reason instanceof ApiError || reason instanceof TypeError
             ? reason.message
-            : '프로필 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+            : t('fanProfilePage.t23'),
         )
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // /users/me가 emailVerified를 내려주지 않는 백엔드에서도 인증 안내를 띄울 수 있도록
@@ -116,7 +122,7 @@ export function FanProfilePage() {
 
     const session = getAuthSession()
     if (!session) {
-      setSaveError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+      setSaveError(t('fanProfilePage.t24'))
       return
     }
 
@@ -125,7 +131,7 @@ export function FanProfilePage() {
     const preferredLanguage = String(formData.get('preferredLanguage') ?? 'KOREAN')
 
     if (!nickname) {
-      setSaveError('닉네임을 입력해 주세요.')
+      setSaveError(t('fanProfilePage.t25'))
       return
     }
 
@@ -150,12 +156,12 @@ export function FanProfilePage() {
           : current,
       )
       setIsEditing(false)
-      setSaveNotice('회원정보가 수정되었습니다.')
+      setSaveNotice(t('fanProfilePage.t26'))
     } catch (reason) {
       setSaveError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '회원정보 수정에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('fanProfilePage.t27'),
       )
     } finally {
       setIsSaving(false)
@@ -167,20 +173,20 @@ export function FanProfilePage() {
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-7">
       <header>
-        <h1 className="text-4xl font-black tracking-[-0.045em]">마이페이지</h1>
+        <h1 className="text-4xl font-black tracking-[-0.045em]">{t('fanProfilePage.t1')}</h1>
         <p className="mt-3 text-[var(--color-text-secondary)]">
-          내 정보와 참여 내역을 관리하세요.
+          {t('fanProfilePage.t2')}
         </p>
       </header>
 
       {loadError ? (
-        <AlertBanner title="프로필을 확인할 수 없습니다" variant="error">
+        <AlertBanner title={t('fanProfilePage.t3')} variant="error">
           {loadError}
         </AlertBanner>
       ) : null}
       {/* 회원정보 수정과 이메일 인증 완료가 같은 배너를 쓰므로 제목은 중립적으로 둔다. */}
       {saveNotice ? (
-        <AlertBanner title="처리 완료" variant="success">
+        <AlertBanner title={t('fanProfilePage.t4')} variant="success">
           {saveNotice}
         </AlertBanner>
       ) : null}
@@ -195,7 +201,7 @@ export function FanProfilePage() {
                 setProfile((current) =>
                   current ? { ...current, emailVerified: true } : current,
                 )
-                setSaveNotice('이메일 인증이 완료되었어요. 이제 팬미팅 응모에 참여할 수 있습니다.')
+                setSaveNotice(t('fanProfilePage.t28'))
               }}
             />
           </CardContent>
@@ -204,7 +210,7 @@ export function FanProfilePage() {
 
       {isLoading ? (
         <div className="flex justify-center py-16">
-          <Spinner label="프로필을 불러오는 중" />
+          <Spinner label={t('fanProfilePage.t5')} />
         </div>
       ) : profile ? (
         <Card>
@@ -213,7 +219,7 @@ export function FanProfilePage() {
               {/* 등록된 프로필 이미지가 없으면 닉네임 기반 아바타를 표시한다 */}
               {profile.profileImageUrl ? (
                 <img
-                  alt={`${profile.nickname} 프로필`}
+                  alt={t('fanProfilePage.t29', { p0: profile.nickname })}
                   className="size-24 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
                   src={profile.profileImageUrl}
                 />
@@ -227,31 +233,31 @@ export function FanProfilePage() {
 
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
-                  프로필
+                  {t('fanProfilePage.t6')}
                 </p>
 
                 {isEditing ? (
                   <form className="mt-3 grid max-w-md gap-4" onSubmit={(event) => void handleSave(event)}>
                     <TextField
                       defaultValue={profile.nickname}
-                      label="닉네임"
+                      label={t('fanProfilePage.t7')}
                       name="nickname"
                       required
                     />
                     <Select
                       defaultValue={profile.preferredLanguage}
-                      label="선호 언어"
+                      label={t('fanProfilePage.t8')}
                       name="preferredLanguage"
-                      options={preferredLanguageOptions}
+                      options={PREFERRED_LANGUAGE_OPTIONS}
                     />
                     {saveError ? (
-                      <AlertBanner title="수정 실패" variant="error">
+                      <AlertBanner title={t('fanProfilePage.t9')} variant="error">
                         {saveError}
                       </AlertBanner>
                     ) : null}
                     <div className="flex gap-3">
                       <Button loading={isSaving} size="sm" type="submit">
-                        저장
+                        {t('fanProfilePage.t10')}
                       </Button>
                       <Button
                         disabled={isSaving}
@@ -263,7 +269,7 @@ export function FanProfilePage() {
                         type="button"
                         variant="secondary"
                       >
-                        취소
+                        {t('fanProfilePage.t11')}
                       </Button>
                     </div>
                   </form>
@@ -275,28 +281,27 @@ export function FanProfilePage() {
                     <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
                       <div className="flex gap-3">
                         <dt className="font-semibold text-[var(--color-text-tertiary)]">
-                          아이디
+                          {t('fanProfilePage.t12')}
                         </dt>
                         <dd className="font-bold">{profile.loginId}</dd>
                       </div>
                       <div className="flex min-w-0 gap-3">
                         <dt className="font-semibold text-[var(--color-text-tertiary)]">
-                          이메일
+                          {t('fanProfilePage.t13')}
                         </dt>
                         <dd className="truncate font-bold">{profile.email}</dd>
                       </div>
                       <div className="flex gap-3">
                         <dt className="font-semibold text-[var(--color-text-tertiary)]">
-                          선호 언어
+                          {t('fanProfilePage.t14')}
                         </dt>
                         <dd className="font-bold">
-                          {preferredLanguageLabels[profile.preferredLanguage] ??
-                            profile.preferredLanguage}
+                          {preferredLanguageLabel(profile.preferredLanguage)}
                         </dd>
                       </div>
                       <div className="flex gap-3">
                         <dt className="font-semibold text-[var(--color-text-tertiary)]">
-                          회원번호
+                          {t('fanProfilePage.t15')}
                         </dt>
                         <dd className="font-bold">{profile.userId}</dd>
                       </div>
@@ -316,17 +321,17 @@ export function FanProfilePage() {
                   }}
                   size="sm"
                 >
-                  회원정보 수정
+                  {t('fanProfilePage.t16')}
                 </Button>
                 {/* TODO: 비밀번호 변경 API가 아직 백엔드에 없어 비활성화 상태로 둡니다. */}
                 <Button
                   disabled
                   leadingIcon={<Key aria-hidden size={17} weight="bold" />}
                   size="sm"
-                  title="비밀번호 변경 기능은 준비 중입니다."
+                  title={t('fanProfilePage.t17')}
                   variant="secondary"
                 >
-                  비밀번호 변경
+                  {t('fanProfilePage.t18')}
                 </Button>
               </div>
             ) : null}
@@ -336,9 +341,9 @@ export function FanProfilePage() {
 
       <Card>
         <CardContent>
-          <h2 className="text-2xl font-black tracking-[-0.035em]">내 활동</h2>
+          <h2 className="text-2xl font-black tracking-[-0.035em]">{t('fanProfilePage.t19')}</h2>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            참여한 이벤트와 팬미팅을 확인할 수 있어요.
+            {t('fanProfilePage.t20')}
           </p>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -355,9 +360,9 @@ export function FanProfilePage() {
                     <Icon aria-hidden size={28} weight="duotone" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <strong className="block text-lg">{item.title}</strong>
+                    <strong className="block text-lg">{t(item.titleKey)}</strong>
                     <span className="mt-1 block text-sm text-[var(--color-text-secondary)]">
-                      {item.description}
+                      {t(item.descriptionKey)}
                     </span>
                   </span>
                   <ArrowRight
@@ -373,7 +378,7 @@ export function FanProfilePage() {
         </CardContent>
       </Card>
 
-      <WithdrawAccountSection description="탈퇴하면 응모 내역과 팬미팅 참여 기록을 다시 볼 수 없습니다." />
+      <WithdrawAccountSection description={t('fanProfilePage.t21')} />
     </div>
   )
 }

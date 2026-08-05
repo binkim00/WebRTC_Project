@@ -1,6 +1,7 @@
 import { CaretRight } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from '../../i18n'
 
 export type BreadcrumbItem = {
   label: ReactNode
@@ -13,8 +14,9 @@ export type BreadcrumbsProps = {
 }
 
 export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
+  const { t } = useTranslation()
   return (
-    <nav aria-label="현재 위치" className={className}>
+    <nav aria-label={t('breadcrumbs.t1')} className={className}>
       <ol className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-secondary)]">
         {items.map((item, index) => {
           const isCurrent = index === items.length - 1

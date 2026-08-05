@@ -7,6 +7,7 @@ import {
   replaceAuthSession,
   type LoginResponse,
 } from './authSession'
+import { translate } from '../i18n'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 export const DEFAULT_API_TIMEOUT_MS = 15_000
@@ -63,7 +64,7 @@ function requestAbortContext(
 function normalizedTimeout(timeoutMs: number | undefined): number {
   if (timeoutMs === undefined) return DEFAULT_API_TIMEOUT_MS
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
-    throw new TypeError('API timeoutMs는 0 이상의 유한한 숫자여야 합니다.')
+    throw new TypeError(translate('client.t1'))
   }
   return timeoutMs
 }
@@ -79,7 +80,7 @@ async function fetchWithTimeout(
     return await fetch(input, { ...init, signal: abortContext.signal })
   } catch (error) {
     if (abortContext.didTimeout()) {
-      throw new ApiError(0, 'REQUEST_TIMEOUT', '서버 응답 시간이 초과되었습니다. 다시 시도해 주세요.')
+      throw new ApiError(0, 'REQUEST_TIMEOUT', translate('client.t2'))
     }
     throw error
   } finally {
@@ -214,7 +215,7 @@ async function requestWithRefresh<T>(
     throw new ApiError(
       response.status,
       error.code ?? `HTTP_${response.status}`,
-      error.detail ?? error.message ?? 'API 요청에 실패했습니다.',
+      error.detail ?? error.message ?? translate('client.t3'),
       error.detail,
     )
   }

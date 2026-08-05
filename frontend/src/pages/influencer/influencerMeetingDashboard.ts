@@ -1,5 +1,6 @@
 import type { LoginRole } from '../../api/authSession'
 import type { ManagerMeetingSummary } from '../../api/managerMeetings'
+import { translate } from '../../i18n'
 
 export type InfluencerDashboardRole = Extract<
   LoginRole,
@@ -50,7 +51,7 @@ export function getDashboardMeetingAction(
     // 진행 중에는 현재 팬을 확인하고 입장하는 대기실로 보낸다.
     return {
       kind: 'navigate',
-      label: role === 'SOLO_INFLUENCER' ? '팬미팅 대기실 입장' : '팬미팅 입장',
+      label: role === 'SOLO_INFLUENCER' ? translate('influencerMeetingDashboard.t1') : translate('influencerMeetingDashboard.t2'),
       to: `/influencer/fan-meetings/${id}/ready`,
     }
   }
@@ -59,13 +60,13 @@ export function getDashboardMeetingAction(
     if (role === 'SOLO_INFLUENCER') {
       return {
         kind: 'navigate',
-        label: '상세 보기',
+        label: translate('influencerMeetingDashboard.t3'),
         to: `/manager/fan-meetings/${id}`,
       }
     }
     return {
       kind: 'navigate',
-      label: '장비 점검',
+      label: translate('influencerMeetingDashboard.t4'),
       to: `/influencer/fan-meetings/${id}/device-check`,
     }
   }
@@ -73,45 +74,45 @@ export function getDashboardMeetingAction(
   if (role === 'INFLUENCER') {
     return {
       kind: 'disabled',
-      label: '진행 준비 중',
-      reason: '매니저가 팬미팅 진행 상태를 준비하고 있습니다.',
+      label: translate('influencerMeetingDashboard.t5'),
+      reason: translate('influencerMeetingDashboard.t6'),
     }
   }
 
   if (meeting.status === 'DRAFT') {
     return {
       kind: 'navigate',
-      label: '이어서 작성',
+      label: translate('influencerMeetingDashboard.t7'),
       to: `/manager/fan-meetings/${id}?tab=settings`,
     }
   }
   if (meeting.status === 'PUBLISHED') {
     return {
       kind: 'navigate',
-      label: '홍보 보기',
+      label: translate('influencerMeetingDashboard.t8'),
       to: `/fan/events/${id}`,
     }
   }
   if (meeting.status === 'APPLICATION_OPEN') {
     return {
       kind: 'navigate',
-      label: '상세 보기',
+      label: translate('influencerMeetingDashboard.t9'),
       to: `/manager/fan-meetings/${id}`,
     }
   }
   if (meeting.status === 'APPLICATION_CLOSED') {
     return meeting.participantCount > 0
-      ? { kind: 'publish-results', label: '결과 발표' }
+      ? { kind: 'publish-results', label: translate('influencerMeetingDashboard.t10') }
       : {
           kind: 'navigate',
-          label: '추첨 진행',
+          label: translate('influencerMeetingDashboard.t11'),
           to: `/manager/fan-meetings/${id}`,
         }
   }
 
   return {
     kind: 'disabled',
-    label: '상태 확인 필요',
-    reason: '현재 상태에서 진행할 수 있는 작업이 없습니다.',
+    label: translate('influencerMeetingDashboard.t12'),
+    reason: translate('influencerMeetingDashboard.t13'),
   }
 }

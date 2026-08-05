@@ -1,5 +1,7 @@
+import { ApiError } from './ApiError'
 import { apiRequest } from './client'
 import { unwrapEnvelope } from './envelope'
+import { translate, type TranslationKey } from '../i18n'
 
 export type FanMeetingStatus =
   | 'DRAFT'
@@ -64,6 +66,10 @@ export type ImmediateFanMeetingStatus =
 export type ImmediateTransitionContext = {
   applicationStartAt?: string | null
   applicationEndAt?: string | null
+  /** 결과 발표 일시다. 응모 기간을 옮길 때 검증 순서(마감 ≤ 발표 < 시작)를 맞추는 데 쓴다. */
+  applicationResultAnnouncementAt?: string | null
+  /** 팬미팅 예정 시작 일시다. 응모 마감·결과 발표는 이보다 앞서야 한다. */
+  scheduledStartAt?: string | null
   /** 테스트에서 전환 시각을 고정할 때 사용한다. */
   now?: Date
 }
@@ -77,10 +83,21 @@ export type ImmediateTransitionContext = {
 const IMMEDIATE_TRANSITIONS: Partial<
   Record<FanMeetingStatus, readonly ImmediateFanMeetingStatus[]>
 > = {
-  PUBLISHED: ['APPLICATION_OPEN'],
+  // PUBLISHED에서 APPLICATION_CLOSED를 허용하는 이유: 응모가 한 번 열리면 백엔드가 응모 일정을
+  // 완전히 잠그므로(아래 transitionFanMeetingImmediately 주석 참고) 마감을 앞당길 수 있는 시점은
+  // 열리기 전뿐이다. 이때는 응모 기간을 아주 짧게 접어 곧바로 마감되게 만든다.
+  PUBLISHED: ['APPLICATION_OPEN', 'APPLICATION_CLOSED'],
   APPLICATION_OPEN: ['APPLICATION_CLOSED'],
   READY: ['LIVE'],
 }
+
+/**
+ * 응모를 열고 곧바로 마감되도록 잡아 줄 기간이다.
+ *
+ * 백엔드는 응모 시작 < 마감을 요구하므로 0으로 둘 수 없고, 응모 시작 상태 전환을 담당하는
+ * 스케줄러가 기본 60초 주기로 도므로 그보다 짧게 잡으면 열리기 전에 마감 시각이 지나 버린다.
+ */
+const MINIMAL_APPLICATION_WINDOW_MS = 90_000
 
 export type FanMeetingApplicationSetting = {
   enabled: boolean
@@ -212,6 +229,45 @@ export function isWaitingRoomOpen(queueOpenAt?: string | null, now = Date.now())
   return Number.isFinite(openAt) && now >= openAt
 }
 
+/**
+ * `/test-control`이 이 서버에 없어서 실패한 요청인지 확인한다.
+ *
+ * 백엔드는 `app.test-control.enabled`가 켜져 있고 prod 프로필이 아닐 때만 그 컨트롤러를 등록한다.
+ * 배포 환경에서는 경로 자체가 없으므로 404가 돌아온다. 401·403(권한)이나 409(상태 충돌)와는
+ * 원인이 다르므로 구분해서 안내해야 한다.
+ */
+function isTestControlUnavailable(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.status === 404
+}
+
+/** 취소 신호로 끊긴 요청인지 확인한다. 이 경우에는 대체 경로를 시도하지 않고 그대로 올린다. */
+function isAborted(cause: unknown): boolean {
+  return cause instanceof DOMException && cause.name === 'AbortError'
+}
+
+/**
+ * 정식 API로 처리할 수 없는 일정 우회를 `/test-control`로 시도한다.
+ *
+ * 그 경로가 없는 환경(배포)에서는 무엇이 왜 막혔는지 알려 주는 오류로 바꿔 던진다. 이전에는
+ * 404가 그대로 올라와 "요청을 처리하지 못했습니다"라는 일반 문구만 보였다.
+ */
+async function controlForTestOrExplain(
+  meetingId: string | number,
+  request: FanMeetingTestControlRequest,
+  authToken: string,
+  signal: AbortSignal | undefined,
+  unavailableMessageKey: TranslationKey,
+): Promise<FanMeetingManagementResponse> {
+  try {
+    return await controlFanMeetingForTest(meetingId, request, authToken, signal)
+  } catch (cause) {
+    if (isTestControlUnavailable(cause)) {
+      throw new TypeError(translate(unavailableMessageKey))
+    }
+    throw cause
+  }
+}
+
 export async function transitionFanMeetingImmediately(
   meetingId: string | number,
   currentStatus: FanMeetingStatus,
@@ -223,7 +279,7 @@ export async function transitionFanMeetingImmediately(
   const allowedTargets = IMMEDIATE_TRANSITIONS[currentStatus]
   if (!allowedTargets?.includes(targetStatus)) {
     throw new TypeError(
-      `${currentStatus} 상태에서 ${targetStatus} 상태로 즉시 전환할 수 없습니다.`,
+      translate('meetingManagement.t1', { p0: currentStatus, p1: targetStatus }),
     )
   }
 
@@ -231,65 +287,210 @@ export async function transitionFanMeetingImmediately(
   const nowValue = toServerLocalDateTime(now)
 
   if (targetStatus === 'APPLICATION_OPEN') {
-    const originalStart = serverLocalDateTimeMs(context.applicationStartAt)
-    const originalEnd = serverLocalDateTimeMs(context.applicationEndAt)
-    const originalDuration = originalEnd - originalStart
-    const closeAt = Number.isFinite(originalEnd) && originalEnd > now.getTime()
-      ? undefined
-      : toServerLocalDateTime(
-          new Date(
-            now.getTime() +
-              (Number.isFinite(originalDuration) && originalDuration > 0
-                ? originalDuration
-                : 24 * 60 * 60_000),
-          ),
-        )
+    // 정식 경로: 아직 PUBLISHED이고 응모 시작 전이므로 PATCH로 응모 시작 일시를 현재로 당길 수 있다.
+    // 상태 전환 자체는 백엔드 MeetingApplicationOpeningScheduler가 주기적으로 처리한다.
+    const patch = applicationOpenNowPatch(now, context)
+    if (patch) {
+      try {
+        return await patchFanMeeting(meetingId, patch, authToken, signal)
+      } catch (cause) {
+        if (isAborted(cause)) throw cause
+        // 일정이 이미 과거로 밀려 검증을 통과할 수 없는 경우가 있어 테스트 경로로 한 번 더 시도한다.
+      }
+    }
 
-    // 응모 서비스가 상태와 기간을 모두 검사하므로 시작 시각도 현재로 옮긴다.
-    return controlFanMeetingForTest(
+    return controlForTestOrExplain(
       meetingId,
-      {
-        status: targetStatus,
-        applicationOpenAt: nowValue,
-        ...(closeAt ? { applicationCloseAt: closeAt } : {}),
-      },
+      { status: targetStatus, applicationOpenAt: nowValue },
       authToken,
       signal,
+      'meetingManagement.t4',
     )
   }
 
   if (targetStatus === 'APPLICATION_CLOSED') {
-    // 실제 마감 기록과 상태가 어긋나지 않도록 예약 마감 시각도 현재로 맞춘다.
-    return controlFanMeetingForTest(
+    /*
+     * 백엔드에는 "응모 마감" 명령이 없다. 상태 전환은 추첨(ApplicationDrawService)이 하고,
+     * 그 추첨은 `now >= applicationCloseAt`일 때만 허용된다. 그런데 응모가 한 번 열리면
+     * `hasApplicationStarted`가 참이 되어 응모 일정 PATCH가 전부 409로 막힌다.
+     * 즉 **열린 뒤에는 마감을 앞당길 방법이 없다.**
+     *
+     * 그래서 아직 열리지 않은 PUBLISHED 상태에서는 응모 기간을 최소로 접어, 곧 열렸다가
+     * 바로 마감되게 만든다. 이렇게 하면 잠시 뒤 추첨 → 결과 발표 → 시작으로 이어갈 수 있다.
+     */
+    if (currentStatus === 'PUBLISHED') {
+      const patch = collapseApplicationWindowPatch(now, context)
+      if (!patch) throw new TypeError(translate('meetingManagement.t8'))
+      return patchFanMeeting(meetingId, patch, authToken, signal)
+    }
+
+    return controlForTestOrExplain(
       meetingId,
       { status: targetStatus, applicationCloseAt: nowValue },
       authToken,
       signal,
+      'meetingManagement.t5',
     )
   }
 
+  // 정식 경로: earlyStartMinutes는 응모가 열린 뒤에도 수정할 수 있는 몇 안 되는 운영 설정이다.
+  // 조기 시작 허용 폭을 예정 시각까지 넓히면 POST /start가 그대로 통과한다.
+  const earlyStartMinutes = minutesUntil(now, context.scheduledStartAt)
+  if (earlyStartMinutes !== undefined) {
+    try {
+      await patchFanMeeting(
+        meetingId,
+        { operation: { earlyStartMinutes } },
+        authToken,
+        signal,
+      )
+      return await startFanMeetingWithOpenWaitingRoom(meetingId, authToken, signal)
+    } catch (cause) {
+      if (isAborted(cause)) throw cause
+      // 예정 시각·대기열 오픈 시각이 검증을 통과하지 못하는 조합이면 테스트 경로로 넘어간다.
+    }
+  }
+
   // LIVE 강제 지정은 actualStartAt을 기록하지 않으므로 시작 시각을 현재로 옮긴 뒤 정식 start 명령을 호출한다.
-  await controlFanMeetingForTest(
+  await controlForTestOrExplain(
     meetingId,
     // 즉시 시작 시 대기열 오픈도 현재 시각으로 맞춰야 참가자가 바로 입장할 수 있다.
     { scheduledStartAt: nowValue, waitingRoomOpenAt: nowValue },
     authToken,
     signal,
+    'meetingManagement.t6',
   )
   return startFanMeeting(meetingId, authToken, signal)
 }
 
-/** 팬미팅 시작 전에도 참가자가 대기실에서 장비를 점검할 수 있도록 대기열을 즉시 연다. */
-export function openWaitingRoomImmediately(
+/**
+ * 응모를 지금 열기 위한 PATCH 본문을 만든다. 검증을 통과할 수 없으면 undefined다.
+ *
+ * 백엔드 `validateSchedule`이 요구하는 순서는 **응모 시작 < 응모 마감 ≤ 결과 발표 < 팬미팅 시작**이다.
+ * 마감·발표 시각이 이미 지났으면 현재 이후로 밀어야 하는데, 팬미팅 시작 시각까지 지난 상태라면
+ * 어떤 값을 넣어도 통과할 수 없으므로 아예 시도하지 않는다.
+ */
+function applicationOpenNowPatch(
+  now: Date,
+  context: ImmediateTransitionContext,
+): FanMeetingUpdateRequest | undefined {
+  const nowMs = now.getTime()
+  const scheduledStartMs = serverLocalDateTimeMs(context.scheduledStartAt)
+  if (!Number.isFinite(scheduledStartMs) || scheduledStartMs <= nowMs) return undefined
+
+  const originalStartMs = serverLocalDateTimeMs(context.applicationStartAt)
+  const originalEndMs = serverLocalDateTimeMs(context.applicationEndAt)
+  const originalDurationMs = originalEndMs - originalStartMs
+
+  // 원래 응모 기간을 유지하되, 팬미팅 시작 1분 전까지로 잘라 검증 순서를 지킨다.
+  const latestEndMs = scheduledStartMs - 60_000
+  const desiredEndMs =
+    Number.isFinite(originalEndMs) && originalEndMs > nowMs
+      ? originalEndMs
+      : nowMs +
+        (Number.isFinite(originalDurationMs) && originalDurationMs > 0
+          ? originalDurationMs
+          : 24 * 60 * 60_000)
+  const endMs = Math.min(desiredEndMs, latestEndMs)
+  if (endMs <= nowMs) return undefined
+
+  const application: ApplicationSettingPatch = {
+    startAt: toServerLocalDateTime(now),
+    endAt: toServerLocalDateTime(new Date(endMs)),
+  }
+
+  // 결과 발표는 마감 이후이면서 팬미팅 시작 전이어야 한다. 기존 값이 그 범위를 벗어나면 함께 옮긴다.
+  const announcementMs = serverLocalDateTimeMs(context.applicationResultAnnouncementAt)
+  if (Number.isFinite(announcementMs)) {
+    if (announcementMs < endMs || announcementMs >= scheduledStartMs) {
+      const adjusted = Math.min(endMs + 60_000, scheduledStartMs - 1_000)
+      if (adjusted < endMs) return undefined
+      application.resultAnnouncementAt = toServerLocalDateTime(new Date(adjusted))
+    }
+  }
+
+  return { application }
+}
+
+/**
+ * 응모 기간을 "지금 열리고 곧 마감"으로 접는 PATCH 본문을 만든다.
+ *
+ * 백엔드 `validateSchedule`이 요구하는 순서(응모 시작 < 마감 ≤ 결과 발표 < 팬미팅 시작)를 모두
+ * 만족해야 하므로, 팬미팅 시작 시각까지 남은 시간이 최소 기간보다 짧으면 만들 수 없다.
+ */
+function collapseApplicationWindowPatch(
+  now: Date,
+  context: ImmediateTransitionContext,
+): FanMeetingUpdateRequest | undefined {
+  const nowMs = now.getTime()
+  const scheduledStartMs = serverLocalDateTimeMs(context.scheduledStartAt)
+  if (!Number.isFinite(scheduledStartMs)) return undefined
+
+  const endMs = nowMs + MINIMAL_APPLICATION_WINDOW_MS
+  // 결과 발표까지 팬미팅 시작 전에 끼워 넣어야 하므로 여유를 한 칸 더 본다.
+  if (endMs + 60_000 >= scheduledStartMs) return undefined
+
+  const application: ApplicationSettingPatch = {
+    startAt: toServerLocalDateTime(now),
+    endAt: toServerLocalDateTime(new Date(endMs)),
+  }
+
+  // 결과 발표 시각은 마감 이후이면서 팬미팅 시작 전이어야 한다. 범위를 벗어나면 함께 옮긴다.
+  const announcementMs = serverLocalDateTimeMs(context.applicationResultAnnouncementAt)
+  if (
+    Number.isFinite(announcementMs) &&
+    (announcementMs < endMs || announcementMs >= scheduledStartMs)
+  ) {
+    application.resultAnnouncementAt = toServerLocalDateTime(new Date(endMs + 30_000))
+  }
+
+  return { application }
+}
+
+/**
+ * 지금부터 예정 시작 시각까지 남은 분을 올림해 돌려준다.
+ *
+ * 조기 시작 허용 폭(`earlyStartMinutes`)으로 쓰이며, 백엔드는 `now >= 예정시각 - 허용폭`일 때
+ * 시작을 허용한다. 경계에서 밀리지 않도록 1분을 더한다. 예정 시각을 알 수 없으면 undefined다.
+ */
+function minutesUntil(now: Date, scheduledStartAt?: string | null): number | undefined {
+  const scheduledStartMs = serverLocalDateTimeMs(scheduledStartAt)
+  if (!Number.isFinite(scheduledStartMs)) return undefined
+  const diffMs = scheduledStartMs - now.getTime()
+  if (diffMs <= 0) return 0
+  return Math.ceil(diffMs / 60_000) + 1
+}
+
+/**
+ * 팬미팅 시작 전에도 참가자가 대기실에서 장비를 점검할 수 있도록 대기열을 즉시 연다.
+ *
+ * 정식 경로(PATCH)는 응모가 시작되기 전에만 열려 있다. 그 뒤에는 백엔드가 `queueOpenAt` 변경을
+ * 거부하므로 `/test-control`로 넘어간다.
+ */
+export async function openWaitingRoomImmediately(
   meetingId: string | number,
   authToken: string,
   signal?: AbortSignal,
 ): Promise<FanMeetingManagementResponse> {
-  return controlFanMeetingForTest(
+  const nowValue = toServerLocalDateTime(new Date())
+
+  try {
+    return await patchFanMeeting(
+      meetingId,
+      { operation: { queueOpenAt: nowValue } },
+      authToken,
+      signal,
+    )
+  } catch (cause) {
+    if (isAborted(cause)) throw cause
+  }
+
+  return controlForTestOrExplain(
     meetingId,
-    { waitingRoomOpenAt: toServerLocalDateTime(new Date()) },
+    { waitingRoomOpenAt: nowValue },
     authToken,
     signal,
+    'meetingManagement.t7',
   )
 }
 
@@ -409,8 +610,8 @@ export async function downloadFanMeetingStatisticsCsv(
   if (!response.ok) {
     throw new Error(
       response.status === 403
-        ? '이 팬미팅의 결과를 내보낼 권한이 없습니다.'
-        : `결과 파일을 내려받지 못했습니다. (HTTP ${response.status})`,
+        ? translate('meetingManagement.t2')
+        : translate('meetingManagement.t3', { p0: response.status }),
     )
   }
 

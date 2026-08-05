@@ -6,6 +6,7 @@ import {
   replaceAuthSession,
   type LoginRole,
 } from '../../api/authSession'
+import { PREFERRED_LANGUAGE_OPTIONS, preferredLanguageLabel } from '../../api/auth'
 import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
 import {
   AlertBanner,
@@ -17,6 +18,7 @@ import {
   TextField,
   WithdrawAccountSection,
 } from '../../components'
+import { translate, useTranslation } from '../../i18n'
 
 type MenuItem = {
   title: string
@@ -34,100 +36,95 @@ type RoleContent = {
   withdrawDescription: string
 }
 
-/** 백엔드 PreferredLanguage enum과 같은 값만 쓴다. */
-const languageOptions = [
-  { label: '한국어', value: 'KOREAN' },
-  { label: 'English', value: 'ENGLISH' },
-] as const
 
 /** 역할별 정적 문구·메뉴다. dc.html의 ROLES 객체와 값이 같다. */
 function roleContentOf(role: LoginRole): RoleContent {
   if (role === 'FAN') {
     return {
-      pageDescription: '내 정보와 참여 내역을 관리하세요.',
-      profileLabel: '프로필',
-      menuTitle: '내 활동',
-      menuDescription: '참여한 이벤트와 팬미팅을 확인할 수 있어요.',
+      pageDescription: translate('myPage.t26'),
+      profileLabel: translate('myPage.t27'),
+      menuTitle: translate('myPage.t28'),
+      menuDescription: translate('myPage.t29'),
       menus: [
         {
-          title: '응모한 이벤트',
-          description: '내가 응모한 이벤트를 확인해 보세요.',
+          title: translate('myPage.t30'),
+          description: translate('myPage.t31'),
           to: '/fan/mypage/applications',
         },
         {
-          title: '팬미팅',
-          description: '신청한 팬미팅 목록으로 이동합니다.',
+          title: translate('myPage.t32'),
+          description: translate('myPage.t33'),
           // 이 목록 화면은 status 쿼리(upcoming/completed)가 없으면 목록 대신 오류 화면을 보여준다.
           to: '/fan/mypage/fan-meetings?status=upcoming',
         },
       ],
-      withdrawDescription: '탈퇴하면 응모 내역과 참여 기록을 다시 볼 수 없습니다.',
+      withdrawDescription: translate('myPage.t34'),
     }
   }
 
   if (role === 'SOLO_INFLUENCER') {
     return {
-      pageDescription: '개인정보를 확인하고 팬미팅과 팬 기록을 관리하세요.',
-      profileLabel: '1인 인플루언서',
-      menuTitle: '내 활동',
-      menuDescription: '만든 팬미팅과 만난 팬을 확인할 수 있어요.',
+      pageDescription: translate('myPage.t35'),
+      profileLabel: translate('myPage.t36'),
+      menuTitle: translate('myPage.t37'),
+      menuDescription: translate('myPage.t38'),
       menus: [
         {
           // nav의 "내 팬미팅"(지금 진행할 것, /influencer/fan-meetings)과 같은 이름·다른 목적지로
           // 겹치지 않도록 "이력"을 붙이고, 실제로도 지난 기록을 보여주는 공용 이력 화면으로 보낸다.
-          title: '내 팬미팅 이력',
-          description: '만들기부터 진행까지 모든 팬미팅을 확인하세요.',
-          action: '이력 확인',
+          title: translate('myPage.t39'),
+          description: translate('myPage.t40'),
+          action: translate('myPage.t41'),
           to: '/influencer/mypage/fan-meetings',
         },
         {
-          title: '내 팬',
-          description: '지금까지 만난 팬과 팬미팅별 메모를 확인하세요.',
-          action: '이동',
+          title: translate('myPage.t42'),
+          description: translate('myPage.t43'),
+          action: translate('myPage.t44'),
           to: '/influencer/fans',
         },
       ],
-      withdrawDescription: '탈퇴하면 진행한 팬미팅 기록과 팬 메모를 다시 볼 수 없습니다.',
+      withdrawDescription: translate('myPage.t45'),
     }
   }
 
   if (role === 'MANAGER') {
     return {
-      pageDescription: '개인정보를 확인하고 팬미팅 관리 이력으로 이동하세요.',
-      profileLabel: '매니저',
-      menuTitle: '관리 이력',
+      pageDescription: translate('myPage.t46'),
+      profileLabel: translate('myPage.t47'),
+      menuTitle: translate('myPage.t48'),
       menus: [
         {
-          title: '팬미팅 관리 이력',
-          description: '담당하거나 관리했던 1:1 영상통화 팬미팅 목록을 확인하세요.',
-          action: '이력 확인',
+          title: translate('myPage.t49'),
+          description: translate('myPage.t50'),
+          action: translate('myPage.t51'),
           to: '/manager/fan-meetings',
         },
       ],
-      withdrawDescription: '탈퇴하면 조직 정보와 팬미팅 관리 기록을 다시 볼 수 없습니다.',
+      withdrawDescription: translate('myPage.t52'),
     }
   }
 
   // INFLUENCER (소속)
   return {
-    pageDescription: '개인정보를 확인하고 팬미팅 이력을 관리하세요.',
-    profileLabel: '인플루언서 프로필',
-    menuTitle: '팬미팅 이력',
+    pageDescription: translate('myPage.t53'),
+    profileLabel: translate('myPage.t54'),
+    menuTitle: translate('myPage.t55'),
     menus: [
       {
-        title: '내 팬미팅 이력',
-        description: '진행한 팬미팅과 상태를 확인하세요.',
-        action: '이력 확인',
+        title: translate('myPage.t56'),
+        description: translate('myPage.t57'),
+        action: translate('myPage.t58'),
         to: '/influencer/mypage/fan-meetings',
       },
       {
-        title: '내 팬',
-        description: '지금까지 만난 팬과 팬미팅별 메모를 확인하세요.',
-        action: '이동',
+        title: translate('myPage.t59'),
+        description: translate('myPage.t60'),
+        action: translate('myPage.t61'),
         to: '/influencer/fans',
       },
     ],
-    withdrawDescription: '탈퇴하면 진행한 팬미팅 기록과 팬 메모를 다시 볼 수 없습니다.',
+    withdrawDescription: translate('myPage.t62'),
   }
 }
 
@@ -144,6 +141,7 @@ function errorMessage(reason: unknown, fallback: string) {
  * 역할별로 새로 만들지 않고 이 컴포넌트 하나가 로그인 세션의 role을 읽어 분기한다.
  */
 export function MyPage() {
+  const { t } = useTranslation()
   // 소셜 연결 후 돌아올 경로로 쓴다. 역할마다 마이페이지 경로가 달라 현재 경로를 그대로 넘긴다.
   const location = useLocation()
   const authSession = getAuthSession()
@@ -164,7 +162,7 @@ export function MyPage() {
 
   useEffect(() => {
     if (!authToken) {
-      setLoadError('회원정보를 확인하려면 먼저 로그인해 주세요.')
+      setLoadError(t('myPage.t22'))
       setLoading(false)
       return
     }
@@ -179,7 +177,7 @@ export function MyPage() {
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setLoadError(errorMessage(reason, '회원정보를 불러오지 못했습니다.'))
+          setLoadError(errorMessage(reason, t('myPage.t23')))
         }
       })
       .finally(() => {
@@ -187,6 +185,8 @@ export function MyPage() {
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken])
 
   function openEdit() {
@@ -203,7 +203,7 @@ export function MyPage() {
 
     const nickname = nicknameInput.trim()
     if (!nickname) {
-      setSaveError('닉네임을 입력해 주세요.')
+      setSaveError(t('myPage.t24'))
       return
     }
 
@@ -229,7 +229,7 @@ export function MyPage() {
         setSaveDone(true)
       })
       .catch((reason: unknown) => {
-        setSaveError(errorMessage(reason, '회원정보 수정에 실패했습니다.'))
+        setSaveError(errorMessage(reason, t('myPage.t25')))
       })
       .finally(() => setSaving(false))
   }
@@ -238,25 +238,25 @@ export function MyPage() {
 
   return (
     <div>
-      <h1 className="text-[25px] font-black tracking-[-0.035em]">마이페이지</h1>
+      <h1 className="text-[25px] font-black tracking-[-0.035em]">{t('myPage.t1')}</h1>
       <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
         {content.pageDescription}
       </p>
 
       {loadError ? (
-        <AlertBanner className="mt-6" title="회원정보를 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('myPage.t2')} variant="error">
           {loadError}
         </AlertBanner>
       ) : null}
       {saveDone ? (
-        <AlertBanner className="mt-6" title="회원정보가 수정되었습니다" variant="success">
-          변경한 닉네임과 선호 언어가 저장되었습니다.
+        <AlertBanner className="mt-6" title={t('myPage.t3')} variant="success">
+          {t('myPage.t4')}
         </AlertBanner>
       ) : null}
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <Spinner label="회원정보를 불러오는 중" />
+          <Spinner label={t('myPage.t5')} />
         </div>
       ) : profile ? (
         <>
@@ -267,18 +267,18 @@ export function MyPage() {
             <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-6 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
               {hasPhoto ? (
                 <img
-                  alt={`${profile.nickname}님의 프로필`}
+                  alt={t('myPage.t63', { p0: profile.nickname })}
                   className="size-[104px] rounded-[10px] bg-[var(--color-surface-muted)] object-cover"
                   src={profile.profileImageUrl ?? undefined}
                 />
               ) : (
                 <div
-                  aria-label="프로필 사진이 없습니다"
+                  aria-label={t('myPage.t6')}
                   className="grid size-[104px] place-items-center rounded-[10px] bg-[var(--color-surface-page)]"
                   role="img"
                 >
                   <span className="text-[13px] font-semibold text-[var(--color-text-muted)]">
-                    사진 없음
+                    {t('myPage.t7')}
                   </span>
                 </div>
               )}
@@ -295,13 +295,13 @@ export function MyPage() {
                 <dl className="mt-3.5 flex flex-wrap gap-x-7 gap-y-2">
                   <div className="flex items-baseline gap-2.5">
                     <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      아이디
+                      {t('myPage.t8')}
                     </dt>
                     <dd className="text-[15px] font-bold">{profile.loginId}</dd>
                   </div>
                   <div className="flex min-w-0 items-baseline gap-2.5">
                     <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      이메일
+                      {t('myPage.t9')}
                     </dt>
                     <dd className="text-[15px] font-bold [overflow-wrap:anywhere]">
                       {profile.email}
@@ -309,16 +309,15 @@ export function MyPage() {
                   </div>
                   <div className="flex items-baseline gap-2.5">
                     <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      선호 언어
+                      {t('myPage.t10')}
                     </dt>
                     <dd className="text-[15px] font-bold">
-                      {languageOptions.find((option) => option.value === profile.preferredLanguage)
-                        ?.label ?? profile.preferredLanguage}
+                      {preferredLanguageLabel(profile.preferredLanguage)}
                     </dd>
                   </div>
                   <div className="flex items-baseline gap-2.5">
                     <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      회원번호
+                      {t('myPage.t11')}
                     </dt>
                     <dd className="text-[15px] font-bold tabular-nums">{profile.userId}</dd>
                   </div>
@@ -327,15 +326,15 @@ export function MyPage() {
 
               <div className="flex flex-col gap-2.5 max-lg:col-span-2 lg:self-center lg:border-l lg:border-[var(--color-divider)] lg:pl-8">
                 <Button className="min-h-[50px] text-base" onClick={openEdit}>
-                  회원정보 수정
+                  {t('myPage.t12')}
                 </Button>
                 <Button
                   className="min-h-[50px] text-base"
                   disabled
-                  title="비밀번호 변경 기능은 아직 지원되지 않습니다."
+                  title={t('myPage.t13')}
                   variant="secondary"
                 >
-                  비밀번호 변경 준비 중
+                  {t('myPage.t14')}
                 </Button>
               </div>
             </div>
@@ -400,37 +399,37 @@ export function MyPage() {
       ) : null}
 
       <Dialog
-        description="닉네임과 선호 언어를 변경할 수 있습니다."
+        description={t('myPage.t15')}
         footer={
           <>
             <Button disabled={saving} onClick={() => setEditOpen(false)} variant="secondary">
-              취소
+              {t('myPage.t16')}
             </Button>
             <Button form="mypage-edit-form" loading={saving} type="submit">
-              저장
+              {t('myPage.t17')}
             </Button>
           </>
         }
         onOpenChange={setEditOpen}
         open={editOpen}
-        title="회원정보 수정"
+        title={t('myPage.t18')}
       >
         <form className="grid gap-4" id="mypage-edit-form" onSubmit={handleSave}>
           <TextField
-            label="닉네임"
+            label={t('myPage.t19')}
             maxLength={30}
             onChange={(event) => setNicknameInput(event.currentTarget.value)}
             required
             value={nicknameInput}
           />
           <Select
-            label="선호 언어"
+            label={t('myPage.t20')}
             onChange={(event) => setLanguageInput(event.currentTarget.value)}
-            options={languageOptions}
+            options={PREFERRED_LANGUAGE_OPTIONS}
             value={languageInput}
           />
           {saveError ? (
-            <AlertBanner title="수정 실패" variant="error">
+            <AlertBanner title={t('myPage.t21')} variant="error">
               {saveError}
             </AlertBanner>
           ) : null}

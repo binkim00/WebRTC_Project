@@ -17,6 +17,7 @@ import {
   Pagination,
   Spinner,
 } from '../../components'
+import { useTranslation } from '../../i18n'
 
 /** LocalDateTime 문자열을 읽기 쉬운 한국어 일시로 표시한다. */
 function formatDateTime(value: string): string {
@@ -35,6 +36,7 @@ function toErrorMessage(cause: unknown, fallback: string): string {
  * 로그인 없이도 볼 수 있는 공개 화면이라 인증 토큰 없이 조회한다.
  */
 export function ServiceNoticesPage() {
+  const { t } = useTranslation()
   const [data, setData] = useState<PageResponse<NoticeSummaryResponse>>()
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -51,27 +53,29 @@ export function ServiceNoticesPage() {
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        setError(toErrorMessage(cause, '공지사항을 불러오지 못했습니다.'))
+        setError(toErrorMessage(cause, t('serviceNoticesPage.t14')))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page])
 
   return (
     <div className="grid gap-7 pb-10">
       <header>
         <p className="text-sm font-black tracking-[0.12em] text-[var(--color-primary-coral)]">NOTICE</p>
-        <h1 className="mt-2 text-4xl font-black tracking-[-0.05em]">공지사항</h1>
+        <h1 className="mt-2 text-4xl font-black tracking-[-0.05em]">{t('serviceNoticesPage.t1')}</h1>
         <p className="mt-3 text-[var(--color-text-secondary)]">
-          서비스 이용에 필요한 안내와 변경 사항을 확인하세요.
+          {t('serviceNoticesPage.t2')}
         </p>
       </header>
 
       {error ? (
-        <AlertBanner title="공지사항을 표시할 수 없습니다" variant="error">
+        <AlertBanner title={t('serviceNoticesPage.t3')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
@@ -79,10 +83,10 @@ export function ServiceNoticesPage() {
       <Card className="overflow-hidden">
         {loading ? (
           <div className="flex min-h-80 items-center justify-center">
-            <Spinner label="공지사항을 불러오는 중" />
+            <Spinner label={t('serviceNoticesPage.t4')} />
           </div>
         ) : !data || data.content.length === 0 ? (
-          <EmptyState description="등록된 공지사항이 없습니다." title="공지사항이 없습니다" />
+          <EmptyState description={t('serviceNoticesPage.t5')} title={t('serviceNoticesPage.t6')} />
         ) : (
           <>
             <ul className="divide-y divide-[var(--color-divider)]">
@@ -96,7 +100,7 @@ export function ServiceNoticesPage() {
                       <div className="flex items-center gap-2">
                         {notice.pinned ? (
                           <Badge variant="primary">
-                            <PushPin aria-hidden="true" size={13} weight="fill" /> 고정
+                            <PushPin aria-hidden="true" size={13} weight="fill" /> {t('serviceNoticesPage.t7')}
                           </Badge>
                         ) : null}
                         <strong className="min-w-0 break-keep">{notice.title}</strong>
@@ -127,6 +131,7 @@ export function ServiceNoticesPage() {
 
 /** 서비스 공지 한 건의 제목과 본문을 보여 준다. */
 export function ServiceNoticeDetailPage() {
+  const { t } = useTranslation()
   const noticeId = useParams<{ noticeId: string }>().noticeId ?? ''
   const [notice, setNotice] = useState<NoticeDetailResponse>()
   const [loading, setLoading] = useState(true)
@@ -134,7 +139,7 @@ export function ServiceNoticeDetailPage() {
 
   useEffect(() => {
     if (!noticeId) {
-      setError('공지 식별자가 없습니다.')
+      setError(t('serviceNoticesPage.t15'))
       setLoading(false)
       return
     }
@@ -149,19 +154,21 @@ export function ServiceNoticeDetailPage() {
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
-        setError(toErrorMessage(cause, '공지사항을 불러오지 못했습니다.'))
+        setError(toErrorMessage(cause, t('serviceNoticesPage.t16')))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noticeId])
 
   if (loading) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
-        <Spinner label="공지사항을 불러오는 중" />
+        <Spinner label={t('serviceNoticesPage.t8')} />
       </div>
     )
   }
@@ -172,19 +179,19 @@ export function ServiceNoticeDetailPage() {
         className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]"
         to="/service-notices"
       >
-        <ArrowLeft size={17} /> 공지사항 목록으로
+        <ArrowLeft size={17} /> {t('serviceNoticesPage.t9')}
       </Link>
 
       {error || !notice ? (
-        <AlertBanner title="공지사항을 표시할 수 없습니다" variant="error">
-          {error ?? '해당 공지를 찾을 수 없습니다.'}
+        <AlertBanner title={t('serviceNoticesPage.t10')} variant="error">
+          {error ?? t('serviceNoticesPage.t17')}
         </AlertBanner>
       ) : (
         <Card className="p-6 sm:p-9">
           <div className="flex flex-wrap items-center gap-2">
             {notice.pinned ? (
               <Badge variant="primary">
-                <PushPin aria-hidden="true" size={13} weight="fill" /> 고정
+                <PushPin aria-hidden="true" size={13} weight="fill" /> {t('serviceNoticesPage.t11')}
               </Badge>
             ) : null}
             <h1 className="text-2xl font-black tracking-[-0.04em]">{notice.title}</h1>
@@ -198,7 +205,7 @@ export function ServiceNoticeDetailPage() {
           {/* 백엔드는 공지에 첨부를 연결할 수 있으므로 읽는 쪽에서도 내려받을 수 있게 한다. */}
           {notice.attachments.length ? (
             <section className="mt-7 grid gap-2 border-t border-[var(--color-divider)] pt-6">
-              <h2 className="text-sm font-bold">첨부파일 {notice.attachments.length}개</h2>
+              <h2 className="text-sm font-bold">{t('serviceNoticesPage.t12')} {notice.attachments.length}{t('serviceNoticesPage.t13')}</h2>
               <ul className="grid gap-2">
                 {notice.attachments.map((attachment) => (
                   <li key={attachment.attachmentId}>

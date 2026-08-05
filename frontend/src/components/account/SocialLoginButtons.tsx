@@ -8,6 +8,7 @@ import {
 } from '../../api/socialAuth'
 import { AlertBanner } from '../feedback/AlertBanner'
 import { SocialProviderLogo } from './SocialProviderLogo'
+import { useTranslation } from '../../i18n'
 
 /** 공급자별 버튼 색이다. 각 브랜드 가이드의 대표색을 따른다. */
 const providerStyles: Record<SocialProviderPath, string> = {
@@ -27,12 +28,15 @@ const providerStyles: Record<SocialProviderPath, string> = {
  */
 export function SocialLoginButtons({
   returnTo,
-  labelPrefix = '{provider}로 시작하기',
+  labelPrefix,
 }: {
   returnTo?: string
   /** 버튼 문구 형식이다. `{provider}`가 공급자 이름으로 바뀐다. */
   labelPrefix?: string
 }) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const labelPrefixResolved = labelPrefix ?? t('socialLoginButtons.t1')
   // 어떤 공급자로 이동 중인지 표시해, 느린 네트워크에서 여러 번 누르는 것을 막는다.
   const [pending, setPending] = useState<SocialProviderPath>()
   const [error, setError] = useState<string>()
@@ -50,7 +54,7 @@ export function SocialLoginButtons({
       setError(
         reason instanceof ApiError
           ? reason.message
-          : `${SOCIAL_PROVIDER_LABELS[provider]} 로그인을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.`,
+          : t('socialLoginButtons.t3', { p0: SOCIAL_PROVIDER_LABELS()[provider] }),
       )
       setPending(undefined)
     }
@@ -59,7 +63,7 @@ export function SocialLoginButtons({
   return (
     <div className="grid gap-2.5">
       {error ? (
-        <AlertBanner title="소셜 로그인을 시작하지 못했습니다" variant="error">
+        <AlertBanner title={t('socialLoginButtons.t2')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
@@ -77,8 +81,8 @@ export function SocialLoginButtons({
             <SocialProviderLogo provider={provider} />
           </span>
           {pending === provider
-            ? `${SOCIAL_PROVIDER_LABELS[provider]}로 이동 중`
-            : labelPrefix.replace('{provider}', SOCIAL_PROVIDER_LABELS[provider])}
+            ? t('socialLoginButtons.t4', { p0: SOCIAL_PROVIDER_LABELS()[provider] })
+            : labelPrefixResolved.replace('{provider}', SOCIAL_PROVIDER_LABELS()[provider])}
         </button>
       ))}
     </div>

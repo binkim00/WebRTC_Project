@@ -1,3 +1,4 @@
+import { translate } from '../i18n'
 /** 백엔드 공통 성공 응답 래퍼다. (backend common/api/ApiResponse.java) */
 export type ApiEnvelope<T> = {
   success: boolean
@@ -21,7 +22,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** ApiResponse 래퍼가 있으면 data를 꺼내고 없으면 값을 그대로 반환한다. */
 export function unwrapEnvelope<T>(value: unknown): T {
   if (value === null || value === undefined) {
-    throw new TypeError('API 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('envelope.t1'))
   }
 
   return (isRecord(value) && 'data' in value ? value.data : value) as T

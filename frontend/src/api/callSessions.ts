@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 import { getAuthSession } from './auth'
+import { translate } from '../i18n'
 
 export type CallSessionRequestOptions = {
   authToken?: string
@@ -59,7 +60,7 @@ function requireCallSessionId(callSessionId: string): string {
   const normalizedId = callSessionId.trim()
 
   if (!normalizedId) {
-    throw new TypeError('callSessionId는 비어 있을 수 없습니다.')
+    throw new TypeError(translate('callSessions.t1'))
   }
 
   return encodeURIComponent(normalizedId)
@@ -163,7 +164,7 @@ export async function issueLiveKitAccessToken(
 
   const data = unwrapApiResponse(response)
   if (!isLiveKitAccessTokenResponse(data)) {
-    throw new TypeError('LiveKit 입장 토큰 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('callSessions.t2'))
   }
 
   return data
@@ -185,7 +186,7 @@ export async function getCallSessionStatus(
 
   const data = unwrapApiResponse(response)
   if (!isCallSessionStatusResponse(data)) {
-    throw new TypeError('통화 상태 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('callSessions.t3'))
   }
 
   return data
@@ -200,10 +201,10 @@ export async function forceEndCallSession(
   const reason = request.reason.trim()
 
   if (!reason) {
-    throw new TypeError('강제 종료 사유는 비어 있을 수 없습니다.')
+    throw new TypeError(translate('callSessions.t4'))
   }
   if (reason.length > 255) {
-    throw new TypeError('강제 종료 사유는 255자 이내로 입력해 주세요.')
+    throw new TypeError(translate('callSessions.t5'))
   }
 
   const response = await apiRequest<unknown>(
@@ -218,7 +219,7 @@ export async function forceEndCallSession(
 
   const data = unwrapApiResponse(response)
   if (!isForceEndCallSessionResponse(data)) {
-    throw new TypeError('통화 강제 종료 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('callSessions.t6'))
   }
 
   return data
@@ -241,7 +242,7 @@ export async function endCallSessionByFan(
 
   const data = unwrapApiResponse(response)
   if (!isCallSessionEndResponse(data)) {
-    throw new TypeError('통화 정상 종료 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('callSessions.t7'))
   }
 
   return data

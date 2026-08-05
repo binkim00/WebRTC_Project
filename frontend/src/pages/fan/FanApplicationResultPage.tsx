@@ -10,8 +10,10 @@ import {
   fetchPublicFanMeetingDetail,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
+import { markApplicationResultRevealed } from './applicationResultReveal'
 import { JellyCelebration } from '../../components/celebration/JellyCelebration'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { translate, useTranslation } from '../../i18n'
 
 function pad(part: number) {
   return String(part).padStart(2, '0')
@@ -49,7 +51,7 @@ function formatRemaining(announceAt: string): string {
   const diff = Math.max(0, new Date(announceAt).getTime() - Date.now())
   const days = Math.floor(diff / 86_400_000)
   const hours = Math.floor((diff % 86_400_000) / 3_600_000)
-  return `${days}일 ${hours}시간`
+  return translate('fanApplicationResultPage.t42', { p0: days, p1: hours })
 }
 
 function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
@@ -61,6 +63,7 @@ function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean 
 }
 
 export function FanApplicationResultPage() {
+  const { t } = useTranslation()
   const { meetingId } = useParams()
   const [application, setApplication] = useState<MyApplicationResponse | null>()
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
@@ -76,7 +79,7 @@ export function FanApplicationResultPage() {
     const session = getAuthSession()
 
     if (!session || session.role !== 'FAN') {
-      setError('팬 계정으로 로그인한 뒤 응모 결과를 확인해 주세요.')
+      setError(t('fanApplicationResultPage.t36'))
       return () => controller.abort()
     }
 
@@ -98,7 +101,13 @@ export function FanApplicationResultPage() {
               session.accessToken,
               controller.signal,
             )
-            setResultPublished(isResultPublished(detail))
+            const published = isResultPublished(detail)
+            setResultPublished(published)
+            // 결과를 실제로 화면에 띄운 시점에만 "확인함"으로 기록한다. 이 기록이 있어야
+            // 응모 내역 목록이 당첨·미당첨을 미리 노출하지 않는다.
+            if (published) {
+              markApplicationResultRevealed(session.userId, Number(meetingId))
+            }
           } catch {
             if (controller.signal.aborted) return
             // 공개 여부를 확인하지 못하면 결과를 숨기는 쪽으로 처리한다.
@@ -114,7 +123,7 @@ export function FanApplicationResultPage() {
         setError(
           reason instanceof ApiError || reason instanceof TypeError
             ? reason.message
-            : '응모 결과를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+            : t('fanApplicationResultPage.t37'),
         )
       })
 
@@ -129,13 +138,15 @@ export function FanApplicationResultPage() {
       .catch(() => undefined)
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId, reloadKey])
 
   if (!meetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 팬미팅 ID가 없습니다. 응모한 이벤트 목록에서 다시 선택해 주세요."
-        title="필수 URL 파라미터가 없습니다"
+        message={t('fanApplicationResultPage.t1')}
+        title={t('fanApplicationResultPage.t2')}
       />
     )
   }
@@ -145,7 +156,7 @@ export function FanApplicationResultPage() {
     return (
       <div className="mx-auto w-full max-w-[1240px] py-[72px]" role="alert">
         <h1 className="text-[clamp(28px,3vw,36px)] font-black leading-[1.16] tracking-[-0.045em] text-[var(--color-error)]">
-          결과를 불러오지 못했어요
+          {t('fanApplicationResultPage.t3')}
         </h1>
         <p className="mt-4 max-w-[52ch] text-lg font-medium leading-[1.7] text-[var(--color-text-body)]">
           {error}
@@ -155,7 +166,7 @@ export function FanApplicationResultPage() {
           onClick={() => setReloadKey((key) => key + 1)}
           type="button"
         >
-          다시 불러오기
+          {t('fanApplicationResultPage.t4')}
         </button>
       </div>
     )
@@ -166,7 +177,7 @@ export function FanApplicationResultPage() {
     return (
       <div
         aria-busy="true"
-        aria-label="응모 결과를 불러오는 중"
+        aria-label={t('fanApplicationResultPage.t5')}
         className="mx-auto w-full max-w-[1240px] py-16"
       >
         <div className="h-5 w-[120px] rounded-md bg-[var(--color-surface-muted)]" />
@@ -181,25 +192,25 @@ export function FanApplicationResultPage() {
     return (
       <div className="rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
         <h1 className="text-xl font-black tracking-[-0.03em]">
-          {application === null ? '응모 내역이 없습니다' : '응모를 취소한 이벤트입니다'}
+          {application === null ? t('fanApplicationResultPage.t38') : t('fanApplicationResultPage.t39')}
         </h1>
         <p className="mt-3 text-sm text-[var(--color-text-secondary)]">
           {application === null
-            ? '이 이벤트에 응모한 기록을 찾을 수 없어요. 이벤트 상세에서 응모해 주세요.'
-            : '응모를 취소해 결과를 확인할 수 없어요. 모집 중이라면 다시 응모할 수 있어요.'}
+            ? t('fanApplicationResultPage.t40')
+            : t('fanApplicationResultPage.t41')}
         </p>
         <Link
           className="mj-font-label mt-6 inline-flex min-h-[var(--control-height)] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-6 py-2 text-sm transition-colors hover:bg-[var(--color-surface-page)]"
           to={`/fan/events/${meetingId}`}
         >
-          이벤트 상세로 이동
+          {t('fanApplicationResultPage.t6')}
         </Link>
       </div>
     )
   }
 
   const announcedAtLabel = application.resultDecidedAt
-    ? `${formatDateTime(application.resultDecidedAt)} 발표`
+    ? t('fanApplicationResultPage.t43', { p0: formatDateTime(application.resultDecidedAt) })
     : null
   const operation = detail?.meeting.operation
   const resultAnnounceAt = detail?.meeting.application.resultAnnouncementAt ?? null
@@ -217,7 +228,7 @@ export function FanApplicationResultPage() {
         {application.coverImageUrl ? (
           <figure className="relative m-0 h-[min(34vw,320px)] overflow-hidden bg-[var(--color-surface-muted)]">
             <img
-              alt={`팬미팅에서 만나게 될 ${application.influencerName}`}
+              alt={t('fanApplicationResultPage.t44', { p0: application.influencerName })}
               className="absolute inset-0 size-full object-cover"
               src={application.coverImageUrl}
             />
@@ -233,54 +244,53 @@ export function FanApplicationResultPage() {
             </p>
           ) : null}
           <h1 className="jc-heading-intro mt-3.5 text-[clamp(38px,4.4vw,58px)] font-black leading-[1.1] tracking-[-0.05em] [text-wrap:balance]">
-            당첨됐어요
+            {t('fanApplicationResultPage.t7')}
           </h1>
           <p className="jc-heading-intro mt-[18px] max-w-[46ch] text-xl font-medium leading-[1.6] text-[var(--color-text-body)]">
-            {application.meetingTitle}에 초대되었습니다. 팬미팅 전에 장비 점검을 마쳐 주세요.
+            {application.meetingTitle}{t('fanApplicationResultPage.t8')}
           </p>
 
           <div className="mt-11 grid items-start gap-10 border-t border-[var(--color-divider)] pt-8 lg:grid-cols-[1fr_460px] lg:gap-[72px]">
-            <section aria-label="팬미팅 정보">
+            <section aria-label={t('fanApplicationResultPage.t9')}>
               <div className="grid grid-cols-1 gap-x-10 gap-y-7 sm:grid-cols-2">
                 <div>
-                  <p className="text-sm font-bold text-[var(--color-text-muted)]">팬미팅 일정</p>
+                  <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanApplicationResultPage.t10')}</p>
                   <p className="mt-1.5 text-2xl font-black tracking-[-0.035em] tabular-nums">
                     {formatDateTime(application.scheduledStartAt)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-[var(--color-text-muted)]">통화 시간</p>
+                  <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanApplicationResultPage.t11')}</p>
                   <p className="mt-1.5 text-2xl font-black tracking-[-0.035em] tabular-nums">
                     {operation ? formatCallDuration(operation.callDurationSec) : '-'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-[var(--color-text-muted)]">인플루언서</p>
+                  <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanApplicationResultPage.t12')}</p>
                   <p className="mt-1.5 text-2xl font-black tracking-[-0.035em]">
                     {application.influencerName}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-[var(--color-text-muted)]">장비 점검 기한</p>
+                  <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanApplicationResultPage.t13')}</p>
                   <p className="mt-1.5 text-2xl font-black tracking-[-0.035em] tabular-nums">
                     {formatShortDateTime(deviceCheckDeadline)}
                   </p>
                 </div>
               </div>
               <p className="mt-7 max-w-[56ch] border-t border-[var(--color-divider)] pt-5 text-base font-medium leading-[1.75] text-[var(--color-text-muted)]">
-                기한까지 장비 점검을 완료하지 않으면 참여가 취소될 수 있습니다. 팬미팅 당일에는
-                시작 {operation?.earlyStartMinutes ?? 10}분 전부터 대기실에 입장할 수 있어요.
+                {t('fanApplicationResultPage.t14')} {operation?.earlyStartMinutes ?? 10}{t('fanApplicationResultPage.t15')}
               </p>
             </section>
-            <section aria-label="다음 단계">
+            <section aria-label={t('fanApplicationResultPage.t16')}>
               <Link
                 className="mj-font-emphasis flex min-h-[58px] w-full items-center justify-center rounded-[10px] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-[17px] text-white shadow-[var(--shadow-final-cta)] transition-[background-color,transform] duration-150 hover:-translate-y-px hover:bg-[var(--color-primary-coral-hover)] active:translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
                 to={`/fan-meetings/${application.meetingId}/device-check`}
               >
-                장비 점검하기
+                {t('fanApplicationResultPage.t17')}
               </Link>
               <p className="mt-5 text-[15px] font-medium leading-[1.7] text-[var(--color-text-muted)]">
-                응모 내역과 결과는 마이페이지에서 다시 확인할 수 있습니다.
+                {t('fanApplicationResultPage.t18')}
               </p>
             </section>
           </div>
@@ -299,39 +309,39 @@ export function FanApplicationResultPage() {
           <p className="text-[15px] font-bold text-[var(--color-text-muted)]">{announcedAtLabel}</p>
         ) : null}
         <h1 className="mt-3.5 max-w-[24ch] text-[clamp(30px,3.2vw,40px)] font-black leading-[1.16] tracking-[-0.045em] [text-wrap:balance]">
-          이번에는 아쉽게 되지 않았어요
+          {t('fanApplicationResultPage.t19')}
         </h1>
         <p className="mt-[18px] max-w-[52ch] text-lg font-medium leading-[1.7] text-[var(--color-text-body)]">
-          {application.meetingTitle}에 응모해 주셔서 감사합니다.
+          {application.meetingTitle}{t('fanApplicationResultPage.t20')}
         </p>
 
         <div className="mt-12 grid items-start gap-10 border-t border-[var(--color-divider)] pt-8 lg:grid-cols-[1fr_400px] lg:gap-[72px]">
-          <section aria-label="응모 내역">
-            <h2 className="text-base font-extrabold tracking-[-0.025em]">응모 내역</h2>
+          <section aria-label={t('fanApplicationResultPage.t21')}>
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">{t('fanApplicationResultPage.t22')}</h2>
             <div className="mt-4 grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
               <div>
-                <p className="text-sm font-bold text-[var(--color-text-muted)]">응모일</p>
+                <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanApplicationResultPage.t23')}</p>
                 <p className="mt-1.5 text-lg font-extrabold tabular-nums">
                   {formatDate(application.submittedAt)}
                 </p>
               </div>
               <div>
-                <p className="text-sm font-bold text-[var(--color-text-muted)]">모집 결과</p>
+                <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanApplicationResultPage.t24')}</p>
                 <p className="mt-1.5 text-lg font-extrabold tabular-nums">
-                  {capacity !== undefined ? `${capacity}명 선정` : '-'}
+                  {capacity !== undefined ? t('fanApplicationResultPage.t45', { p0: capacity }) : '-'}
                 </p>
               </div>
             </div>
             <p className="mt-[26px] max-w-[56ch] border-t border-[var(--color-divider)] pt-5 text-base font-medium leading-[1.75] text-[var(--color-text-muted)]">
-              선정은 응모 순서와 무관하게 진행됩니다. 다음 팬미팅 응모에는 영향을 주지 않습니다.
+              {t('fanApplicationResultPage.t25')}
             </p>
           </section>
-          <section aria-label="다음 단계">
+          <section aria-label={t('fanApplicationResultPage.t26')}>
             <Link
               className="mj-font-emphasis flex min-h-[54px] items-center justify-center rounded-[10px] bg-[var(--color-primary-coral)] text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
               to="/fan/events"
             >
-              다음 팬미팅 보기
+              {t('fanApplicationResultPage.t27')}
             </Link>
             <label className="mt-3.5 flex min-h-[52px] cursor-not-allowed items-center gap-3">
               <input
@@ -342,11 +352,11 @@ export function FanApplicationResultPage() {
                 type="checkbox"
               />
               <span className="text-base font-semibold text-[var(--color-text-muted)]">
-                {application.influencerName}의 다음 팬미팅 알림 받기
+                {application.influencerName}{t('fanApplicationResultPage.t28')}
               </span>
             </label>
             <p aria-live="polite" className="mt-1.5 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
-              알림 설정 기능은 아직 제공되지 않습니다.
+              {t('fanApplicationResultPage.t29')}
             </p>
           </section>
         </div>
@@ -358,33 +368,32 @@ export function FanApplicationResultPage() {
   return (
     <div className="mx-auto w-full max-w-[1240px] py-[72px]">
       <p className="text-[15px] font-bold text-[var(--color-text-muted)]">
-        응모 완료 · 결과 대기 중
+        {t('fanApplicationResultPage.t30')}
       </p>
       <h1 className="mt-3.5 text-[clamp(30px,3.2vw,40px)] font-black leading-[1.16] tracking-[-0.045em]">
-        결과 발표를 기다리고 있어요
+        {t('fanApplicationResultPage.t31')}
       </h1>
 
       <div className="mt-10 max-w-[520px] border-t-2 border-[var(--color-text-primary)] pt-7">
-        <p className="text-sm font-bold text-[var(--color-text-muted)]">결과 발표까지</p>
+        <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanApplicationResultPage.t32')}</p>
         <p className="mt-2 text-[clamp(40px,5vw,60px)] font-black leading-none tracking-[-0.05em] tabular-nums">
           {resultAnnounceAt ? formatRemaining(resultAnnounceAt) : '-'}
         </p>
         {resultAnnounceAt ? (
           <p className="mt-3.5 text-[17px] font-medium tabular-nums text-[var(--color-text-muted)]">
-            {formatDateTime(resultAnnounceAt)} 발표 예정
+            {formatDateTime(resultAnnounceAt)} {t('fanApplicationResultPage.t33')}
           </p>
         ) : null}
       </div>
 
       <p className="mt-9 max-w-[56ch] border-t border-[var(--color-divider)] pt-6 text-[17px] font-medium leading-[1.75] text-[var(--color-text-body)]">
-        결과는 이 화면과 마이페이지 응모 내역에서 확인할 수 있습니다. 알림을 켜두면 발표 시각에
-        안내를 보내드려요.
+        {t('fanApplicationResultPage.t34')}
       </p>
       <Link
         className="mj-font-label mt-[26px] inline-flex min-h-[52px] items-center rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-6 text-base hover:border-[var(--color-text-muted)]"
         to="/fan/mypage/applications"
       >
-        마이페이지 응모 내역
+        {t('fanApplicationResultPage.t35')}
       </Link>
     </div>
   )

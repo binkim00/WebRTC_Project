@@ -146,6 +146,61 @@ export async function getMeetingNotice(
   return unwrapEnvelope<NoticeDetailResponse>(response)
 }
 
+/**
+ * 서비스 전체 공지를 작성한다. (ADMIN 전용)
+ *
+ * 팬미팅 공지와 요청·응답 계약이 같아 타입을 함께 쓴다. 다른 점은 경로와 권한뿐이다.
+ * 서비스 전체에 노출되는 공지라 백엔드가 `hasRole("ADMIN")`으로 제한한다.
+ */
+export async function createServiceNotice(
+  request: NoticeCreateRequest,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<NoticeCreateResponse> {
+  const response = await apiRequest<unknown>('/api/v1/service-notices', {
+    method: 'POST',
+    authToken,
+    signal,
+    body: JSON.stringify(request),
+  })
+
+  return unwrapEnvelope<NoticeCreateResponse>(response)
+}
+
+/**
+ * 서비스 전체 공지를 부분 수정한다. (ADMIN 전용)
+ *
+ * ADMIN이어도 **자기가 작성한 공지만** 수정할 수 있다. 작성자 확인은 백엔드
+ * PostCommandService가 다시 수행하므로, 다른 운영자의 공지에는 권한 오류가 돌아온다.
+ */
+export async function updateServiceNotice(
+  noticeId: string | number,
+  request: NoticeUpdateRequest,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<PostUpdateResponse> {
+  const response = await apiRequest<unknown>(
+    `/api/v1/service-notices/${encodeURIComponent(String(noticeId))}`,
+    { method: 'PATCH', authToken, signal, body: JSON.stringify(request) },
+  )
+
+  return unwrapEnvelope<PostUpdateResponse>(response)
+}
+
+/** 서비스 전체 공지를 삭제한다. (ADMIN 전용, 작성자 본인만) */
+export async function deleteServiceNotice(
+  noticeId: string | number,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<PostDeleteResponse> {
+  const response = await apiRequest<unknown>(
+    `/api/v1/service-notices/${encodeURIComponent(String(noticeId))}`,
+    { method: 'DELETE', authToken, signal },
+  )
+
+  return unwrapEnvelope<PostDeleteResponse>(response)
+}
+
 /** 팬미팅 공지를 작성한다. (운영자 전용) */
 export async function createMeetingNotice(
   meetingId: string | number,

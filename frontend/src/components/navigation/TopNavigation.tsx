@@ -145,12 +145,11 @@ export function TopNavigation({
             <summary
               aria-controls={mobileMenuId}
               aria-expanded={mobileMenuOpen}
-              aria-label={`모바일 메뉴 ${mobileMenuOpen ? '닫기' : '열기'}`}
+              aria-label={t('topNavigation.t3', { p0: mobileMenuOpen ? t('topNavigation.t1') : t('topNavigation.t2') })}
               className="mj-font-label inline-flex min-h-11 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-sm text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] [&::-webkit-details-marker]:hidden"
               ref={mobileMenuButtonRef}
             >
-              메뉴
-            </summary>
+               {t('topNavigation.t4')} </summary>
             <div
               className="absolute right-0 z-30 mt-2 grid min-w-56 gap-1 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-2 shadow-[var(--shadow-modal)]"
               id={mobileMenuId}

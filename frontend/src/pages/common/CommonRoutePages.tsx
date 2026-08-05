@@ -23,6 +23,7 @@ import {
 } from '../../api/meetingManagement'
 import { AlertBanner, IconButton, Skeleton, Spinner } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { translate, type TranslationKey, useTranslation } from '../../i18n'
 
 type FeaturedMeeting = {
   id: number
@@ -34,29 +35,34 @@ type FeaturedMeeting = {
   image: string
 }
 
-const featuredEyebrows = [
-  '지금 만날 수 있어요',
-  '이번 주에 만나요',
-  '새로운 만남을 준비 중이에요',
-] as const
+/**
+ * 추천 카드 위에 붙는 짧은 문구다. 카드 순서에 따라 돌려 쓴다.
+ *
+ * 모듈 로드 시점에 만들어지는 배열이므로 문장 대신 **사전 키**를 둔다.
+ */
+const featuredEyebrowKeys = [
+  'commonRoutePages.eyebrow.now',
+  'commonRoutePages.eyebrow.thisWeek',
+  'commonRoutePages.eyebrow.preparing',
+] as const satisfies readonly TranslationKey[]
 
 function toStatusLabel(status: string | undefined): string {
   switch (status) {
     case 'APPLICATION_OPEN':
-      return '모집 중'
+      return translate('commonRoutePages.t58')
     case 'APPLICATION_CLOSED':
-      return '모집 마감'
+      return translate('commonRoutePages.t59')
     case 'READY':
-      return '진행 준비'
+      return translate('commonRoutePages.t60')
     case 'LIVE':
-      return '진행 중'
+      return translate('commonRoutePages.t61')
     case 'ENDED':
     case 'COMPLETED':
-      return '종료'
+      return translate('commonRoutePages.t62')
     case 'CANCELED':
-      return '취소됨'
+      return translate('commonRoutePages.t63')
     default:
-      return '오픈 예정'
+      return translate('commonRoutePages.t64')
   }
 }
 
@@ -74,6 +80,7 @@ function formatSchedule(scheduledStartAt: string): string {
 }
 
 export function HomePage() {
+  const { t } = useTranslation()
   const [featuredMeetings, setFeaturedMeetings] = useState<FeaturedMeeting[]>()
   const [activeMeetingIndex, setActiveMeetingIndex] = useState(0)
 
@@ -85,7 +92,7 @@ export function HomePage() {
         setFeaturedMeetings(
           result.content.map((meeting, index) => ({
             id: meeting.meetingId,
-            eyebrow: featuredEyebrows[index] ?? '추천 팬미팅',
+            eyebrow: t(featuredEyebrowKeys[index] ?? 'commonRoutePages.t31'),
             title: meeting.title,
             influencer: meeting.influencerName,
             schedule: formatSchedule(meeting.scheduledStartAt),
@@ -101,6 +108,8 @@ export function HomePage() {
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const activeMeeting = featuredMeetings?.[activeMeetingIndex]
@@ -121,17 +130,17 @@ export function HomePage() {
             MEETING × JELLY × MEMORY
           </p>
           <h1 className="mt-7 max-w-[580px] text-[46px] font-black leading-[1.18] tracking-[-0.055em] text-[var(--color-text-primary)] sm:text-[58px] lg:text-[60px]">
-            기다림은 설렘으로,
+            {t('commonRoutePages.t1')}
             <br />
-            만남은 기억으로.
+            {t('commonRoutePages.t2')}
           </h1>
           <p className="mt-7 text-lg text-[var(--color-text-secondary)]">
-            좋아하는 인플루언서와 단둘이 만나는 1:1 영상 팬미팅.
+            {t('commonRoutePages.t3')}
           </p>
         </div>
         <div className="relative flex min-h-[330px] items-center justify-center overflow-hidden lg:min-h-[440px]">
           <img
-            alt="서로 기대어 웃고 있는 코랄색과 보라색 젤리 캐릭터"
+            alt={t('commonRoutePages.t4')}
             className="h-full max-h-[510px] w-full object-cover object-center mix-blend-multiply"
             src={heroJellies}
           />
@@ -140,13 +149,13 @@ export function HomePage() {
 
       {featuredMeetings === undefined ? (
         <section className="flex justify-center pb-8">
-          <Spinner label="팬미팅 소식을 불러오는 중" />
+          <Spinner label={t('commonRoutePages.t5')} />
         </section>
       ) : !activeMeeting ? (
         <section className="rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
-          <h2 className="font-bold">아직 소개할 팬미팅이 없어요</h2>
+          <h2 className="font-bold">{t('commonRoutePages.t6')}</h2>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            새로운 팬미팅이 공개되면 이곳에서 가장 먼저 알려드릴게요.
+            {t('commonRoutePages.t7')}
           </p>
         </section>
       ) : (
@@ -155,7 +164,7 @@ export function HomePage() {
           className="relative grid items-center gap-8 pb-8 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-12"
         >
           <IconButton
-            aria-label="이전 팬미팅"
+            aria-label={t('commonRoutePages.t8')}
             className="absolute left-0 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_10px_30px_rgb(35_38_47_/_12%)] lg:inline-flex"
             icon={<ArrowLeftIcon aria-hidden="true" size={22} weight="bold" />}
             onClick={() => moveMeeting(-1)}
@@ -176,17 +185,17 @@ export function HomePage() {
             <dl className="mt-8 grid gap-4 text-[15px] text-[var(--color-text-secondary)]">
               <div className="flex items-center gap-3">
                 <UserIcon aria-hidden="true" size={21} />
-                <dt className="sr-only">인플루언서</dt>
+                <dt className="sr-only">{t('commonRoutePages.t9')}</dt>
                 <dd>{activeMeeting.influencer}</dd>
               </div>
               <div className="flex items-center gap-3">
                 <CalendarBlankIcon aria-hidden="true" size={21} />
-                <dt className="sr-only">일정</dt>
+                <dt className="sr-only">{t('commonRoutePages.t10')}</dt>
                 <dd>{activeMeeting.schedule}</dd>
               </div>
               <div className="flex items-center gap-3 font-bold text-[var(--color-primary-coral)]">
                 <UsersThreeIcon aria-hidden="true" size={21} weight="fill" />
-                <dt className="sr-only">모집 상태</dt>
+                <dt className="sr-only">{t('commonRoutePages.t11')}</dt>
                 <dd>{activeMeeting.status}</dd>
               </div>
             </dl>
@@ -194,18 +203,18 @@ export function HomePage() {
               className="mt-8 inline-flex min-h-[var(--control-height)] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-transparent bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] py-2 text-sm font-semibold text-white shadow-[var(--shadow-control)] transition-colors hover:bg-[var(--color-primary-coral-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary-coral)]"
               to={`/fan/events/${activeMeeting.id}`}
             >
-              상세 보기
+              {t('commonRoutePages.t12')}
             </Link>
           </div>
 
           <div className="relative overflow-hidden rounded-[var(--radius-panel)]">
             <img
-              alt={`${activeMeeting.influencer} 팬미팅 소개`}
+              alt={t('commonRoutePages.t65', { p0: activeMeeting.influencer })}
               className="aspect-[16/5] w-full object-cover"
               src={activeMeeting.image}
             />
             <IconButton
-              aria-label="다음 팬미팅"
+              aria-label={t('commonRoutePages.t13')}
               className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/95 shadow-[0_10px_30px_rgb(35_38_47_/_14%)] lg:-right-0"
               icon={<ArrowRightIcon aria-hidden="true" size={22} weight="bold" />}
               onClick={() => moveMeeting(1)}
@@ -215,12 +224,12 @@ export function HomePage() {
           </div>
 
           <div
-            aria-label={`${featuredMeetings.length}개 중 ${activeMeetingIndex + 1}번째 팬미팅`}
+            aria-label={t('commonRoutePages.t66', { p0: featuredMeetings.length, p1: activeMeetingIndex + 1 })}
             className="flex justify-center gap-3 lg:col-start-2"
           >
             {featuredMeetings.map((meeting, index) => (
               <button
-                aria-label={`${index + 1}번째 팬미팅 보기`}
+                aria-label={t('commonRoutePages.t67', { p0: index + 1 })}
                 className={[
                   'size-3 rounded-full transition',
                   index === activeMeetingIndex
@@ -243,7 +252,7 @@ function formatDurationMinSec(totalSeconds: number): string {
   const safeSeconds = Math.max(0, Math.round(totalSeconds))
   const minutes = Math.floor(safeSeconds / 60)
   const seconds = safeSeconds % 60
-  return `${minutes}분 ${String(seconds).padStart(2, '0')}초`
+  return translate('commonRoutePages.t68', { p0: minutes, p1: String(seconds).padStart(2, '0') })
 }
 
 function formatScheduleDot(value: string): string {
@@ -271,13 +280,14 @@ type StatisticsMetric = {
 }
 
 export function MeetingStatisticsPage() {
+  const { t } = useTranslation()
   const { fanMeetingId } = useParams()
   const authSession = getAuthSession()
   const authToken = authSession?.accessToken
   const isManager = authSession?.role === 'MANAGER'
   // CSV 내보내기는 소유 운영자 권한이라 1인 인플루언서도 자기 팬미팅에서 쓸 수 있다.
   const canOperateExport = isManager || authSession?.role === 'SOLO_INFLUENCER'
-  const roleLabel = isManager ? '매니저 보기' : '인플루언서 보기'
+  const roleLabel = isManager ? t('commonRoutePages.t32') : t('commonRoutePages.t33')
 
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
   const [statistics, setStatistics] = useState<FanMeetingStatisticsResponse>()
@@ -301,7 +311,7 @@ export function MeetingStatisticsPage() {
       URL.revokeObjectURL(objectUrl)
     } catch (reason) {
       setExportError(
-        reason instanceof Error ? reason.message : '결과 파일을 내려받지 못했습니다.',
+        reason instanceof Error ? reason.message : t('commonRoutePages.t34'),
       )
     } finally {
       setExporting(false)
@@ -312,7 +322,7 @@ export function MeetingStatisticsPage() {
     if (!fanMeetingId?.trim()) return
 
     if (!authToken) {
-      setError('팬미팅 통계를 확인하려면 먼저 로그인해 주세요.')
+      setError(t('commonRoutePages.t35'))
       return
     }
 
@@ -331,21 +341,23 @@ export function MeetingStatisticsPage() {
         if (controller.signal.aborted) return
         setError(
           reason instanceof ApiError && reason.status === 403
-            ? '팬미팅 통계를 조회할 권한이 없습니다.'
+            ? t('commonRoutePages.t36')
             : reason instanceof ApiError || reason instanceof TypeError
               ? reason.message
-              : '팬미팅 통계를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+              : t('commonRoutePages.t37'),
         )
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, fanMeetingId])
 
   if (!fanMeetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 fanMeetingId 값이 없습니다. 이전 화면에서 올바른 팬미팅을 선택해 주세요."
-        title="필수 URL 파라미터가 없습니다"
+        message={t('commonRoutePages.t14')}
+        title={t('commonRoutePages.t15')}
       />
     )
   }
@@ -366,40 +378,40 @@ export function MeetingStatisticsPage() {
     ? [
         {
           key: 'participation',
-          label: '참여율',
+          label: t('commonRoutePages.t38'),
           value: ratioPercent(statistics.participantCount, statistics.selectedCount),
           unit: '%',
-          supporting: `${statistics.participantCount}명 / ${statistics.selectedCount}명`,
-          description: '전체 참가자 중 실제 팬미팅에 참여한 팬의 비율입니다.',
+          supporting: t('commonRoutePages.t69', { p0: statistics.participantCount, p1: statistics.selectedCount }),
+          description: t('commonRoutePages.t39'),
           valueColor: 'text-[var(--color-text-primary)]',
         },
         {
           key: 'completion',
-          label: '정상 완료율',
+          label: t('commonRoutePages.t40'),
           value: ratioPercent(statistics.completedCallCount, statistics.selectedCount),
           unit: '%',
-          supporting: `${statistics.completedCallCount}개 세션 정상 종료`,
-          description: '연결 실패, 노쇼, 강제 종료 없이 완료된 세션 비율입니다.',
+          supporting: t('commonRoutePages.t70', { p0: statistics.completedCallCount }),
+          description: t('commonRoutePages.t41'),
           valueColor: 'text-[var(--color-success)]',
         },
         {
           // 백엔드가 팬미팅 간 재참여 이력을 아직 내려주지 않아 실제 값을 계산할 수 없다.
           // 값을 지어내는 대신 대시로 비워 두고 사유를 그대로 보여준다.
           key: 'returning',
-          label: '재참여 팬 비율',
+          label: t('commonRoutePages.t42'),
           value: undefined,
           unit: '',
-          supporting: '집계 데이터 없음',
-          description: '이전 팬미팅에도 참여한 이력이 있는 팬의 비율입니다.',
+          supporting: t('commonRoutePages.t43'),
+          description: t('commonRoutePages.t44'),
           valueColor: 'text-[var(--color-text-primary)]',
         },
         {
           key: 'duration',
-          label: '평균 통화 시간',
+          label: t('commonRoutePages.t45'),
           value: formatDurationMinSec(statistics.averageCallDurationSec),
           unit: '',
-          supporting: '완료 세션 기준',
-          description: '정상적으로 완료된 세션의 실제 평균 통화 시간입니다.',
+          supporting: t('commonRoutePages.t46'),
+          description: t('commonRoutePages.t47'),
           valueColor: 'text-[var(--color-text-primary)]',
         },
       ]
@@ -409,10 +421,10 @@ export function MeetingStatisticsPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
-          <p className="text-sm font-bold text-[var(--color-text-muted)]">종료된 팬미팅</p>
-          <h1 className="mt-[9px] text-[25px] font-black tracking-[-0.035em]">팬미팅 통계</h1>
+          <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('commonRoutePages.t16')}</p>
+          <h1 className="mt-[9px] text-[25px] font-black tracking-[-0.035em]">{t('commonRoutePages.t17')}</h1>
           <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
-            실제 1:1 영상통화 팬미팅의 핵심 운영 결과를 확인하세요.
+            {t('commonRoutePages.t18')}
           </p>
         </div>
         <p className="whitespace-nowrap text-sm font-bold text-[var(--color-text-muted)]">
@@ -421,24 +433,24 @@ export function MeetingStatisticsPage() {
       </div>
 
       {error ? (
-        <AlertBanner className="mt-6" title="팬미팅 통계를 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('commonRoutePages.t19')} variant="error">
           {error}
         </AlertBanner>
       ) : !loaded ? (
         <div className="flex justify-center py-24">
-          <Spinner label="팬미팅 통계를 불러오는 중" />
+          <Spinner label={t('commonRoutePages.t20')} />
         </div>
       ) : (
         <>
           <section
-            aria-label="팬미팅 정보"
+            aria-label={t('commonRoutePages.t21')}
             className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] sm:grid-cols-4"
           >
             {[
-              ['팬미팅명', detail.meeting.title],
-              ['진행 일자', formatScheduleDot(detail.meeting.scheduledStartAt)],
-              ['인플루언서', detail.influencer.name],
-              ['전체 참가자', `${statistics.selectedCount}명`],
+              [t('commonRoutePages.t48'), detail.meeting.title],
+              [t('commonRoutePages.t49'), formatScheduleDot(detail.meeting.scheduledStartAt)],
+              [t('commonRoutePages.t50'), detail.influencer.name],
+              [t('commonRoutePages.t51'), t('commonRoutePages.t71', { p0: statistics.selectedCount })],
             ].map(([label, value], index) => (
               <div
                 className={index ? 'border-l border-[var(--color-divider)] px-5 py-[17px]' : 'py-[17px] pr-5'}
@@ -451,9 +463,9 @@ export function MeetingStatisticsPage() {
           </section>
 
           <div className="mt-8">
-            <h2 className="text-xl font-extrabold tracking-[-0.03em]">핵심 결과</h2>
+            <h2 className="text-xl font-extrabold tracking-[-0.03em]">{t('commonRoutePages.t22')}</h2>
             <p className="mt-1.5 text-[15px] font-medium text-[var(--color-text-muted)]">
-              완료된 세션을 기준으로 집계한 운영 결과입니다.
+              {t('commonRoutePages.t23')}
             </p>
           </div>
 
@@ -463,10 +475,10 @@ export function MeetingStatisticsPage() {
               role="status"
             >
               <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
-                집계할 수 있는 세션이 없습니다
+                {t('commonRoutePages.t24')}
               </strong>
               <span className="mt-[9px] max-w-[420px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
-                정상적으로 완료된 세션이 없어 핵심 결과 지표를 표시할 수 없습니다.
+                {t('commonRoutePages.t25')}
               </span>
             </div>
           ) : null}
@@ -477,10 +489,10 @@ export function MeetingStatisticsPage() {
               role="status"
             >
               <strong className="block text-base font-extrabold text-[var(--color-warning)]">
-                팬미팅 결과를 집계하고 있습니다
+                {t('commonRoutePages.t26')}
               </strong>
               <p className="mt-1.5 text-[15px] font-medium leading-[1.55] text-[var(--color-warning)]">
-                완료된 세션을 확인한 뒤 통계와 결과 파일을 준비합니다.
+                {t('commonRoutePages.t27')}
               </p>
             </div>
           ) : null}
@@ -494,7 +506,7 @@ export function MeetingStatisticsPage() {
                 >
                   <p className="text-sm font-bold text-[var(--color-text-muted)]">{metric.label}</p>
                   {stage === 'collecting' ? (
-                    <Skeleton aria-label={`${metric.label} 집계 중`} className="mt-3" lines={3} />
+                    <Skeleton aria-label={t('commonRoutePages.t72', { p0: metric.label })} className="mt-3" lines={3} />
                   ) : (
                     <>
                       <p className="mt-2.5 flex items-baseline gap-[3px]">
@@ -523,15 +535,15 @@ export function MeetingStatisticsPage() {
           ) : null}
 
           <section
-            aria-label="팬미팅 결과"
+            aria-label={t('commonRoutePages.t28')}
             className="mt-[34px] flex flex-col items-stretch justify-between gap-4 border-t border-[var(--color-divider)] pt-[26px] sm:flex-row sm:items-end"
           >
             <div className="min-w-0">
-              <h2 className="text-lg font-extrabold tracking-[-0.028em]">팬미팅 결과 상세</h2>
+              <h2 className="text-lg font-extrabold tracking-[-0.028em]">{t('commonRoutePages.t29')}</h2>
               <p className="mt-1.5 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
                 {canOperateExport
-                  ? '참가자별 상태를 확인하거나 운영 결과 파일을 준비할 수 있습니다.'
-                  : '참가자별 상태를 확인할 수 있습니다.'}
+                  ? t('commonRoutePages.t52')
+                  : t('commonRoutePages.t53')}
               </p>
             </div>
             <div className="flex flex-none flex-wrap gap-2.5">
@@ -539,7 +551,7 @@ export function MeetingStatisticsPage() {
                 className="mj-font-emphasis inline-flex min-h-[50px] items-center whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
                 to={`/fan-meetings/${encodeURIComponent(fanMeetingId)}/fans`}
               >
-                팬 리스트 보기
+                {t('commonRoutePages.t30')}
               </Link>
               {canOperateExport ? (
                 <button
@@ -552,7 +564,7 @@ export function MeetingStatisticsPage() {
                   onClick={() => void handleExport()}
                   type="button"
                 >
-                  {exporting ? '내보내는 중…' : '결과 내보내기'}
+                  {exporting ? t('commonRoutePages.t54') : t('commonRoutePages.t55')}
                 </button>
               ) : null}
             </div>
@@ -560,8 +572,8 @@ export function MeetingStatisticsPage() {
           {canOperateExport && !canExport ? (
             <p className="mt-[11px] text-sm font-medium text-[var(--color-text-muted)]">
               {stage === 'collecting'
-                ? '집계가 끝나면 결과 파일을 내보낼 수 있어요.'
-                : '집계된 세션이 없어 내보낼 결과가 없습니다.'}
+                ? t('commonRoutePages.t56')
+                : t('commonRoutePages.t57')}
             </p>
           ) : null}
           {exportError ? (

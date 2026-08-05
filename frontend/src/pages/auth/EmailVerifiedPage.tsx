@@ -12,6 +12,7 @@ import {
   EmailVerificationNotice,
   Spinner,
 } from '../../components'
+import { useTranslation } from '../../i18n'
 
 type ConfirmPhase =
   | { kind: 'checking' }
@@ -37,6 +38,7 @@ function safeInternalPath(value: string | null): string | undefined {
  * 로그인을 다녀오거나 확인 중 새로고침을 한 사용자의 유효한 링크가 유실된다.
  */
 export function EmailVerifiedPage() {
+  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -99,13 +101,13 @@ export function EmailVerifiedPage() {
         if (reason.status === 401) {
           // 재발급까지 실패하면 client.ts가 세션을 지우고 App이 로그인으로 보낸다.
           // 토큰은 URL에 남아 있으므로 재로그인 후 자동으로 다시 확인된다.
-          setPhase({ kind: 'failed', message: '로그인이 만료되었습니다. 다시 로그인해 주세요.' })
+          setPhase({ kind: 'failed', message: t('emailVerifiedPage.t21') })
           return
         }
         setPhase({ kind: 'failed', message: reason.message })
         return
       }
-      setPhase({ kind: 'failed', message: '인증 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.' })
+      setPhase({ kind: 'failed', message: t('emailVerifiedPage.t22') })
     }
   }
 
@@ -133,28 +135,28 @@ export function EmailVerifiedPage() {
           <CardContent className="grid gap-6 p-8">
             {phase.kind === 'checking' ? (
               <div className="flex min-h-40 items-center justify-center">
-                <Spinner label="이메일 인증을 확인하는 중" size="lg" />
+                <Spinner label={t('emailVerifiedPage.t1')} size="lg" />
               </div>
             ) : phase.kind === 'verified' ? (
-              <AlertBanner title="이메일 인증이 완료되었습니다" variant="success">
-                이제 로그인해서 서비스를 이용해 주세요.
+              <AlertBanner title={t('emailVerifiedPage.t2')} variant="success">
+                {t('emailVerifiedPage.t3')}
               </AlertBanner>
             ) : (
-              <AlertBanner title="이메일 인증을 완료하지 못했습니다" variant="error">
+              <AlertBanner title={t('emailVerifiedPage.t4')} variant="error">
                 {phase.kind === 'failed'
                   ? phase.message
                   : phase.kind === 'rateLimited'
-                    ? '확인 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.'
-                    : '인증 링크가 만료되었거나 이미 사용되었습니다.'}
+                    ? t('emailVerifiedPage.t23')
+                    : t('emailVerifiedPage.t24')}
               </AlertBanner>
             )}
             {phase.kind === 'verified' ? (
               <Button className="w-full" onClick={() => navigate('/login')} size="lg">
-                로그인하러 가기
+                {t('emailVerifiedPage.t5')}
               </Button>
             ) : phase.kind === 'rateLimited' || phase.kind === 'failed' ? (
               <Button className="w-full" onClick={retryConfirm} variant="secondary">
-                다시 확인하기
+                {t('emailVerifiedPage.t6')}
               </Button>
             ) : null}
           </CardContent>
@@ -165,7 +167,7 @@ export function EmailVerifiedPage() {
 
   const fallbackPath = session?.role === 'FAN' ? '/fan/events' : session ? '/' : '/login'
   const donePath = returnTo ?? fallbackPath
-  const doneLabel = returnTo ? '이전 화면으로 돌아가기' : session.role === 'FAN' ? '이벤트 보러 가기' : '홈으로 가기'
+  const doneLabel = returnTo ? t('emailVerifiedPage.t25') : session.role === 'FAN' ? t('emailVerifiedPage.t26') : t('emailVerifiedPage.t27')
 
   return (
     <div className="mx-auto grid w-full max-w-xl gap-6 py-12">
@@ -183,11 +185,11 @@ export function EmailVerifiedPage() {
                 />
                 <div>
                   <h1 className="text-2xl font-black tracking-[-0.03em]">
-                    {phase.alreadyVerified ? '이미 인증이 완료되어 있어요' : '이메일 인증이 완료되었어요'}
+                    {phase.alreadyVerified ? t('emailVerifiedPage.t28') : t('emailVerifiedPage.t29')}
                   </h1>
                   <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
-                    {phase.email ? `${maskEmail(phase.email)} 주소가 확인되었습니다. ` : ''}
-                    이제 팬미팅 응모에 참여할 수 있어요.
+                    {phase.email ? t('emailVerifiedPage.t30', { p0: maskEmail(phase.email) }) : ''}
+                    {t('emailVerifiedPage.t7')}
                   </p>
                 </div>
               </div>
@@ -198,40 +200,40 @@ export function EmailVerifiedPage() {
           ) : !hasToken ? (
             <>
               <StateHeading
-                description="인증 링크가 올바르지 않아요. 아래에서 인증 메일을 다시 받아 주세요."
-                title="잘못된 인증 링크입니다"
+                description={t('emailVerifiedPage.t8')}
+                title={t('emailVerifiedPage.t9')}
               />
               <EmailVerificationNotice onVerified={() => setPhase({ kind: 'verified', alreadyVerified: true })} />
             </>
           ) : phase.kind === 'checking' ? (
             <div className="flex min-h-40 items-center justify-center">
-              <Spinner label="이메일 인증을 확인하는 중" size="lg" />
+              <Spinner label={t('emailVerifiedPage.t10')} size="lg" />
             </div>
           ) : phase.kind === 'invalid' ? (
             <>
               <StateHeading
-                description="인증 링크가 만료되었거나 이미 사용되었어요. 새 인증 메일을 받아 다시 시도해 주세요."
-                title="사용할 수 없는 인증 링크예요"
+                description={t('emailVerifiedPage.t11')}
+                title={t('emailVerifiedPage.t12')}
               />
               <EmailVerificationNotice onVerified={() => setPhase({ kind: 'verified', alreadyVerified: true })} />
             </>
           ) : phase.kind === 'rateLimited' ? (
             <>
               <StateHeading
-                description="확인 요청이 너무 많아 잠시 제한되었어요. 잠시 후 아래 버튼으로 다시 시도해 주세요."
-                title="잠시 후 다시 시도해 주세요"
+                description={t('emailVerifiedPage.t13')}
+                title={t('emailVerifiedPage.t14')}
               />
               <Button className="w-full" onClick={retryConfirm} variant="secondary">
-                다시 확인하기
+                {t('emailVerifiedPage.t15')}
               </Button>
             </>
           ) : (
             <>
-              <AlertBanner title="인증을 완료하지 못했습니다" variant="error">
+              <AlertBanner title={t('emailVerifiedPage.t16')} variant="error">
                 {phase.message}
               </AlertBanner>
               <Button className="w-full" onClick={retryConfirm} variant="secondary">
-                다시 확인하기
+                {t('emailVerifiedPage.t17')}
               </Button>
             </>
           )}
@@ -239,11 +241,11 @@ export function EmailVerifiedPage() {
       </Card>
 
       <p className="text-center text-sm text-[var(--color-text-secondary)]">
-        문제가 계속되면{' '}
+        {t('emailVerifiedPage.t18')}{' '}
         <Link className="font-bold underline underline-offset-4" to="/service-notices">
-          공지사항
+          {t('emailVerifiedPage.t19')}
         </Link>
-        을 확인해 주세요.
+        {t('emailVerifiedPage.t20')}
       </p>
     </div>
   )

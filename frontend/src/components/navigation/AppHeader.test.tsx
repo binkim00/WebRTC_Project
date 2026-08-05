@@ -52,6 +52,14 @@ const expectedNavigation = {
     { labelKey: 'nav.manager.organization', label: '조직 관리', to: '/manager/organization' },
     { labelKey: 'nav.manager.mypage', label: '마이페이지', to: '/manager/mypage' },
   ],
+  // 서비스 운영자는 팬미팅 운영 화면이 없고 서비스 단위 업무만 갖는다.
+  ADMIN: [
+    {
+      labelKey: 'nav.admin.serviceNotices',
+      label: '전체 공지 관리',
+      to: '/admin/service-notices',
+    },
+  ],
 } as const satisfies Record<
   LoginRole,
   readonly { labelKey: string; label: string; to: string }[]

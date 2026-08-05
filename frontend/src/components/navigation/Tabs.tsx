@@ -1,5 +1,6 @@
 import { useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 export type TabItem = {
   value: string
@@ -25,9 +26,12 @@ export function Tabs({
   value,
   onValueChange,
   activationMode = 'automatic',
-  ariaLabel = '화면 탭',
+  ariaLabel,
   className,
 }: TabsProps) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const resolvedAriaLabel = ariaLabel ?? t('tabs.t1')
   const generatedId = useId().replaceAll(':', '')
   const tabRefs = useRef(new Map<string, HTMLButtonElement>())
   const selectedEnabledItem = items.find((item) => item.value === value && !item.disabled)
@@ -64,7 +68,7 @@ export function Tabs({
 
   return (
     <div
-      aria-label={ariaLabel}
+      aria-label={resolvedAriaLabel}
       aria-orientation="horizontal"
       className={cn(
         'flex min-h-14 gap-7 overflow-x-auto overflow-y-hidden border-b border-[var(--color-divider)]',

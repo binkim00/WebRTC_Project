@@ -1,15 +1,17 @@
 import { useParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components/call/VideoCallRoom'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { useTranslation } from '../../i18n'
 
 export function FanMeetingCallPage() {
+  const { t } = useTranslation()
   const { fanMeetingId, callSessionId } = useParams()
 
   if (!fanMeetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 fanMeetingId 값이 없습니다. 이전 화면에서 올바른 팬미팅을 선택해 주세요."
-        title="필수 URL 파라미터가 없습니다"
+        message={t('fanRoutePages.t1')}
+        title={t('fanRoutePages.t2')}
       />
     )
   }
@@ -17,8 +19,8 @@ export function FanMeetingCallPage() {
   if (!callSessionId?.trim()) {
     return (
       <InvalidRouteState
-        message="실제 영상통화 입장에는 callSessionId가 필요합니다. 대기 화면에서 배정받은 통화 세션으로 입장해 주세요."
-        title="통화 세션 ID가 없습니다"
+        message={t('fanRoutePages.t3')}
+        title={t('fanRoutePages.t4')}
       />
     )
   }
@@ -28,7 +30,7 @@ export function FanMeetingCallPage() {
       callSessionId={callSessionId}
       endTo={`/fan/fan-meetings/${fanMeetingId}/complete`}
       meetingId={fanMeetingId}
-      participantLabel="인플루언서 영상"
+      participantLabel={t('fanRoutePages.t5')}
       screenId="FN-005"
     />
   )

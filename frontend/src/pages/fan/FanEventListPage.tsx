@@ -290,7 +290,7 @@ export function FanEventListPage() {
 
           <div className="mt-3.5 grid grid-cols-1 gap-x-[26px] gap-y-[30px] sm:grid-cols-2 lg:grid-cols-3">
             {visibleMeetings.map((meeting) => {
-              const statusLabel = fanMeetingStatusContent[meeting.status].label
+              const statusLabel = fanMeetingStatusContent()[meeting.status].label
               const isOpen = meeting.status === 'APPLICATION_OPEN'
               const isUpcoming = meeting.status === 'PUBLISHED'
               const statusColor = isOpen

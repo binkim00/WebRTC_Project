@@ -7,6 +7,7 @@ import wordmark from '../../assets/landing/melly-wordmark-selected.png'
 import ringLight from '../../assets/landing/ring-light.webp'
 import timer from '../../assets/landing/timer.webp'
 import './landing.css'
+import { useTranslation } from '../../i18n'
 
 const particlePalette = ['#f5aca1', '#f3d76c', '#b8e3d3', '#d9c7f4', '#b9dbf6']
 
@@ -24,6 +25,7 @@ const floatObjects = [
  * 헤더·네비게이션은 전역 AppHeader(role 분기)가 담당하므로 히어로만 렌더링한다.
  */
 export function LandingPage() {
+  const { t } = useTranslation()
   const heroRef = useRef<HTMLElement>(null)
 
   // 원본 script.js의 파티클 생성·포인터 패럴랙스·젤리 보잉 인터랙션을 그대로 옮겼다.
@@ -153,11 +155,11 @@ export function LandingPage() {
       <div className="hero-copy">
         <img alt="Melly" className="wordmark" src={wordmark} />
         <h1 id="hero-title">
-          좋아하는 사람과
+          {t('landingPage.t1')}
           <br />
-          마주보는 순간.
+          {t('landingPage.t2')}
         </h1>
-        <p>기다리던 크리에이터와 단둘이 만나는 1:1 영상 팬미팅.</p>
+        <p>{t('landingPage.t3')}</p>
       </div>
     </section>
   )

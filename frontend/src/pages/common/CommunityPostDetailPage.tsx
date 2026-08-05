@@ -29,6 +29,7 @@ import {
   TextField,
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { translate, useTranslation } from '../../i18n'
 
 const COMMENT_PAGE_SIZE = 10
 
@@ -46,13 +47,14 @@ function formatDateTime(iso: string): string {
 
 function toFriendlyCommentError(error: unknown): string {
   if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-    return '댓글은 확정 참가자 또는 운영자만 작성할 수 있습니다.'
+    return translate('communityPostDetailPage.t60')
   }
 
-  return error instanceof Error ? error.message : '댓글 작성에 실패했습니다.'
+  return error instanceof Error ? error.message : translate('communityPostDetailPage.t61')
 }
 
 export function CommunityPostDetailPage() {
+  const { t } = useTranslation()
   const { postId } = useParams()
   const navigate = useNavigate()
   const [session] = useState(() => getAuthSession())
@@ -101,7 +103,7 @@ export function CommunityPostDetailPage() {
         }
 
         setPostError(
-          error instanceof Error ? error.message : '게시글을 불러오지 못했습니다.',
+          error instanceof Error ? error.message : t('communityPostDetailPage.t45'),
         )
       })
       .finally(() => {
@@ -111,6 +113,8 @@ export function CommunityPostDetailPage() {
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, postReloadCount])
 
   useEffect(() => {
@@ -135,7 +139,7 @@ export function CommunityPostDetailPage() {
         }
 
         setCommentsError(
-          error instanceof Error ? error.message : '댓글을 불러오지 못했습니다.',
+          error instanceof Error ? error.message : t('communityPostDetailPage.t46'),
         )
       })
       .finally(() => {
@@ -145,6 +149,8 @@ export function CommunityPostDetailPage() {
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, commentPage, commentsReloadCount])
 
   async function handleUpdatePost(event: FormEvent<HTMLFormElement>) {
@@ -159,7 +165,7 @@ export function CommunityPostDetailPage() {
     const content = String(formData.get('content') ?? '').trim()
 
     if (!title || !content) {
-      setPostActionError('제목과 내용을 모두 입력해 주세요.')
+      setPostActionError(t('communityPostDetailPage.t47'))
       return
     }
 
@@ -172,7 +178,7 @@ export function CommunityPostDetailPage() {
       setPostReloadCount((count) => count + 1)
     } catch (error: unknown) {
       setPostActionError(
-        error instanceof Error ? error.message : '게시글 수정에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t48'),
       )
     } finally {
       setPostSaving(false)
@@ -184,7 +190,7 @@ export function CommunityPostDetailPage() {
       return
     }
 
-    if (!window.confirm('게시글을 삭제하시겠습니까?')) {
+    if (!window.confirm(t('communityPostDetailPage.t49'))) {
       return
     }
 
@@ -200,7 +206,7 @@ export function CommunityPostDetailPage() {
       }
     } catch (error: unknown) {
       setPostActionError(
-        error instanceof Error ? error.message : '게시글 삭제에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t50'),
       )
     }
   }
@@ -215,7 +221,7 @@ export function CommunityPostDetailPage() {
     const content = commentContent.trim()
 
     if (!content) {
-      setCommentError('댓글 내용을 입력해 주세요.')
+      setCommentError(t('communityPostDetailPage.t51'))
       return
     }
 
@@ -243,7 +249,7 @@ export function CommunityPostDetailPage() {
     const content = editingCommentContent.trim()
 
     if (!content) {
-      setCommentActionError('댓글 내용을 입력해 주세요.')
+      setCommentActionError(t('communityPostDetailPage.t52'))
       return
     }
 
@@ -258,7 +264,7 @@ export function CommunityPostDetailPage() {
       setCommentsReloadCount((count) => count + 1)
     } catch (error: unknown) {
       setCommentActionError(
-        error instanceof Error ? error.message : '댓글 수정에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t53'),
       )
     } finally {
       setCommentActionBusy(false)
@@ -270,7 +276,7 @@ export function CommunityPostDetailPage() {
       return
     }
 
-    if (!window.confirm('댓글을 삭제하시겠습니까?')) {
+    if (!window.confirm(t('communityPostDetailPage.t54'))) {
       return
     }
 
@@ -284,7 +290,7 @@ export function CommunityPostDetailPage() {
       setPostReloadCount((count) => count + 1)
     } catch (error: unknown) {
       setCommentActionError(
-        error instanceof Error ? error.message : '댓글 삭제에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t55'),
       )
     } finally {
       setCommentActionBusy(false)
@@ -306,7 +312,7 @@ export function CommunityPostDetailPage() {
     const detail = String(formData.get('detail') ?? '').trim()
 
     if (!reason) {
-      setCommentActionError('신고 사유를 입력해 주세요.')
+      setCommentActionError(t('communityPostDetailPage.t56'))
       return
     }
 
@@ -321,10 +327,10 @@ export function CommunityPostDetailPage() {
         session.accessToken,
       )
       setReportingCommentId(undefined)
-      setCommentActionSuccess('신고가 접수되었습니다. 확인 후 조치하겠습니다.')
+      setCommentActionSuccess(t('communityPostDetailPage.t57'))
     } catch (error: unknown) {
       setCommentActionError(
-        error instanceof Error ? error.message : '신고 접수에 실패했습니다.',
+        error instanceof Error ? error.message : t('communityPostDetailPage.t58'),
       )
     } finally {
       setCommentActionBusy(false)
@@ -334,8 +340,8 @@ export function CommunityPostDetailPage() {
   if (!postId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 postId 값이 없습니다."
-        title="필수 URL 파라미터가 없습니다."
+        message={t('communityPostDetailPage.t1')}
+        title={t('communityPostDetailPage.t2')}
       />
     )
   }
@@ -343,7 +349,7 @@ export function CommunityPostDetailPage() {
   if (postLoading) {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label="게시글을 불러오는 중" />
+        <Spinner label={t('communityPostDetailPage.t3')} />
       </div>
     )
   }
@@ -351,11 +357,11 @@ export function CommunityPostDetailPage() {
   if (postError || !post) {
     return (
       <div className="mx-auto grid w-full max-w-4xl gap-6">
-        <AlertBanner title="게시글을 불러오지 못했습니다" variant="error">
-          {postError ?? '게시글 정보를 찾을 수 없습니다.'}
+        <AlertBanner title={t('communityPostDetailPage.t4')} variant="error">
+          {postError ?? t('communityPostDetailPage.t59')}
         </AlertBanner>
         <div>
-          <Button onClick={() => setPostReloadCount((count) => count + 1)}>다시 시도</Button>
+          <Button onClick={() => setPostReloadCount((count) => count + 1)}>{t('communityPostDetailPage.t5')}</Button>
         </div>
       </div>
     )
@@ -373,7 +379,7 @@ export function CommunityPostDetailPage() {
             to={`/fan-meetings/${post.meetingId}/community`}
           >
             <ArrowLeft aria-hidden size={18} weight="bold" />
-            커뮤니티 목록으로
+            {t('communityPostDetailPage.t6')}
           </Link>
         ) : null}
       </header>
@@ -382,16 +388,16 @@ export function CommunityPostDetailPage() {
         <CardContent>
           {editing ? (
             <form className="grid gap-4" onSubmit={(event) => void handleUpdatePost(event)}>
-              <TextField defaultValue={post.title} label="제목" name="title" required />
+              <TextField defaultValue={post.title} label={t('communityPostDetailPage.t7')} name="title" required />
               <Textarea
                 defaultValue={post.content}
-                label="내용"
+                label={t('communityPostDetailPage.t8')}
                 name="content"
                 required
                 rows={8}
               />
               {postActionError ? (
-                <AlertBanner title="게시글을 수정하지 못했습니다" variant="error">
+                <AlertBanner title={t('communityPostDetailPage.t9')} variant="error">
                   {postActionError}
                 </AlertBanner>
               ) : null}
@@ -404,17 +410,17 @@ export function CommunityPostDetailPage() {
                   type="button"
                   variant="secondary"
                 >
-                  취소
+                  {t('communityPostDetailPage.t10')}
                 </Button>
                 <Button loading={postSaving} type="submit">
-                  저장
+                  {t('communityPostDetailPage.t11')}
                 </Button>
               </div>
             </form>
           ) : (
             <article>
               <div className="flex flex-wrap items-center gap-2">
-                {post.pinned ? <Badge variant="primary">고정</Badge> : null}
+                {post.pinned ? <Badge variant="primary">{t('communityPostDetailPage.t12')}</Badge> : null}
                 <h1 className="text-2xl font-black tracking-[-0.03em] text-[var(--color-text-primary)]">
                   {post.title}
                 </h1>
@@ -422,14 +428,14 @@ export function CommunityPostDetailPage() {
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--color-divider)] pb-4 text-sm text-[var(--color-text-secondary)]">
                 <span className="font-semibold">{post.authorNickname}</span>
                 <time dateTime={post.createdAt}>{formatDateTime(post.createdAt)}</time>
-                <span>댓글 {post.commentCount}개</span>
+                <span>{t('communityPostDetailPage.t13')} {post.commentCount}{t('communityPostDetailPage.t14')}</span>
               </div>
               <p className="mt-5 whitespace-pre-wrap leading-7 text-[var(--color-text-primary)]">
                 {post.content}
               </p>
               {postActionError ? (
                 <div className="mt-4">
-                  <AlertBanner title="요청을 처리하지 못했습니다" variant="error">
+                  <AlertBanner title={t('communityPostDetailPage.t15')} variant="error">
                     {postActionError}
                   </AlertBanner>
                 </div>
@@ -445,7 +451,7 @@ export function CommunityPostDetailPage() {
                       size="sm"
                       variant="secondary"
                     >
-                      수정
+                      {t('communityPostDetailPage.t16')}
                     </Button>
                   ) : null}
                   {post.canDelete ? (
@@ -454,7 +460,7 @@ export function CommunityPostDetailPage() {
                       size="sm"
                       variant="danger"
                     >
-                      삭제
+                      {t('communityPostDetailPage.t17')}
                     </Button>
                   ) : null}
                 </div>
@@ -466,7 +472,7 @@ export function CommunityPostDetailPage() {
 
       <section className="grid gap-4">
         <h2 className="text-xl font-black tracking-[-0.03em]">
-          댓글 <span className="text-[var(--color-primary-coral)]">{post.commentCount}</span>
+          {t('communityPostDetailPage.t18')} <span className="text-[var(--color-primary-coral)]">{post.commentCount}</span>
         </h2>
 
         {session ? (
@@ -474,57 +480,57 @@ export function CommunityPostDetailPage() {
             <CardContent>
               <form className="grid gap-3" onSubmit={(event) => void handleCreateComment(event)}>
                 <Textarea
-                  label="댓글 작성"
+                  label={t('communityPostDetailPage.t19')}
                   onChange={(event) => setCommentContent(event.currentTarget.value)}
-                  placeholder="따뜻한 댓글을 남겨 주세요."
+                  placeholder={t('communityPostDetailPage.t20')}
                   rows={3}
                   value={commentContent}
                 />
                 {commentError ? (
-                  <AlertBanner title="댓글을 등록하지 못했습니다" variant="error">
+                  <AlertBanner title={t('communityPostDetailPage.t21')} variant="error">
                     {commentError}
                   </AlertBanner>
                 ) : null}
                 <div className="flex justify-end">
                   <Button loading={commentSubmitting} type="submit">
-                    댓글 등록
+                    {t('communityPostDetailPage.t22')}
                   </Button>
                 </div>
               </form>
             </CardContent>
           </Card>
         ) : (
-          <AlertBanner title="로그인이 필요합니다" variant="info">
-            댓글을 작성하려면{' '}
+          <AlertBanner title={t('communityPostDetailPage.t23')} variant="info">
+            {t('communityPostDetailPage.t24')}{' '}
             <Link className="font-semibold underline" to="/login">
-              로그인
+              {t('communityPostDetailPage.t25')}
             </Link>
-            해 주세요.
+            {t('communityPostDetailPage.t26')}
           </AlertBanner>
         )}
 
         {commentActionSuccess ? (
-          <AlertBanner title="처리가 완료되었습니다" variant="success">
+          <AlertBanner title={t('communityPostDetailPage.t27')} variant="success">
             {commentActionSuccess}
           </AlertBanner>
         ) : null}
         {commentActionError ? (
-          <AlertBanner title="요청을 처리하지 못했습니다" variant="error">
+          <AlertBanner title={t('communityPostDetailPage.t28')} variant="error">
             {commentActionError}
           </AlertBanner>
         ) : null}
         {commentsError ? (
-          <AlertBanner title="댓글을 불러오지 못했습니다" variant="error">
+          <AlertBanner title={t('communityPostDetailPage.t29')} variant="error">
             {commentsError}
           </AlertBanner>
         ) : null}
 
         {commentsLoading ? (
           <div className="flex justify-center py-10">
-            <Spinner label="댓글을 불러오는 중" />
+            <Spinner label={t('communityPostDetailPage.t30')} />
           </div>
         ) : commentList.length === 0 ? (
-          <EmptyState description="첫 댓글을 남겨 보세요." title="댓글이 없습니다" />
+          <EmptyState description={t('communityPostDetailPage.t31')} title={t('communityPostDetailPage.t32')} />
         ) : (
           <Card>
             <CardContent className="p-0">
@@ -560,7 +566,7 @@ export function CommunityPostDetailPage() {
                               size="sm"
                               variant="ghost"
                             >
-                              수정
+                              {t('communityPostDetailPage.t33')}
                             </Button>
                           ) : null}
                           {comment.canDelete ? (
@@ -570,7 +576,7 @@ export function CommunityPostDetailPage() {
                               size="sm"
                               variant="ghost"
                             >
-                              삭제
+                              {t('communityPostDetailPage.t34')}
                             </Button>
                           ) : null}
                           {session && !isOwnComment ? (
@@ -587,7 +593,7 @@ export function CommunityPostDetailPage() {
                               size="sm"
                               variant="ghost"
                             >
-                              신고
+                              {t('communityPostDetailPage.t35')}
                             </Button>
                           ) : null}
                         </span>
@@ -596,7 +602,7 @@ export function CommunityPostDetailPage() {
                       {isEditingComment ? (
                         <div className="grid gap-2">
                           <Textarea
-                            label="댓글 수정"
+                            label={t('communityPostDetailPage.t36')}
                             onChange={(event) =>
                               setEditingCommentContent(event.currentTarget.value)
                             }
@@ -612,14 +618,14 @@ export function CommunityPostDetailPage() {
                               size="sm"
                               variant="secondary"
                             >
-                              취소
+                              {t('communityPostDetailPage.t37')}
                             </Button>
                             <Button
                               loading={commentActionBusy}
                               onClick={() => void handleUpdateComment(comment.commentId)}
                               size="sm"
                             >
-                              저장
+                              {t('communityPostDetailPage.t38')}
                             </Button>
                           </div>
                         </div>
@@ -637,16 +643,16 @@ export function CommunityPostDetailPage() {
                           }
                         >
                           <TextField
-                            label="신고 사유"
+                            label={t('communityPostDetailPage.t39')}
                             maxLength={100}
                             name="reason"
-                            placeholder="신고 사유를 입력하세요 (100자 이내)"
+                            placeholder={t('communityPostDetailPage.t40')}
                             required
                           />
                           <Textarea
-                            label="상세 내용 (선택)"
+                            label={t('communityPostDetailPage.t41')}
                             name="detail"
-                            placeholder="추가로 전달할 내용이 있으면 입력하세요."
+                            placeholder={t('communityPostDetailPage.t42')}
                             rows={3}
                           />
                           <div className="flex justify-end gap-2">
@@ -656,7 +662,7 @@ export function CommunityPostDetailPage() {
                               type="button"
                               variant="secondary"
                             >
-                              취소
+                              {t('communityPostDetailPage.t43')}
                             </Button>
                             <Button
                               loading={commentActionBusy}
@@ -664,7 +670,7 @@ export function CommunityPostDetailPage() {
                               type="submit"
                               variant="danger"
                             >
-                              신고하기
+                              {t('communityPostDetailPage.t44')}
                             </Button>
                           </div>
                         </form>
