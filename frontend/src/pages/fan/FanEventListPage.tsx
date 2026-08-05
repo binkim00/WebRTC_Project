@@ -10,6 +10,7 @@ import {
   type PublicFanMeetingSummary,
 } from '../../api/fanMeetings'
 import { AlertBanner, Select, Spinner, TextField } from '../../components'
+import { useTranslation, type TranslationKey } from '../../i18n'
 import { fanMeetingStatusContent } from './fanMeetingStatus'
 
 /**
@@ -23,12 +24,16 @@ const discoverableStatuses = [
   'READY',
 ] as const satisfies readonly PublicFanMeetingStatus[]
 
+/**
+ * 모집 상태 필터다. 라벨은 사전 키로 들고 있고 화면에서 현재 언어로 번역한다.
+ * (모듈 상수라 훅을 쓸 수 없고 언어가 바뀔 때 다시 만들 수도 없다.)
+ */
 const statusFilterOptions = [
-  { label: '전체', value: 'ALL' },
-  { label: '모집 예정', value: 'PUBLISHED' },
-  { label: '모집 중', value: 'APPLICATION_OPEN' },
-  { label: '결과 발표', value: 'READY' },
-] as const
+  { labelKey: 'fanEvents.status.all', value: 'ALL' },
+  { labelKey: 'fanEvents.status.published', value: 'PUBLISHED' },
+  { labelKey: 'fanEvents.status.open', value: 'APPLICATION_OPEN' },
+  { labelKey: 'fanEvents.status.ready', value: 'READY' },
+] as const satisfies readonly { labelKey: TranslationKey; value: string }[]
 
 /**
  * dc.html의 날짜 필터는 "8월 1주차"처럼 특정 달에 고정된 데모용 값이라 그대로 쓸 수 없다.
@@ -36,13 +41,13 @@ const statusFilterOptions = [
  * 일(오늘) · 주(이번 주/다음 주) · 월(이번 달/다음 달) 세 단위로 제공한다.
  */
 const dateFilterOptions = [
-  { label: '전체 날짜', value: 'ALL' },
-  { label: '오늘', value: 'TODAY' },
-  { label: '이번 주', value: 'THIS_WEEK' },
-  { label: '다음 주', value: 'NEXT_WEEK' },
-  { label: '이번 달', value: 'THIS_MONTH' },
-  { label: '다음 달', value: 'NEXT_MONTH' },
-] as const
+  { labelKey: 'fanEvents.date.all', value: 'ALL' },
+  { labelKey: 'fanEvents.date.today', value: 'TODAY' },
+  { labelKey: 'fanEvents.date.thisWeek', value: 'THIS_WEEK' },
+  { labelKey: 'fanEvents.date.nextWeek', value: 'NEXT_WEEK' },
+  { labelKey: 'fanEvents.date.thisMonth', value: 'THIS_MONTH' },
+  { labelKey: 'fanEvents.date.nextMonth', value: 'NEXT_MONTH' },
+] as const satisfies readonly { labelKey: TranslationKey; value: string }[]
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -129,6 +134,16 @@ function errorMessage(reason: unknown, fallback: string) {
 }
 
 export function FanEventListPage() {
+  const { t } = useTranslation()
+  // 필터 옵션은 사전 키로 정의돼 있어 현재 언어로 번역해 Select에 넘긴다.
+  const translatedStatusOptions = statusFilterOptions.map((option) => ({
+    label: t(option.labelKey),
+    value: option.value,
+  }))
+  const translatedDateOptions = dateFilterOptions.map((option) => ({
+    label: t(option.labelKey),
+    value: option.value,
+  }))
   const [meetings, setMeetings] = useState<PublicFanMeetingSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
@@ -151,13 +166,17 @@ export function FanEventListPage() {
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return
-        setError(errorMessage(reason, '팬미팅 목록을 불러오지 못했습니다.'))
+        // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 목록 재조회를
+        // 유발하므로 제외한다. 이미 표시된 오류 문구는 다음 조회 때 새 언어로 바뀐다.
+        setError(errorMessage(reason, t('fanEvents.loadFailed')))
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
 
     return () => controller.abort()
+    // t는 위 주석대로 의존성에서 제외한다. 언어 전환이 목록 재조회를 유발하지 않게 한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.keyword])
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -200,9 +219,9 @@ export function FanEventListPage() {
 
   return (
     <div>
-      <h1 className="text-[30px] font-black tracking-[-0.04em]">열려 있는 이벤트</h1>
+      <h1 className="text-[30px] font-black tracking-[-0.04em]">{t('fanEvents.heading')}</h1>
       <p className="mt-[9px] text-[17px] font-medium text-[var(--color-text-body)]">
-        응모 마감이 가까운 순서로 보여드려요.
+        {t('fanEvents.lead')}
       </p>
 
       <form
@@ -213,60 +232,60 @@ export function FanEventListPage() {
         <TextField
           containerClassName="sm:col-span-2 lg:col-span-1"
           defaultValue={filters.keyword}
-          label="검색"
+          label={t('fanEvents.search.label')}
           name="keyword"
-          placeholder="이벤트명 또는 인플루언서명"
+          placeholder={t('fanEvents.search.placeholder')}
           type="search"
         />
         <Select
           defaultValue={filters.status}
-          label="모집 상태"
+          label={t('fanEvents.status.label')}
           name="status"
-          options={statusFilterOptions}
+          options={translatedStatusOptions}
         />
         <Select
           defaultValue={filters.date}
-          label="날짜"
+          label={t('fanEvents.date.label')}
           name="date"
-          options={dateFilterOptions}
+          options={translatedDateOptions}
         />
         <TextField
           defaultValue={filters.influencerName}
-          label="인플루언서"
+          label={t('fanEvents.influencer.label')}
           name="influencerName"
-          placeholder="인플루언서명"
+          placeholder={t('fanEvents.influencer.placeholder')}
           type="search"
         />
         <button
           className="mj-font-emphasis min-h-[46px] whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] px-[22px] text-[15px] text-white hover:bg-[var(--color-primary-coral-hover)]"
           type="submit"
         >
-          검색
+          {t('fanEvents.search.submit')}
         </button>
       </form>
 
       {error ? (
-        <AlertBanner className="mt-6" title="팬미팅 목록을 표시할 수 없습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('fanEvents.error.title')} variant="error">
           {error}
         </AlertBanner>
       ) : loading ? (
         <div className="flex min-h-80 items-center justify-center">
-          <Spinner label="팬미팅 목록을 불러오는 중" />
+          <Spinner label={t('fanEvents.loading')} />
         </div>
       ) : visibleMeetings.length === 0 ? (
         <div aria-live="polite" className="grid place-items-center px-6 py-[76px] text-center">
           <img alt="" className="size-24 object-contain opacity-60" src={moldEmptyImage} />
           <strong className="mt-4 text-[19px] font-extrabold tracking-[-0.03em]">
-            조건에 맞는 팬미팅이 없어요
+            {t('fanEvents.empty.title')}
           </strong>
           <span className="mt-2 text-base font-medium text-[var(--color-text-muted)]">
-            검색 조건을 바꾸면 다른 팬미팅을 볼 수 있어요.
+            {t('fanEvents.empty.description')}
           </span>
         </div>
       ) : (
         <>
           <p className="mt-[22px] text-[15px] font-extrabold tabular-nums">
-            {visibleMeetings.length}개
+            {t('fanEvents.count', { count: visibleMeetings.length })}
           </p>
 
           <div className="mt-3.5 grid grid-cols-1 gap-x-[26px] gap-y-[30px] sm:grid-cols-2 lg:grid-cols-3">
@@ -295,12 +314,12 @@ export function FanEventListPage() {
                         />
                       ) : (
                         <div
-                          aria-label="대표 이미지가 등록되지 않은 이벤트"
+                          aria-label={t('fanEvents.card.noImageAria')}
                           className="grid aspect-[16/10] w-full place-items-center"
                           role="img"
                         >
                           <span className="text-sm font-semibold text-[var(--color-text-muted)]">
-                            이미지 없음
+                            {t('fanEvents.card.noImage')}
                           </span>
                         </div>
                       )}
@@ -321,7 +340,7 @@ export function FanEventListPage() {
                         <p
                           className={`whitespace-nowrap text-[13px] font-extrabold ${ddayUrgent ? 'text-[var(--color-warning)]' : 'text-[var(--color-text-muted)]'}`}
                         >
-                          마감 D-{dday}
+                          {t('fanEvents.card.dday', { days: dday })}
                         </p>
                       ) : null}
                     </div>
@@ -329,18 +348,22 @@ export function FanEventListPage() {
                       {meeting.title}
                     </h2>
                     <p className="mt-1.5 text-[15px] font-medium text-[var(--color-text-muted)]">
-                      인플루언서 {meeting.influencerName}
+                      {t('fanEvents.card.influencer', { name: meeting.influencerName })}
                     </p>
                     <p className="mt-3 border-t border-[var(--color-divider)] pt-3 text-base font-extrabold tabular-nums">
                       {formatDateTime(meeting.scheduledStartAt)}
                     </p>
                     {isUpcoming && meeting.applicationStartAt ? (
                       <p className="mt-[5px] text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
-                        응모 시작 {formatMonthDay(meeting.applicationStartAt)}
+                        {t('fanEvents.card.applyStart', {
+                          date: formatMonthDay(meeting.applicationStartAt),
+                        })}
                       </p>
                     ) : meeting.applicationEndAt ? (
                       <p className="mt-[5px] text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
-                        응모 마감 {formatMonthDay(meeting.applicationEndAt)}
+                        {t('fanEvents.card.applyEnd', {
+                          date: formatMonthDay(meeting.applicationEndAt),
+                        })}
                       </p>
                     ) : null}
                   </Link>

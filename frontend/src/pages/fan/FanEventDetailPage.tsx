@@ -24,13 +24,15 @@ import {
   Textarea,
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { useTranslation, type TranslationKey } from '../../i18n'
 import { fanMeetingStatusContent } from './fanMeetingStatus'
 
+/** 응모 동의 항목이다. 라벨은 사전 키로 들고 있고 화면에서 현재 언어로 번역한다. */
 const agreementItems = [
-  { id: 'privacy', label: '개인정보 수집·이용 동의' },
-  { id: 'recording', label: '영상통화 녹화 동의' },
-  { id: 'participation', label: '응모 규칙 및 참여 조건 동의' },
-] as const
+  { id: 'privacy', labelKey: 'fanEvent.agree.privacy' },
+  { id: 'recording', labelKey: 'fanEvent.agree.recording' },
+  { id: 'participation', labelKey: 'fanEvent.agree.participation' },
+] as const satisfies readonly { id: string; labelKey: TranslationKey }[]
 
 type AgreementId = (typeof agreementItems)[number]['id']
 
@@ -131,6 +133,7 @@ function HeroSeam({ glowOpacity, lineOpacity, animate }: {
 }
 
 export function FanEventDetailPage() {
+  const { t } = useTranslation()
   // 팬 화면 경로는 '이벤트'라고 부르지만 실제 식별자는 팬미팅 ID다.
   const meetingId = Number(useParams().meetingId)
   const validMeetingId = Number.isInteger(meetingId) && meetingId > 0
@@ -196,7 +199,7 @@ export function FanEventDetailPage() {
         setFormError(
           reason instanceof ApiError || reason instanceof TypeError
             ? reason.message
-            : '응모 질문을 불러오지 못했습니다.',
+            : t('fanEvent.form.error.load'),
         )
       })
       .finally(() => {
@@ -204,6 +207,8 @@ export function FanEventDetailPage() {
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발하므로 제외한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formReloadKey, meetingId, validMeetingId])
 
   useEffect(() => {
@@ -222,7 +227,7 @@ export function FanEventDetailPage() {
         setError(
           reason instanceof ApiError
             ? reason.message
-            : '이벤트 상세 정보를 불러오지 못했습니다.',
+            : t('fanEvent.error.detailLoad'),
         )
       })
       .finally(() => {
@@ -230,6 +235,8 @@ export function FanEventDetailPage() {
       })
 
     return () => controller.abort()
+    // 위와 같은 이유로 t는 의존성에서 제외한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId, validMeetingId])
 
   /** 상세를 다시 불러와 viewer 응모 상태를 최신으로 맞춘다. */
@@ -245,13 +252,13 @@ export function FanEventDetailPage() {
   async function handleSubmitApplication() {
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setSubmitError('응모하려면 먼저 로그인해 주세요.')
+      setSubmitError(t('fanEvent.submit.needLogin'))
       return
     }
 
     // 질문 조회가 끝나기 전이거나 실패한 상태에서는 빈 답변으로 잘못 접수하지 않는다.
     if (formLoading || formError) {
-      setSubmitError('응모 질문을 확인한 뒤 다시 시도해 주세요.')
+      setSubmitError(t('fanEvent.submit.checkForm'))
       return
     }
 
@@ -260,7 +267,11 @@ export function FanEventDetailPage() {
       (question) => question.required && !(answers[question.questionId] ?? '').trim(),
     )
     if (missingRequired.length > 0) {
-      setSubmitError(`필수 질문에 답변해 주세요: ${missingRequired.map((question) => question.questionText).join(', ')}`)
+      setSubmitError(
+        t('fanEvent.submit.missingRequired', {
+          questions: missingRequired.map((question) => question.questionText).join(', '),
+        }),
+      )
       return
     }
 
@@ -288,24 +299,24 @@ export function FanEventDetailPage() {
         // 인증 미완료는 화면 상태가 오래된 경우이므로 오류 문구와 함께 인증 안내로 전환한다.
         if (reason.code === 'EMAIL_VERIFICATION_REQUIRED') {
           setEmailVerified(false)
-          setSubmitError('이메일 인증을 완료한 뒤 응모할 수 있어요.')
+          setSubmitError(t('fanEvent.submit.needEmailVerify'))
           return
         }
         setSubmitError(
           reason.status === 401
-            ? '로그인이 만료되었습니다. 다시 로그인해 주세요.'
+            ? t('fanEvent.submit.sessionExpired')
             : reason.status === 403
-              ? '팬 계정으로 로그인해야 응모할 수 있습니다.'
+              ? t('fanEvent.submit.fanOnly')
               : reason.code === 'DEVICE_DUPLICATE_APPLICATION'
-                ? '같은 환경에서 다른 계정의 응모 이력이 확인되어 접수할 수 없습니다. 본인 계정이 맞다면 운영팀에 문의해 주세요.'
+                ? t('fanEvent.submit.deviceDuplicate')
                 : reason.status === 409
-                  ? '이미 응모한 이벤트입니다.'
+                  ? t('fanEvent.submit.alreadyApplied')
                   : reason.status === 429
-                    ? '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.'
+                    ? t('fanEvent.submit.tooManyRequests')
                     : reason.message,
         )
       } else {
-        setSubmitError('응모 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.')
+        setSubmitError(t('fanEvent.submit.failed'))
       }
     } finally {
       setSubmitting(false)
@@ -316,10 +327,10 @@ export function FanEventDetailPage() {
   async function handleWithdrawApplication() {
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setSubmitError('응모를 취소하려면 먼저 로그인해 주세요.')
+      setSubmitError(t('fanEvent.withdraw.needLogin'))
       return
     }
-    if (!window.confirm('응모를 취소할까요? 응모 기간 안에는 다시 응모할 수 있어요.')) return
+    if (!window.confirm(t('fanEvent.withdraw.confirm'))) return
 
     setSubmitting(true)
     setSubmitError(undefined)
@@ -332,13 +343,13 @@ export function FanEventDetailPage() {
       if (reason instanceof ApiError) {
         setSubmitError(
           reason.status === 401
-            ? '로그인이 만료되었습니다. 다시 로그인해 주세요.'
+            ? t('fanEvent.submit.sessionExpired')
             : reason.status === 409
-              ? '지금은 응모를 취소할 수 있는 기간이 아닙니다.'
+              ? t('fanEvent.withdraw.notAllowed')
               : reason.message,
         )
       } else {
-        setSubmitError('응모 취소 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.')
+        setSubmitError(t('fanEvent.withdraw.failed'))
       }
     } finally {
       setSubmitting(false)
@@ -348,8 +359,8 @@ export function FanEventDetailPage() {
   if (!validMeetingId) {
     return (
       <InvalidRouteState
-        message="올바른 이벤트를 선택해 주세요."
-        title="이벤트 정보가 없습니다"
+        message={t('fanEvent.invalid.message')}
+        title={t('fanEvent.invalid.title')}
       />
     )
   }
@@ -359,7 +370,7 @@ export function FanEventDetailPage() {
     return (
       <div
         aria-busy="true"
-        aria-label="이벤트 상세 정보를 불러오는 중"
+        aria-label={t('fanEvent.loading')}
         className="-mx-4 -mt-8 grid h-[640px] sm:-mx-6 lg:-mx-10 lg:-mt-10 min-[1081px]:grid-cols-[1fr_400px]"
       >
         <div className="bg-[var(--color-surface-muted)]" />
@@ -375,8 +386,8 @@ export function FanEventDetailPage() {
 
   if (error || !detail) {
     return (
-      <AlertBanner title="이벤트 정보를 표시할 수 없습니다" variant="error">
-        {error ?? '해당 이벤트를 찾을 수 없습니다.'}
+      <AlertBanner title={t('fanEvent.error.title')} variant="error">
+        {error ?? t('fanEvent.error.notFound')}
       </AlertBanner>
     )
   }
@@ -408,22 +419,25 @@ export function FanEventDetailPage() {
   const ctaDisabled = !viewer.canApply || !allAgreed || formLoading || Boolean(formError) || submitting
   // 비활성 사유를 우선순위대로 하나만 보여 준다. aria-live로 상태 변화를 함께 알린다.
   const helperText = !viewer.canApply
-    ? '응모 기간이 아닙니다.'
+    ? t('fanEvent.helper.notOpen')
     : formLoading
-      ? '응모 질문을 불러오는 중입니다.'
+      ? t('fanEvent.helper.formLoading')
       : formError
-        ? '응모 질문을 확인한 뒤 다시 시도해 주세요.'
+        ? t('fanEvent.helper.formError')
         : allAgreed
-          ? '필수 동의를 모두 완료했어요.'
-          : `필수 항목 ${visibleAgreementItems.length}개에 모두 동의해야 응모할 수 있어요.`
+          ? t('fanEvent.helper.allAgreed')
+          : t('fanEvent.helper.needAgree', { count: visibleAgreementItems.length })
 
   const badge =
     panel === 'applied'
-      ? { label: '응모 완료', coral: true }
+      ? { label: t('fanEvent.badge.applied'), coral: true }
       : panel === 'closed'
-        ? { label: '모집 마감', coral: false }
+        ? { label: t('fanEvent.badge.closed'), coral: false }
         : meeting.status === 'APPLICATION_OPEN' && applicationEndAt
-          ? { label: `모집 중 · ${formatMonthDay(applicationEndAt)}까지`, coral: true }
+          ? {
+              label: t('fanEvent.badge.open', { date: formatMonthDay(applicationEndAt) }),
+              coral: true,
+            }
           : { label: fanMeetingStatusContent[meeting.status].label, coral: true }
 
   const seam =
@@ -439,14 +453,14 @@ export function FanEventDetailPage() {
     .filter(Boolean)
 
   const participationConditions = [
-    '본인 명의 계정 및 장비 점검 완료',
-    '팬미팅 시작 전 대기실 입장',
+    t('fanEvent.condition.identity'),
+    t('fanEvent.condition.waitingRoom'),
   ]
   const cautions = [
     meeting.operation.recordingEnabled
-      ? '녹화 영상은 팬미팅 후 5일 동안 보관됩니다'
-      : '이 팬미팅은 영상통화를 녹화하지 않습니다',
-    '부적절한 상황 발생 시 운영자 조치가 있을 수 있습니다',
+      ? t('fanEvent.caution.recordingKept')
+      : t('fanEvent.caution.noRecording'),
+    t('fanEvent.caution.moderation'),
   ]
 
   const questions = [...(applicationForm?.questions ?? [])].sort(
@@ -456,24 +470,24 @@ export function FanEventDetailPage() {
   return (
     <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
       <section
-        aria-label="이벤트 개요 및 응모"
+        aria-label={t('fanEvent.sectionAria')}
         className="grid items-stretch border-b border-[var(--color-divider)] min-[1081px]:grid-cols-[minmax(0,1fr)_444px]"
       >
         <div className="relative min-h-[min(52vw,420px)] overflow-hidden bg-[var(--color-surface-muted)] min-[1081px]:min-h-[640px]">
           {meeting.coverImageUrl ? (
             <img
-              alt={`${meeting.title} 대표 이미지`}
+              alt={t('fanEvent.coverAlt', { title: meeting.title })}
               className={`absolute inset-0 size-full object-cover ${panel === 'closed' ? 'saturate-[0.68] brightness-[1.03]' : ''}`}
               src={meeting.coverImageUrl}
             />
           ) : (
             <div
-              aria-label="대표 이미지가 등록되지 않은 이벤트"
+              aria-label={t('fanEvent.noImageAria')}
               className="absolute inset-0 grid place-items-center"
               role="img"
             >
               <span className="text-sm font-semibold text-[var(--color-text-muted)]">
-                이미지 없음
+                {t('fanEvent.noImage')}
               </span>
             </div>
           )}
@@ -490,11 +504,13 @@ export function FanEventDetailPage() {
             {meeting.title}
           </h1>
           <p className="mt-4 text-[17px] font-semibold text-[var(--color-text-body)]">
-            인플루언서 {influencer.name}
+            {t('fanEvent.influencer', { name: influencer.name })}
           </p>
           <p className="mt-1.5 text-[17px] font-medium tabular-nums text-[var(--color-text-muted)]">
-            {formatDateTime(meeting.scheduledStartAt)} · 1:1 영상통화{' '}
-            {formatCallDuration(meeting.operation.callDurationSec)}
+            {t('fanEvent.schedule', {
+              date: formatDateTime(meeting.scheduledStartAt),
+              duration: formatCallDuration(meeting.operation.callDurationSec),
+            })}
           </p>
 
           {showEmailGate ? (
@@ -510,7 +526,7 @@ export function FanEventDetailPage() {
           ) : panel === 'open' ? (
             <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]">
               {formError ? (
-                <AlertBanner className="mb-5" title="응모 질문을 불러오지 못했습니다" variant="error">
+                <AlertBanner className="mb-5" title={t('fanEvent.form.error.title')} variant="error">
                   <p>{formError}</p>
                   <Button
                     className="mt-3"
@@ -518,13 +534,13 @@ export function FanEventDetailPage() {
                     size="sm"
                     variant="secondary"
                   >
-                    질문 다시 불러오기
+                    {t('fanEvent.form.reload')}
                   </Button>
                 </AlertBanner>
               ) : formLoading ? (
                 <div className="mb-5 flex items-center gap-3 text-sm text-[var(--color-text-muted)]">
-                  <Spinner label="응모 질문을 불러오는 중" size="sm" />
-                  <span>응모 질문을 불러오는 중입니다.</span>
+                  <Spinner label={t('fanEvent.form.loading')} size="sm" />
+                  <span>{t('fanEvent.form.loadingText')}</span>
                 </div>
               ) : questions.length > 0 ? (
                 <div className="mb-6 grid gap-4">
@@ -538,7 +554,7 @@ export function FanEventDetailPage() {
                       <Textarea
                         disabled={!viewer.canApply}
                         key={question.questionId}
-                        label={`${question.questionText}${question.required ? ' (필수)' : ''}`}
+                        label={`${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`}
                         rows={4}
                         value={answers[question.questionId] ?? ''}
                         onChange={(event) =>
@@ -552,7 +568,7 @@ export function FanEventDetailPage() {
                       <TextField
                         disabled={!viewer.canApply}
                         key={question.questionId}
-                        label={`${question.questionText}${question.required ? ' (필수)' : ''}`}
+                        label={`${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`}
                         value={answers[question.questionId] ?? ''}
                         onChange={(event) =>
                           setAnswers((current) => ({
@@ -566,7 +582,7 @@ export function FanEventDetailPage() {
                 </div>
               ) : null}
 
-              <h2 className="text-[17px] font-extrabold tracking-[-0.03em]">응모 동의</h2>
+              <h2 className="text-[17px] font-extrabold tracking-[-0.03em]">{t('fanEvent.agree.title')}</h2>
               <div className="mt-2.5">
                 {visibleAgreementItems.map((item, index) => (
                   <label
@@ -585,9 +601,9 @@ export function FanEventDetailPage() {
                       }
                       type="checkbox"
                     />
-                    <span className="text-base font-semibold">{item.label}</span>
+                    <span className="text-base font-semibold">{t(item.labelKey)}</span>
                     <span className="ml-auto text-[13px] font-semibold text-[var(--color-text-muted)]">
-                      필수
+                      {t('fanEvent.agree.requiredBadge')}
                     </span>
                   </label>
                 ))}
@@ -602,7 +618,7 @@ export function FanEventDetailPage() {
                 onClick={() => setConfirmOpen(true)}
                 type="button"
               >
-                응모하기
+                {t('fanEvent.submit')}
               </button>
               <p
                 aria-live="polite"
@@ -614,17 +630,19 @@ export function FanEventDetailPage() {
           ) : panel === 'applied' ? (
             <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px] motion-safe:animate-[mj-settle-in_420ms_cubic-bezier(0.16,1,0.3,1)_both]">
               <h2 className="text-2xl font-black tracking-[-0.038em] text-[var(--color-primary-coral)]">
-                응모가 접수됐어요
+                {t('fanEvent.applied.title')}
               </h2>
               <p className="mt-3 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
                 {resultAt
-                  ? `결과는 ${formatShortDateTime(resultAt)}에 발표됩니다. 진행 상태는 마이페이지 응모 내역에서 볼 수 있어요.`
-                  : '진행 상태는 마이페이지 응모 내역에서 볼 수 있어요.'}
+                  ? t('fanEvent.applied.withResult', {
+                      date: formatShortDateTime(resultAt),
+                    })
+                  : t('fanEvent.applied.withoutResult')}
               </p>
               {applicationEndAt ? (
                 <>
                   <p className="mt-[18px] text-sm font-bold text-[var(--color-text-muted)]">
-                    취소 가능 기한
+                    {t('fanEvent.applied.withdrawDeadline')}
                   </p>
                   <p className="mt-[5px] text-[17px] font-extrabold tabular-nums">
                     {formatDateTime(applicationEndAt)}
@@ -635,7 +653,7 @@ export function FanEventDetailPage() {
                 className="mj-font-emphasis mt-6 flex min-h-[54px] items-center justify-center rounded-[10px] bg-[var(--color-primary-coral)] text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
                 to="/fan/mypage/applications"
               >
-                마이페이지 응모 내역
+                {t('fanEvent.applied.myApplications')}
               </Link>
               {canWithdraw ? (
                 <button
@@ -644,14 +662,14 @@ export function FanEventDetailPage() {
                   onClick={() => void handleWithdrawApplication()}
                   type="button"
                 >
-                  응모 취소
+                  {t('fanEvent.applied.withdraw')}
                 </button>
               ) : null}
             </div>
           ) : panel === 'error' ? (
             <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]" role="alert">
               <h2 className="text-2xl font-black tracking-[-0.038em] text-[var(--color-error)]">
-                응모를 완료하지 못했어요
+                {t('fanEvent.failed.title')}
               </h2>
               <p className="mt-3 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
                 {submitError}
@@ -662,27 +680,27 @@ export function FanEventDetailPage() {
                 onClick={() => void handleSubmitApplication()}
                 type="button"
               >
-                다시 응모하기
+                {t('fanEvent.failed.retry')}
               </button>
             </div>
           ) : panel === 'closed' ? (
             <div className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]">
-              <h2 className="text-2xl font-black tracking-[-0.038em]">모집이 마감됐어요</h2>
+              <h2 className="text-2xl font-black tracking-[-0.038em]">{t('fanEvent.closed.title')}</h2>
               <p className="mt-3 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
-                이번 팬미팅의 응모는 종료되었습니다.
+                {t('fanEvent.closed.description')}
               </p>
               <button
                 className="mj-font-emphasis mt-6 min-h-14 w-full cursor-not-allowed rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[17px] text-[var(--color-text-muted)]"
                 disabled
                 type="button"
               >
-                모집 마감
+                {t('fanEvent.closed.cta')}
               </button>
               <Link
                 className="mj-font-label mt-4 block text-center text-[15px] text-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral-hover)]"
                 to="/fan/events"
               >
-                다음 팬미팅 보기
+                {t('fanEvent.closed.next')}
               </Link>
             </div>
           ) : null}
@@ -692,7 +710,7 @@ export function FanEventDetailPage() {
       <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] pt-14 min-[1081px]:w-[min(100%-88px,1240px)]">
         <div className="grid items-start gap-10 lg:grid-cols-[1fr_460px] lg:gap-[72px]">
           <section>
-            <h2 className="text-[22px] font-extrabold tracking-[-0.032em]">이번 팬미팅은</h2>
+            <h2 className="text-[22px] font-extrabold tracking-[-0.032em]">{t('fanEvent.about')}</h2>
             <div className="mt-4 grid gap-3">
               {descriptionParagraphs.map((paragraph) => (
                 <p
@@ -704,28 +722,28 @@ export function FanEventDetailPage() {
               ))}
             </div>
           </section>
-          <section aria-label="응모 일정">
+          <section aria-label={t('fanEvent.scheduleAria')}>
             <div className="border-t-2 border-[var(--color-text-primary)] pt-[18px]">
-              <p className="text-sm font-bold text-[var(--color-text-muted)]">응모 마감</p>
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanEvent.applicationEnd')}</p>
               <p className="mt-1.5 text-[26px] font-black tracking-[-0.035em] tabular-nums">
                 {applicationEndAt ? formatDateTime(applicationEndAt) : '-'}
               </p>
             </div>
             <div className="mt-[22px] border-t border-[var(--color-divider)] pt-[18px]">
-              <p className="text-sm font-bold text-[var(--color-text-muted)]">결과 발표</p>
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('fanEvent.resultAnnounce')}</p>
               <p className="mt-1.5 text-[26px] font-black tracking-[-0.035em] tabular-nums">
                 {resultAt ? formatDateTime(resultAt) : '-'}
               </p>
             </div>
             <p className="mt-[22px] border-t border-[var(--color-divider)] pt-4 text-base font-medium tabular-nums text-[var(--color-text-muted)]">
-              {meeting.application.capacity}명 모집
+              {t('fanEvent.capacity', { count: meeting.application.capacity })}
             </p>
           </section>
         </div>
 
         <div className="mt-14 grid items-start gap-10 border-t border-[var(--color-divider)] pt-9 lg:grid-cols-[1fr_460px] lg:gap-[72px]">
           <section>
-            <h2 className="text-base font-extrabold tracking-[-0.025em]">참여 조건</h2>
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">{t('fanEvent.conditions')}</h2>
             <ul className="mt-3 list-disc pl-[18px] text-base font-medium leading-[1.85] text-[var(--color-text-muted)]">
               {participationConditions.map((condition) => (
                 <li key={condition}>{condition}</li>
@@ -733,7 +751,7 @@ export function FanEventDetailPage() {
             </ul>
           </section>
           <section>
-            <h2 className="text-base font-extrabold tracking-[-0.025em]">유의사항</h2>
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">{t('fanEvent.cautions')}</h2>
             <ul className="mt-3 list-disc pl-[18px] text-base font-medium leading-[1.85] text-[var(--color-text-muted)]">
               {cautions.map((caution) => (
                 <li key={caution}>{caution}</li>
@@ -746,13 +764,15 @@ export function FanEventDetailPage() {
       <Dialog
         description={
           applicationEndAt
-            ? `${formatShortDateTime(applicationEndAt)}까지 마이페이지에서 취소할 수 있어요.`
+            ? t('fanEvent.confirm.description', {
+                date: formatShortDateTime(applicationEndAt),
+              })
             : undefined
         }
         footer={
           <>
             <Button disabled={submitting} onClick={() => setConfirmOpen(false)} variant="secondary">
-              취소
+              {t('fanEvent.confirm.cancel')}
             </Button>
             <Button
               loading={submitting}
@@ -760,13 +780,13 @@ export function FanEventDetailPage() {
                 void handleSubmitApplication().finally(() => setConfirmOpen(false))
               }}
             >
-              확인
+              {t('fanEvent.confirm.ok')}
             </Button>
           </>
         }
         onOpenChange={setConfirmOpen}
         open={confirmOpen}
-        title="이 팬미팅에 응모할까요?"
+        title={t('fanEvent.confirm.title')}
       />
     </div>
   )

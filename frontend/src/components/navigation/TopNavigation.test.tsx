@@ -2,23 +2,32 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { I18nProvider } from '../../i18n'
 import { TopNavigation } from './TopNavigation'
 
 afterEach(cleanup)
 
+// 헤더 기본 문구(건너뛰기 링크·네비 aria-label)는 화면 언어를 따른다. 한국어 문구로 요소를
+// 찾는 검증이 있으므로, I18nProvider가 읽는 저장값을 ko로 고정해 브라우저 기본 언어
+// (jsdom은 en-US)에 흔들리지 않게 한다.
+beforeEach(() => {
+  window.localStorage.setItem('melly-locale', 'ko')
+})
 function renderNavigation() {
   return render(
-    <MemoryRouter>
-      <TopNavigation
-        brand="Melly"
-        items={[
-          { label: '팬미팅', to: '/meetings' },
-          { label: '알림', to: '/notifications' },
-        ]}
-      />
-      <main id="main-content" tabIndex={-1} />
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter>
+        <TopNavigation
+          brand="Melly"
+          items={[
+            { label: '팬미팅', to: '/meetings' },
+            { label: '알림', to: '/notifications' },
+          ]}
+        />
+        <main id="main-content" tabIndex={-1} />
+      </MemoryRouter>
+    </I18nProvider>,
   )
 }
 

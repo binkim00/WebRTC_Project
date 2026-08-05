@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
+import { useTranslation } from '../../i18n'
 import { cn } from '../ui/cn'
 import { NotificationBell } from './NotificationBell'
 
@@ -27,11 +28,15 @@ export function TopNavigation({
   items,
   centerContent,
   actions,
-  ariaLabel = '주요 메뉴',
+  ariaLabel,
   className,
-  skipLinkLabel = '본문으로 건너뛰기',
+  skipLinkLabel,
   skipLinkTargetId = 'main-content',
 }: TopNavigationProps) {
+  // 기본 문구는 현재 화면 언어를 따른다. 호출자가 값을 주면 그것을 그대로 존중한다.
+  const { t } = useTranslation()
+  const navigationAriaLabel = ariaLabel ?? t('nav.ariaLabel')
+  const resolvedSkipLinkLabel = skipLinkLabel ?? t('nav.skipToContent')
   const mobileMenuRef = useRef<HTMLDetailsElement>(null)
   const mobileMenuButtonRef = useRef<HTMLElement>(null)
   const mobileMenuId = `${useId().replaceAll(':', '')}-mobile-navigation`
@@ -110,7 +115,7 @@ export function TopNavigation({
       )}
     >
       <a className="skip-link" href={`#${skipLinkTargetId}`} onClick={focusMainContent}>
-        {skipLinkLabel}
+        {resolvedSkipLinkLabel}
       </a>
       <div className="relative mx-auto flex h-full w-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
         <Link
@@ -124,7 +129,7 @@ export function TopNavigation({
             {centerContent}
           </div>
         ) : (
-          <nav aria-label={ariaLabel} className="hidden h-full items-stretch gap-10 lg:flex">
+          <nav aria-label={navigationAriaLabel} className="hidden h-full items-stretch gap-10 lg:flex">
             {navigationLinks()}
           </nav>
         )}
@@ -150,7 +155,7 @@ export function TopNavigation({
               className="absolute right-0 z-30 mt-2 grid min-w-56 gap-1 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-2 shadow-[var(--shadow-modal)]"
               id={mobileMenuId}
             >
-              <nav aria-label={`${ariaLabel} 모바일`} className="grid">
+              <nav aria-label={`${navigationAriaLabel} (mobile)`} className="grid">
                 {navigationLinks(true)}
               </nav>
               {actions ? (
