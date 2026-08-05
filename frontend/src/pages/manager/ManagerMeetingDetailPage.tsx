@@ -748,7 +748,7 @@ function OverviewPanel({
 
   return (
     <div>
-      <section aria-labelledby="meeting-actions-title" className="border-t border-[var(--color-divider)] py-6">
+      <section aria-labelledby="meeting-actions-title" className="py-6">
         <div className="flex flex-col items-start justify-between gap-5 md:flex-row">
           <div className="min-w-0">
             <h2 className="text-lg font-extrabold" id="meeting-actions-title">운영 액션</h2>
@@ -793,7 +793,7 @@ function OverviewPanel({
         </div>
       </section>
 
-      <section aria-labelledby="meeting-flow-title" className="border-t border-[var(--color-divider)] py-6">
+      <section aria-labelledby="meeting-flow-title" className="py-6">
         <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">진행 현황</p>
         <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-flow-title">팬미팅 흐름</h2>
         <ol className="mt-5 border-y border-[var(--color-divider)]">
@@ -834,7 +834,7 @@ function OverviewPanel({
         </ol>
       </section>
 
-      <section aria-labelledby="meeting-links-title" className="border-t border-[var(--color-divider)] py-6">
+      <section aria-labelledby="meeting-links-title" className="py-6">
         <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">바로 가기</p>
         <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-links-title">연결된 관리 화면</h2>
         <div className="mt-5 grid gap-x-5 sm:grid-cols-2">
