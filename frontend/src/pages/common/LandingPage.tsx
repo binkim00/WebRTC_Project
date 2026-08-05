@@ -81,6 +81,28 @@ export function LandingPage() {
       boing.id = 'jelly-boing'
     }
 
+    // 워드마크도 같은 boing을 주되, 본문 한가운데라 과하지 않게 진폭을 절반쯤 줄인다.
+    const wordmark = hero.querySelector<HTMLElement>('.wordmark')
+    const handleWordmarkEnter = () => {
+      if (!wordmark) return
+      wordmark.getAnimations().forEach((animation) => {
+        if (animation.id === 'jelly-boing') animation.cancel()
+      })
+
+      const boing = wordmark.animate(
+        [
+          { offset: 0, rotate: '0deg', scale: '1 1' },
+          { offset: 0.2, rotate: '-0.8deg', scale: '1.06 0.95', easing: 'ease-out' },
+          { offset: 0.43, rotate: '0.6deg', scale: '0.97 1.04', easing: 'ease-in-out' },
+          { offset: 0.67, rotate: '-0.3deg', scale: '1.02 0.99', easing: 'ease-in-out' },
+          { offset: 1, rotate: '0deg', scale: '1 1' },
+        ],
+        { duration: 620, easing: 'linear' },
+      )
+      boing.id = 'jelly-boing'
+    }
+    wordmark?.addEventListener('pointerenter', handleWordmarkEnter)
+
     const handleMove = (event: PointerEvent) => {
       const x = event.clientX / window.innerWidth - 0.5
       const y = event.clientY / window.innerHeight - 0.5
@@ -102,6 +124,7 @@ export function LandingPage() {
 
     return () => {
       objects.forEach((object) => object.removeEventListener('pointerenter', handleEnter))
+      wordmark?.removeEventListener('pointerenter', handleWordmarkEnter)
       hero.removeEventListener('pointermove', handleMove)
       hero.removeEventListener('pointerleave', handleLeave)
       particleField?.replaceChildren()

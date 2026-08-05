@@ -211,25 +211,17 @@ export function FanApplicationResultPage() {
 
     return (
       <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
-        <figure className="relative m-0 h-[min(70vw,600px)] overflow-hidden bg-[var(--color-surface-muted)]">
-          {application.coverImageUrl ? (
+        {/* 히어로는 축하 배경일 뿐 정보가 아니므로 본문을 밀어내지 않는 높이로 제한하고,
+            이미지가 없으면 아예 그리지 않는다. */}
+        {application.coverImageUrl ? (
+          <figure className="relative m-0 h-[min(34vw,320px)] overflow-hidden bg-[var(--color-surface-muted)]">
             <img
               alt={`팬미팅에서 만나게 될 ${application.influencerName}`}
               className="absolute inset-0 size-full object-cover"
               src={application.coverImageUrl}
             />
-          ) : (
-            <div
-              aria-label="대표 이미지가 등록되지 않은 팬미팅"
-              className="absolute inset-0 grid place-items-center"
-              role="img"
-            >
-              <span className="text-sm font-semibold text-[var(--color-text-muted)]">
-                이미지 없음
-              </span>
-            </div>
-          )}
-        </figure>
+          </figure>
+        ) : null}
 
         <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] pt-11 min-[1081px]:w-[min(100%-88px,1240px)]">
           {announcedAtLabel ? (
