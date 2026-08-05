@@ -9,33 +9,39 @@ import {
   type PublicFanMeetingStatus,
   type PublicFanMeetingSummary,
 } from '../../api/fanMeetings'
-import { getInfluencers, type InfluencerSummaryResponse } from '../../api/influencers'
 import { AlertBanner, Select, Spinner, TextField } from '../../components'
 import { fanMeetingStatusContent } from './fanMeetingStatus'
 
 /**
- * 이 화면에 나열하는 팬미팅 범위다. 모집 전(PUBLISHED)·진행/종료(LIVE/ENDED)는 다른 화면의 몫이고,
- * 모집이 끝난(APPLICATION_CLOSED) 팬미팅은 더 이상 팬이 할 수 있는 행동이 없어 목록에서 뺀다.
+ * 이 화면에 나열하는 팬미팅 범위다. 응모 시작 전(PUBLISHED)도 미리 보고 기다릴 수 있게 노출한다.
+ * 진행/종료(LIVE/ENDED)는 다른 화면의 몫이고, 모집이 끝난(APPLICATION_CLOSED) 팬미팅은
+ * 더 이상 팬이 할 수 있는 행동이 없어 목록에서 뺀다.
  */
 const discoverableStatuses = [
+  'PUBLISHED',
   'APPLICATION_OPEN',
   'READY',
 ] as const satisfies readonly PublicFanMeetingStatus[]
 
 const statusFilterOptions = [
   { label: '전체', value: 'ALL' },
+  { label: '모집 예정', value: 'PUBLISHED' },
   { label: '모집 중', value: 'APPLICATION_OPEN' },
   { label: '결과 발표', value: 'READY' },
 ] as const
 
 /**
  * dc.html의 날짜 필터는 "8월 1주차"처럼 특정 달에 고정된 데모용 값이라 그대로 쓸 수 없다.
- * 오늘 기준 상대 주차(이번 주/다음 주)로 바꿔 실제 일정에도 맞게 했다.
+ * 팬미팅은 며칠에서 몇 주 앞 일정이 대부분이라, 오늘 기준 상대 기간을
+ * 일(오늘) · 주(이번 주/다음 주) · 월(이번 달/다음 달) 세 단위로 제공한다.
  */
 const dateFilterOptions = [
   { label: '전체 날짜', value: 'ALL' },
+  { label: '오늘', value: 'TODAY' },
   { label: '이번 주', value: 'THIS_WEEK' },
   { label: '다음 주', value: 'NEXT_WEEK' },
+  { label: '이번 달', value: 'THIS_MONTH' },
+  { label: '다음 달', value: 'NEXT_MONTH' },
 ] as const
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -51,6 +57,27 @@ function weekRange(weeksFromNow: number): { start: Date; end: Date } {
   const start = new Date(sunday.getTime() + weeksFromNow * 7 * DAY_MS)
   const end = new Date(start.getTime() + 7 * DAY_MS)
   return { start, end }
+}
+
+/** 이번 달 1일 0시를 기준으로 이번 달/다음 달 경계를 계산한다. */
+function monthRange(monthsFromNow: number): { start: Date; end: Date } {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth() + monthsFromNow, 1)
+  const end = new Date(now.getFullYear(), now.getMonth() + monthsFromNow + 1, 1)
+  return { start, end }
+}
+
+/** 날짜 필터 값을 [시작, 끝) 경계로 바꾼다. 전체면 undefined다. */
+function dateRangeOf(value: string): { start: Date; end: Date } | undefined {
+  if (value === 'TODAY') {
+    const start = startOfDay(new Date())
+    return { start, end: new Date(start.getTime() + DAY_MS) }
+  }
+  if (value === 'THIS_WEEK') return weekRange(0)
+  if (value === 'NEXT_WEEK') return weekRange(1)
+  if (value === 'THIS_MONTH') return monthRange(0)
+  if (value === 'NEXT_MONTH') return monthRange(1)
+  return undefined
 }
 
 function formatDateTime(value: string): string {
@@ -85,14 +112,14 @@ type AppliedFilters = {
   keyword: string
   status: string
   date: string
-  influencerId: string
+  influencerName: string
 }
 
 const initialFilters: AppliedFilters = {
   keyword: '',
   status: 'ALL',
   date: 'ALL',
-  influencerId: 'ALL',
+  influencerName: '',
 }
 
 function errorMessage(reason: unknown, fallback: string) {
@@ -102,21 +129,10 @@ function errorMessage(reason: unknown, fallback: string) {
 }
 
 export function FanEventListPage() {
-  const [influencers, setInfluencers] = useState<InfluencerSummaryResponse[]>([])
   const [meetings, setMeetings] = useState<PublicFanMeetingSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [filters, setFilters] = useState<AppliedFilters>(initialFilters)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void getInfluencers({ page: 0, size: 100 }, undefined, controller.signal)
-      .then((result) => setInfluencers(result.content))
-      .catch(() => {
-        // 인플루언서 필터 목록을 못 받아도 팬미팅 목록 자체는 볼 수 있어야 한다.
-      })
-    return () => controller.abort()
-  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -151,21 +167,19 @@ export function FanEventListPage() {
       keyword: String(formData.get('keyword') ?? '').trim(),
       status: String(formData.get('status') ?? 'ALL'),
       date: String(formData.get('date') ?? 'ALL'),
-      influencerId: String(formData.get('influencerId') ?? 'ALL'),
+      influencerName: String(formData.get('influencerName') ?? '').trim(),
     })
   }
 
-  const dateBounds = filters.date === 'ALL' ? undefined : weekRange(filters.date === 'NEXT_WEEK' ? 1 : 0)
+  const dateBounds = dateRangeOf(filters.date)
+  const influencerQuery = filters.influencerName.toLowerCase()
 
   const visibleMeetings = meetings
     .filter((meeting) => discoverableStatuses.some((status) => status === meeting.status))
     .filter((meeting) => filters.status === 'ALL' || meeting.status === filters.status)
     .filter(
       (meeting) =>
-        filters.influencerId === 'ALL' ||
-        String(meeting.influencerName) ===
-          influencers.find((influencer) => String(influencer.influencerId) === filters.influencerId)
-            ?.influencerName,
+        !influencerQuery || meeting.influencerName.toLowerCase().includes(influencerQuery),
     )
     .filter((meeting) => {
       if (!dateBounds) return true
@@ -216,17 +230,12 @@ export function FanEventListPage() {
           name="date"
           options={dateFilterOptions}
         />
-        <Select
-          defaultValue={filters.influencerId}
+        <TextField
+          defaultValue={filters.influencerName}
           label="인플루언서"
-          name="influencerId"
-          options={[
-            { label: '전체', value: 'ALL' },
-            ...influencers.map((influencer) => ({
-              label: influencer.influencerName,
-              value: String(influencer.influencerId),
-            })),
-          ]}
+          name="influencerName"
+          placeholder="인플루언서명"
+          type="search"
         />
         <button
           className="mj-font-emphasis min-h-[46px] whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] px-[22px] text-[15px] text-white hover:bg-[var(--color-primary-coral-hover)]"
@@ -264,9 +273,12 @@ export function FanEventListPage() {
             {visibleMeetings.map((meeting) => {
               const statusLabel = fanMeetingStatusContent[meeting.status].label
               const isOpen = meeting.status === 'APPLICATION_OPEN'
+              const isUpcoming = meeting.status === 'PUBLISHED'
               const statusColor = isOpen
                 ? 'text-[var(--color-primary-coral)]'
-                : 'text-[var(--color-success)]'
+                : isUpcoming
+                  ? 'text-[var(--color-text-muted)]'
+                  : 'text-[var(--color-success)]'
               const dday = isOpen && meeting.applicationEndAt ? daysUntil(meeting.applicationEndAt) : undefined
               const ddayUrgent = dday !== undefined && dday <= 7
               const showSeam = meeting.meetingId === soonestOpenMeetingId
@@ -322,7 +334,11 @@ export function FanEventListPage() {
                     <p className="mt-3 border-t border-[var(--color-divider)] pt-3 text-base font-extrabold tabular-nums">
                       {formatDateTime(meeting.scheduledStartAt)}
                     </p>
-                    {meeting.applicationEndAt ? (
+                    {isUpcoming && meeting.applicationStartAt ? (
+                      <p className="mt-[5px] text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
+                        응모 시작 {formatMonthDay(meeting.applicationStartAt)}
+                      </p>
+                    ) : meeting.applicationEndAt ? (
                       <p className="mt-[5px] text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
                         응모 마감 {formatMonthDay(meeting.applicationEndAt)}
                       </p>
