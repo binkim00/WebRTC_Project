@@ -221,6 +221,9 @@ services:
       EMAIL_VERIFY_BASE_URL: ${EMAIL_VERIFY_BASE_URL}
       DEVICE_TOKEN_SECURE: ${DEVICE_TOKEN_SECURE}
 
+      DEVICE_TOKEN_SECURE: ${DEVICE_TOKEN_SECURE}
+      APPLICATION_EMAIL_VERIFICATION_REQUIRED: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:-false}
+
     volumes:
       # 업로드 파일은 컨테이너가 아니라 호스트 디스크에 남겨야 재생성·재배포 후에도 보존된다.
       # 컨테이너 안의 경로를 호스트와 같게 두어 설정값을 그대로 쓸 수 있게 한다.
