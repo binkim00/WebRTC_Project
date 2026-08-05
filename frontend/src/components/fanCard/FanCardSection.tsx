@@ -7,7 +7,7 @@ import {
 } from '../../api/fanCards'
 import { getCapturedPhotos, MAX_PHOTOS_PER_CARD } from '../../api/capturedPhotos'
 import { AlertBanner, Button, Card } from '..'
-import { drawFanCard, type FanCardLayout } from './fanCardCanvas'
+import { drawFanCard, type FanCardFont, type FanCardLayout } from './fanCardCanvas'
 
 /** AI 추천 문구가 생성 중일 때 다시 조회하는 간격이다. */
 const SUGGESTION_POLL_INTERVAL_MS = 3_000
@@ -28,6 +28,19 @@ const LAYOUT_OPTIONS: readonly LayoutOption[] = [
   { key: 'FOURCUT_VERTICAL', label: '네컷 세로', photoCount: MAX_PHOTOS_PER_CARD },
   { key: 'FOURCUT_HORIZONTAL', label: '네컷 가로', photoCount: MAX_PHOTOS_PER_CARD },
   { key: undefined, label: '사진 없이 문구만', photoCount: 0 },
+]
+
+/**
+ * 팬이 고를 수 있는 글꼴이다.
+ *
+ * <p>previewFamily는 버튼 라벨을 그 글꼴로 보여 주기 위한 값이며, 카드에 실제로 쓰는
+ * 글꼴은 fanCardCanvas가 키로 정한다.
+ */
+const FONT_OPTIONS: readonly { key: FanCardFont; label: string; previewFamily?: string }[] = [
+  { key: 'DEFAULT', label: '기본' },
+  { key: 'ROUND', label: '둥글둥글', previewFamily: '"Jua"' },
+  { key: 'HANDWRITING', label: '손글씨', previewFamily: '"Gaegu"' },
+  { key: 'HEADLINE', label: '또렷하게', previewFamily: '"Do Hyeon"' },
 ]
 
 /**
@@ -81,6 +94,7 @@ export function FanCardSection({
   const [photoUrls, setPhotoUrls] = useState<readonly string[]>([])
   const [layout, setLayout] = useState<FanCardLayout>()
   const [selectedPhotoIndexes, setSelectedPhotoIndexes] = useState<readonly number[]>([])
+  const [fontKey, setFontKey] = useState<FanCardFont>('DEFAULT')
 
   // 통화 화면에서 셔터로 남긴 사진을 불러온다. 서버에 올리지 않으므로 이 브라우저에만 있다.
   useEffect(() => {
@@ -172,6 +186,7 @@ export function FanCardSection({
       dateLabel,
       layout,
       photos,
+      fontKey,
     }).catch(() => {
       if (active) setSaveError('카드 이미지를 그리지 못했습니다.')
     })
@@ -182,6 +197,7 @@ export function FanCardSection({
   }, [
     dateLabel,
     fanNickname,
+    fontKey,
     influencerName,
     layout,
     meetingTitle,
@@ -443,6 +459,29 @@ export function FanCardSection({
         {selectedText ? (
           <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
             <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+              글꼴 고르기
+            </h3>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {FONT_OPTIONS.map((option) => (
+                <li key={option.key}>
+                  <button
+                    aria-pressed={fontKey === option.key}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition-colors duration-200 motion-reduce:transition-none ${
+                      fontKey === option.key
+                        ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
+                        : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)]'
+                    }`}
+                    onClick={() => setFontKey(option.key)}
+                    style={option.previewFamily ? { fontFamily: option.previewFamily } : undefined}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <h3 className="mt-6 text-sm font-semibold text-[var(--color-text-primary)]">
               카드 미리보기
             </h3>
             <canvas
