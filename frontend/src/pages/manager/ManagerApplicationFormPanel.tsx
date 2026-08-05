@@ -167,7 +167,8 @@ export function ManagerApplicationFormPanel({
         </AlertBanner>
       ) : null}
 
-      <Card>
+      {/* 탭 표시선 아래 상단 구분선이 겹쳐 보여 진행 현황 탭과 동일하게 여백으로만 구역을 나눈다. */}
+      <Card className="border-t-0">
         <CardHeader>
           <Badge variant="primary">응모 폼</Badge>
           <CardTitle as="h2" className="mt-3">팬 응모 질문 구성</CardTitle>
