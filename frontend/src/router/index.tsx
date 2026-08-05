@@ -371,6 +371,13 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: 'fan-meetings/:fanMeetingId/external-participants',
+            lazy: lazyPage(
+              () => import('../pages/manager/ManagerExternalParticipantsPage'),
+              'ManagerExternalParticipantsPage',
+            ),
+          },
+          {
             path: 'fan-meetings/:fanMeetingId/edit',
             element: <LegacyMeetingSettingsRedirect />,
           },
