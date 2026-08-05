@@ -133,8 +133,7 @@ class EmailVerificationServiceTest {
                 .thenReturn(Optional.of(token));
 
         EmailVerificationStatusResponse response = emailVerificationService.confirm(
-                principal, new EmailVerificationConfirmRequest(rawToken)
-        );
+                new EmailVerificationConfirmRequest(rawToken));
 
         assertThat(response.emailVerified()).isTrue();
         assertThat(response.emailVerifiedAt()).isEqualTo(now());
@@ -153,7 +152,7 @@ class EmailVerificationServiceTest {
                 .thenReturn(Optional.of(token));
 
         assertThatThrownBy(() -> emailVerificationService.confirm(
-                principal, new EmailVerificationConfirmRequest(rawToken)
+                new EmailVerificationConfirmRequest(rawToken)
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID));
@@ -172,7 +171,7 @@ class EmailVerificationServiceTest {
                 .thenReturn(Optional.of(token));
 
         assertThatThrownBy(() -> emailVerificationService.confirm(
-                principal, new EmailVerificationConfirmRequest(rawToken)
+                new EmailVerificationConfirmRequest(rawToken)
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID));
@@ -180,7 +179,8 @@ class EmailVerificationServiceTest {
 
     /** 다른 사용자에게 발급된 토큰을 거부하는지 검증한다. */
     @Test
-    void rejectsTokenIssuedToAnotherUser() {
+    /** 로그인 principal과 관계없이 토큰 소유 사용자를 인증하는지 검증한다. */
+    void confirmsTokenIssuedToAnotherUserWithoutPrincipal() {
         String rawToken = "raw-token";
         User other = activeUser();
         ReflectionTestUtils.setField(other, "id", 2L);
@@ -189,12 +189,14 @@ class EmailVerificationServiceTest {
         );
         when(tokenRepository.findByTokenHash(tokenHasher.hash(rawToken)))
                 .thenReturn(Optional.of(token));
+        when(rateLimiter.canConfirm(2L)).thenReturn(true);
 
-        assertThatThrownBy(() -> emailVerificationService.confirm(
-                principal, new EmailVerificationConfirmRequest(rawToken)
-        )).isInstanceOfSatisfying(BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID));
+        EmailVerificationStatusResponse response = emailVerificationService.confirm(
+                new EmailVerificationConfirmRequest(rawToken));
+
+        assertThat(response.email()).isEqualTo(other.getEmail());
+        assertThat(other.isEmailVerified()).isTrue();
+        verify(rateLimiter).clear(2L);
     }
 
     /** 확인 시도 상한에 걸리면 토큰 조회 전에 429로 거부하는지 검증한다. */
@@ -202,13 +204,30 @@ class EmailVerificationServiceTest {
     void rejectsConfirmWhenRateLimited() {
         when(rateLimiter.canConfirm(1L)).thenReturn(false);
 
+        when(tokenRepository.findByTokenHash(tokenHasher.hash("raw-token")))
+                .thenReturn(Optional.of(usableToken("raw-token")));
+
         assertThatThrownBy(() -> emailVerificationService.confirm(
-                principal, new EmailVerificationConfirmRequest("raw-token")
+                new EmailVerificationConfirmRequest("raw-token")
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
 
-        verify(tokenRepository, never()).findByTokenHash(any());
+        verify(rateLimiter, never()).recordConfirmFailure(anyLong());
+    }
+
+    /** 존재하지 않는 토큰은 무효 토큰 오류로 거부하는지 검증한다. */
+    @Test
+    void rejectsUnknownToken() {
+        String rawToken = "unknown-token";
+        when(tokenRepository.findByTokenHash(tokenHasher.hash(rawToken))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> emailVerificationService.confirm(
+                new EmailVerificationConfirmRequest(rawToken)
+        )).isInstanceOfSatisfying(BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID));
+
         verify(rateLimiter, never()).recordConfirmFailure(anyLong());
     }
 

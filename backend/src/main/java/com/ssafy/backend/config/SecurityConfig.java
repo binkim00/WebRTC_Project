@@ -80,8 +80,9 @@ public class SecurityConfig {
                         // 이메일 인증 (AUTH-005~008)
                         // 자기 계정의 메일함만 확인하는 흐름이라 역할 제한 없이 로그인만 요구한다.
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/email-verifications",
-                                "/api/v1/auth/email-verifications/resend",
-                                "/api/v1/auth/email-verifications/confirm").authenticated()
+                                "/api/v1/auth/email-verifications/resend").authenticated()
+                        // 인증 링크는 다른 기기와 새 탭에서 열릴 수 있어 토큰만으로 확인을 허용한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/email-verifications/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/email-verifications")
                                 .authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/v1/influencers/*/follow")

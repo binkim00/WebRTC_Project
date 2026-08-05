@@ -113,16 +113,17 @@ public class EmailVerificationService {
     /**
      * 메일로 받은 토큰을 검증하고 사용자의 이메일 인증을 완료한다.
      *
-     * @param principal JWT 인증 사용자 정보
+     * <p>토큰 해시로 조회한 발급 대상 사용자를 인증하며 JWT principal은 사용하지 않는다.
+     *
      * @param request 인증 토큰 원문
      * @return 인증 완료 후 상태
      * @throws BusinessException 토큰이 유효하지 않거나 확인 시도 제한에 걸린 경우
      */
     @Transactional
-    public EmailVerificationStatusResponse confirm(
-            AuthenticatedUser principal, EmailVerificationConfirmRequest request
-    ) {
-        User user = currentUserService.requireActiveUser(principal);
+    public EmailVerificationStatusResponse confirm(EmailVerificationConfirmRequest request) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        EmailVerificationToken token = findToken(request.token().trim());
+        User user = token.getUser();
         if (user.isEmailVerified()) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
         }
@@ -130,8 +131,10 @@ public class EmailVerificationService {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
         }
 
-        LocalDateTime now = LocalDateTime.now(clock);
-        EmailVerificationToken token = findUsableToken(request.token().trim(), user, now);
+        if (!token.isUsable(now)) {
+            rateLimiter.recordConfirmFailure(user.getId());
+            throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
+        }
 
         token.consume(now);
         user.verifyEmail(now);
@@ -162,12 +165,16 @@ public class EmailVerificationService {
      * @return 사용 가능한 인증 토큰
      * @throws BusinessException 토큰이 없거나 사용할 수 없는 경우
      */
-    private EmailVerificationToken findUsableToken(String rawToken, User user, LocalDateTime now) {
-        Optional<EmailVerificationToken> found = tokenRepository.findByTokenHash(tokenHasher.hash(rawToken))
-                .filter(token -> token.getUser().getId().equals(user.getId()))
-                .filter(token -> token.isUsable(now));
+    /**
+     * 토큰 원문의 HMAC 해시로 인증 토큰을 조회한다.
+     *
+     * @param rawToken 검증할 토큰 원문
+     * @return 조회된 인증 토큰
+     * @throws BusinessException 일치하는 토큰이 없는 경우
+     */
+    private EmailVerificationToken findToken(String rawToken) {
+        Optional<EmailVerificationToken> found = tokenRepository.findByTokenHash(tokenHasher.hash(rawToken));
         if (found.isEmpty()) {
-            rateLimiter.recordConfirmFailure(user.getId());
             throw new BusinessException(ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
         }
         return found.get();

@@ -65,16 +65,16 @@ public class EmailVerificationController {
      *
      * <p>API 명세 AUTH-007에 해당한다.
      *
+     * <p>로그인 세션 없이 메일 링크 토큰만으로 인증 대상을 식별한다.
+     *
      * @param request 인증 토큰 원문
-     * @param principal JWT 인증 사용자 정보
      * @return 공통 성공 형식으로 감싼 인증 완료 상태
      */
     @PostMapping("/confirm")
     public ApiResponse<EmailVerificationStatusResponse> confirm(
-            @Valid @RequestBody EmailVerificationConfirmRequest request,
-            @AuthenticationPrincipal AuthenticatedUser principal
+            @Valid @RequestBody EmailVerificationConfirmRequest request
     ) {
-        return ApiResponse.success(emailVerificationService.confirm(principal, request));
+        return ApiResponse.success(emailVerificationService.confirm(request));
     }
 
     /**
