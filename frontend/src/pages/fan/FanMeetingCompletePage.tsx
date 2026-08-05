@@ -54,10 +54,33 @@ function formatSpokenDuration(seconds: number | null | undefined): string | unde
   return rest > 0 ? `${minutes}분 ${rest}초` : `${minutes}분`
 }
 
-/** 영상 보관 만료까지 남은 일수다. 지났으면 0을 준다. */
-function remainingDays(availableUntil: string): number {
-  const diff = new Date(availableUntil).getTime() - Date.now()
-  return Math.max(0, Math.ceil(diff / DAY_MS))
+/**
+ * 영상 보관 만료까지 남은 일수다. 지났으면 0을 준다.
+ *
+ * 백엔드는 녹화가 아직 완료되지 않았거나(요청·egress 진행 중) 실패한 경우 `availableUntil`을
+ * 내려주지 않는다. 그때 0일을 반환하면 "곧 삭제됨"이라는 잘못된 정보가 되므로,
+ * **모르는 상태는 null로 구분해** 호출하는 쪽이 표기를 생략할 수 있게 한다.
+ */
+function remainingDays(availableUntil: string | null | undefined): number | null {
+  if (!availableUntil) return null
+
+  const until = new Date(availableUntil).getTime()
+  if (Number.isNaN(until)) return null
+
+  return Math.max(0, Math.ceil((until - Date.now()) / DAY_MS))
+}
+
+/**
+ * 기록 정렬용 시각(ms)이다. 값이 없거나 해석할 수 없으면 0을 준다.
+ *
+ * `completedAt`은 녹화가 완료된 뒤에만 채워지므로, 아직 완료되지 않은 기록은 시각을 알 수 없다.
+ * 0을 주어 목록 끝으로 밀어 두면 완료된 기록의 최신순 정렬이 흔들리지 않는다.
+ */
+function completedTime(completedAt: string | null | undefined): number {
+  if (!completedAt) return 0
+
+  const time = new Date(completedAt).getTime()
+  return Number.isNaN(time) ? 0 : time
 }
 
 /** 대기실에서 저장한 "하고 싶은 말"을 읽는다. 팬 측 메모 API가 아직 없어 브라우저 보관값을 쓴다. */
@@ -293,7 +316,8 @@ export function FanMeetingCompletePage() {
   const proc = loading || (Boolean(currentRecording) && !isReady && !isExpired)
   const durationSec = detail?.durationSec ?? currentRecording?.durationSec ?? null
   const spokenDuration = formatSpokenDuration(durationSec)
-  const daysLeft = currentRecording ? remainingDays(currentRecording.availableUntil) : null
+  // 보관 기한을 모르는 경우(녹화 미완료·실패)도 null이 되어 아래 recMeta에서 표기를 생략한다.
+  const daysLeft = remainingDays(currentRecording?.availableUntil)
 
   const headline = proc
     ? '기록을 만들고 있어요'
@@ -334,9 +358,9 @@ export function FanMeetingCompletePage() {
   const eyebrowDate = formatDate(
     currentRecording?.completedAt ?? new Date().toISOString(),
   )
+  // 완료 시각 최신순이다. 완료되지 않아 시각을 모르는 기록은 completedTime이 0을 주어 뒤로 밀린다.
   const archive = [...(recordings ?? [])].sort(
-    (left, right) =>
-      new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
+    (left, right) => completedTime(right.completedAt) - completedTime(left.completedAt),
   )
 
   return (
@@ -616,7 +640,12 @@ export function FanMeetingCompletePage() {
                       <p
                         className={`mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-bold ${expired ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-warning)]'}`}
                       >
-                        {expired ? '영상 보관 종료' : `영상 ${days}일 남음`}{' '}
+                        {/* days가 null이면 보관 기한이 아직 정해지지 않은 것이라 남은 일수를 단정하지 않는다. */}
+                        {expired
+                          ? '영상 보관 종료'
+                          : days === null
+                            ? '영상 저장 처리 중'
+                            : `영상 ${days}일 남음`}{' '}
                         <span className="font-medium text-[var(--color-text-muted)]">
                           {note || !expired ? '· 사진과 메모는 계속 보관' : '· 기록만 남음'}
                         </span>
