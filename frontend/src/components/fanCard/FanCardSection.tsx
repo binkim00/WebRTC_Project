@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 
 import {
   getFanCardCandidates,
@@ -7,7 +13,18 @@ import {
 } from '../../api/fanCards'
 import { getCapturedPhotos, MAX_PHOTOS_PER_CARD } from '../../api/capturedPhotos'
 import { AlertBanner, Button, Card } from '..'
-import { drawFanCard, type FanCardFont, type FanCardLayout } from './fanCardCanvas'
+import {
+  drawFanCard,
+  fanCardSizeOf,
+  type CardDecoration,
+  type FanCardFont,
+  type FanCardLayout,
+} from './fanCardCanvas'
+import {
+  CARD_STICKER_CATEGORIES,
+  cardStickerName,
+  cardStickerUrl,
+} from './cardStickers'
 
 /** AI 추천 문구가 생성 중일 때 다시 조회하는 간격이다. */
 const SUGGESTION_POLL_INTERVAL_MS = 3_000
@@ -42,6 +59,72 @@ const FONT_OPTIONS: readonly { key: FanCardFont; label: string; previewFamily?: 
   { key: 'HANDWRITING', label: '손글씨', previewFamily: '"Gaegu"' },
   { key: 'HEADLINE', label: '또렷하게', previewFamily: '"Do Hyeon"' },
 ]
+
+/** 새로 얹는 스티커의 한 변 길이다. 카드 폭의 6분의 1쯤이라 한눈에 보인다. */
+const NEW_STICKER_SIZE = 180
+
+/** 새로 얹는 글자의 크기다. */
+const NEW_TEXT_SIZE = 72
+
+/** 팬이 조절할 수 있는 크기 범위다. */
+const MIN_DECORATION_SIZE = 48
+const MAX_DECORATION_SIZE = 420
+
+/**
+ * 화면에서 누른 지점을 카드 안의 좌표로 바꾼다.
+ *
+ * <p>미리보기 캔버스는 화면 폭에 맞춰 줄여 그리므로, 저장본과 같은 자리에 얹으려면
+ * 표시 크기와 실제 카드 크기의 비율을 곱해야 한다.
+ *
+ * @param canvas 대상 캔버스
+ * @param clientX 화면 기준 가로 좌표
+ * @param clientY 화면 기준 세로 좌표
+ * @returns 카드 좌표계의 지점
+ */
+function toCardPoint(
+  canvas: HTMLCanvasElement,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
+  const rect = canvas.getBoundingClientRect()
+  return {
+    x: ((clientX - rect.left) / rect.width) * canvas.width,
+    y: ((clientY - rect.top) / rect.height) * canvas.height,
+  }
+}
+
+/**
+ * 누른 지점에 있는 꾸미기 요소를 찾는다.
+ *
+ * <p>위에 쌓인 것을 먼저 집도록 뒤에서부터 살핀다. 글자는 세로보다 가로로 넓으므로
+ * 글자 수만큼 판정 폭을 넓혀 준다.
+ *
+ * @param decorations 카드에 얹힌 요소 목록
+ * @param point 카드 좌표계의 지점
+ * @returns 집힌 요소이며 없으면 undefined
+ */
+function findDecorationAt(
+  decorations: readonly CardDecoration[],
+  point: { x: number; y: number },
+): CardDecoration | undefined {
+  for (let index = decorations.length - 1; index >= 0; index -= 1) {
+    const decoration = decorations[index]
+    if (!decoration) continue
+
+    const halfHeight = decoration.size / 2
+    const halfWidth = decoration.kind === 'TEXT'
+      ? Math.max(halfHeight, (decoration.content.length * decoration.size * 0.6) / 2)
+      : halfHeight
+
+    if (
+      Math.abs(point.x - decoration.x) <= halfWidth
+      && Math.abs(point.y - decoration.y) <= halfHeight
+    ) {
+      return decoration
+    }
+  }
+  return undefined
+}
 
 /**
  * 레이아웃이 쓰는 사진 수를 알려 준다.
@@ -95,6 +178,120 @@ export function FanCardSection({
   const [layout, setLayout] = useState<FanCardLayout>()
   const [selectedPhotoIndexes, setSelectedPhotoIndexes] = useState<readonly number[]>([])
   const [fontKey, setFontKey] = useState<FanCardFont>('DEFAULT')
+  const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
+  const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
+  const [stickerCategoryKey, setStickerCategoryKey] = useState(
+    CARD_STICKER_CATEGORIES[0]?.key ?? 'heart',
+  )
+  const [decorationTextInput, setDecorationTextInput] = useState('')
+  const decorationCounterRef = useRef(0)
+  const draggingRef = useRef<{ id: string; offsetX: number; offsetY: number }>(undefined)
+
+  const selectedDecoration = decorations.find(
+    (decoration) => decoration.id === selectedDecorationId,
+  )
+
+  /**
+   * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
+   *
+   * @param kind 스티커인지 글자인지
+   * @param content 스티커 코드 또는 글자
+   */
+  const addDecoration = useCallback(
+    (kind: CardDecoration['kind'], content: string) => {
+      const size = fanCardSizeOf(layout)
+      decorationCounterRef.current += 1
+      const created: CardDecoration = {
+        id: `decoration-${decorationCounterRef.current}`,
+        kind,
+        content,
+        x: size.width / 2,
+        y: size.height / 2,
+        size: kind === 'STICKER' ? NEW_STICKER_SIZE : NEW_TEXT_SIZE,
+        rotation: 0,
+      }
+      setDecorations((current) => [...current, created])
+      setSelectedDecorationId(created.id)
+    },
+    [layout],
+  )
+
+  /**
+   * 선택한 요소의 값을 바꾼다.
+   *
+   * @param patch 바꿀 속성만 담은 값
+   */
+  const updateSelectedDecoration = useCallback(
+    (patch: Partial<Pick<CardDecoration, 'x' | 'y' | 'size' | 'rotation'>>) => {
+      if (!selectedDecorationId) return
+      setDecorations((current) =>
+        current.map((decoration) =>
+          decoration.id === selectedDecorationId ? { ...decoration, ...patch } : decoration,
+        ),
+      )
+    },
+    [selectedDecorationId],
+  )
+
+  /** 선택한 요소를 카드에서 뗀다. */
+  const removeSelectedDecoration = useCallback(() => {
+    if (!selectedDecorationId) return
+    setDecorations((current) =>
+      current.filter((decoration) => decoration.id !== selectedDecorationId),
+    )
+    setSelectedDecorationId(undefined)
+  }, [selectedDecorationId])
+
+  /**
+   * 카드를 눌렀을 때 그 자리의 요소를 집는다. 빈 곳을 누르면 선택을 푼다.
+   *
+   * @param event 포인터 누름 이벤트
+   */
+  const handleCanvasPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+      const canvas = event.currentTarget
+      const point = toCardPoint(canvas, event.clientX, event.clientY)
+      const hit = findDecorationAt(decorations, point)
+
+      setSelectedDecorationId(hit?.id)
+      if (!hit) return
+
+      // 집은 지점과 요소 중심의 차이를 기억해야 끌 때 요소가 튀지 않는다.
+      draggingRef.current = { id: hit.id, offsetX: point.x - hit.x, offsetY: point.y - hit.y }
+      canvas.setPointerCapture(event.pointerId)
+    },
+    [decorations],
+  )
+
+  /**
+   * 집은 요소를 끌어 옮긴다.
+   *
+   * @param event 포인터 이동 이벤트
+   */
+  const handleCanvasPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+      const dragging = draggingRef.current
+      if (!dragging) return
+
+      const canvas = event.currentTarget
+      const point = toCardPoint(canvas, event.clientX, event.clientY)
+      // 카드 밖으로 완전히 나가 다시 집지 못하는 일이 없게 안쪽으로 붙잡아 둔다.
+      const x = Math.min(Math.max(point.x - dragging.offsetX, 0), canvas.width)
+      const y = Math.min(Math.max(point.y - dragging.offsetY, 0), canvas.height)
+
+      setDecorations((current) =>
+        current.map((decoration) =>
+          decoration.id === dragging.id ? { ...decoration, x, y } : decoration,
+        ),
+      )
+    },
+    [],
+  )
+
+  /** 끌기를 마친다. */
+  const handleCanvasPointerUp = useCallback(() => {
+    draggingRef.current = undefined
+  }, [])
 
   // 통화 화면에서 셔터로 남긴 사진을 불러온다. 서버에 올리지 않으므로 이 브라우저에만 있다.
   useEffect(() => {
@@ -187,21 +384,46 @@ export function FanCardSection({
       layout,
       photos,
       fontKey,
-    }).catch(() => {
-      if (active) setSaveError('카드 이미지를 그리지 못했습니다.')
+      decorations,
     })
+      .then(() => {
+        // 고른 요소를 알아볼 수 있게 점선을 두른다. 이 표시는 미리보기에만 그리고
+        // 내려받을 때는 따로 그린 캔버스를 쓰므로 저장본에는 남지 않는다.
+        if (!active || !selectedDecoration) return
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+
+        const half = selectedDecoration.size / 2
+        const halfWidth = selectedDecoration.kind === 'TEXT'
+          ? Math.max(half, (selectedDecoration.content.length * selectedDecoration.size * 0.6) / 2)
+          : half
+
+        ctx.save()
+        ctx.translate(selectedDecoration.x, selectedDecoration.y)
+        ctx.rotate(selectedDecoration.rotation)
+        ctx.setLineDash([14, 10])
+        ctx.lineWidth = 4
+        ctx.strokeStyle = '#ff5a5f'
+        ctx.strokeRect(-halfWidth - 8, -half - 8, halfWidth * 2 + 16, half * 2 + 16)
+        ctx.restore()
+      })
+      .catch(() => {
+        if (active) setSaveError('카드 이미지를 그리지 못했습니다.')
+      })
 
     return () => {
       active = false
     }
   }, [
     dateLabel,
+    decorations,
     fanNickname,
     fontKey,
     influencerName,
     layout,
     meetingTitle,
     photoBitmaps,
+    selectedDecoration,
     selectedPhotoIndexes,
     selectedText,
   ])
@@ -213,6 +435,19 @@ export function FanCardSection({
    */
   const changeLayout = useCallback(
     (nextLayout: FanCardLayout | undefined) => {
+      // 네컷 스트립은 카드 크기가 달라서, 얹어 둔 스티커를 같은 비율 자리로 옮겨 준다.
+      const before = fanCardSizeOf(layout)
+      const after = fanCardSizeOf(nextLayout)
+      if (before.width !== after.width || before.height !== after.height) {
+        setDecorations((current) =>
+          current.map((decoration) => ({
+            ...decoration,
+            x: (decoration.x / before.width) * after.width,
+            y: (decoration.y / before.height) * after.height,
+          })),
+        )
+      }
+
       setLayout(nextLayout)
       const need = photoCountOf(nextLayout)
 
@@ -224,7 +459,7 @@ export function FanCardSection({
         return photoBitmaps.slice(0, need).map((_, index) => index)
       })
     },
-    [photoBitmaps],
+    [layout, photoBitmaps],
   )
 
   /**
@@ -266,10 +501,36 @@ export function FanCardSection({
     }
   }, [authToken, callSessionId, selectedText])
 
-  /** 미리보기 캔버스를 PNG로 내려받는다. */
-  function handleDownload() {
-    const canvas = canvasRef.current
-    if (!canvas) return
+  /**
+   * 카드를 PNG로 내려받는다.
+   *
+   * <p>미리보기 캔버스에는 고른 요소를 알리는 점선이 그려져 있으므로, 저장할 때는 화면에
+   * 없는 캔버스에 같은 내용을 다시 그려 점선이 파일에 남지 않게 한다.
+   */
+  async function handleDownload() {
+    if (!selectedText) return
+
+    const canvas = document.createElement('canvas')
+    const photos = selectedPhotoIndexes
+      .map((index) => photoBitmaps[index])
+      .filter((photo): photo is ImageBitmap => Boolean(photo))
+
+    try {
+      await drawFanCard(canvas, {
+        text: selectedText,
+        meetingTitle,
+        influencerName,
+        fanNickname,
+        dateLabel,
+        layout,
+        photos,
+        fontKey,
+        decorations,
+      })
+    } catch {
+      setSaveError('카드 이미지를 만들지 못했습니다.')
+      return
+    }
 
     canvas.toBlob((blob) => {
       if (!blob) {
@@ -486,10 +747,142 @@ export function FanCardSection({
             </h3>
             <canvas
               aria-label={`기념 카드 미리보기: ${selectedText}`}
-              className="mx-auto mt-3 h-auto w-full max-w-xs rounded-[var(--radius-panel)]"
+              // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
+              className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] ${
+                decorations.length > 0 ? 'cursor-grab' : ''
+              }`}
+              onPointerCancel={handleCanvasPointerUp}
+              onPointerDown={handleCanvasPointerDown}
+              onPointerMove={handleCanvasPointerMove}
+              onPointerUp={handleCanvasPointerUp}
               ref={canvasRef}
               role="img"
             />
+
+            <div className="mt-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  스티커로 꾸미기
+                </h4>
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  {decorations.length > 0
+                    ? '카드 위에서 끌어 옮길 수 있어요.'
+                    : '눌러서 카드에 올려 보세요.'}
+                </p>
+              </div>
+
+              <ul className="mt-3 flex flex-wrap gap-1.5">
+                {CARD_STICKER_CATEGORIES.map((category) => (
+                  <li key={category.key}>
+                    <button
+                      aria-pressed={stickerCategoryKey === category.key}
+                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors duration-200 motion-reduce:transition-none ${
+                        stickerCategoryKey === category.key
+                          ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
+                          : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)]'
+                      }`}
+                      onClick={() => setStickerCategoryKey(category.key)}
+                      type="button"
+                    >
+                      {category.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <ul className="mt-3 grid grid-cols-6 gap-1.5 sm:grid-cols-8">
+                {(CARD_STICKER_CATEGORIES.find(
+                  (category) => category.key === stickerCategoryKey,
+                )?.stickers ?? []).map((sticker) => (
+                  <li key={sticker.code}>
+                    <button
+                      className="block w-full rounded-[var(--radius-control)] p-1.5 transition-colors duration-200 hover:bg-[var(--color-surface-page)] motion-reduce:transition-none"
+                      onClick={() => addDecoration('STICKER', sticker.code)}
+                      title={sticker.name}
+                      type="button"
+                    >
+                      <img
+                        alt={sticker.name}
+                        className="block aspect-square w-full"
+                        loading="lazy"
+                        src={cardStickerUrl(sticker.code)}
+                      />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <input
+                  aria-label="카드에 올릴 글자"
+                  className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 py-2 text-sm"
+                  maxLength={20}
+                  onChange={(event) => setDecorationTextInput(event.target.value)}
+                  placeholder="카드에 올릴 짧은 글자"
+                  type="text"
+                  value={decorationTextInput}
+                />
+                <Button
+                  disabled={!decorationTextInput.trim()}
+                  onClick={() => {
+                    addDecoration('TEXT', decorationTextInput.trim())
+                    setDecorationTextInput('')
+                  }}
+                  size="sm"
+                  variant="secondary"
+                >
+                  글자 올리기
+                </Button>
+              </div>
+
+              {selectedDecoration ? (
+                <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                      {selectedDecoration.kind === 'STICKER'
+                        ? cardStickerName(selectedDecoration.content)
+                        : `“${selectedDecoration.content}”`}
+                      <span className="ml-2 font-normal text-[var(--color-text-secondary)]">
+                        선택됨
+                      </span>
+                    </p>
+                    <Button onClick={removeSelectedDecoration} size="sm" variant="secondary">
+                      떼어내기
+                    </Button>
+                  </div>
+
+                  <label className="mt-3 block text-xs font-semibold text-[var(--color-text-secondary)]">
+                    크기
+                    <input
+                      className="mt-1 block w-full"
+                      max={MAX_DECORATION_SIZE}
+                      min={MIN_DECORATION_SIZE}
+                      onChange={(event) =>
+                        updateSelectedDecoration({ size: Number(event.target.value) })
+                      }
+                      type="range"
+                      value={selectedDecoration.size}
+                    />
+                  </label>
+
+                  <label className="mt-2 block text-xs font-semibold text-[var(--color-text-secondary)]">
+                    기울기
+                    <input
+                      className="mt-1 block w-full"
+                      max={180}
+                      min={-180}
+                      onChange={(event) =>
+                        updateSelectedDecoration({
+                          rotation: (Number(event.target.value) * Math.PI) / 180,
+                        })
+                      }
+                      type="range"
+                      value={Math.round((selectedDecoration.rotation * 180) / Math.PI)}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
 
             {saveError ? (
               <AlertBanner className="mt-4" title="카드를 처리하지 못했습니다" variant="error">
@@ -511,7 +904,7 @@ export function FanCardSection({
               >
                 {savedText ? '이 문구로 다시 저장' : '카드 저장하기'}
               </Button>
-              <Button onClick={handleDownload} size="lg" variant="secondary">
+              <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
                 이미지 내려받기
               </Button>
             </div>

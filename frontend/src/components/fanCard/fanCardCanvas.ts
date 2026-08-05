@@ -6,6 +6,8 @@
  * 처음부터 자체 도안만 사용한다.
  */
 
+import { cardStickerUrl } from './cardStickers'
+
 /** 카드 이미지 크기이며 세로형 포토카드 비율(4:5)이다. */
 export const CARD_WIDTH = 1080
 export const CARD_HEIGHT = 1350
@@ -98,6 +100,31 @@ export type FanCardArtwork = {
   photos?: readonly ImageBitmap[]
   /** 팬이 고른 글꼴이다. 없거나 내려받지 못하면 서비스 기본 글꼴로 그린다. */
   fontKey?: FanCardFont
+  /** 팬이 카드 위에 올린 스티커와 글자다. 목록 순서대로 위에 쌓인다. */
+  decorations?: readonly CardDecoration[]
+}
+
+/**
+ * 팬이 카드 위에 얹은 꾸미기 요소 하나다.
+ *
+ * <p>좌표와 크기는 모두 카드 픽셀 기준이라 레이아웃마다 카드 크기가 달라도 그대로 쓸 수
+ * 있다. 화면에서 캔버스를 줄여 보여 주더라도 저장본과 위치가 어긋나지 않는다.
+ */
+export type CardDecoration = {
+  /** 목록에서 구분하는 식별자 */
+  id: string
+  /** STICKER는 그림, TEXT는 팬이 쓴 글자다. */
+  kind: 'STICKER' | 'TEXT'
+  /** STICKER면 스티커 코드, TEXT면 표시할 글자 */
+  content: string
+  /** 카드 안에서의 가로 중심 */
+  x: number
+  /** 카드 안에서의 세로 중심 */
+  y: number
+  /** 스티커는 한 변의 길이, 글자는 글꼴 크기다. */
+  size: number
+  /** 라디안 단위 회전각 */
+  rotation: number
 }
 
 /**
@@ -247,27 +274,31 @@ export async function drawFanCard(
 
   if (photos.length === 0) {
     drawQuoteOnlyCard(ctx, artwork, fontFamily)
-    return
+  } else {
+    switch (artwork.layout) {
+      case 'INSTA':
+        drawInstaCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'POLAROID':
+        drawPolaroidCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'FOURCUT':
+        drawFourCutCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'FOURCUT_VERTICAL':
+        drawFourCutVerticalCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'FOURCUT_HORIZONTAL':
+        drawFourCutHorizontalCard(ctx, artwork, photos, fontFamily)
+        break
+      default:
+        drawQuoteOnlyCard(ctx, artwork, fontFamily)
+    }
   }
 
-  switch (artwork.layout) {
-    case 'INSTA':
-      drawInstaCard(ctx, artwork, photos, fontFamily)
-      return
-    case 'POLAROID':
-      drawPolaroidCard(ctx, artwork, photos, fontFamily)
-      return
-    case 'FOURCUT':
-      drawFourCutCard(ctx, artwork, photos, fontFamily)
-      return
-    case 'FOURCUT_VERTICAL':
-      drawFourCutVerticalCard(ctx, artwork, photos, fontFamily)
-      return
-    case 'FOURCUT_HORIZONTAL':
-      drawFourCutHorizontalCard(ctx, artwork, photos, fontFamily)
-      return
-    default:
-      drawQuoteOnlyCard(ctx, artwork, fontFamily)
+  // 꾸미기 요소는 카드를 다 그린 뒤 맨 위에 얹는다.
+  if (artwork.decorations?.length) {
+    await drawDecorations(ctx, artwork.decorations, fontFamily)
   }
 }
 
@@ -1287,6 +1318,96 @@ function drawFourCutHorizontalCard(
   )
 
   drawFooterMark(ctx, fontFamily, stripBottom + 122, 'rgba(255, 255, 255, 0.42)', centerX)
+}
+
+/**
+ * 이미 불러온 스티커 그림을 코드별로 재사용한다.
+ *
+ * <p>같은 스티커를 여러 개 붙이거나 위치를 옮길 때마다 다시 내려받지 않게 한다.
+ */
+const stickerImageCache = new Map<string, Promise<HTMLImageElement>>()
+
+/**
+ * 스티커 SVG를 그림으로 불러온다.
+ *
+ * <p>같은 출처의 파일이라 캔버스가 오염되지 않으므로 합성한 카드를 그대로 PNG로 저장할 수
+ * 있다. 실패하면 캐시에서 지워 다음에 다시 시도한다.
+ *
+ * @param code 불러올 스티커 코드
+ * @returns 그릴 준비가 끝난 그림
+ * @throws Error 그림을 불러오지 못한 경우
+ */
+function loadStickerImage(code: string): Promise<HTMLImageElement> {
+  const cached = stickerImageCache.get(code)
+  if (cached) return cached
+
+  const loading = new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.decoding = 'async'
+    image.addEventListener('load', () => resolve(image), { once: true })
+    image.addEventListener(
+      'error',
+      () => reject(new Error('스티커 그림을 불러오지 못했습니다.')),
+      { once: true },
+    )
+    image.src = cardStickerUrl(code)
+  })
+
+  stickerImageCache.set(code, loading)
+  void loading.catch(() => stickerImageCache.delete(code))
+  return loading
+}
+
+/**
+ * 팬이 얹은 스티커와 글자를 카드 위에 그린다.
+ *
+ * <p>그림을 먼저 모두 불러온 뒤 한 번에 그린다. 그리는 도중에 기다리면 캔버스 상태를
+ * 저장·복원하는 사이에 다른 그리기가 끼어들 수 있기 때문이다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param decorations 팬이 얹은 요소이며 앞에서부터 아래에 깔린다
+ * @param fontFamily 글자 요소에 쓸 글꼴
+ */
+async function drawDecorations(
+  ctx: CanvasRenderingContext2D,
+  decorations: readonly CardDecoration[],
+  fontFamily: string,
+): Promise<void> {
+  const images = await Promise.all(
+    decorations.map((decoration) =>
+      decoration.kind === 'STICKER'
+        // 한 장을 못 불러와도 나머지는 그린다.
+        ? loadStickerImage(decoration.content).catch(() => undefined)
+        : Promise.resolve(undefined),
+    ),
+  )
+
+  decorations.forEach((decoration, index) => {
+    ctx.save()
+    ctx.translate(decoration.x, decoration.y)
+    ctx.rotate(decoration.rotation)
+
+    if (decoration.kind === 'TEXT') {
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.font = `700 ${decoration.size}px ${fontFamily}`
+      // 밝은 프레임과 어두운 네컷 어디에 올려도 읽히도록 테두리를 함께 그린다.
+      ctx.lineJoin = 'round'
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)'
+      ctx.lineWidth = Math.max(2, decoration.size * 0.14)
+      ctx.strokeText(decoration.content, 0, 0)
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(decoration.content, 0, 0)
+    } else {
+      const image = images[index]
+      if (image) {
+        const half = decoration.size / 2
+        ctx.drawImage(image, -half, -half, decoration.size, decoration.size)
+      }
+    }
+
+    ctx.restore()
+  })
 }
 
 /**
