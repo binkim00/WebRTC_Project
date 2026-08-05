@@ -64,6 +64,10 @@ livekit:
   test-token-enabled: ${LIVEKIT_TEST_TOKEN_ENABLED:false}
 
 app:
+  test-control:
+    # 개발·통합 테스트에서만 팬미팅 상태를 강제로 변경하는 API를 등록한다.
+    enabled: ${TEST_CONTROL_ENABLED:false}
+
   application:
     # 응모 전 이메일 인증을 강제한다. 현재 배포 환경에서는 임시로 비활성화한다.
     email-verification-required: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:false}
