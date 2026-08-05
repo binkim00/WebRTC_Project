@@ -3,8 +3,11 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import {
+  CALL_DURATION_MAX_MINUTES,
+  CALL_DURATION_MIN_MINUTES,
   callDurationSecToMinutesInput,
   formatCallDuration,
+  minutesInputToCallDurationSec,
   validateCallDurationSec,
 } from './callDuration'
 import { saveApplicationForm } from '../../api/applications'
@@ -283,10 +286,13 @@ export function ManagerMeetingCreatePage() {
   /** 복구된 초안이 가리키던 팬미팅을 더 이상 수정할 수 없어 연결을 끊었을 때의 안내다. */
   const [staleDraftLinkNotice, setStaleDraftLinkNotice] = useState<string>()
   const allowNavigationRef = useRef(false)
-  // 통화 시간은 선택형 UI로 초 단위 값을 직접 고르지만, 초안 폐기 시 표시값 복원을 위해
-  // 분 단위 표시 문자열도 함께 유지한다.
-  const [, setCallDurationMinutesInput] = useState(() =>
+  // 통화 시간은 분 단위로 입력받고 초로 저장한다. 입력 도중의 빈 문자열·소수점을
+  // 초로 환산할 수 없으므로 표시용 문자열을 별도 상태로 둔다.
+  const [callDurationMinutesInput, setCallDurationMinutesInput] = useState(() =>
     callDurationSecToMinutesInput(form.operation.callDurationSec),
+  )
+  const callDurationError = validateCallDurationSec(
+    minutesInputToCallDurationSec(callDurationMinutesInput),
   )
 
   /**
@@ -628,9 +634,9 @@ export function ManagerMeetingCreatePage() {
         setError('팬미팅 일시를 입력해 주세요.')
         return
       }
-      if (step === 1 && (!Number.isInteger(form.operation.callDurationSec) || form.operation.callDurationSec <= 0)) {
+      if (step === 1 && callDurationError) {
         setErrorTitle('입력 확인')
-        setError('1인 통화 시간을 선택해 주세요.')
+        setError(callDurationError)
         return
       }
       if (step === 1 && !form.operation.queueOpenAt) {
@@ -749,8 +755,7 @@ export function ManagerMeetingCreatePage() {
     form.operation.maxRecallCount,
   ].every((value) => value == null || (Number.isInteger(value) && value >= 0))
   const operationComplete = Boolean(
-    Number.isInteger(form.operation.callDurationSec) &&
-      form.operation.callDurationSec > 0 &&
+    !callDurationError &&
       form.operation.queueOpenAt &&
       operationPoliciesValid &&
       !queueOpenError,
@@ -948,12 +953,30 @@ export function ManagerMeetingCreatePage() {
                     </p>
                   </div>
                   <div className="grid items-start gap-5">
-                    <Select
-                      helperText="팬 한 명과 영상통화를 진행하는 시간입니다."
+                    <TextField
+                      endAdornment={
+                        <span className="pr-3 text-sm text-[var(--color-text-muted)]">분</span>
+                      }
+                      error={callDurationError}
+                      helperText={`팬 한 명과 영상통화를 진행하는 시간입니다. ${CALL_DURATION_MIN_MINUTES}~${CALL_DURATION_MAX_MINUTES}분 사이로 입력해 주세요.`}
                       label="1명당 통화 시간"
-                      options={[{ value: '120', label: '2분' }, { value: '180', label: '3분' }, { value: '300', label: '5분' }]}
-                      value={String(form.operation.callDurationSec)}
-                      onChange={(event) => setForm({ ...form, operation: { ...form.operation, callDurationSec: Number(event.target.value) } })}
+                      max={CALL_DURATION_MAX_MINUTES}
+                      min={CALL_DURATION_MIN_MINUTES}
+                      required
+                      step={1}
+                      type="number"
+                      value={callDurationMinutesInput}
+                      onChange={(event) => {
+                        // 입력 중 빈 문자열을 초로 되돌릴 수 없으므로 표시용 문자열을 따로 들고 있는다.
+                        setCallDurationMinutesInput(event.target.value)
+                        const seconds = minutesInputToCallDurationSec(event.target.value)
+                        if (seconds !== undefined) {
+                          setForm({
+                            ...form,
+                            operation: { ...form.operation, callDurationSec: seconds },
+                          })
+                        }
+                      }}
                     />
                   </div>
                 </section>
@@ -1277,8 +1300,8 @@ export function ManagerMeetingCreatePage() {
             step === 0
               ? '필수 입력 항목을 모두 입력해야 다음 단계로 이동할 수 있습니다.'
               : step === 1
-                ? !Number.isInteger(form.operation.callDurationSec) || form.operation.callDurationSec <= 0
-                  ? '1인 통화 시간을 선택해야 다음 단계로 이동할 수 있습니다.'
+                ? callDurationError
+                  ? callDurationError
                   : !form.operation.queueOpenAt
                     ? '대기열 오픈 일시를 입력해야 다음 단계로 이동할 수 있습니다.'
                     : !operationPoliciesValid
