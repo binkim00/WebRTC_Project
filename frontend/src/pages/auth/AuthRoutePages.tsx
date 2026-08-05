@@ -3,6 +3,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
+  clearAuthSession,
   login,
   saveAuthSession,
   signup,
@@ -12,7 +13,7 @@ import {
 } from '../../api/auth'
 import { maskEmail } from '../../api/emailVerifications'
 import { isEmailVerificationEnabled } from '../../config/features'
-import { AlertBanner } from '../../components'
+import { AlertBanner, EmailVerificationNotice } from '../../components'
 
 const languageOptions = [
   { label: '한국어', value: 'KOREAN' },
@@ -257,6 +258,16 @@ export function LoginPage() {
   )
 }
 
+/**
+ * 회원가입 화면의 진행 단계다.
+ *
+ * `form`은 입력·가입 요청, `verifying`은 가입 직후 이메일 인증 단계다.
+ * 인증까지 끝나면 로그인 화면으로 넘긴다.
+ */
+type SignupPhase =
+  | { kind: 'form' }
+  | { kind: 'verifying'; email: string; role: SignupRole }
+
 export function SignupPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -274,6 +285,8 @@ export function SignupPage() {
   const [policyNotice, setPolicyNotice] = useState<string>()
   const [submitError, setSubmitError] = useState<string>()
   const [loading, setLoading] = useState(false)
+  // 가입 완료 후 이메일 인증 단계로 넘어가기 위한 진행 상태다.
+  const [phase, setPhase] = useState<SignupPhase>({ kind: 'form' })
 
   const markTouched = (field: string) => () =>
     setTouched((current) => ({ ...current, [field]: true }))
@@ -347,18 +360,34 @@ export function SignupPage() {
 
     try {
       await signup(request)
-      // 인증 메일 발송 API는 로그인이 필요하므로 여기서는 안내만 하고 발송은 로그인 후 화면에 맡긴다.
-      // 인증 요구는 팬의 응모에만 걸리고 백엔드 배포 상태에 따라 꺼져 있을 수 있어,
-      // 팬 가입일 때만 조건부 문구로 알린다. 실제 안내 카드는 미인증이 확인된 화면이 띄운다.
-      navigate('/login', {
-        replace: true,
-        state: {
-          notice:
-            request.role === 'FAN' && isEmailVerificationEnabled
-              ? `가입이 완료되었어요. 팬미팅 응모에 이메일 인증이 필요한 경우, 로그인 후 마이페이지에서 ${maskEmail(request.email)} 주소로 인증 메일을 보낼 수 있어요.`
-              : '가입이 완료되었어요. 로그인해 주세요.',
-        },
-      })
+
+      // 이메일 인증 기능이 꺼진 환경에서는 종전처럼 로그인 화면으로 바로 넘긴다.
+      if (!isEmailVerificationEnabled) {
+        navigate('/login', {
+          replace: true,
+          state: { notice: '가입이 완료되었어요. 로그인해 주세요.' },
+        })
+        return
+      }
+
+      // 인증 메일 발송·상태 조회 API는 모두 로그인 토큰을 요구하는데 회원가입 응답에는
+      // 토큰이 없다(userId·role·createdAt만 내려온다). 그래서 방금 입력한 자격증명으로
+      // 곧바로 로그인해 임시 세션을 만들고, 그 세션으로 인증 단계를 진행한다.
+      // 이 임시 세션은 인증 단계를 벗어날 때(완료·나중에 하기) leaveVerifyingPhase가 반드시 지운다.
+      try {
+        const session = await login({ loginId: request.loginId, password: request.password })
+        saveAuthSession(session, false)
+        setPhase({ kind: 'verifying', email: request.email, role: request.role })
+      } catch {
+        // 가입은 성공했으나 자동 로그인이 막힌 경우다(계정 상태·정책 등).
+        // 인증 단계를 띄울 수 없으므로 로그인 후 마이페이지에서 인증하도록 안내만 남긴다.
+        navigate('/login', {
+          replace: true,
+          state: {
+            notice: `가입이 완료되었어요. 로그인 후 마이페이지에서 ${maskEmail(request.email)} 주소로 인증 메일을 보낼 수 있어요.`,
+          },
+        })
+      }
     } catch (error: unknown) {
       setSubmitError(
         error instanceof ApiError || error instanceof TypeError
@@ -368,6 +397,17 @@ export function SignupPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  /**
+   * 인증 단계를 마치고 로그인 화면으로 넘긴다.
+   *
+   * 인증 메일 발송을 위해 만든 임시 세션을 여기서 반드시 지운다. 그대로 두면 사용자가
+   * 로그인하지 않았는데도 로그인 상태로 서비스에 들어가게 된다.
+   */
+  function leaveVerifyingPhase(notice: string) {
+    clearAuthSession()
+    navigate('/login', { replace: true, state: { notice } })
   }
 
   function passwordToggle(shown: boolean, onToggle: () => void, targetLabel: string) {
@@ -385,6 +425,52 @@ export function SignupPage() {
           <EyeIcon aria-hidden="true" size={20} />
         )}
       </button>
+    )
+  }
+
+  // 가입 직후 이메일 인증 단계다. 인증 메일은 EmailVerificationNotice가 자동으로 한 번 보내고,
+  // 재발송·완료 확인도 같은 카드에서 처리한다. 인증이 확인되면 로그인 화면으로 넘긴다.
+  if (phase.kind === 'verifying') {
+    return (
+      <main className="mx-auto w-full max-w-[620px] pb-16 pt-8 sm:pt-12">
+        <p className="text-[13px] font-extrabold tracking-[0.08em] text-[var(--color-primary-coral)]">
+          MELLY FAN MEETING
+        </p>
+        <h1 className="mt-3.5 text-[32px] font-black tracking-[-0.045em] text-[var(--color-text-primary)] [text-wrap:balance]">
+          가입이 완료되었어요
+        </h1>
+        <p className="mt-3 text-[17px] font-medium leading-[1.7] text-[var(--color-text-body)]">
+          마지막으로 이메일 인증만 마치면 바로 로그인할 수 있어요.
+        </p>
+
+        <section className="mt-8 rounded-xl border border-[var(--color-divider)] p-7">
+          <EmailVerificationNotice
+            autoSend
+            email={phase.email}
+            onVerified={() =>
+              leaveVerifyingPhase('이메일 인증이 완료되었어요. 이제 로그인해 주세요.')
+            }
+          />
+        </section>
+
+        {/*
+          인증을 나중으로 미루는 경로다. 팬은 응모 시점에 인증이 필요하므로 그 사실을 함께 알린다.
+          팬이 아닌 역할은 현재 인증을 요구하는 화면이 없어 안내 문구를 다르게 둔다.
+        */}
+        <button
+          className="mt-5 min-h-11 w-full text-[15px] font-bold text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+          onClick={() =>
+            leaveVerifyingPhase(
+              phase.role === 'FAN'
+                ? '가입이 완료되었어요. 이메일 인증은 로그인 후 마이페이지에서도 할 수 있고, 팬미팅 응모 전에는 인증이 필요해요.'
+                : '가입이 완료되었어요. 이메일 인증은 로그인 후 마이페이지에서도 할 수 있어요.',
+            )
+          }
+          type="button"
+        >
+          나중에 인증하고 로그인하러 가기
+        </button>
+      </main>
     )
   }
 

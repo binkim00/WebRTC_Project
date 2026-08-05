@@ -17,7 +17,7 @@ import {
   getPendingRecording,
 } from '../../api/pendingRecordings'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
-import { AlertBanner, Button } from '../../components'
+import { AlertBanner, Button, Spinner } from '../../components'
 import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
@@ -378,7 +378,55 @@ export function FanMeetingCompletePage() {
               />
               <MellySeal dimmed={false} size="lg" />
             </>
-          ) : null}
+          ) : (
+            /*
+              영상이 없을 때의 자리다. 이전에는 아무것도 그리지 않아 통화 종료 직후 이 화면에서
+              560px 높이의 빈 회색 면만 마주하게 됐다. 통화를 마치고 처음 보는 화면이므로
+              지금 무슨 일이 일어나는지(저장 중·녹화 없음·보관 종료)를 상태에 맞게 알려 준다.
+            */
+            <div className="absolute inset-0 grid place-items-center px-8 text-center">
+              <div className="grid justify-items-center gap-4">
+                {proc ? (
+                  <>
+                    {/* 저장이 진행 중임을 움직임으로 알린다. 정지된 안내문만으로는 멈춘 것처럼 보인다. */}
+                    <Spinner label="녹화 영상을 저장하는 중" size="lg" />
+                    <div>
+                      <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
+                        오늘의 기록을 만들고 있어요
+                      </strong>
+                      <p className="mt-2 max-w-[34ch] text-base font-medium leading-[1.65] text-[var(--color-text-muted)]">
+                        저장이 끝나면 이 자리에서 영상을 바로 볼 수 있어요. 화면을 닫지 말아 주세요.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <img
+                      alt=""
+                      className="size-[104px] object-contain opacity-60"
+                      src={moldEmptyImage}
+                    />
+                    <div>
+                      <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
+                        {isExpired
+                          ? '영상 보관이 종료되었어요'
+                          : noRecordingMeeting
+                            ? '이 팬미팅은 녹화하지 않았어요'
+                            : '저장된 영상이 없어요'}
+                      </strong>
+                      <p className="mt-2 max-w-[34ch] text-base font-medium leading-[1.65] text-[var(--color-text-muted)]">
+                        {isExpired
+                          ? '영상은 보관 기간이 지나 삭제되었지만, 함께한 시간과 남긴 말은 그대로 남아 있어요.'
+                          : noRecordingMeeting
+                            ? '운영 설정에 따라 녹화하지 않는 팬미팅이었어요. 함께한 시간과 남긴 말은 기록에 남습니다.'
+                            : '영상을 찾지 못했어요. 아래 안내를 확인해 주세요.'}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col px-5 pb-8 pt-[26px] sm:px-[26px] sm:pb-9 sm:pt-[30px] min-[1081px]:pb-11 min-[1081px]:pl-10 min-[1081px]:pr-11 min-[1081px]:pt-[46px]">
