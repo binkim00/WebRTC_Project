@@ -209,6 +209,18 @@ services:
 
       ATTACHMENT_STORAGE_ROOT: ${ATTACHMENT_STORAGE_ROOT:-/srv/melly/attachments}
 
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS}
+
+      EMAIL_VERIFY_DELIVERY: ${EMAIL_VERIFY_DELIVERY}
+      EMAIL_VERIFY_BASE_URL: ${EMAIL_VERIFY_BASE_URL}
+      DEVICE_TOKEN_SECURE: ${DEVICE_TOKEN_SECURE}
+
     volumes:
       # 업로드 파일은 컨테이너가 아니라 호스트 디스크에 남겨야 재생성·재배포 후에도 보존된다.
       # 컨테이너 안의 경로를 호스트와 같게 두어 설정값을 그대로 쓸 수 있게 한다.
