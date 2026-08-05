@@ -17,10 +17,12 @@ import { Button } from '../ui/Button'
 import { ConnectedCallRoom } from './ConnectedCallRoom'
 import { MeetingWrapUp } from './MeetingWrapUp'
 import type { VideoCallRoomProps } from './types'
+import { useTranslation } from '../../i18n'
 
 export type { VideoCallRoomProps } from './types'
 
 export function VideoCallRoom(props: VideoCallRoomProps) {
+  const { t } = useTranslation()
   const [connectionInfo, setConnectionInfo] = useState<LiveKitAccessTokenResponse>()
   const [sessionStatus, setSessionStatus] = useState<CallSessionStatusResponse>()
   const [connectionError, setConnectionError] = useState<string>()
@@ -315,10 +317,10 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         <header>
           <Badge variant="primary">{props.screenId}</Badge>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-            영상 통화
+            {t('videoCallRoom.t1')}
           </h1>
           <p className="mt-3 text-[var(--color-text-secondary)]">
-            통화 세션 ID: <span className="font-mono">{props.callSessionId ?? '없음'}</span>
+            {t('videoCallRoom.t2')} <span className="font-mono">{props.callSessionId ?? '없음'}</span>
           </p>
         </header>
         <AlertBanner
@@ -331,7 +333,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         </AlertBanner>
         {!loading ? (
           <div>
-            <Button onClick={() => setRetryCount((count) => count + 1)}>다시 시도</Button>
+            <Button onClick={() => setRetryCount((count) => count + 1)}>{t('videoCallRoom.t3')}</Button>
           </div>
         ) : null}
       </div>
@@ -368,14 +370,14 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       />
       {connectionError ? (
         <div className="mt-4">
-          <AlertBanner title="LiveKit 연결 오류" variant="error">
+          <AlertBanner title={t('videoCallRoom.t4')} variant="error">
             {connectionError}
           </AlertBanner>
         </div>
       ) : null}
       {statusError ? (
         <div className="mt-4">
-          <AlertBanner title="통화 상태 갱신 오류" variant="warning">
+          <AlertBanner title={t('videoCallRoom.t5')} variant="warning">
             {statusError}
           </AlertBanner>
         </div>

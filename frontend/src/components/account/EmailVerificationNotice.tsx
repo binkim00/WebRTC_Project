@@ -12,6 +12,7 @@ import {
 import { useNowTicker } from '../../hooks/useNowTicker'
 import { AlertBanner } from '../feedback/AlertBanner'
 import { Button } from '../ui/Button'
+import { useTranslation } from '../../i18n'
 
 /** 재발송 버튼 잠금 시간이며 서버 기본 쿨다운(60초)과 맞춘다. */
 const RESEND_COOLDOWN_MS = 60_000
@@ -42,6 +43,7 @@ export function EmailVerificationNotice({
    */
   autoSend?: boolean
 }) {
+  const { t } = useTranslation()
   const [knownEmail, setKnownEmail] = useState(email)
   const [sentOnce, setSentOnce] = useState(false)
   // 서버의 resendAvailableAt(KST 문자열)을 절대 시각으로 쓰면 KST가 아닌 브라우저에서
@@ -184,13 +186,13 @@ export function EmailVerificationNotice({
           <EnvelopeSimple aria-hidden size={22} weight="duotone" />
         </span>
         <div>
-          <h3 className="text-lg font-extrabold">이메일 인증이 필요해요</h3>
+          <h3 className="text-lg font-extrabold">{t('emailVerificationNotice.t1')}</h3>
           <p className="mt-1 text-sm leading-6 text-[var(--color-text-secondary)]">
-            안전한 응모를 위해 이메일 인증을 완료해 주세요.
+            {t('emailVerificationNotice.t2')}
             {knownEmail ? (
               <>
                 {' '}
-                인증 메일은 <strong>{maskEmail(knownEmail)}</strong> 주소로 발송됩니다.
+                {t('emailVerificationNotice.t3')} <strong>{maskEmail(knownEmail)}</strong> {t('emailVerificationNotice.t4')}
               </>
             ) : null}
           </p>
@@ -198,12 +200,12 @@ export function EmailVerificationNotice({
       </div>
 
       {error ? (
-        <AlertBanner title="요청 실패" variant="error">
+        <AlertBanner title={t('emailVerificationNotice.t5')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
       {message ? (
-        <AlertBanner title="발송 완료" variant="success">
+        <AlertBanner title={t('emailVerificationNotice.t6')} variant="success">
           {message}
         </AlertBanner>
       ) : null}
@@ -230,7 +232,7 @@ export function EmailVerificationNotice({
           type="button"
           variant="secondary"
         >
-          인증을 완료했어요
+          {t('emailVerificationNotice.t7')}
         </Button>
       </div>
 
@@ -239,13 +241,12 @@ export function EmailVerificationNotice({
           className="text-xs font-semibold text-[var(--color-text-tertiary)] underline underline-offset-4"
           to={`/email-verification?token=${encodeURIComponent(devToken)}`}
         >
-          [개발용] 메일 없이 인증 링크 바로 열기
+          {t('emailVerificationNotice.t8')}
         </Link>
       ) : null}
 
       <p className="text-xs leading-5 text-[var(--color-text-secondary)]">
-        메일이 보이지 않으면 스팸함을 확인해 주세요. 인증 링크는 30분 동안 유효하며, 새 메일을
-        보내면 이전 링크는 사용할 수 없어요.
+        {t('emailVerificationNotice.t9')}
       </p>
     </div>
   )

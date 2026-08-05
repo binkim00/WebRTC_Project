@@ -42,6 +42,7 @@ import {
 import { isQueueNotInitialized } from '../../api/queue'
 import { AlertBanner, Badge, Button, Card, Spinner } from '../../components'
 import { getAvailableActions } from './meetingLifecycle'
+import { useTranslation } from '../../i18n'
 
 const previewQueue: MeetingQueue = {
   currentCall: {
@@ -90,6 +91,7 @@ function statusBadge(status: QueueStatus): 'primary' | 'success' | 'warning' | '
 }
 
 export function ManagerMeetingMonitorPage() {
+  const { t } = useTranslation()
   const { fanMeetingId } = useParams<{ fanMeetingId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -574,14 +576,14 @@ export function ManagerMeetingMonitorPage() {
   }
 
   if (loading) {
-    return <div className="flex min-h-[420px] items-center justify-center"><Spinner label="대기열 정보를 불러오는 중" /></div>
+    return <div className="flex min-h-[420px] items-center justify-center"><Spinner label={t('managerMeetingMonitorPage.t1')} /></div>
   }
 
   return (
     <div className="grid min-w-0 gap-5 pb-10">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-[var(--color-primary-coral)]">팬미팅 #{fanMeetingId}</p>
+          <p className="text-sm font-semibold text-[var(--color-primary-coral)]">{t('managerMeetingMonitorPage.t2')}{fanMeetingId}</p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h1 className="text-4xl font-black tracking-[-0.05em]">
               {isSoloInfluencer ? '솔로 팬미팅 운영 콘솔' : '실시간 대기열 운영'}
@@ -596,17 +598,17 @@ export function ManagerMeetingMonitorPage() {
             onClick={() => void runLifecycle('start')}
             title={lifecycleActions.startBlockedReason ?? statusError}
           >
-            팬미팅 시작
+            {t('managerMeetingMonitorPage.t3')}
           </Button>
           {meetingStatus === 'READY' || meetingStatus === 'LIVE' ? (
             <Button
               disabled={lifecycleBusy || Boolean(statusError)}
               leadingIcon={<Clock size={17} weight="bold" />}
               onClick={() => void runLifecycle('openQueue')}
-              title="대기실 오픈 시각을 현재로 당겨 당첨된 팬이 바로 입장할 수 있게 합니다."
+              title={t('managerMeetingMonitorPage.t4')}
               variant="secondary"
             >
-              대기열 지금 오픈
+              {t('managerMeetingMonitorPage.t5')}
             </Button>
           ) : null}
           {lifecycleActions.canStartNow && !lifecycleActions.canStart ? (
@@ -614,51 +616,51 @@ export function ManagerMeetingMonitorPage() {
               disabled={immediateStartDisabled}
               leadingIcon={<Play size={17} weight="bold" />}
               onClick={() => void runLifecycle('startNow')}
-              title="예정 시작 시각을 현재로 변경한 뒤 팬미팅을 시작합니다."
+              title={t('managerMeetingMonitorPage.t6')}
               variant="secondary"
             >
-              일정 전에 즉시 시작
+              {t('managerMeetingMonitorPage.t7')}
             </Button>
           ) : null}
-          <Button disabled={endDisabled} leadingIcon={<Stop size={17} weight="bold" />} onClick={() => void runLifecycle('end')} variant="danger">팬미팅 종료</Button>
+          <Button disabled={endDisabled} leadingIcon={<Stop size={17} weight="bold" />} onClick={() => void runLifecycle('end')} variant="danger">{t('managerMeetingMonitorPage.t8')}</Button>
           <Button disabled={refreshing} onClick={() => void refreshMonitor(true)} variant="ghost" leadingIcon={<ArrowsClockwise size={18} weight="bold" />}>
             {refreshing ? '갱신 중…' : '새로고침'}
           </Button>
-          <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-500" />자동 갱신: 5초</span>
+          <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-500" />{t('managerMeetingMonitorPage.t9')}</span>
         </div>
       </header>
 
-      {isPreview ? <AlertBanner title="개발 미리보기" variant="warning">대기열 상태 변경은 현재 화면에만 반영됩니다.</AlertBanner> : null}
-      {statusError ? <AlertBanner title="상태 변경 기능이 잠겼습니다" variant="warning">{statusError}</AlertBanner> : null}
-      {waitingRoomWarning ? <AlertBanner title="팬이 아직 대기실에 입장할 수 없습니다" variant="warning">{waitingRoomWarning}</AlertBanner> : null}
+      {isPreview ? <AlertBanner title={t('managerMeetingMonitorPage.t10')} variant="warning">{t('managerMeetingMonitorPage.t11')}</AlertBanner> : null}
+      {statusError ? <AlertBanner title={t('managerMeetingMonitorPage.t12')} variant="warning">{statusError}</AlertBanner> : null}
+      {waitingRoomWarning ? <AlertBanner title={t('managerMeetingMonitorPage.t13')} variant="warning">{waitingRoomWarning}</AlertBanner> : null}
       {queueUnavailableNotice ? (
         <AlertBanner title={queueUnavailableNotice.title} variant="info">
           {queueUnavailableNotice.body}
         </AlertBanner>
       ) : null}
-      {error ? <AlertBanner title="대기열 작업을 완료할 수 없습니다" variant="error">{error}</AlertBanner> : null}
+      {error ? <AlertBanner title={t('managerMeetingMonitorPage.t14')} variant="error">{error}</AlertBanner> : null}
 
       {isSoloInfluencer ? (
         <Card className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-extrabold">1인 운영은 대기실에서</h2>
+              <h2 className="text-lg font-extrabold">{t('managerMeetingMonitorPage.t15')}</h2>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                대기열 오픈, 장비 점검, 팬 정보와 메모, 통화 입장을 대기실에서 이어서 처리하세요.
+                {t('managerMeetingMonitorPage.t16')}
               </p>
             </div>
             <Link className={consoleLinkClass} to={`/influencer/fan-meetings/${encodedMeetingId}/ready`}>
-              <VideoCamera aria-hidden size={18} weight="bold" />대기실로 이동
+              <VideoCamera aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t17')}
             </Link>
           </div>
         </Card>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard icon={<Clock size={20} />} label="대기" value={counts.waiting} />
-        <SummaryCard icon={<PhoneCall size={20} />} label="호출됨" value={counts.called} />
-        <SummaryCard icon={<CheckCircle size={20} />} label="완료" value={counts.completed} />
-        <SummaryCard icon={<UserMinus size={20} />} label="노쇼" value={counts.noShow} />
+        <SummaryCard icon={<Clock size={20} />} label={t('managerMeetingMonitorPage.t18')} value={counts.waiting} />
+        <SummaryCard icon={<PhoneCall size={20} />} label={t('managerMeetingMonitorPage.t19')} value={counts.called} />
+        <SummaryCard icon={<CheckCircle size={20} />} label={t('managerMeetingMonitorPage.t20')} value={counts.completed} />
+        <SummaryCard icon={<UserMinus size={20} />} label={t('managerMeetingMonitorPage.t21')} value={counts.noShow} />
       </div>
 
       <Card className="p-5 sm:p-6">
@@ -668,10 +670,10 @@ export function ManagerMeetingMonitorPage() {
             {queue.currentCall ? (
               <>
                 <h2 className="mt-2 text-2xl font-black">{queue.currentCall.nickname}</h2>
-                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">통화 세션 #{queue.currentCall.callSessionId}</p>
+                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t22')}{queue.currentCall.callSessionId}</p>
               </>
             ) : (
-              <h2 className="mt-2 text-2xl font-black">현재 진행 중인 통화가 없습니다</h2>
+              <h2 className="mt-2 text-2xl font-black">{t('managerMeetingMonitorPage.t23')}</h2>
             )}
           </div>
           {queue.currentCall ? (
@@ -681,16 +683,16 @@ export function ManagerMeetingMonitorPage() {
                   className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
                   to={`/influencer/fan-meetings/${encodedMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`}
                 >
-                  <VideoCamera aria-hidden size={18} weight="bold" />현재 통화 입장
+                  <VideoCamera aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t24')}
                 </Link>
               ) : null}
               {isSoloInfluencer && currentCallEntry ? (
                 <Link className={consoleLinkClass} to={fanRecordPath(currentCallEntry)}>
-                  <NotePencil aria-hidden size={18} weight="bold" />현재 팬 메모
+                  <NotePencil aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t25')}
                 </Link>
               ) : null}
               <Link className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-danger)] px-[var(--control-padding-inline)] text-sm font-semibold text-white" to={`/manager/fan-meetings/${encodedMeetingId}/monitor/risk?callSessionId=${encodeURIComponent(queue.currentCall.callSessionId)}`}>
-                <Warning size={18} weight="bold" />통화 강제 종료
+                <Warning size={18} weight="bold" />{t('managerMeetingMonitorPage.t26')}
               </Link>
             </div>
           ) : null}
@@ -699,11 +701,11 @@ export function ManagerMeetingMonitorPage() {
 
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-[var(--color-divider)] p-5">
-          <h2 className="text-lg font-extrabold">순서 변경 요청</h2>
-          <span className="text-sm text-[var(--color-text-secondary)]">대기 중 {changeRequests.length}건</span>
+          <h2 className="text-lg font-extrabold">{t('managerMeetingMonitorPage.t27')}</h2>
+          <span className="text-sm text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t28')} {changeRequests.length}{t('managerMeetingMonitorPage.t29')}</span>
         </div>
         {changeRequests.length === 0 ? (
-          <div className="p-6 text-center text-sm text-[var(--color-text-secondary)]">처리 대기 중인 순서 변경 요청이 없습니다.</div>
+          <div className="p-6 text-center text-sm text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t30')}</div>
         ) : (
           <div className="divide-y divide-[var(--color-divider)]">
             {changeRequests.map((request) => (
@@ -717,12 +719,12 @@ export function ManagerMeetingMonitorPage() {
                   <div className="min-w-0">
                     <strong>{request.nickname}</strong>
                     <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{request.requestReason}</p>
-                    <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">요청 {new Date(request.requestedAt).toLocaleString('ko-KR')}{request.previousPosition !== null ? ` · 현재 ${request.previousPosition}번` : ''}</p>
+                    <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t('managerMeetingMonitorPage.t31')} {new Date(request.requestedAt).toLocaleString('ko-KR')}{request.previousPosition !== null ? ` · 현재 ${request.previousPosition}번` : ''}</p>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button disabled={queueMutationBusy} onClick={() => void decideRequest(request, 'APPROVED')} size="sm">승인</Button>
-                  <Button disabled={queueMutationBusy} onClick={() => void decideRequest(request, 'REJECTED')} size="sm" variant="danger">거절</Button>
+                  <Button disabled={queueMutationBusy} onClick={() => void decideRequest(request, 'APPROVED')} size="sm">{t('managerMeetingMonitorPage.t32')}</Button>
+                  <Button disabled={queueMutationBusy} onClick={() => void decideRequest(request, 'REJECTED')} size="sm" variant="danger">{t('managerMeetingMonitorPage.t33')}</Button>
                 </div>
               </div>
             ))}
@@ -732,11 +734,11 @@ export function ManagerMeetingMonitorPage() {
 
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-[var(--color-divider)] p-5">
-          <h2 className="text-lg font-extrabold">대기열</h2>
-          <span className="text-sm text-[var(--color-text-secondary)]">총 {queue.entries.length}명</span>
+          <h2 className="text-lg font-extrabold">{t('managerMeetingMonitorPage.t34')}</h2>
+          <span className="text-sm text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t35')} {queue.entries.length}{t('managerMeetingMonitorPage.t36')}</span>
         </div>
         {queue.entries.length === 0 ? (
-          <div className="p-8 text-center text-[var(--color-text-secondary)]">현재 대기열에 참가자가 없습니다.</div>
+          <div className="p-8 text-center text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t37')}</div>
         ) : (
           <div className="divide-y divide-[var(--color-divider)]">
             {queue.entries.map((entry) => (
@@ -744,7 +746,7 @@ export function ManagerMeetingMonitorPage() {
                 <span className="flex size-10 items-center justify-center rounded-full bg-[var(--color-surface-page)] font-black">{entry.position}</span>
                 <div>
                   <strong>{entry.nickname}</strong>
-                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">호출 시도 {entry.callAttemptCount}회</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t38')} {entry.callAttemptCount}{t('managerMeetingMonitorPage.t39')}</p>
                 </div>
                 <Badge variant={statusBadge(entry.status)}>{statusLabels[entry.status]}</Badge>
                 <div className="flex flex-wrap justify-end gap-2">
@@ -753,17 +755,17 @@ export function ManagerMeetingMonitorPage() {
                       className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-divider)] px-3 text-xs font-semibold hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
                       to={fanRecordPath(entry)}
                     >
-                      <NotePencil aria-hidden size={15} />메모
+                      <NotePencil aria-hidden size={15} />{t('managerMeetingMonitorPage.t40')}
                     </Link>
                   ) : null}
                   {entry.status === 'WAITING' ? (
                     <>
-                      <Button disabled={queueCallDisabled} onClick={() => void runQueueAction(entry, 'CALL')} size="sm" leadingIcon={<MonitorPlay size={16} />}>호출</Button>
-                      <Button disabled={queueMutationBusy} onClick={() => void changePosition(entry)} size="sm" variant="secondary" leadingIcon={<ArrowsDownUp size={16} />}>순서 변경</Button>
+                      <Button disabled={queueCallDisabled} onClick={() => void runQueueAction(entry, 'CALL')} size="sm" leadingIcon={<MonitorPlay size={16} />}>{t('managerMeetingMonitorPage.t41')}</Button>
+                      <Button disabled={queueMutationBusy} onClick={() => void changePosition(entry)} size="sm" variant="secondary" leadingIcon={<ArrowsDownUp size={16} />}>{t('managerMeetingMonitorPage.t42')}</Button>
                     </>
                   ) : null}
                   {entry.status === 'CALLED' ? (
-                    <Button disabled={queueCallDisabled} onClick={() => void runQueueAction(entry, 'NO_SHOW')} size="sm" variant="danger" leadingIcon={<UserMinus size={16} />}>노쇼 처리</Button>
+                    <Button disabled={queueCallDisabled} onClick={() => void runQueueAction(entry, 'NO_SHOW')} size="sm" variant="danger" leadingIcon={<UserMinus size={16} />}>{t('managerMeetingMonitorPage.t43')}</Button>
                   ) : null}
                 </div>
               </div>
@@ -776,10 +778,11 @@ export function ManagerMeetingMonitorPage() {
 }
 
 function SummaryCard({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+  const { t } = useTranslation()
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">{icon}{label}</div>
-      <p className="mt-3 text-3xl font-black">{value}<span className="ml-1 text-sm font-semibold">명</span></p>
+      <p className="mt-3 text-3xl font-black">{value}<span className="ml-1 text-sm font-semibold">{t('managerMeetingMonitorPage.t44')}</span></p>
     </Card>
   )
 }

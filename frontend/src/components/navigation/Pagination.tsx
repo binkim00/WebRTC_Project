@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight } from '@phosphor-icons/react'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 type PageItem = number | 'ellipsis-start' | 'ellipsis-end'
 
@@ -48,17 +49,18 @@ export function Pagination({
   onPageChange,
   className,
 }: PaginationProps) {
+  const { t } = useTranslation()
   const safeTotal = Math.max(1, Math.floor(totalPages))
   const safeCurrent = Math.min(Math.max(1, Math.floor(currentPage)), safeTotal)
   const pageItems = createPageItems(safeCurrent, safeTotal)
 
   return (
     <nav
-      aria-label="페이지 이동"
+      aria-label={t('pagination.t1')}
       className={cn('flex flex-wrap items-center justify-center gap-5', className)}
     >
       <button
-        aria-label="이전 페이지"
+        aria-label={t('pagination.t2')}
         className="inline-flex size-12 items-center justify-center text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-divider)]"
         disabled={safeCurrent === 1}
         onClick={() => onPageChange(safeCurrent - 1)}
@@ -96,7 +98,7 @@ export function Pagination({
       )}
 
       <button
-        aria-label="다음 페이지"
+        aria-label={t('pagination.t3')}
         className="inline-flex size-12 items-center justify-center text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-divider)]"
         disabled={safeCurrent === safeTotal}
         onClick={() => onPageChange(safeCurrent + 1)}

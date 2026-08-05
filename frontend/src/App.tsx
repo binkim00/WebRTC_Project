@@ -14,6 +14,7 @@ import {
   requiredCapabilityForPath,
 } from './router/roleCapabilities'
 import { isVideoCallPath } from './router/routeState'
+import { useTranslation } from './i18n'
 
 const publicNavigationItems = [
   { label: '공지사항', to: '/service-notices' },
@@ -107,6 +108,7 @@ function UserProfileSummary({ session }: { session: LoginResponse }) {
 }
 
 function App() {
+  const { t } = useTranslation()
   const { pathname, search } = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -199,21 +201,21 @@ function App() {
         {...headerNavigationProps}
         // 통화 중에는 알림으로 이탈하지 않도록 벨을 숨긴다. (handoff 7b)
         hideNotifications={isCallPage}
-        ariaLabel="주요 화면"
+        ariaLabel={t('app.t1')}
         centerContent={
           isDeviceCheckPage ? (
             <p className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
-              <span>입장 예정 팬미팅</span>
+              <span>{t('app.t2')}</span>
               <span aria-hidden="true" className="h-4 w-px bg-[var(--color-divider)]" />
               <strong className="text-[var(--color-text-primary)]">
-                선택한 팬미팅 장비 점검
+                {t('app.t3')}
               </strong>
             </p>
           ) : undefined
         }
         actions={
           isHomePage ? (
-            <nav aria-label="메인 메뉴" className="flex items-center gap-7 text-sm font-semibold">
+            <nav aria-label={t('app.t4')} className="flex items-center gap-7 text-sm font-semibold">
               {authSession ? (
                 <>
                   <UserProfileSummary session={authSession} />
@@ -222,16 +224,16 @@ function App() {
                     onClick={() => void handleLogout()}
                     type="button"
                   >
-                    로그아웃
+                    {t('app.t5')}
                   </button>
                 </>
               ) : (
                 <>
                   <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
-                    이벤트
+                    {t('app.t6')}
                   </Link>
                   <Link className="hover:text-[var(--color-primary-coral)]" to={loginPath}>
-                    로그인
+                    {t('app.t7')}
                   </Link>
                 </>
               )}
@@ -240,7 +242,7 @@ function App() {
                   className="inline-flex min-h-11 items-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-white shadow-[var(--shadow-final-cta)] transition hover:bg-[var(--color-primary-coral-hover)]"
                   to="/signup"
                 >
-                  회원가입
+                  {t('app.t8')}
                 </Link>
               ) : null}
             </nav>
@@ -250,16 +252,16 @@ function App() {
               to="/"
             >
               <SignOutIcon aria-hidden="true" size={18} />
-              나가기
+              {t('app.t9')}
             </Link>
           ) : isSignupPage ? (
             <p className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
-              <span>이미 계정이 있나요?</span>
+              <span>{t('app.t10')}</span>
               <Link
                 className="inline-flex items-center gap-1 font-bold text-[var(--color-primary-coral)] hover:underline"
                 to="/login"
               >
-                로그인
+                {t('app.t11')}
                 <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
               </Link>
             </p>
@@ -268,7 +270,7 @@ function App() {
               className="inline-flex items-center gap-1 text-sm font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]"
               to="/fan/events"
             >
-              이벤트 둘러보기
+              {t('app.t12')}
               <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
             </Link>
           ) : authSession ? (
@@ -279,7 +281,7 @@ function App() {
                 onClick={() => void handleLogout()}
                 type="button"
               >
-                로그아웃
+                {t('app.t13')}
               </button>
             </div>
           ) : undefined

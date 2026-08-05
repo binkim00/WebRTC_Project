@@ -24,6 +24,7 @@ import { isQueueNotInitialized } from '../../api/queue'
 import { useMediaDeviceCheck } from '../../hooks/useMediaDeviceCheck'
 import { useNowTicker } from '../../hooks/useNowTicker'
 import { usePolling } from '../../hooks/usePolling'
+import { useTranslation } from '../../i18n'
 
 type DeviceCheckResult = {
   cameraOk?: boolean
@@ -82,6 +83,7 @@ function formatDurationSec(totalSeconds: number) {
 }
 
 export function InfluencerMeetingReadyPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { fanMeetingId } = useParams()
   const [detail, setDetail] = useState<PublicFanMeetingDetail>()
@@ -486,8 +488,7 @@ export function InfluencerMeetingReadyPage() {
           }
           variant="info"
         >
-          더 이상 통화를 진행할 수 없습니다. 대기열과 통화 방이 모두 정리되었으니 진행 결과는
-          팬미팅 이력에서 확인해 주세요.
+          {t('influencerMeetingReadyPage.t1')}
           {closedRedirectRemainingSec !== undefined
             ? ` ${closedRedirectRemainingSec}초 뒤 메인으로 이동합니다.`
             : ''}
@@ -497,10 +498,8 @@ export function InfluencerMeetingReadyPage() {
       {/* 대기열 오픈 전에는 오류 대신 오픈 예정 안내를 표시한다 */}
       {!isMeetingClosed && isBeforeQueueOpen ? (
         <div className="mb-6 grid gap-3">
-          <AlertBanner title="대기열이 아직 열리지 않았습니다" variant="info">
-            {formatScheduledAt(detail?.meeting.operation.queueOpenAt ?? undefined)} 오픈
-            예정입니다. 오픈되면 자동으로 대기열 정보를 불러옵니다. 그동안 카메라와 마이크
-            상태를 점검해 주세요.
+          <AlertBanner title={t('influencerMeetingReadyPage.t2')} variant="info">
+            {formatScheduledAt(detail?.meeting.operation.queueOpenAt ?? undefined)} {t('influencerMeetingReadyPage.t3')}
           </AlertBanner>
           {isSolo ? (
             <div>
@@ -512,7 +511,7 @@ export function InfluencerMeetingReadyPage() {
                 }}
                 type="button"
               >
-                대기열 지금 오픈
+                {t('influencerMeetingReadyPage.t4')}
               </button>
               {openQueueError ? (
                 <p className="mt-2 text-sm font-medium text-[var(--color-error)]" role="alert">
@@ -523,16 +522,16 @@ export function InfluencerMeetingReadyPage() {
           ) : null}
         </div>
       ) : error ? (
-        <AlertBanner className="mb-6" title="통화 정보를 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mb-6" title={t('influencerMeetingReadyPage.t5')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
 
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
-          <h1 className="text-[26px] font-black tracking-[-0.035em]">대기실</h1>
+          <h1 className="text-[26px] font-black tracking-[-0.035em]">{t('influencerMeetingReadyPage.t6')}</h1>
           <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
-            화면과 팬 정보를 확인한 뒤 영상 통화에 입장하세요.
+            {t('influencerMeetingReadyPage.t7')}
           </p>
         </div>
         <p
@@ -543,11 +542,11 @@ export function InfluencerMeetingReadyPage() {
       </div>
 
       <section
-        aria-label="팬미팅 개요"
+        aria-label={t('influencerMeetingReadyPage.t8')}
         className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] lg:grid-cols-[1.5fr_1fr_1fr_1fr]"
       >
         <div className="py-[18px] pr-6">
-          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">오늘 진행</p>
+          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">{t('influencerMeetingReadyPage.t9')}</p>
           <p className="mt-1.5 truncate text-lg font-extrabold tracking-[-0.025em]">
             {detail?.meeting.title ?? '팬미팅 정보를 불러오는 중'}
           </p>
@@ -557,15 +556,15 @@ export function InfluencerMeetingReadyPage() {
           </p>
         </div>
         <div className="border-l border-[var(--color-divider)] px-6 py-[18px]">
-          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">팬 1명당</p>
+          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">{t('influencerMeetingReadyPage.t10')}</p>
           <p className="mt-1.5 text-xl font-extrabold tabular-nums">{perFanLabel}</p>
         </div>
         <div className="border-t border-[var(--color-divider)] py-[18px] pr-6 lg:border-l lg:border-t-0 lg:px-6">
-          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">예상 총 소요</p>
+          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">{t('influencerMeetingReadyPage.t11')}</p>
           <p className="mt-1.5 text-xl font-extrabold tabular-nums">{expectedTotalLabel}</p>
         </div>
         <div className="border-l border-t border-[var(--color-divider)] px-6 py-[18px] lg:border-t-0">
-          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">현재까지 진행</p>
+          <p className="text-[13px] font-bold text-[var(--color-text-muted)]">{t('influencerMeetingReadyPage.t12')}</p>
           <p className="mt-1.5 text-xl font-extrabold tabular-nums">
             {elapsedApproxSec !== undefined ? formatDurationSec(elapsedApproxSec) : '—'}
           </p>
@@ -576,7 +575,7 @@ export function InfluencerMeetingReadyPage() {
         <section aria-labelledby="ir-cam" className="min-w-0">
           <div className="flex items-baseline justify-between gap-4">
             <h2 className="text-lg font-extrabold tracking-[-0.028em]" id="ir-cam">
-              현재 화면
+              {t('influencerMeetingReadyPage.t13')}
             </h2>
             <p
               className={`text-sm font-bold ${cameraBroken || !isDeviceChecked ? 'text-[var(--color-warning)]' : 'text-[var(--color-success)]'}`}
@@ -590,7 +589,7 @@ export function InfluencerMeetingReadyPage() {
             {stream ? (
               <figcaption className="absolute bottom-3.5 left-3.5 flex items-center gap-2 rounded-lg bg-[rgb(23_24_29/72%)] px-3 py-[7px]">
                 <span className="text-sm font-bold text-white">{influencerName}</span>
-                <span className="text-[13px] font-medium text-white/75">카메라 미리보기</span>
+                <span className="text-[13px] font-medium text-white/75">{t('influencerMeetingReadyPage.t14')}</span>
               </figcaption>
             ) : null}
             {cameraBroken ? (
@@ -600,7 +599,7 @@ export function InfluencerMeetingReadyPage() {
               >
                 <div className="max-w-[340px] rounded-[10px] bg-[var(--color-surface-panel)] p-[22px] text-center">
                   <p className="text-[17px] font-extrabold tracking-[-0.028em] text-[var(--color-warning)]">
-                    카메라 연결을 확인해 주세요
+                    {t('influencerMeetingReadyPage.t15')}
                   </p>
                   <p className="mt-2 text-[15px] font-medium leading-[1.6] text-[var(--color-text-body)]">
                     {mediaErrorMessage ??
@@ -611,7 +610,7 @@ export function InfluencerMeetingReadyPage() {
                     onClick={() => void startMedia()}
                     type="button"
                   >
-                    상태 재확인
+                    {t('influencerMeetingReadyPage.t16')}
                   </button>
                 </div>
               </div>
@@ -623,29 +622,29 @@ export function InfluencerMeetingReadyPage() {
               className="mj-font-label mt-3.5 inline-flex min-h-11 items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-[18px] text-[15px] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
               to={`/influencer/fan-meetings/${fanMeetingId}/device-check`}
             >
-              장비 점검하기
+              {t('influencerMeetingReadyPage.t17')}
             </Link>
           ) : null}
         </section>
 
-        <aside aria-label="팬 순서와 입장" className="min-w-0">
+        <aside aria-label={t('influencerMeetingReadyPage.t18')} className="min-w-0">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-[13px] font-bold text-[var(--color-text-muted)]">팬 진행 순서</p>
+            <p className="text-[13px] font-bold text-[var(--color-text-muted)]">{t('influencerMeetingReadyPage.t19')}</p>
             <Link
               className="text-sm font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
               to={`/influencer/fan-meetings/${fanMeetingId}/fans`}
             >
-              참가 팬
+              {t('influencerMeetingReadyPage.t20')}
             </Link>
           </div>
           <p className="mt-2 text-[15px] font-extrabold tabular-nums">
-            {completedFanCount}명 완료{' '}
+            {completedFanCount}{t('influencerMeetingReadyPage.t21')}{' '}
             <span className="font-medium text-[var(--color-text-muted)]">
-              {currentEntry ? `· 현재 ${currentEntry.position}번째 ` : ''}· 전체 {totalFanCount}명
+              {currentEntry ? `· 현재 ${currentEntry.position}번째 ` : ''}{t('influencerMeetingReadyPage.t22')} {totalFanCount}{t('influencerMeetingReadyPage.t23')}
             </span>
           </p>
           <div
-            aria-label="팬미팅 진행률"
+            aria-label={t('influencerMeetingReadyPage.t24')}
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={progressPercent}
@@ -664,10 +663,10 @@ export function InfluencerMeetingReadyPage() {
               className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px]"
             >
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-[13px] font-bold text-[var(--color-primary-coral)]">현재 팬</p>
+                <p className="text-[13px] font-bold text-[var(--color-primary-coral)]">{t('influencerMeetingReadyPage.t25')}</p>
                 {currentEntry ? (
                   <p className="text-sm font-bold tabular-nums text-[var(--color-text-muted)]">
-                    {currentEntry.position}번째
+                    {currentEntry.position}{t('influencerMeetingReadyPage.t26')}
                   </p>
                 ) : null}
               </div>
@@ -698,13 +697,13 @@ export function InfluencerMeetingReadyPage() {
 
               <div className="mt-4 rounded-lg bg-[var(--color-surface-subtle)] px-4 py-3.5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <p className="text-[13px] font-bold text-[var(--color-text-muted)]">기존 메모</p>
+                  <p className="text-[13px] font-bold text-[var(--color-text-muted)]">{t('influencerMeetingReadyPage.t27')}</p>
                   <button
                     className="text-sm font-bold hover:text-[var(--color-primary-coral)]"
                     onClick={handleOpenMemo}
                     type="button"
                   >
-                    메모 확인하기
+                    {t('influencerMeetingReadyPage.t28')}
                   </button>
                 </div>
                 <p className="mt-2 text-[15px] font-medium leading-[1.65] text-[var(--color-text-body)]">
@@ -718,10 +717,10 @@ export function InfluencerMeetingReadyPage() {
               className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px]"
             >
               <h3 className="text-lg font-extrabold tracking-[-0.028em]" id="ir-cur-empty">
-                아직 입장 가능한 팬이 없습니다
+                {t('influencerMeetingReadyPage.t29')}
               </h3>
               <p className="mt-2 text-[15px] font-medium leading-[1.65] text-[var(--color-text-muted)]">
-                다음 팬이 준비되면 현재 팬 정보가 표시됩니다.
+                {t('influencerMeetingReadyPage.t30')}
               </p>
             </section>
           )}
@@ -741,7 +740,7 @@ export function InfluencerMeetingReadyPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-bold text-[var(--color-text-muted)]">
-                    다음 팬 · {nextEntry.position}번째
+                    {t('influencerMeetingReadyPage.t31')} {nextEntry.position}{t('influencerMeetingReadyPage.t32')}
                   </p>
                   <h3 className="mt-[3px] text-base font-extrabold tracking-[-0.025em]" id="ir-next">
                     {nextEntry.nickname}
@@ -751,10 +750,10 @@ export function InfluencerMeetingReadyPage() {
             ) : (
               <div>
                 <h3 className="text-base font-extrabold tracking-[-0.025em]" id="ir-next">
-                  마지막 팬입니다
+                  {t('influencerMeetingReadyPage.t33')}
                 </h3>
                 <p className="mt-1.5 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
-                  이번 통화가 오늘의 마지막 순서예요.
+                  {t('influencerMeetingReadyPage.t34')}
                 </p>
               </div>
             )}
@@ -807,7 +806,7 @@ export function InfluencerMeetingReadyPage() {
                 onClick={handleEnterCall}
                 type="button"
               >
-                영상 통화 입장
+                {t('influencerMeetingReadyPage.t35')}
               </button>
               <p
                 aria-live="polite"
@@ -828,7 +827,7 @@ export function InfluencerMeetingReadyPage() {
               }}
               type="button"
             >
-              팬미팅 종료
+              {t('influencerMeetingReadyPage.t36')}
             </button>
           ) : null}
           {endError ? (
@@ -840,14 +839,14 @@ export function InfluencerMeetingReadyPage() {
       </div>
 
       <Dialog
-        description="진행 중인 모든 통화가 강제로 마감되고 대기열이 정리됩니다. 종료하면 되돌릴 수 없습니다."
+        description={t('influencerMeetingReadyPage.t37')}
         footer={
           <>
             <Button disabled={ending} onClick={() => setEndDialogOpen(false)} variant="secondary">
-              취소
+              {t('influencerMeetingReadyPage.t38')}
             </Button>
             <Button loading={ending} onClick={() => void handleEndMeeting()} variant="danger">
-              종료하기
+              {t('influencerMeetingReadyPage.t39')}
             </Button>
           </>
         }
@@ -855,17 +854,17 @@ export function InfluencerMeetingReadyPage() {
           if (!open && !ending) setEndDialogOpen(false)
         }}
         open={endDialogOpen}
-        title="팬미팅을 종료할까요?"
+        title={t('influencerMeetingReadyPage.t40')}
       >
         {endError ? (
-          <AlertBanner title="팬미팅을 종료하지 못했습니다" variant="error">
+          <AlertBanner title={t('influencerMeetingReadyPage.t41')} variant="error">
             {endError}
           </AlertBanner>
         ) : null}
       </Dialog>
 
       <Dialog
-        description="당첨된 팬이 장비 점검 후 대기실에서 기다릴 수 있습니다. 오픈한 대기열은 다시 닫을 수 없습니다."
+        description={t('influencerMeetingReadyPage.t42')}
         footer={
           <>
             <Button
@@ -873,10 +872,10 @@ export function InfluencerMeetingReadyPage() {
               onClick={() => setOpenQueueConfirm(false)}
               variant="secondary"
             >
-              취소
+              {t('influencerMeetingReadyPage.t43')}
             </Button>
             <Button loading={openingQueue} onClick={() => void handleOpenQueueNow()}>
-              지금 오픈
+              {t('influencerMeetingReadyPage.t44')}
             </Button>
           </>
         }
@@ -884,10 +883,10 @@ export function InfluencerMeetingReadyPage() {
           if (!open && !openingQueue) setOpenQueueConfirm(false)
         }}
         open={openQueueConfirm}
-        title="대기열을 지금 오픈할까요?"
+        title={t('influencerMeetingReadyPage.t45')}
       >
         {openQueueError ? (
-          <AlertBanner title="대기열을 열지 못했습니다" variant="error">
+          <AlertBanner title={t('influencerMeetingReadyPage.t46')} variant="error">
             {openQueueError}
           </AlertBanner>
         ) : null}

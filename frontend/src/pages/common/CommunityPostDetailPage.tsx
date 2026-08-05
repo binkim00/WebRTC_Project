@@ -29,6 +29,7 @@ import {
   TextField,
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { useTranslation } from '../../i18n'
 
 const COMMENT_PAGE_SIZE = 10
 
@@ -53,6 +54,7 @@ function toFriendlyCommentError(error: unknown): string {
 }
 
 export function CommunityPostDetailPage() {
+  const { t } = useTranslation()
   const { postId } = useParams()
   const navigate = useNavigate()
   const [session] = useState(() => getAuthSession())
@@ -334,8 +336,8 @@ export function CommunityPostDetailPage() {
   if (!postId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 postId 값이 없습니다."
-        title="필수 URL 파라미터가 없습니다."
+        message={t('communityPostDetailPage.t1')}
+        title={t('communityPostDetailPage.t2')}
       />
     )
   }
@@ -343,7 +345,7 @@ export function CommunityPostDetailPage() {
   if (postLoading) {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label="게시글을 불러오는 중" />
+        <Spinner label={t('communityPostDetailPage.t3')} />
       </div>
     )
   }
@@ -351,11 +353,11 @@ export function CommunityPostDetailPage() {
   if (postError || !post) {
     return (
       <div className="mx-auto grid w-full max-w-4xl gap-6">
-        <AlertBanner title="게시글을 불러오지 못했습니다" variant="error">
+        <AlertBanner title={t('communityPostDetailPage.t4')} variant="error">
           {postError ?? '게시글 정보를 찾을 수 없습니다.'}
         </AlertBanner>
         <div>
-          <Button onClick={() => setPostReloadCount((count) => count + 1)}>다시 시도</Button>
+          <Button onClick={() => setPostReloadCount((count) => count + 1)}>{t('communityPostDetailPage.t5')}</Button>
         </div>
       </div>
     )
@@ -373,7 +375,7 @@ export function CommunityPostDetailPage() {
             to={`/fan-meetings/${post.meetingId}/community`}
           >
             <ArrowLeft aria-hidden size={18} weight="bold" />
-            커뮤니티 목록으로
+            {t('communityPostDetailPage.t6')}
           </Link>
         ) : null}
       </header>
@@ -382,16 +384,16 @@ export function CommunityPostDetailPage() {
         <CardContent>
           {editing ? (
             <form className="grid gap-4" onSubmit={(event) => void handleUpdatePost(event)}>
-              <TextField defaultValue={post.title} label="제목" name="title" required />
+              <TextField defaultValue={post.title} label={t('communityPostDetailPage.t7')} name="title" required />
               <Textarea
                 defaultValue={post.content}
-                label="내용"
+                label={t('communityPostDetailPage.t8')}
                 name="content"
                 required
                 rows={8}
               />
               {postActionError ? (
-                <AlertBanner title="게시글을 수정하지 못했습니다" variant="error">
+                <AlertBanner title={t('communityPostDetailPage.t9')} variant="error">
                   {postActionError}
                 </AlertBanner>
               ) : null}
@@ -404,17 +406,17 @@ export function CommunityPostDetailPage() {
                   type="button"
                   variant="secondary"
                 >
-                  취소
+                  {t('communityPostDetailPage.t10')}
                 </Button>
                 <Button loading={postSaving} type="submit">
-                  저장
+                  {t('communityPostDetailPage.t11')}
                 </Button>
               </div>
             </form>
           ) : (
             <article>
               <div className="flex flex-wrap items-center gap-2">
-                {post.pinned ? <Badge variant="primary">고정</Badge> : null}
+                {post.pinned ? <Badge variant="primary">{t('communityPostDetailPage.t12')}</Badge> : null}
                 <h1 className="text-2xl font-black tracking-[-0.03em] text-[var(--color-text-primary)]">
                   {post.title}
                 </h1>
@@ -422,14 +424,14 @@ export function CommunityPostDetailPage() {
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--color-divider)] pb-4 text-sm text-[var(--color-text-secondary)]">
                 <span className="font-semibold">{post.authorNickname}</span>
                 <time dateTime={post.createdAt}>{formatDateTime(post.createdAt)}</time>
-                <span>댓글 {post.commentCount}개</span>
+                <span>{t('communityPostDetailPage.t13')} {post.commentCount}{t('communityPostDetailPage.t14')}</span>
               </div>
               <p className="mt-5 whitespace-pre-wrap leading-7 text-[var(--color-text-primary)]">
                 {post.content}
               </p>
               {postActionError ? (
                 <div className="mt-4">
-                  <AlertBanner title="요청을 처리하지 못했습니다" variant="error">
+                  <AlertBanner title={t('communityPostDetailPage.t15')} variant="error">
                     {postActionError}
                   </AlertBanner>
                 </div>
@@ -445,7 +447,7 @@ export function CommunityPostDetailPage() {
                       size="sm"
                       variant="secondary"
                     >
-                      수정
+                      {t('communityPostDetailPage.t16')}
                     </Button>
                   ) : null}
                   {post.canDelete ? (
@@ -454,7 +456,7 @@ export function CommunityPostDetailPage() {
                       size="sm"
                       variant="danger"
                     >
-                      삭제
+                      {t('communityPostDetailPage.t17')}
                     </Button>
                   ) : null}
                 </div>
@@ -466,7 +468,7 @@ export function CommunityPostDetailPage() {
 
       <section className="grid gap-4">
         <h2 className="text-xl font-black tracking-[-0.03em]">
-          댓글 <span className="text-[var(--color-primary-coral)]">{post.commentCount}</span>
+          {t('communityPostDetailPage.t18')} <span className="text-[var(--color-primary-coral)]">{post.commentCount}</span>
         </h2>
 
         {session ? (
@@ -474,57 +476,57 @@ export function CommunityPostDetailPage() {
             <CardContent>
               <form className="grid gap-3" onSubmit={(event) => void handleCreateComment(event)}>
                 <Textarea
-                  label="댓글 작성"
+                  label={t('communityPostDetailPage.t19')}
                   onChange={(event) => setCommentContent(event.currentTarget.value)}
-                  placeholder="따뜻한 댓글을 남겨 주세요."
+                  placeholder={t('communityPostDetailPage.t20')}
                   rows={3}
                   value={commentContent}
                 />
                 {commentError ? (
-                  <AlertBanner title="댓글을 등록하지 못했습니다" variant="error">
+                  <AlertBanner title={t('communityPostDetailPage.t21')} variant="error">
                     {commentError}
                   </AlertBanner>
                 ) : null}
                 <div className="flex justify-end">
                   <Button loading={commentSubmitting} type="submit">
-                    댓글 등록
+                    {t('communityPostDetailPage.t22')}
                   </Button>
                 </div>
               </form>
             </CardContent>
           </Card>
         ) : (
-          <AlertBanner title="로그인이 필요합니다" variant="info">
-            댓글을 작성하려면{' '}
+          <AlertBanner title={t('communityPostDetailPage.t23')} variant="info">
+            {t('communityPostDetailPage.t24')}{' '}
             <Link className="font-semibold underline" to="/login">
-              로그인
+              {t('communityPostDetailPage.t25')}
             </Link>
-            해 주세요.
+            {t('communityPostDetailPage.t26')}
           </AlertBanner>
         )}
 
         {commentActionSuccess ? (
-          <AlertBanner title="처리가 완료되었습니다" variant="success">
+          <AlertBanner title={t('communityPostDetailPage.t27')} variant="success">
             {commentActionSuccess}
           </AlertBanner>
         ) : null}
         {commentActionError ? (
-          <AlertBanner title="요청을 처리하지 못했습니다" variant="error">
+          <AlertBanner title={t('communityPostDetailPage.t28')} variant="error">
             {commentActionError}
           </AlertBanner>
         ) : null}
         {commentsError ? (
-          <AlertBanner title="댓글을 불러오지 못했습니다" variant="error">
+          <AlertBanner title={t('communityPostDetailPage.t29')} variant="error">
             {commentsError}
           </AlertBanner>
         ) : null}
 
         {commentsLoading ? (
           <div className="flex justify-center py-10">
-            <Spinner label="댓글을 불러오는 중" />
+            <Spinner label={t('communityPostDetailPage.t30')} />
           </div>
         ) : commentList.length === 0 ? (
-          <EmptyState description="첫 댓글을 남겨 보세요." title="댓글이 없습니다" />
+          <EmptyState description={t('communityPostDetailPage.t31')} title={t('communityPostDetailPage.t32')} />
         ) : (
           <Card>
             <CardContent className="p-0">
@@ -560,7 +562,7 @@ export function CommunityPostDetailPage() {
                               size="sm"
                               variant="ghost"
                             >
-                              수정
+                              {t('communityPostDetailPage.t33')}
                             </Button>
                           ) : null}
                           {comment.canDelete ? (
@@ -570,7 +572,7 @@ export function CommunityPostDetailPage() {
                               size="sm"
                               variant="ghost"
                             >
-                              삭제
+                              {t('communityPostDetailPage.t34')}
                             </Button>
                           ) : null}
                           {session && !isOwnComment ? (
@@ -587,7 +589,7 @@ export function CommunityPostDetailPage() {
                               size="sm"
                               variant="ghost"
                             >
-                              신고
+                              {t('communityPostDetailPage.t35')}
                             </Button>
                           ) : null}
                         </span>
@@ -596,7 +598,7 @@ export function CommunityPostDetailPage() {
                       {isEditingComment ? (
                         <div className="grid gap-2">
                           <Textarea
-                            label="댓글 수정"
+                            label={t('communityPostDetailPage.t36')}
                             onChange={(event) =>
                               setEditingCommentContent(event.currentTarget.value)
                             }
@@ -612,14 +614,14 @@ export function CommunityPostDetailPage() {
                               size="sm"
                               variant="secondary"
                             >
-                              취소
+                              {t('communityPostDetailPage.t37')}
                             </Button>
                             <Button
                               loading={commentActionBusy}
                               onClick={() => void handleUpdateComment(comment.commentId)}
                               size="sm"
                             >
-                              저장
+                              {t('communityPostDetailPage.t38')}
                             </Button>
                           </div>
                         </div>
@@ -637,16 +639,16 @@ export function CommunityPostDetailPage() {
                           }
                         >
                           <TextField
-                            label="신고 사유"
+                            label={t('communityPostDetailPage.t39')}
                             maxLength={100}
                             name="reason"
-                            placeholder="신고 사유를 입력하세요 (100자 이내)"
+                            placeholder={t('communityPostDetailPage.t40')}
                             required
                           />
                           <Textarea
-                            label="상세 내용 (선택)"
+                            label={t('communityPostDetailPage.t41')}
                             name="detail"
-                            placeholder="추가로 전달할 내용이 있으면 입력하세요."
+                            placeholder={t('communityPostDetailPage.t42')}
                             rows={3}
                           />
                           <div className="flex justify-end gap-2">
@@ -656,7 +658,7 @@ export function CommunityPostDetailPage() {
                               type="button"
                               variant="secondary"
                             >
-                              취소
+                              {t('communityPostDetailPage.t43')}
                             </Button>
                             <Button
                               loading={commentActionBusy}
@@ -664,7 +666,7 @@ export function CommunityPostDetailPage() {
                               type="submit"
                               variant="danger"
                             >
-                              신고하기
+                              {t('communityPostDetailPage.t44')}
                             </Button>
                           </div>
                         </form>

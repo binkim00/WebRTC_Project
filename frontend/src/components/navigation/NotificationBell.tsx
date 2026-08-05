@@ -9,6 +9,7 @@ import {
   type NotificationType,
 } from '../../api/notifications'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 const PANEL_SIZE = 5
 
@@ -92,6 +93,7 @@ function formatWhen(iso: string): string {
  * 전체 목록은 기존 /notifications 화면이 담당한다.
  */
 export function NotificationBell() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<NotificationResponse[]>([])
@@ -192,7 +194,7 @@ export function NotificationBell() {
         onClick={toggle}
         type="button"
       >
-        <span className="text-[15px] font-bold text-[var(--color-text-primary)]">알림</span>
+        <span className="text-[15px] font-bold text-[var(--color-text-primary)]">{t('notificationBell.t1')}</span>
         {unreadCount > 0 ? (
           <span className="grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[var(--color-primary-coral)] px-1.5 text-xs font-extrabold text-white tabular-nums">
             {unreadCount}
@@ -202,18 +204,18 @@ export function NotificationBell() {
 
       {open ? (
         <section
-          aria-label="알림"
+          aria-label={t('notificationBell.t2')}
           className="absolute right-0 top-[calc(100%+10px)] z-30 max-h-[460px] w-[400px] max-w-[calc(100vw-2rem)] overflow-auto rounded-xl border border-[var(--color-divider)] bg-[var(--color-surface-panel)] shadow-[var(--shadow-modal)]"
         >
           <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-[18px] py-4">
-            <h2 className="text-[17px] font-extrabold tracking-[-0.028em]">알림</h2>
+            <h2 className="text-[17px] font-extrabold tracking-[-0.028em]">{t('notificationBell.t3')}</h2>
             {unreadCount > 0 ? (
               <button
                 className="mj-font-label min-h-9 whitespace-nowrap px-2.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-primary-coral)]"
                 onClick={() => void readAll()}
                 type="button"
               >
-                모두 읽음
+                {t('notificationBell.t4')}
               </button>
             ) : null}
           </div>
@@ -221,9 +223,9 @@ export function NotificationBell() {
           {items.length === 0 ? (
             <div className="grid place-items-center px-6 py-14 text-center" role="status">
               <img alt="" className="size-[72px] object-contain opacity-55" src={moldEmptyImage} />
-              <strong className="mt-3.5 text-base font-extrabold">새로운 알림이 없어요</strong>
+              <strong className="mt-3.5 text-base font-extrabold">{t('notificationBell.t5')}</strong>
               <span className="mt-[7px] text-[15px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
-                응모 결과와 팬미팅 안내를 여기서 알려드릴게요.
+                {t('notificationBell.t6')}
               </span>
             </div>
           ) : (
@@ -284,7 +286,7 @@ export function NotificationBell() {
                   onClick={() => setOpen(false)}
                   to="/notifications"
                 >
-                  알림 전체 보기
+                  {t('notificationBell.t7')}
                 </Link>
               </div>
             </>

@@ -1,5 +1,6 @@
 import { isRouteErrorResponse, Link, useRouteError } from 'react-router-dom'
 import { AlertBanner, Badge, Card, CardContent, CardHeader, CardTitle } from '../../components'
+import { useTranslation } from '../../i18n'
 
 type ErrorPageShellProps = {
   code: string
@@ -8,6 +9,7 @@ type ErrorPageShellProps = {
 }
 
 function ErrorPageShell({ code, title, description }: ErrorPageShellProps) {
+  const { t } = useTranslation()
   return (
     <Card className="mx-auto max-w-2xl overflow-hidden text-center">
       <CardHeader className="bg-gradient-to-br from-red-50 to-white">
@@ -19,14 +21,14 @@ function ErrorPageShell({ code, title, description }: ErrorPageShellProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <AlertBanner title="요청한 화면을 표시할 수 없습니다" variant="error">
+        <AlertBanner title={t('errorRoutePages.t1')} variant="error">
           {description}
         </AlertBanner>
         <Link
           className="mt-6 inline-flex min-h-10 items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
           to="/"
         >
-          메인으로 이동
+          {t('errorRoutePages.t2')}
         </Link>
       </CardContent>
     </Card>
@@ -34,26 +36,29 @@ function ErrorPageShell({ code, title, description }: ErrorPageShellProps) {
 }
 
 export function ForbiddenPage() {
+  const { t } = useTranslation()
   return (
     <ErrorPageShell
       code="403"
-      description="현재 로그인한 역할로는 이 화면에 접근할 수 없습니다."
-      title="접근 권한이 없습니다"
+      description={t('errorRoutePages.t3')}
+      title={t('errorRoutePages.t4')}
     />
   )
 }
 
 export function NotFoundPage() {
+  const { t } = useTranslation()
   return (
     <ErrorPageShell
       code="404"
-      description="정의되지 않은 주소이거나 더 이상 존재하지 않는 화면입니다."
-      title="페이지를 찾을 수 없습니다"
+      description={t('errorRoutePages.t5')}
+      title={t('errorRoutePages.t6')}
     />
   )
 }
 
 export function RouterErrorPage() {
+  const { t } = useTranslation()
   const error = useRouteError()
 
   if (isRouteErrorResponse(error)) {
@@ -61,7 +66,7 @@ export function RouterErrorPage() {
       <ErrorPageShell
         code={String(error.status)}
         description={error.statusText || '라우트를 처리하는 중 오류가 발생했습니다.'}
-        title="라우트 오류가 발생했습니다"
+        title={t('errorRoutePages.t7')}
       />
     )
   }
@@ -69,5 +74,5 @@ export function RouterErrorPage() {
   const description =
     error instanceof Error ? error.message : '알 수 없는 라우트 오류가 발생했습니다.'
 
-  return <ErrorPageShell code="ERROR" description={description} title="화면을 표시할 수 없습니다" />
+  return <ErrorPageShell code="ERROR" description={description} title={t('errorRoutePages.t8')} />
 }

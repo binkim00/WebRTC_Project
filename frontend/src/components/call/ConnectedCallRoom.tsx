@@ -38,6 +38,7 @@ import {
 } from './subtitleChannel'
 import type { MediaAction, VideoCallRoomProps } from './types'
 import { useRemainingTime } from './useRemainingTime'
+import { useTranslation } from '../../i18n'
 
 /**
  * 종료 시각을 넘긴 뒤 서버 status=ENDED를 기다려 주는 시간이다.
@@ -147,6 +148,7 @@ export function ConnectedCallRoom({
     onReconnectNeeded,
     onPeerCallEnded,
 }: ConnectedCallRoomProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const room = useRoomContext()
   const connectionState = useConnectionState()
@@ -592,14 +594,14 @@ export function ConnectedCallRoom({
     <div className="flex size-full flex-col items-center justify-center gap-3 bg-[#23242a] px-6 text-center text-white/70">
       <UserCircleIcon aria-hidden="true" size={64} weight="thin" />
       <p className="font-semibold text-white">{remoteName}</p>
-      <p className="text-sm">상대방의 입장 또는 카메라 연결을 기다리고 있습니다.</p>
+      <p className="text-sm">{t('connectedCallRoom.t1')}</p>
     </div>
   )
 
   const localVideo =
     localCameraTrack && isCameraEnabled ? (
       <VideoTrack
-        aria-label="내 카메라"
+        aria-label={t('connectedCallRoom.t2')}
         className="size-full -scale-x-100 object-cover"
         trackRef={localCameraTrack}
       />
@@ -653,7 +655,7 @@ export function ConnectedCallRoom({
         AI 대화 요약을 여기에 모아 마무리 단계를 만든다.
       */}
       {waitingForNextFan ? (
-        <section aria-label="통화 마무리" className="grid gap-4">
+        <section aria-label={t('connectedCallRoom.t3')} className="grid gap-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1.5">
             <h2 className="text-[22px] font-black tracking-[-0.032em] text-white">
               {lastRemoteName
@@ -662,13 +664,12 @@ export function ConnectedCallRoom({
             </h2>
             {finishedDurationLabel ? (
               <p className="text-[15px] font-bold tabular-nums text-white/70">
-                함께한 시간 {finishedDurationLabel}
+                {t('connectedCallRoom.t4')} {finishedDurationLabel}
               </p>
             ) : null}
           </div>
           <p className="text-[15px] font-medium leading-[1.6] text-white/65">
-            통화방 연결은 그대로 유지됩니다. 대기실에서 다음 팬을 호출하면 이 화면에서 바로 이어서
-            통화할 수 있어요.
+            {t('connectedCallRoom.t5')}
           </p>
 
           {/*
@@ -679,9 +680,9 @@ export function ConnectedCallRoom({
           {callSessionId && authSession?.role !== 'FAN' ? (
             <div className="overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-surface-panel)]">
               <div className="flex items-baseline justify-between gap-4 border-b border-[var(--color-divider)] px-6 py-4">
-                <h3 className="text-[17px] font-extrabold tracking-[-0.03em]">대화 요약</h3>
+                <h3 className="text-[17px] font-extrabold tracking-[-0.03em]">{t('connectedCallRoom.t6')}</h3>
                 <span className="text-sm font-semibold text-[var(--color-text-muted)]">
-                  AI가 정리한 내용
+                  {t('connectedCallRoom.t7')}
                 </span>
               </div>
               <CallSummaryPanel callSessionId={callSessionId} />
@@ -691,31 +692,31 @@ export function ConnectedCallRoom({
       ) : null}
 
       {authSession?.role === 'FAN' && recordingPolicyError ? (
-        <AlertBanner title="녹화 설정 확인 실패" variant="warning">
+        <AlertBanner title={t('connectedCallRoom.t8')} variant="warning">
           {recordingPolicyError}
         </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && !recordingPolicyError && !recordingEnabled ? (
-        <AlertBanner title="녹화하지 않는 팬미팅" variant="info">
-          이 통화는 팬미팅 운영 설정에 따라 녹화되지 않습니다.
+        <AlertBanner title={t('connectedCallRoom.t9')} variant="info">
+          {t('connectedCallRoom.t10')}
         </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'recording' ? (
-        <AlertBanner title="통화 녹화 중" variant="info">
-          팬미팅 설정에 따라 이 통화가 녹화되고 있습니다.
+        <AlertBanner title={t('connectedCallRoom.t11')} variant="info">
+          {t('connectedCallRoom.t12')}
         </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'uploading' ? (
-        <AlertBanner title="녹화 영상 저장 중" variant="info">
-          업로드가 끝날 때까지 이 화면을 닫지 말아 주세요.
+        <AlertBanner title={t('connectedCallRoom.t13')} variant="info">
+          {t('connectedCallRoom.t14')}
         </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'failed' ? (
-        <AlertBanner title="녹화 영상을 아직 저장하지 못했습니다" variant="error">
+        <AlertBanner title={t('connectedCallRoom.t15')} variant="error">
           <p>{recordingError ?? '브라우저에 임시 보관했으며 다시 업로드할 수 있습니다.'}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -723,7 +724,7 @@ export function ConnectedCallRoom({
               onClick={() => void handleRecordingRetry()}
               type="button"
             >
-              업로드 다시 시도
+              {t('connectedCallRoom.t16')}
             </button>
             {departurePending && pendingRecordingPersisted ? (
               <button
@@ -731,7 +732,7 @@ export function ConnectedCallRoom({
                 onClick={continueWithPendingRecording}
                 type="button"
               >
-                완료 화면에서 재시도
+                {t('connectedCallRoom.t17')}
               </button>
             ) : null}
           </div>

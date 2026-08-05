@@ -22,6 +22,7 @@ import {
 } from '../../api/recordings'
 import { AlertBanner, Button, Spinner } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { useTranslation } from '../../i18n'
 
 type FanMeetingListStatus = 'upcoming' | 'completed'
 
@@ -101,6 +102,7 @@ function parsePage(value: string | null): number {
 }
 
 export function FanMeetingListPage() {
+  const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const status = searchParams.get('status')
@@ -348,8 +350,8 @@ export function FanMeetingListPage() {
   if (status !== 'upcoming' && status !== 'completed') {
     return (
       <InvalidRouteState
-        message="status는 upcoming 또는 completed여야 합니다."
-        title="팬미팅 목록 상태를 확인할 수 없습니다"
+        message={t('fanMeetingListPage.t1')}
+        title={t('fanMeetingListPage.t2')}
       />
     )
   }
@@ -434,30 +436,30 @@ export function FanMeetingListPage() {
         className="text-sm font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
         to="/fan/mypage/profile"
       >
-        ← 프로필로 돌아가기
+        {t('fanMeetingListPage.t3')}
       </Link>
-      <h1 className="mt-3.5 text-[28px] font-black tracking-[-0.038em]">마이페이지</h1>
+      <h1 className="mt-3.5 text-[28px] font-black tracking-[-0.038em]">{t('fanMeetingListPage.t4')}</h1>
       <p className="mt-[7px] text-base font-medium text-[var(--color-text-muted)]">
-        내 정보와 참여 내역을 관리하세요.
+        {t('fanMeetingListPage.t5')}
       </p>
 
-      <nav aria-label="마이페이지 메뉴" className="mt-6 flex gap-[26px] border-b border-[var(--color-divider)]">
+      <nav aria-label={t('fanMeetingListPage.t6')} className="mt-6 flex gap-[26px] border-b border-[var(--color-divider)]">
         <Link
           className="px-0.5 pb-[13px] text-base font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
           to="/fan/mypage/applications"
         >
-          응모한 팬미팅
+          {t('fanMeetingListPage.t7')}
         </Link>
         <span
           aria-current="page"
           className="px-0.5 pb-[13px] text-base font-extrabold text-[var(--color-primary-coral)] shadow-[inset_0_-3px_0_0_var(--color-primary-coral)]"
         >
-          내 팬미팅
+          {t('fanMeetingListPage.t8')}
         </span>
       </nav>
 
       {listError ? (
-        <AlertBanner className="mt-6" title="팬미팅 목록을 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('fanMeetingListPage.t9')} variant="error">
           <p>{listError}</p>
           <Button
             className="mt-3"
@@ -465,12 +467,12 @@ export function FanMeetingListPage() {
             size="sm"
             variant="secondary"
           >
-            목록 다시 불러오기
+            {t('fanMeetingListPage.t10')}
           </Button>
         </AlertBanner>
       ) : null}
       {partialWarning ? (
-        <AlertBanner className="mt-6" title="일부 정보를 확인하지 못했습니다" variant="warning">
+        <AlertBanner className="mt-6" title={t('fanMeetingListPage.t11')} variant="warning">
           {partialWarning}
         </AlertBanner>
       ) : null}
@@ -479,7 +481,7 @@ export function FanMeetingListPage() {
         {refreshing ? '대기열 상태를 확인하는 중입니다.' : ''}
       </p>
 
-      <div aria-label="팬미팅 상태" className="mt-6 flex gap-2" role="tablist">
+      <div aria-label={t('fanMeetingListPage.t12')} className="mt-6 flex gap-2" role="tablist">
         <button
           aria-selected={isUpcoming}
           className={statusTabClass(isUpcoming)}
@@ -487,7 +489,7 @@ export function FanMeetingListPage() {
           role="tab"
           type="button"
         >
-          예정 <span className="font-bold tabular-nums">{upcomingCount}</span>
+          {t('fanMeetingListPage.t13')} <span className="font-bold tabular-nums">{upcomingCount}</span>
         </button>
         <button
           aria-selected={!isUpcoming}
@@ -496,19 +498,19 @@ export function FanMeetingListPage() {
           role="tab"
           type="button"
         >
-          히스토리 <span className="font-bold tabular-nums">{completedCount}</span>
+          {t('fanMeetingListPage.t14')} <span className="font-bold tabular-nums">{completedCount}</span>
         </button>
       </div>
 
       {loading ? (
         <div className="flex min-h-64 items-center justify-center">
-          <Spinner label="내 팬미팅 목록을 불러오는 중" />
+          <Spinner label={t('fanMeetingListPage.t15')} />
         </div>
       ) : isUpcoming ? (
-        <section aria-label="예정된 팬미팅" className="mt-[26px]">
+        <section aria-label={t('fanMeetingListPage.t16')} className="mt-[26px]">
           {visibleItems.length === 0 ? (
             <p className="py-14 text-center text-sm font-medium text-[var(--color-text-secondary)]">
-              예정된 팬미팅이 없습니다.
+              {t('fanMeetingListPage.t17')}
             </p>
           ) : (
             visibleItems.map((item, index) => {
@@ -537,12 +539,12 @@ export function FanMeetingListPage() {
                       />
                     ) : (
                       <div
-                        aria-label="대표 이미지가 등록되지 않은 팬미팅"
+                        aria-label={t('fanMeetingListPage.t18')}
                         className="grid aspect-[16/10] w-full place-items-center"
                         role="img"
                       >
                         <span className="text-sm font-semibold text-[var(--color-text-muted)]">
-                          이미지 없음
+                          {t('fanMeetingListPage.t19')}
                         </span>
                       </div>
                     )}
@@ -567,10 +569,10 @@ export function FanMeetingListPage() {
                       {item.application.meetingTitle}
                     </h2>
                     <p className="mt-[7px] text-base font-medium text-[var(--color-text-muted)]">
-                      인플루언서 {item.application.influencerName}
+                      {t('fanMeetingListPage.t20')} {item.application.influencerName}
                     </p>
                     <p className="mt-3.5 text-[13px] font-bold text-[var(--color-text-muted)]">
-                      팬미팅 일정
+                      {t('fanMeetingListPage.t21')}
                     </p>
                     <p className="mt-[5px] text-lg font-extrabold tabular-nums">
                       {formatDateTime(item.application.scheduledStartAt)}
@@ -589,14 +591,14 @@ export function FanMeetingListPage() {
                         loading={enteringMeetingId === item.application.meetingId}
                         onClick={() => void handleEnterQueue(item.application.meetingId)}
                       >
-                        입장하기
+                        {t('fanMeetingListPage.t22')}
                       </Button>
                     ) : (
                       <Link
                         className="mj-font-emphasis inline-flex min-h-[52px] items-center whitespace-nowrap rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-6 text-base hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
                         to={`/fan-meetings/${item.application.meetingId}/device-check`}
                       >
-                        장비 점검하기
+                        {t('fanMeetingListPage.t23')}
                       </Link>
                     )}
                     {queueError?.meetingId === item.application.meetingId ? (
@@ -611,16 +613,15 @@ export function FanMeetingListPage() {
           )}
         </section>
       ) : (
-        <section aria-label="지난 팬미팅" className="mt-[26px]">
+        <section aria-label={t('fanMeetingListPage.t24')} className="mt-[26px]">
           <p className="max-w-[60ch] text-base font-medium leading-[1.65] text-[var(--color-text-body)]">
-            녹화 영상은 팬미팅 후{' '}
-            <strong className="font-extrabold text-[var(--color-text-primary)]">5일</strong> 동안
-            보관됩니다. 기간이 지나면 영상은 삭제되고 기록은 그대로 남습니다.
+            {t('fanMeetingListPage.t25')}{' '}
+            <strong className="font-extrabold text-[var(--color-text-primary)]">{t('fanMeetingListPage.t26')}</strong> {t('fanMeetingListPage.t27')}
           </p>
 
           {visibleItems.length === 0 ? (
             <p className="py-14 text-center text-sm font-medium text-[var(--color-text-secondary)]">
-              완료된 팬미팅이 없습니다.
+              {t('fanMeetingListPage.t28')}
             </p>
           ) : (
             <div className="mt-[22px] grid grid-cols-1 gap-7 min-[621px]:grid-cols-2 lg:grid-cols-3">
@@ -640,12 +641,12 @@ export function FanMeetingListPage() {
                         />
                       ) : (
                         <div
-                          aria-label="사진이 저장되지 않은 기록"
+                          aria-label={t('fanMeetingListPage.t29')}
                           className="grid aspect-[16/10] w-full place-items-center bg-[var(--color-surface-page)]"
                           role="img"
                         >
                           <span className="text-sm font-semibold text-[var(--color-text-muted)]">
-                            사진 없음
+                            {t('fanMeetingListPage.t30')}
                           </span>
                         </div>
                       )}
@@ -674,10 +675,10 @@ export function FanMeetingListPage() {
                         {remainingDays(item.recording.availableUntil) !== null ? (
                           <>
                             <p className="mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-extrabold text-[var(--color-warning)]">
-                              영상 {remainingDays(item.recording.availableUntil)}일 남음
+                              {t('fanMeetingListPage.t31')} {remainingDays(item.recording.availableUntil)}{t('fanMeetingListPage.t32')}
                             </p>
                             <p className="mt-1 text-sm font-medium tabular-nums text-[var(--color-text-muted)]">
-                              {formatDate(item.recording.availableUntil)}까지
+                              {formatDate(item.recording.availableUntil)}{t('fanMeetingListPage.t33')}
                             </p>
                           </>
                         ) : null}
@@ -698,13 +699,13 @@ export function FanMeetingListPage() {
                           {recordingEnabled === false ? '녹화하지 않은 팬미팅' : '영상 보관 종료'}
                         </p>
                         <p className="mt-1 text-sm font-medium text-[var(--color-text-muted)]">
-                          사진과 기록은 계속 보관
+                          {t('fanMeetingListPage.t34')}
                         </p>
                         <Link
                           className="mj-font-label mt-3 inline-flex min-h-[46px] items-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-[18px] text-[15px] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
                           to={`/fan/fan-meetings/${item.application.meetingId}/complete`}
                         >
-                          기록 보기
+                          {t('fanMeetingListPage.t35')}
                         </Link>
                       </>
                     )}
@@ -723,7 +724,7 @@ export function FanMeetingListPage() {
 
       {!loading && totalPages > 1 ? (
         <nav
-          aria-label="팬미팅 목록 페이지"
+          aria-label={t('fanMeetingListPage.t36')}
           className="mt-8 flex items-center justify-center gap-4"
         >
           <Button
@@ -731,17 +732,17 @@ export function FanMeetingListPage() {
             onClick={() => changePage(currentPage - 1)}
             variant="secondary"
           >
-            이전
+            {t('fanMeetingListPage.t37')}
           </Button>
           <p aria-live="polite" className="text-sm font-semibold">
-            {currentPage} / {totalPages} 페이지
+            {currentPage} / {totalPages} {t('fanMeetingListPage.t38')}
           </p>
           <Button
             disabled={currentPage >= totalPages}
             onClick={() => changePage(currentPage + 1)}
             variant="secondary"
           >
-            다음
+            {t('fanMeetingListPage.t39')}
           </Button>
         </nav>
       ) : null}

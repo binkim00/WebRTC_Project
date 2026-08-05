@@ -9,6 +9,7 @@ import {
 } from '../../api/aiSummaries'
 import { AlertBanner } from '../feedback/AlertBanner'
 import { Spinner } from '../feedback/Spinner'
+import { useTranslation } from '../../i18n'
 
 /** 생성 중일 때 다시 물어보는 간격이다. 요약은 통화 종료 직후 수 초~수십 초가 걸린다. */
 const POLL_INTERVAL_MS = 5000
@@ -35,6 +36,7 @@ function PanelFrame({ children }: { children: React.ReactNode }) {
  * 백엔드는 아직 생성 중이면 202와 GENERATING을 주므로, 완료될 때까지 주기적으로 다시 조회한다.
  */
 export function CallSummaryPanel({ callSessionId }: { callSessionId: string | number }) {
+  const { t } = useTranslation()
   const [state, setState] = useState<PanelState>({ kind: 'loading' })
 
   useEffect(() => {
@@ -85,7 +87,7 @@ export function CallSummaryPanel({ callSessionId }: { callSessionId: string | nu
   if (state.kind === 'loading') {
     return (
       <PanelFrame>
-        <Spinner label="대화 요약을 불러오는 중" />
+        <Spinner label={t('callSummaryPanel.t1')} />
       </PanelFrame>
     )
   }
@@ -93,11 +95,11 @@ export function CallSummaryPanel({ callSessionId }: { callSessionId: string | nu
   if (state.kind === 'generating') {
     return (
       <PanelFrame>
-        <Spinner label="대화 요약 생성 중" />
+        <Spinner label={t('callSummaryPanel.t2')} />
         <div>
           <p className="text-lg font-extrabold">{state.message}</p>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            완료되면 자동으로 표시됩니다. 이 화면을 열어 두세요.
+            {t('callSummaryPanel.t3')}
           </p>
         </div>
       </PanelFrame>
@@ -113,7 +115,7 @@ export function CallSummaryPanel({ callSessionId }: { callSessionId: string | nu
           size={44}
           weight="duotone"
         />
-        <AlertBanner title="대화 요약을 표시할 수 없습니다" variant="info">
+        <AlertBanner title={t('callSummaryPanel.t4')} variant="info">
           {state.message}
         </AlertBanner>
       </PanelFrame>

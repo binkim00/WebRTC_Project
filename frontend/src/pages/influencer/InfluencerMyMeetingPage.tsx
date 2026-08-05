@@ -26,6 +26,7 @@ import {
   type DashboardMeetingAction,
   type InfluencerDashboardRole,
 } from './influencerMeetingDashboard'
+import { useTranslation } from '../../i18n'
 
 export type InfluencerMyMeetingPageProps = {
   role?: LoginRole
@@ -149,8 +150,9 @@ function recentMeetingCopy(
 }
 
 function DashboardSkeleton() {
+  const { t } = useTranslation()
   return (
-    <div aria-label="내 팬미팅을 불러오는 중" aria-live="polite" className="grid gap-5">
+    <div aria-label={t('influencerMyMeetingPage.t1')} aria-live="polite" className="grid gap-5">
       <div className="h-5 w-28 rounded-[var(--radius-control)] bg-[var(--color-surface-muted)]" />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="grid gap-4">
@@ -206,6 +208,7 @@ function ActionButton({
 
 /** 최근 팬미팅 한 건의 다음 행동을 역할에 맞게 보여 주는 대시보드다. */
 export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps = {}) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [meetings, setMeetings] = useState<ManagerMeetingSummary[]>([])
   const [todayInsight, setTodayInsight] = useState<TodayInsight>({})
@@ -340,10 +343,10 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div className="min-w-0">
           <h1 className="mj-font-title text-[clamp(1.75rem,3vw,2.25rem)] leading-tight tracking-[-0.04em] text-[var(--color-text-primary)]">
-            내 팬미팅
+            {t('influencerMyMeetingPage.t2')}
           </h1>
           <p className="mt-2 text-base font-medium text-[var(--color-text-muted)]">
-            가장 가까운 팬미팅 한 건입니다.
+            {t('influencerMyMeetingPage.t3')}
           </p>
         </div>
         {isSolo ? (
@@ -351,7 +354,7 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
             onClick={() => navigate('/manager/fan-meetings/new')}
             variant="outline"
           >
-            새 팬미팅 만들기
+            {t('influencerMyMeetingPage.t4')}
           </Button>
         ) : null}
       </div>
@@ -368,10 +371,10 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
               className="text-2xl font-black tracking-[-0.038em] text-[var(--color-text-primary)]"
               id="today-meeting-title"
             >
-              팬미팅 정보를 표시할 수 없어요
+              {t('influencerMyMeetingPage.t5')}
             </h2>
             <p className="mt-3 max-w-[48ch] text-base font-medium leading-relaxed text-[var(--color-text-body)]">
-              잠시 후 페이지를 새로고침해 주세요.
+              {t('influencerMyMeetingPage.t6')}
             </p>
           </div>
         ) : recentMeeting && copy && primaryAction ? (
@@ -432,7 +435,7 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
                   onClick={() => navigate(`/fan-meetings/${encodeURIComponent(recentMeeting.meetingId)}/fans`)}
                   variant="outline"
                 >
-                  참가 팬
+                  {t('influencerMyMeetingPage.t7')}
                 </Button>
                 <Button
                   onClick={() =>
@@ -444,7 +447,7 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
                   }
                   variant="outline"
                 >
-                  상세 열기
+                  {t('influencerMyMeetingPage.t8')}
                 </Button>
               </div>
             </div>
@@ -455,10 +458,10 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
               className="text-2xl font-black tracking-[-0.038em] text-[var(--color-text-primary)]"
               id="today-meeting-title"
             >
-              등록된 팬미팅이 없어요
+              {t('influencerMyMeetingPage.t9')}
             </h2>
             <p className="mt-3 max-w-[48ch] text-base font-medium leading-relaxed text-[var(--color-text-body)]">
-              새 팬미팅을 만들거나 지난 기록을 확인해 보세요.
+              {t('influencerMyMeetingPage.t10')}
             </p>
           </div>
         )}
@@ -469,12 +472,12 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
           onClick={() => navigate('/influencer/mypage/fan-meetings')}
           variant="text"
         >
-          지난 팬미팅 보기
+          {t('influencerMyMeetingPage.t11')}
         </Button>
       </p>
 
       <Dialog
-        description="발표하면 응모자 전원에게 알림이 가며, 당첨 명단은 변경할 수 없습니다."
+        description={t('influencerMyMeetingPage.t12')}
         footer={
           <>
             <Button
@@ -482,10 +485,10 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
               onClick={() => setPublishTarget(undefined)}
               variant="outline"
             >
-              취소
+              {t('influencerMyMeetingPage.t13')}
             </Button>
             <Button loading={publishing} onClick={() => void handlePublishResults()}>
-              결과 발표
+              {t('influencerMyMeetingPage.t14')}
             </Button>
           </>
         }
@@ -493,11 +496,11 @@ export function InfluencerMyMeetingPage({ role }: InfluencerMyMeetingPageProps =
           if (!open && !publishing) setPublishTarget(undefined)
         }}
         open={Boolean(publishTarget)}
-        title="응모 결과를 발표할까요?"
+        title={t('influencerMyMeetingPage.t15')}
       >
         {publishing ? (
           <p className="text-sm font-medium text-[var(--color-text-muted)]" role="status">
-            결과를 발표하는 동안 창을 닫을 수 없습니다.
+            {t('influencerMyMeetingPage.t16')}
           </p>
         ) : null}
       </Dialog>

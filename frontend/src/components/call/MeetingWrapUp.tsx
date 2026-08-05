@@ -1,5 +1,6 @@
 import { CheckCircle, ProhibitInset, UsersThree } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from '../../i18n'
 
 /**
  * 팬미팅이 끝난 이유다.
@@ -34,6 +35,7 @@ export function MeetingWrapUp({
   reason: MeetingWrapUpReason
   tally?: MeetingWrapUpTally
 }) {
+  const { t } = useTranslation()
   const canceled = reason === 'CANCELED'
   const title = canceled
     ? '팬미팅이 취소되었어요'
@@ -78,13 +80,13 @@ export function MeetingWrapUp({
       {tally && !canceled ? (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-divider)]">
           <div className="bg-[var(--color-surface-panel)] px-6 py-5 text-center">
-            <p className="text-sm font-bold text-[var(--color-text-muted)]">만난 팬</p>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('meetingWrapUp.t1')}</p>
             <p className="mt-1.5 text-[34px] font-black leading-none tracking-[-0.04em] tabular-nums">
               {tally.completed}
             </p>
           </div>
           <div className="bg-[var(--color-surface-panel)] px-6 py-5 text-center">
-            <p className="text-sm font-bold text-[var(--color-text-muted)]">못 만난 팬</p>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('meetingWrapUp.t2')}</p>
             <p
               className={`mt-1.5 text-[34px] font-black leading-none tracking-[-0.04em] tabular-nums ${
                 tally.missed > 0 ? 'text-[var(--color-warning)]' : ''
@@ -104,20 +106,20 @@ export function MeetingWrapUp({
             to={`/influencer/fan-meetings/${encodeURIComponent(meetingId)}/fans`}
           >
             <UsersThree aria-hidden size={20} weight="bold" />
-            오늘 만난 팬 기록 보기
+            {t('meetingWrapUp.t3')}
           </Link>
         )}
         <Link
           className="mj-font-label flex min-h-12 items-center justify-center rounded-[10px] border border-[var(--color-border-control)] px-6 text-base font-bold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-text-tertiary)]"
           to="/influencer/fan-meetings"
         >
-          팬미팅 목록으로 가기
+          {t('meetingWrapUp.t4')}
         </Link>
         <Link
           className="mj-font-label flex min-h-11 items-center justify-center text-[15px] text-[var(--color-text-muted)] hover:text-[var(--color-primary-coral)]"
           to="/"
         >
-          홈으로
+          {t('meetingWrapUp.t5')}
         </Link>
       </div>
     </div>

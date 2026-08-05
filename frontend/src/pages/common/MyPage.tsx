@@ -17,6 +17,7 @@ import {
   TextField,
   WithdrawAccountSection,
 } from '../../components'
+import { useTranslation } from '../../i18n'
 
 type MenuItem = {
   title: string
@@ -144,6 +145,7 @@ function errorMessage(reason: unknown, fallback: string) {
  * 역할별로 새로 만들지 않고 이 컴포넌트 하나가 로그인 세션의 role을 읽어 분기한다.
  */
 export function MyPage() {
+  const { t } = useTranslation()
   // 소셜 연결 후 돌아올 경로로 쓴다. 역할마다 마이페이지 경로가 달라 현재 경로를 그대로 넘긴다.
   const location = useLocation()
   const authSession = getAuthSession()
@@ -238,25 +240,25 @@ export function MyPage() {
 
   return (
     <div>
-      <h1 className="text-[25px] font-black tracking-[-0.035em]">마이페이지</h1>
+      <h1 className="text-[25px] font-black tracking-[-0.035em]">{t('myPage.t1')}</h1>
       <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
         {content.pageDescription}
       </p>
 
       {loadError ? (
-        <AlertBanner className="mt-6" title="회원정보를 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('myPage.t2')} variant="error">
           {loadError}
         </AlertBanner>
       ) : null}
       {saveDone ? (
-        <AlertBanner className="mt-6" title="회원정보가 수정되었습니다" variant="success">
-          변경한 닉네임과 선호 언어가 저장되었습니다.
+        <AlertBanner className="mt-6" title={t('myPage.t3')} variant="success">
+          {t('myPage.t4')}
         </AlertBanner>
       ) : null}
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <Spinner label="회원정보를 불러오는 중" />
+          <Spinner label={t('myPage.t5')} />
         </div>
       ) : profile ? (
         <>
@@ -273,12 +275,12 @@ export function MyPage() {
                 />
               ) : (
                 <div
-                  aria-label="프로필 사진이 없습니다"
+                  aria-label={t('myPage.t6')}
                   className="grid size-[104px] place-items-center rounded-[10px] bg-[var(--color-surface-page)]"
                   role="img"
                 >
                   <span className="text-[13px] font-semibold text-[var(--color-text-muted)]">
-                    사진 없음
+                    {t('myPage.t7')}
                   </span>
                 </div>
               )}
@@ -295,13 +297,13 @@ export function MyPage() {
                 <dl className="mt-3.5 flex flex-wrap gap-x-7 gap-y-2">
                   <div className="flex items-baseline gap-2.5">
                     <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      아이디
+                      {t('myPage.t8')}
                     </dt>
                     <dd className="text-[15px] font-bold">{profile.loginId}</dd>
                   </div>
                   <div className="flex min-w-0 items-baseline gap-2.5">
                     <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      이메일
+                      {t('myPage.t9')}
                     </dt>
                     <dd className="text-[15px] font-bold [overflow-wrap:anywhere]">
                       {profile.email}
@@ -309,7 +311,7 @@ export function MyPage() {
                   </div>
                   <div className="flex items-baseline gap-2.5">
                     <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      선호 언어
+                      {t('myPage.t10')}
                     </dt>
                     <dd className="text-[15px] font-bold">
                       {languageOptions.find((option) => option.value === profile.preferredLanguage)
@@ -318,7 +320,7 @@ export function MyPage() {
                   </div>
                   <div className="flex items-baseline gap-2.5">
                     <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      회원번호
+                      {t('myPage.t11')}
                     </dt>
                     <dd className="text-[15px] font-bold tabular-nums">{profile.userId}</dd>
                   </div>
@@ -327,15 +329,15 @@ export function MyPage() {
 
               <div className="flex flex-col gap-2.5 max-lg:col-span-2 lg:self-center lg:border-l lg:border-[var(--color-divider)] lg:pl-8">
                 <Button className="min-h-[50px] text-base" onClick={openEdit}>
-                  회원정보 수정
+                  {t('myPage.t12')}
                 </Button>
                 <Button
                   className="min-h-[50px] text-base"
                   disabled
-                  title="비밀번호 변경 기능은 아직 지원되지 않습니다."
+                  title={t('myPage.t13')}
                   variant="secondary"
                 >
-                  비밀번호 변경 준비 중
+                  {t('myPage.t14')}
                 </Button>
               </div>
             </div>
@@ -400,37 +402,37 @@ export function MyPage() {
       ) : null}
 
       <Dialog
-        description="닉네임과 선호 언어를 변경할 수 있습니다."
+        description={t('myPage.t15')}
         footer={
           <>
             <Button disabled={saving} onClick={() => setEditOpen(false)} variant="secondary">
-              취소
+              {t('myPage.t16')}
             </Button>
             <Button form="mypage-edit-form" loading={saving} type="submit">
-              저장
+              {t('myPage.t17')}
             </Button>
           </>
         }
         onOpenChange={setEditOpen}
         open={editOpen}
-        title="회원정보 수정"
+        title={t('myPage.t18')}
       >
         <form className="grid gap-4" id="mypage-edit-form" onSubmit={handleSave}>
           <TextField
-            label="닉네임"
+            label={t('myPage.t19')}
             maxLength={30}
             onChange={(event) => setNicknameInput(event.currentTarget.value)}
             required
             value={nicknameInput}
           />
           <Select
-            label="선호 언어"
+            label={t('myPage.t20')}
             onChange={(event) => setLanguageInput(event.currentTarget.value)}
             options={languageOptions}
             value={languageInput}
           />
           {saveError ? (
-            <AlertBanner title="수정 실패" variant="error">
+            <AlertBanner title={t('myPage.t21')} variant="error">
               {saveError}
             </AlertBanner>
           ) : null}

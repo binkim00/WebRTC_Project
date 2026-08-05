@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { TextField } from '../ui/FormControls'
 import { AlertBanner } from '../feedback/AlertBanner'
 import { Dialog } from '../feedback/Dialog'
+import { useTranslation } from '../../i18n'
 
 /**
  * 회원탈퇴 진입점과 비밀번호 확인 대화상자를 함께 제공한다.
@@ -18,6 +19,7 @@ export function WithdrawAccountSection({
 }: {
   description?: string
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -75,7 +77,7 @@ export function WithdrawAccountSection({
           onClick={() => setOpen(true)}
           type="button"
         >
-          회원탈퇴
+          {t('withdrawAccountSection.t1')}
         </button>
       </div>
 
@@ -84,31 +86,31 @@ export function WithdrawAccountSection({
         footer={
           <div className="flex justify-end gap-3">
             <Button disabled={submitting} onClick={closeDialog} variant="secondary">
-              닫기
+              {t('withdrawAccountSection.t2')}
             </Button>
             <Button
               disabled={!password || submitting}
               loading={submitting}
               onClick={() => void submit()}
             >
-              탈퇴하기
+              {t('withdrawAccountSection.t3')}
             </Button>
           </div>
         }
         onOpenChange={(next) => (next ? setOpen(true) : closeDialog())}
         open={open}
-        title="정말 탈퇴하시겠어요?"
+        title={t('withdrawAccountSection.t4')}
       >
         <div className="grid gap-4">
           <TextField
             autoComplete="current-password"
-            label="현재 비밀번호"
+            label={t('withdrawAccountSection.t5')}
             onChange={(event) => setPassword(event.target.value)}
             type="password"
             value={password}
           />
           {error ? (
-            <AlertBanner title="탈퇴 실패" variant="error">
+            <AlertBanner title={t('withdrawAccountSection.t6')} variant="error">
               {error}
             </AlertBanner>
           ) : null}

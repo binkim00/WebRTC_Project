@@ -55,12 +55,14 @@ import {
   type DraftFormQuestion,
   type MeetingCreateLocalDraft,
 } from './managerMeetingCreateDraft'
+import { useTranslation } from '../../i18n'
 
 /** 매니저 페이지의 제목, 설명, 선택적 뒤로가기 링크를 같은 형태로 표시한다. */
 function PageHeader({ eyebrow, title, description, backTo }: { eyebrow?: string; title: string; description: string; backTo?: string }) {
+  const { t } = useTranslation()
   return (
     <header className="grid gap-2">
-      {backTo ? <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]" to={backTo}><ArrowLeft size={17} /> 이전 화면으로 돌아가기</Link> : null}
+      {backTo ? <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]" to={backTo}><ArrowLeft size={17} /> {t('managerRoutePages.t1')}</Link> : null}
       {eyebrow ? <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--color-primary-coral)]">{eyebrow}</p> : null}
       <h1 className="text-4xl font-black tracking-[-0.055em]">{title}</h1>
       <p className="text-[var(--color-text-secondary)]">{description}</p>
@@ -70,9 +72,10 @@ function PageHeader({ eyebrow, title, description, backTo }: { eyebrow?: string;
 
 /** 단계형 입력 폼에서 현재 단계와 완료 단계를 시각적으로 표시한다. */
 function Stepper({ step, labels, onStepChange, disabled = false }: { step: number; labels: string[]; onStepChange: (step: number) => void; disabled?: boolean }) {
+  const { t } = useTranslation()
   return (
     <ol
-      aria-label="팬미팅 생성 단계"
+      aria-label={t('managerRoutePages.t2')}
       className="grid grid-cols-2 gap-y-5 border-b border-[var(--color-divider)] pb-6 sm:grid-cols-5"
     >
       {labels.map((label, index) => {
@@ -126,12 +129,13 @@ function Stepper({ step, labels, onStepChange, disabled = false }: { step: numbe
 
 /** 단계형 폼의 이전 단계와 다음 단계 버튼을 공통 배치한다. */
 function FormActions({ onBack, nextLabel = '다음 단계', nextDisabled = false, nextLoading = false, disabledReason }: { onBack?: () => void; nextLabel?: string; nextDisabled?: boolean; nextLoading?: boolean; disabledReason?: string }) {
+  const { t } = useTranslation()
   return (
     <div className="border-t border-[var(--color-divider)] pt-5">
       <div className="flex flex-wrap justify-end gap-2">
           {onBack ? (
             <Button disabled={nextLoading} onClick={onBack} variant="outline">
-              이전 단계
+              {t('managerRoutePages.t3')}
             </Button>
           ) : null}
           <Button disabled={nextDisabled} loading={nextLoading} type="submit">
@@ -200,6 +204,7 @@ const LOCAL_DRAFT_SAVE_DELAY_MS = 500
  * 팬미팅 정보 → 영상통화 운영 → 이벤트 정보 → 응모 설정·폼 → 최종 확인 순서로 값을 모아 저장한다.
  */
 export function ManagerMeetingCreatePage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const session = getAuthSession()
   const isInfluencerAccount = session?.role === 'INFLUENCER' || session?.role === 'SOLO_INFLUENCER'
@@ -783,13 +788,13 @@ export function ManagerMeetingCreatePage() {
         className="inline-flex min-h-11 items-center text-sm font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
         to="/manager/fan-meetings"
       >
-        팬미팅 관리로 돌아가기
+        {t('managerRoutePages.t4')}
       </Link>
       <h1 className="mj-font-title mt-3.5 text-[var(--service-page-title-size)] leading-tight tracking-[-0.035em] text-[var(--color-text-primary)]">
-        새 팬미팅 만들기
+        {t('managerRoutePages.t5')}
       </h1>
       <p className="mt-2 text-base font-medium text-[var(--color-text-muted)]">
-        팬미팅을 만들면 팬에게 공개할 이벤트 정보와 응모까지 함께 생성됩니다.
+        {t('managerRoutePages.t6')}
       </p>
 
       <div className="mt-6.5">
@@ -821,16 +826,15 @@ export function ManagerMeetingCreatePage() {
             </span>
           </div>
           <Button onClick={() => setNewStartDialogOpen(true)} variant="outline">
-            새로 시작
+            {t('managerRoutePages.t7')}
           </Button>
         </div>
       ) : null}
 
       {restoredLocalDraft ? (
-        <AlertBanner className="mt-4" title="브라우저 임시 초안을 복구했습니다" variant="success">
+        <AlertBanner className="mt-4" title={t('managerRoutePages.t8')} variant="success">
           <p>
-            {formatDateTime(restoredLocalDraft.savedAt)}에 저장한 STEP {restoredLocalDraft.step + 1}의
-            입력을 이어서 표시합니다. 서버에 저장한 초안은 ‘초안 확인’에서 별도로 불러올 수 있습니다.
+            {formatDateTime(restoredLocalDraft.savedAt)}{t('managerRoutePages.t9')} {restoredLocalDraft.step + 1}{t('managerRoutePages.t10')}
             {restoredLocalDraft.createdMeetingId
               ? ` 이 초안은 이미 만들어진 팬미팅(ID ${restoredLocalDraft.createdMeetingId})과 연결되어 있어, 저장하면 새로 만들지 않고 그 팬미팅을 수정합니다.`
               : ''}
@@ -838,24 +842,24 @@ export function ManagerMeetingCreatePage() {
           {/* 초안을 버릴 수단이 없으면 복구된 createdMeetingId 때문에 새 팬미팅을 만들 수 없다. */}
           <div className="mt-3">
             <Button onClick={discardLocalDraft} size="sm" variant="secondary">
-              초안 버리고 새로 만들기
+              {t('managerRoutePages.t11')}
             </Button>
           </div>
         </AlertBanner>
       ) : localDraftDiscarded ? (
-        <AlertBanner className="mt-4" title="임시 초안을 버렸습니다" variant="info">
-          빈 상태에서 새 팬미팅을 만들 수 있습니다.
+        <AlertBanner className="mt-4" title={t('managerRoutePages.t12')} variant="info">
+          {t('managerRoutePages.t13')}
         </AlertBanner>
       ) : null}
 
       {staleDraftLinkNotice ? (
-        <AlertBanner className="mt-4" title="이전 팬미팅과의 연결을 끊었습니다" variant="warning">
+        <AlertBanner className="mt-4" title={t('managerRoutePages.t14')} variant="warning">
           {staleDraftLinkNotice}
         </AlertBanner>
       ) : null}
       <form className="grid gap-5" onSubmit={submit}>
         <fieldset className="contents">
-          <legend className="sr-only">팬미팅 생성 정보</legend>
+          <legend className="sr-only">{t('managerRoutePages.t15')}</legend>
         <section aria-labelledby={`meeting-create-step-${step}`} className="mt-6">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div>
@@ -879,7 +883,7 @@ export function ManagerMeetingCreatePage() {
             </div>
             {step === 0 ? (
               <p className="text-sm font-semibold text-[var(--color-text-muted)]">
-                <span className="font-extrabold text-[var(--color-primary-coral)]">*</span> 표시는 필수 입력 항목입니다.
+                <span className="font-extrabold text-[var(--color-primary-coral)]">*</span> {t('managerRoutePages.t16')}
               </p>
             ) : null}
           </div>
@@ -887,29 +891,29 @@ export function ManagerMeetingCreatePage() {
           <div className="mt-6">
             {step === 0 ? (
               <div className="grid items-start gap-5 sm:grid-cols-2">
-                <TextField label="팬미팅명" maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText="팬에게 공개되는 홍보·응모 페이지의 제목입니다." />
-                <TextField label="예정 팬미팅 일시" required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
+                <TextField label={t('managerRoutePages.t17')} maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText={t('managerRoutePages.t18')} />
+                <TextField label={t('managerRoutePages.t19')} required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
                 <div>
                   {isInfluencerAccount ? (
                     <div className="grid gap-2">
-                      <span className="text-sm font-bold text-[var(--color-text-primary)]">담당 인플루언서 <span className="text-[var(--color-primary-coral)]">*</span></span>
+                      <span className="text-sm font-bold text-[var(--color-text-primary)]">{t('managerRoutePages.t20')} <span className="text-[var(--color-primary-coral)]">*</span></span>
                       <div className="flex min-h-[var(--control-height)] items-center justify-between gap-4 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-[var(--control-padding-inline)]">
                         <strong className="font-semibold text-[var(--color-text-primary)]">{influencerNickname}</strong>
                         <span className="text-sm font-bold text-[var(--color-success)]" role="status">
-                          자동 연결
+                          {t('managerRoutePages.t21')}
                         </span>
                       </div>
-                      <p className="text-sm font-medium text-[var(--color-text-muted)]">현재 로그인한 인플루언서 계정으로 자동 연결됩니다.</p>
+                      <p className="text-sm font-medium text-[var(--color-text-muted)]">{t('managerRoutePages.t22')}</p>
                     </div>
                   ) : (
                     <Select
                       helperText={organizationInfluencers.length > 0 ? '현재 조직에 소속된 인플루언서만 선택할 수 있습니다.' : '소속 인플루언서가 없습니다. 조직 관리에서 먼저 초대를 수락했는지 확인해 주세요.'}
-                      label="담당 인플루언서"
+                      label={t('managerRoutePages.t23')}
                       options={organizationInfluencers.map((member) => ({
                         value: String(member.userId),
                         label: `${member.nickname} (회원번호 ${member.userId})`,
                       }))}
-                      placeholder="인플루언서를 선택해 주세요"
+                      placeholder={t('managerRoutePages.t24')}
                       required
                       value={form.influencerId ? String(form.influencerId) : ''}
                       onChange={(event) => setForm({ ...form, influencerId: Number(event.target.value) })}
@@ -923,15 +927,15 @@ export function ManagerMeetingCreatePage() {
               <div className="grid gap-5 sm:grid-cols-2">
                 <Textarea
                   containerClassName="sm:col-span-2"
-                  label="이벤트 상세 소개"
+                  label={t('managerRoutePages.t25')}
                   value={form.description ?? ''}
                   onChange={(event) => setForm({ ...form, description: event.target.value })}
-                  placeholder="팬에게 보여 줄 이벤트와 응모 안내를 입력해 주세요."
+                  placeholder={t('managerRoutePages.t26')}
                 />
                 <TextField
                   containerClassName="sm:col-span-2"
-                  helperText="외부에서 접근 가능한 이미지 URL을 입력해 주세요."
-                  label="커버 이미지 URL"
+                  helperText={t('managerRoutePages.t27')}
+                  label={t('managerRoutePages.t28')}
                   maxLength={2048}
                   type="url"
                   value={form.coverImageUrl ?? ''}
@@ -946,20 +950,20 @@ export function ManagerMeetingCreatePage() {
                 <section aria-labelledby="meeting-time-settings" className="grid gap-5">
                   <div>
                     <h3 className="text-base font-extrabold text-[var(--color-text-primary)]" id="meeting-time-settings">
-                      팬미팅 진행 시간
+                      {t('managerRoutePages.t29')}
                     </h3>
                     <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                      팬 한 명과 통화하는 시간을 설정합니다.
+                      {t('managerRoutePages.t30')}
                     </p>
                   </div>
                   <div className="grid items-start gap-5">
                     <TextField
                       endAdornment={
-                        <span className="pr-3 text-sm text-[var(--color-text-muted)]">분</span>
+                        <span className="pr-3 text-sm text-[var(--color-text-muted)]">{t('managerRoutePages.t31')}</span>
                       }
                       error={callDurationError}
                       helperText={`팬 한 명과 영상통화를 진행하는 시간입니다. ${CALL_DURATION_MIN_MINUTES}~${CALL_DURATION_MAX_MINUTES}분 사이로 입력해 주세요.`}
-                      label="1명당 통화 시간"
+                      label={t('managerRoutePages.t32')}
                       max={CALL_DURATION_MAX_MINUTES}
                       min={CALL_DURATION_MIN_MINUTES}
                       required
@@ -984,21 +988,21 @@ export function ManagerMeetingCreatePage() {
                 <section aria-labelledby="queue-settings" className="grid gap-5 border-t border-[var(--color-divider)] pt-5">
                   <div>
                     <h3 className="text-base font-extrabold text-[var(--color-text-primary)]" id="queue-settings">
-                      대기열 운영
+                      {t('managerRoutePages.t33')}
                     </h3>
                     <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                      팬이 대기 화면에 들어올 수 있는 시작 시각을 설정합니다.
+                      {t('managerRoutePages.t34')}
                     </p>
                   </div>
                   <div className="grid items-start gap-5 sm:grid-cols-2">
                     <TextField
                       error={queueOpenError}
-                      helperText="팬이 대기 화면에 입장할 수 있는 날짜와 시간입니다."
+                      helperText={t('managerRoutePages.t35')}
                       label={
                         <span className="inline-flex items-center gap-2">
-                          대기열 오픈 일시
+                          {t('managerRoutePages.t36')}
                           <span className="rounded-[var(--radius-control)] bg-[var(--color-primary-coral-soft)] px-2 py-0.5 text-xs font-bold text-[var(--color-primary-coral)]">
-                            필수
+                            {t('managerRoutePages.t37')}
                           </span>
                         </span>
                       }
@@ -1014,18 +1018,18 @@ export function ManagerMeetingCreatePage() {
                 <section aria-labelledby="connection-settings" className="grid gap-5 border-t border-[var(--color-divider)] pt-5">
                   <div>
                     <h3 className="text-base font-extrabold text-[var(--color-text-primary)]" id="connection-settings">
-                      연결 및 재입장
+                      {t('managerRoutePages.t38')}
                     </h3>
                     <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                      연결이 끊기거나 입장 요청에 응답하지 않은 팬의 처리 기준을 설정합니다.
+                      {t('managerRoutePages.t39')}
                     </p>
                   </div>
                   <div className="grid items-start gap-5 sm:grid-cols-2">
                     <TextField
                       className="pr-44"
-                      endAdornment={<span className="whitespace-nowrap px-3 text-sm text-[var(--color-text-muted)]">초 동안 재입장 가능</span>}
-                      helperText="통화 연결이 끊긴 팬이 다시 입장할 수 있는 시간을 설정합니다. 입력하지 않으면 서비스 기본값이 적용됩니다."
-                      label="연결이 끊긴 후 재입장 가능 시간"
+                      endAdornment={<span className="whitespace-nowrap px-3 text-sm text-[var(--color-text-muted)]">{t('managerRoutePages.t40')}</span>}
+                      helperText={t('managerRoutePages.t41')}
+                      label={t('managerRoutePages.t42')}
                       min={0}
                       onChange={(event) => setForm({
                         ...form,
@@ -1040,9 +1044,9 @@ export function ManagerMeetingCreatePage() {
                     />
                     <TextField
                       className="pr-40"
-                      endAdornment={<span className="whitespace-nowrap px-3 text-sm text-[var(--color-text-muted)]">회까지 다시 호출</span>}
-                      helperText="입장 요청에 응답하지 않은 팬을 다시 호출할 수 있는 최대 횟수입니다. 입력하지 않으면 서비스 기본값이 적용됩니다."
-                      label="응답 없는 팬 다시 호출"
+                      endAdornment={<span className="whitespace-nowrap px-3 text-sm text-[var(--color-text-muted)]">{t('managerRoutePages.t43')}</span>}
+                      helperText={t('managerRoutePages.t44')}
+                      label={t('managerRoutePages.t45')}
                       min={0}
                       onChange={(event) => setForm({
                         ...form,
@@ -1061,17 +1065,17 @@ export function ManagerMeetingCreatePage() {
                 <section aria-labelledby="media-settings" className="grid gap-5 border-t border-[var(--color-divider)] pt-5">
                   <div>
                     <h3 className="text-base font-extrabold text-[var(--color-text-primary)]" id="media-settings">
-                      녹화 및 실시간 기능
+                      {t('managerRoutePages.t46')}
                     </h3>
                     <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                      통화 중 사용할 녹화와 번역 자막 기능을 선택합니다.
+                      {t('managerRoutePages.t47')}
                     </p>
                   </div>
                   <div className="grid items-start gap-5 sm:grid-cols-2">
                     <Switch
                       checked={form.operation.recordingEnabled}
-                      description="영상통화를 녹화합니다. 녹화 영상은 팬미팅 종료 후 5일 동안 보관된 뒤 삭제됩니다."
-                      label="영상통화 녹화"
+                      description={t('managerRoutePages.t48')}
+                      label={t('managerRoutePages.t49')}
                       onCheckedChange={(checked) =>
                         setForm({
                           ...form,
@@ -1081,8 +1085,8 @@ export function ManagerMeetingCreatePage() {
                     />
                     <Switch
                       checked={form.operation.translationEnabled}
-                      description="통화 중 팬과 인플루언서에게 실시간 번역 자막을 제공합니다."
-                      label="실시간 번역 자막"
+                      description={t('managerRoutePages.t50')}
+                      label={t('managerRoutePages.t51')}
                       onCheckedChange={(checked) =>
                         setForm({
                           ...form,
@@ -1100,8 +1104,8 @@ export function ManagerMeetingCreatePage() {
                 <div className="grid gap-5 border-t border-[var(--color-divider)] pt-5">
                   <Checkbox
                     checked={form.application.enabled}
-                    description="응모를 사용하면 기간·결과 발표 일시·정원을 함께 전송합니다."
-                    label="팬 응모를 진행합니다."
+                    description={t('managerRoutePages.t52')}
+                    label={t('managerRoutePages.t53')}
                     onChange={(event) => setForm({
                       ...form,
                       application: { ...form.application, enabled: event.target.checked },
@@ -1109,15 +1113,14 @@ export function ManagerMeetingCreatePage() {
                   />
                   {form.application.enabled ? (
                     <div className="grid gap-5 sm:grid-cols-2">
-                      <TextField label="응모 시작 일시" required reserveMessageSpace type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
-                      <TextField error={applicationEndError} label="응모 종료 일시" required reserveMessageSpace type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
-                      <TextField error={resultAnnouncementError} label="결과 발표 일시" required reserveMessageSpace type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
-                      <TextField label="응모 정원" min={1} required type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
+                      <TextField label={t('managerRoutePages.t54')} required reserveMessageSpace type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
+                      <TextField error={applicationEndError} label={t('managerRoutePages.t55')} required reserveMessageSpace type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
+                      <TextField error={resultAnnouncementError} label={t('managerRoutePages.t56')} required reserveMessageSpace type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
+                      <TextField label={t('managerRoutePages.t57')} min={1} required type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
                     </div>
                   ) : (
-                    <AlertBanner title="응모 없이 발행할 수 없습니다" variant="warning">
-                      현재 참가자를 직접 등록할 수 없습니다. 응모를 끄면 참가자와 대기열을
-                      구성할 수 없어 팬미팅을 진행할 수 없습니다.
+                    <AlertBanner title={t('managerRoutePages.t58')} variant="warning">
+                      {t('managerRoutePages.t59')}
                     </AlertBanner>
                   )}
                 </div>
@@ -1126,13 +1129,12 @@ export function ManagerMeetingCreatePage() {
                 {form.application.enabled ? (
                   <>
                     <p className="text-sm text-[var(--color-text-secondary)]">
-                      팬이 응모할 때 작성할 질문입니다. 단답형과 장문형을 사용할 수 있으며,
-                      응모가 시작된 뒤에는 수정할 수 없습니다.
+                      {t('managerRoutePages.t60')}
                     </p>
                     <Textarea
-                      label="응모 폼 안내 문구"
+                      label={t('managerRoutePages.t61')}
                       onChange={(event) => setFormDescription(event.target.value)}
-                      placeholder="응모자에게 보여 줄 안내 문구를 입력해 주세요."
+                      placeholder={t('managerRoutePages.t62')}
                       rows={3}
                       value={formDescription}
                     />
@@ -1141,20 +1143,20 @@ export function ManagerMeetingCreatePage() {
                         {questions.map((question, index) => (
                           <div className="grid gap-4 border-t border-[var(--color-divider)] pt-5" key={question.key}>
                             <div className="flex items-center justify-between gap-3">
-                              <strong className="text-sm text-[var(--color-text-primary)]">질문 {index + 1}</strong>
+                              <strong className="text-sm text-[var(--color-text-primary)]">{t('managerRoutePages.t63')} {index + 1}</strong>
                               <Button
                                 onClick={() => setQuestionDeleteTarget(question.key)}
                                 size="sm"
                                 type="button"
                                 variant="danger"
                               >
-                                삭제
+                                {t('managerRoutePages.t64')}
                               </Button>
                             </div>
                             <div className="grid gap-4 sm:grid-cols-3">
                               <TextField
                                 containerClassName="sm:col-span-2"
-                                label="질문 내용"
+                                label={t('managerRoutePages.t65')}
                                 onChange={(event) =>
                                   setQuestions((items) =>
                                     items.map((item) =>
@@ -1162,11 +1164,11 @@ export function ManagerMeetingCreatePage() {
                                     ),
                                   )
                                 }
-                                placeholder="예: 이번 팬미팅에서 가장 나누고 싶은 이야기는 무엇인가요?"
+                                placeholder={t('managerRoutePages.t66')}
                                 value={question.questionText}
                               />
                               <Select
-                                label="답변 형식"
+                                label={t('managerRoutePages.t67')}
                                 onChange={(event) =>
                                   setQuestions((items) =>
                                     items.map((item) =>
@@ -1189,7 +1191,7 @@ export function ManagerMeetingCreatePage() {
                             </div>
                             <Checkbox
                               checked={question.required}
-                              label="필수 응답 질문입니다."
+                              label={t('managerRoutePages.t68')}
                               onChange={(event) =>
                                 setQuestions((items) =>
                                   items.map((item) =>
@@ -1219,18 +1221,18 @@ export function ManagerMeetingCreatePage() {
                         type="button"
                         variant="outline"
                       >
-                        질문 추가 ({questions.length}/{MAX_DRAFT_QUESTIONS})
+                        {t('managerRoutePages.t69')}{questions.length}/{MAX_DRAFT_QUESTIONS})
                       </Button>
                       {questions.length >= MAX_DRAFT_QUESTIONS ? (
                         <p className="mt-2 text-sm font-medium text-[var(--color-text-muted)]">
-                          응모 질문은 최대 {MAX_DRAFT_QUESTIONS}개까지 등록할 수 있습니다.
+                          {t('managerRoutePages.t70')} {MAX_DRAFT_QUESTIONS}{t('managerRoutePages.t71')}
                         </p>
                       ) : null}
                     </div>
                   </>
                 ) : (
                   <p className="text-sm text-[var(--color-text-secondary)]">
-                    응모를 사용하지 않는 팬미팅이라 응모 폼을 만들지 않습니다. 다음 단계로 넘어가 주세요.
+                    {t('managerRoutePages.t72')}
                   </p>
                 )}
                 </div>
@@ -1241,7 +1243,7 @@ export function ManagerMeetingCreatePage() {
               <div className="grid gap-6">
                 <div className="grid gap-6 border-t border-[var(--color-divider)] pt-5 lg:grid-cols-[1.1fr_1fr] lg:gap-9">
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-[var(--color-text-muted)]">팬에게 보이는 화면</p>
+                    <p className="text-xs font-bold text-[var(--color-text-muted)]">{t('managerRoutePages.t73')}</p>
                     {form.coverImageUrl?.trim() ? (
                       <img
                         alt={`${form.title} 대표 이미지`}
@@ -1249,10 +1251,10 @@ export function ManagerMeetingCreatePage() {
                         src={form.coverImageUrl}
                       />
                     ) : null}
-                    <p className="mt-4 text-sm font-extrabold text-[var(--color-primary-coral)]" role="status">모집 중</p>
+                    <p className="mt-4 text-sm font-extrabold text-[var(--color-primary-coral)]" role="status">{t('managerRoutePages.t74')}</p>
                     <h3 className="mj-font-title mt-2 text-2xl tracking-[-0.038em] text-[var(--color-text-primary)]">{form.title}</h3>
                     <p className="mt-2 text-base font-medium text-[var(--color-text-muted)]">
-                      인플루언서 {isInfluencerAccount ? influencerNickname : `사용자 #${form.influencerId || '-'}`}
+                      {t('managerRoutePages.t75')} {isInfluencerAccount ? influencerNickname : `사용자 #${form.influencerId || '-'}`}
                     </p>
                     {form.description?.trim() ? (
                       <p className="mt-3 whitespace-pre-wrap text-base font-medium leading-[1.75] text-[var(--color-text-body)]">{form.description}</p>
@@ -1285,8 +1287,8 @@ export function ManagerMeetingCreatePage() {
 
                 <Checkbox
                   checked={readyToPublish}
-                  description="발행하면 팬에게 즉시 공개되고 응모 시작 일시에 접수가 열립니다."
-                  label="팬미팅 정보와 홍보·응모 설정을 모두 확인했습니다."
+                  description={t('managerRoutePages.t76')}
+                  label={t('managerRoutePages.t77')}
                   onChange={(event) => setReadyToPublish(event.target.checked)}
                 />
               </div>
@@ -1341,11 +1343,11 @@ export function ManagerMeetingCreatePage() {
         </fieldset>
       </form>
       <Dialog
-        description="발행하면 팬에게 즉시 공개되고 응모 시작 일시에 접수가 열립니다."
+        description={t('managerRoutePages.t78')}
         footer={
           <>
             <Button disabled={submitting} onClick={() => setPublishDialogOpen(false)} variant="outline">
-              취소
+              {t('managerRoutePages.t79')}
             </Button>
             <Button
               loading={submitting}
@@ -1354,7 +1356,7 @@ export function ManagerMeetingCreatePage() {
                 void saveMeeting()
               }}
             >
-              팬미팅 발행
+              {t('managerRoutePages.t80')}
             </Button>
           </>
         }
@@ -1362,14 +1364,14 @@ export function ManagerMeetingCreatePage() {
           if (!submitting) setPublishDialogOpen(open)
         }}
         open={publishDialogOpen}
-        title="팬미팅을 발행할까요?"
+        title={t('managerRoutePages.t81')}
       />
       <Dialog
-        description="삭제한 질문과 입력한 내용은 복구할 수 없습니다."
+        description={t('managerRoutePages.t82')}
         footer={
           <>
             <Button onClick={() => setQuestionDeleteTarget(undefined)} variant="outline">
-              취소
+              {t('managerRoutePages.t83')}
             </Button>
             <Button
               onClick={() => {
@@ -1378,7 +1380,7 @@ export function ManagerMeetingCreatePage() {
               }}
               variant="danger"
             >
-              질문 삭제
+              {t('managerRoutePages.t84')}
             </Button>
           </>
         }
@@ -1386,26 +1388,26 @@ export function ManagerMeetingCreatePage() {
           if (!open) setQuestionDeleteTarget(undefined)
         }}
         open={questionDeleteTarget !== undefined}
-        title="이 질문을 삭제할까요?"
+        title={t('managerRoutePages.t85')}
       />
       <Dialog
-        description="현재 브라우저에 자동 저장된 작성 내용이 삭제되며 복구할 수 없습니다."
+        description={t('managerRoutePages.t86')}
         footer={
           <>
             <Button onClick={() => setNewStartDialogOpen(false)} variant="outline">
-              취소
+              {t('managerRoutePages.t87')}
             </Button>
             <Button onClick={startNewMeeting} variant="danger">
-              새로 시작
+              {t('managerRoutePages.t88')}
             </Button>
           </>
         }
         onOpenChange={setNewStartDialogOpen}
         open={newStartDialogOpen}
-        title="새 팬미팅으로 다시 시작할까요?"
+        title={t('managerRoutePages.t89')}
       />
       <Dialog
-        description="현재 작성 내용은 이 브라우저에 자동 저장됩니다. 그래도 화면에서 나가시겠습니까?"
+        description={t('managerRoutePages.t90')}
         footer={
           <div className="flex justify-end gap-2">
             <Button
@@ -1414,14 +1416,14 @@ export function ManagerMeetingCreatePage() {
               }}
               variant="outline"
             >
-              계속 작성
+              {t('managerRoutePages.t91')}
             </Button>
             {/* 초안을 남기지 않고 나갈 수단이 없으면 다음 방문에서 또 복구되어 새로 만들 수 없다. */}
             <Button onClick={discardAndLeave} variant="ghost">
-              초안 버리고 나가기
+              {t('managerRoutePages.t92')}
             </Button>
             <Button onClick={proceedBlockedNavigation} variant="danger">
-              저장하지 않고 나가기
+              {t('managerRoutePages.t93')}
             </Button>
           </div>
         }
@@ -1429,10 +1431,10 @@ export function ManagerMeetingCreatePage() {
           if (!open && navigationBlocker.state === 'blocked') navigationBlocker.reset()
         }}
         open={navigationBlocker.state === 'blocked'}
-        title="팬미팅 작성을 중단할까요?"
+        title={t('managerRoutePages.t94')}
       >
         <p className="text-sm text-[var(--color-text-secondary)]">
-          같은 계정과 브라우저로 돌아오면 첫 단계부터 이어서 작성할 수 있습니다.
+          {t('managerRoutePages.t95')}
         </p>
       </Dialog>
     </div>
@@ -1441,6 +1443,7 @@ export function ManagerMeetingCreatePage() {
 
 /** 팬미팅 공지를 실제 API로 조회·작성·수정·삭제하는 관리 페이지다. */
 export function ManagerNoticesPage() {
+  const { t } = useTranslation()
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
   const [meetingTitle, setMeetingTitle] = useState('팬미팅')
   const [pageData, setPageData] = useState<PageResponse<NoticeSummaryResponse>>()
@@ -1682,44 +1685,44 @@ export function ManagerNoticesPage() {
         className="text-sm font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
         to={`/manager/fan-meetings/${meetingId}/monitor`}
       >
-        ← 모니터링으로 돌아가기
+        {t('managerRoutePages.t96')}
       </Link>
 
       <header className="mt-4">
-        <h1 className="text-2xl font-black tracking-[-0.035em]">공지 관리</h1>
+        <h1 className="text-2xl font-black tracking-[-0.035em]">{t('managerRoutePages.t97')}</h1>
         <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
-          {meetingTitle} · 참가자에게 전달할 안내를 관리하세요.
+          {meetingTitle} {t('managerRoutePages.t98')}
         </p>
       </header>
 
       <div className="mt-6 grid gap-3">
-        {error ? <AlertBanner title="공지 관리 요청 실패" variant="error">{error}</AlertBanner> : null}
-        {message ? <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 완료" variant="success">{message}</AlertBanner> : null}
+        {error ? <AlertBanner title={t('managerRoutePages.t99')} variant="error">{error}</AlertBanner> : null}
+        {message ? <AlertBanner onDismiss={() => setMessage(undefined)} title={t('managerRoutePages.t100')} variant="success">{message}</AlertBanner> : null}
       </div>
 
       <div className="mt-6 grid items-start gap-7 border-t border-[var(--color-divider)] pt-6 lg:grid-cols-[340px_minmax(0,1fr)] lg:gap-10">
-        <nav aria-label="공지 목록" className="min-w-0">
+        <nav aria-label={t('managerRoutePages.t101')} className="min-w-0">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-extrabold">
-              공지 목록{' '}
+              {t('managerRoutePages.t102')}{' '}
               <span className="font-semibold tabular-nums text-[var(--color-text-secondary)]">
                 {pageData ? `${pageData.totalElements}개` : '-'}
               </span>
             </h2>
-            <Button onClick={openNewNotice} size="sm" variant="outline">새 공지</Button>
+            <Button onClick={openNewNotice} size="sm" variant="outline">{t('managerRoutePages.t103')}</Button>
           </div>
 
           {loading ? (
             <div className="flex min-h-[180px] items-center justify-center">
-              <Spinner label="공지 목록을 불러오는 중" />
+              <Spinner label={t('managerRoutePages.t104')} />
             </div>
           ) : !pageData || pageData.content.length === 0 ? (
             <div className="mt-5 rounded-[var(--radius-control)] border border-dashed border-[var(--color-border-control)] px-5 py-10 text-center" role="status">
-              <strong className="block text-base font-extrabold">등록된 공지가 없습니다</strong>
+              <strong className="block text-base font-extrabold">{t('managerRoutePages.t105')}</strong>
               <span className="mt-2 block text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
-                팬미팅 운영 안내를 새 공지로 작성해 주세요.
+                {t('managerRoutePages.t106')}
               </span>
-              <Button className="mt-4" onClick={openNewNotice}>새 공지 작성</Button>
+              <Button className="mt-4" onClick={openNewNotice}>{t('managerRoutePages.t107')}</Button>
             </div>
           ) : (
             <>
@@ -1756,10 +1759,10 @@ export function ManagerNoticesPage() {
           )}
         </nav>
 
-        <section aria-label="공지 편집" className="min-w-0">
+        <section aria-label={t('managerRoutePages.t108')} className="min-w-0">
           {detailLoading ? (
             <div className="flex min-h-[240px] items-center justify-center">
-              <Spinner label="공지 내용을 불러오는 중" />
+              <Spinner label={t('managerRoutePages.t109')} />
             </div>
           ) : creating || detail ? (
             <>
@@ -1775,18 +1778,18 @@ export function ManagerNoticesPage() {
               <form className="mt-5 grid gap-4" id="manager-notice-form" onSubmit={submitNotice}>
                 <TextField
                   disabled={!canEdit}
-                  label="제목"
+                  label={t('managerRoutePages.t110')}
                   maxLength={200}
                   onChange={(event) => setTitle(event.target.value)}
-                  placeholder="공지 제목을 입력하세요"
+                  placeholder={t('managerRoutePages.t111')}
                   required
                   value={title}
                 />
                 <Textarea
                   disabled={!canEdit}
-                  label="내용"
+                  label={t('managerRoutePages.t112')}
                   onChange={(event) => setContent(event.target.value)}
-                  placeholder="참가자에게 전달할 내용을 입력하세요"
+                  placeholder={t('managerRoutePages.t113')}
                   required
                   rows={7}
                   value={content}
@@ -1794,7 +1797,7 @@ export function ManagerNoticesPage() {
 
                 <fieldset className="grid gap-3">
                   <legend className="text-sm font-bold text-[var(--color-text-secondary)]">
-                    첨부파일{' '}
+                    {t('managerRoutePages.t114')}{' '}
                     <span className="font-medium tabular-nums">
                       ({attachments.length}/{NOTICE_ATTACHMENT_MAX_COUNT})
                     </span>
@@ -1810,7 +1813,7 @@ export function ManagerNoticesPage() {
                     }}
                     type="file"
                   />
-                  {uploading ? <p className="text-sm text-[var(--color-text-secondary)]">첨부파일을 올리는 중입니다.</p> : null}
+                  {uploading ? <p className="text-sm text-[var(--color-text-secondary)]">{t('managerRoutePages.t115')}</p> : null}
                   {attachments.length ? (
                     <ul className="grid gap-2">
                       {attachments.map((attachment) => (
@@ -1833,7 +1836,7 @@ export function ManagerNoticesPage() {
                               size="sm"
                               variant="ghost"
                             >
-                              제거
+                              {t('managerRoutePages.t116')}
                             </Button>
                           ) : null}
                         </li>
@@ -1842,7 +1845,7 @@ export function ManagerNoticesPage() {
                   ) : null}
                 </fieldset>
 
-                {editorError ? <AlertBanner title="저장 실패" variant="error">{editorError}</AlertBanner> : null}
+                {editorError ? <AlertBanner title={t('managerRoutePages.t117')} variant="error">{editorError}</AlertBanner> : null}
 
                 <div className="mt-1 flex flex-wrap gap-3 border-t border-[var(--color-divider)] pt-5">
                   <Button
@@ -1855,7 +1858,7 @@ export function ManagerNoticesPage() {
                   </Button>
                   {!creating && detail?.canDelete ? (
                     <Button className="ml-auto" onClick={() => setDeleteTarget(detail)} variant="danger">
-                      삭제
+                      {t('managerRoutePages.t118')}
                     </Button>
                   ) : null}
                 </div>
@@ -1869,17 +1872,17 @@ export function ManagerNoticesPage() {
       </div>
 
       <Dialog
-        description="삭제하면 되돌릴 수 없습니다."
+        description={t('managerRoutePages.t119')}
         footer={
           <>
-            <Button disabled={deleting} onClick={() => setDeleteTarget(undefined)} variant="outline">취소</Button>
+            <Button disabled={deleting} onClick={() => setDeleteTarget(undefined)} variant="outline">{t('managerRoutePages.t120')}</Button>
             <Button
               disabled={deleting}
               loading={deleting}
               onClick={() => deleteTarget && void removeNotice(deleteTarget)}
               variant="danger"
             >
-              삭제
+              {t('managerRoutePages.t121')}
             </Button>
           </>
         }
@@ -1887,7 +1890,7 @@ export function ManagerNoticesPage() {
           if (!open && !deleting) setDeleteTarget(undefined)
         }}
         open={deleteTarget !== undefined}
-        title="이 공지를 삭제할까요?"
+        title={t('managerRoutePages.t122')}
       />
     </div>
   )
@@ -1912,6 +1915,7 @@ function formatLongDuration(seconds: number): string {
 
 /** 팬미팅 운영 결과 지표를 실제 통계 API로 보여주는 페이지다. */
 export function ManagerStatisticsPage() {
+  const { t } = useTranslation()
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
   const [stats, setStats] = useState<FanMeetingStatisticsResponse>()
   const [loading, setLoading] = useState(true)
@@ -1963,10 +1967,10 @@ export function ManagerStatisticsPage() {
 
   return (
     <div className="grid gap-7 pb-10">
-      <PageHeader title="팬미팅 통계" description="팬미팅 진행률과 통화 운영 결과를 한눈에 확인하세요." backTo={`/manager/fan-meetings/${meetingId}/monitor`} />
-      {error ? <AlertBanner title="통계 조회 실패" variant="error">{error}</AlertBanner> : null}
+      <PageHeader title={t('managerRoutePages.t123')} description={t('managerRoutePages.t124')} backTo={`/manager/fan-meetings/${meetingId}/monitor`} />
+      {error ? <AlertBanner title={t('managerRoutePages.t125')} variant="error">{error}</AlertBanner> : null}
       {loading ? (
-        <div className="flex min-h-[240px] items-center justify-center"><Spinner label="팬미팅 통계를 불러오는 중" /></div>
+        <div className="flex min-h-[240px] items-center justify-center"><Spinner label={t('managerRoutePages.t126')} /></div>
       ) : stats ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1978,10 +1982,10 @@ export function ManagerStatisticsPage() {
             ))}
           </div>
           <Card>
-            <CardHeader><CardTitle as="h2">통화 완료 현황</CardTitle></CardHeader>
+            <CardHeader><CardTitle as="h2">{t('managerRoutePages.t127')}</CardTitle></CardHeader>
             <CardContent className="grid gap-5">
               <div className="flex items-center justify-between text-sm">
-                <span>완료 {stats.completedCallCount}건 / 참가자 {stats.participantCount}명</span>
+                <span>{t('managerRoutePages.t128')} {stats.completedCallCount}{t('managerRoutePages.t129')} {stats.participantCount}{t('managerRoutePages.t130')}</span>
                 <strong className="text-[var(--color-primary-coral)]">{completionPercent}%</strong>
               </div>
               <div className="h-4 overflow-hidden rounded-full bg-[var(--color-surface-page)]">
@@ -1997,6 +2001,7 @@ export function ManagerStatisticsPage() {
 
 /** 위험 감지 통화 세션을 확인하고 필요하면 강제 종료하는 처리 페이지다. */
 export function ManagerRiskIncidentPage() {
+  const { t } = useTranslation()
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? 'demo-meeting'
   const [params] = useSearchParams()
   const callSessionId = params.get('callSessionId')?.trim()
@@ -2029,28 +2034,28 @@ export function ManagerRiskIncidentPage() {
 
   return (
     <div className="grid gap-7 pb-10">
-      <PageHeader eyebrow="CALL OPERATION" title="위험 상황 처리" description="현재 통화 세션을 확인하고 필요한 경우 강제로 종료하세요." backTo={`/manager/fan-meetings/${meetingId}/monitor`} />
-      <AlertBanner title="AI 위험 감지 API는 아직 구현되지 않았습니다" variant="warning">
-        감지 유형·신뢰도·판단 저장 기능은 표시하지 않습니다. 현재 백엔드에서 지원하는 통화 강제 종료만 사용할 수 있습니다.
+      <PageHeader eyebrow="CALL OPERATION" title={t('managerRoutePages.t131')} description={t('managerRoutePages.t132')} backTo={`/manager/fan-meetings/${meetingId}/monitor`} />
+      <AlertBanner title={t('managerRoutePages.t133')} variant="warning">
+        {t('managerRoutePages.t134')}
       </AlertBanner>
       {!callSessionId ? (
-        <AlertBanner title="통화 세션 정보가 필요합니다" variant="error">
-          모니터링 화면의 현재 통화에서 진입하거나 URL에 <code>callSessionId</code>를 전달해 주세요.
+        <AlertBanner title={t('managerRoutePages.t135')} variant="error">
+          {t('managerRoutePages.t136')} <code>callSessionId</code>{t('managerRoutePages.t137')}
         </AlertBanner>
       ) : (
         <Card>
           <CardHeader>
-            <Badge variant="danger">세션 {callSessionId}</Badge>
-            <CardTitle as="h2" className="mt-3">현재 영상통화 강제 종료</CardTitle>
+            <Badge variant="danger">{t('managerRoutePages.t138')} {callSessionId}</Badge>
+            <CardTitle as="h2" className="mt-3">{t('managerRoutePages.t139')}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-5">
             {/* 백엔드 ForceEndCallRequest의 255자 제한을 입력 단계에서 동일하게 적용한다. */}
-            <Textarea label="강제 종료 사유" maxLength={255} required rows={4} value={reason} onChange={(event) => setReason(event.target.value)} />
+            <Textarea label={t('managerRoutePages.t140')} maxLength={255} required rows={4} value={reason} onChange={(event) => setReason(event.target.value)} />
             <Button disabled={submitting || ended || !reason.trim()} onClick={forceEnd} variant="danger">
               {ended ? '강제 종료 완료' : submitting ? '종료 처리 중…' : '현재 통화 강제 종료'}
             </Button>
-            {error ? <AlertBanner title="강제 종료 실패" variant="error">{error}</AlertBanner> : null}
-            {ended ? <AlertBanner title="통화를 종료했습니다" variant="success">서버에서 강제 종료 결과를 확인했습니다.</AlertBanner> : null}
+            {error ? <AlertBanner title={t('managerRoutePages.t141')} variant="error">{error}</AlertBanner> : null}
+            {ended ? <AlertBanner title={t('managerRoutePages.t142')} variant="success">{t('managerRoutePages.t143')}</AlertBanner> : null}
           </CardContent>
         </Card>
       )}

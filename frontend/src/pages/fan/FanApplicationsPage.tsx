@@ -20,6 +20,7 @@ import {
   Pagination,
   Spinner,
 } from '../../components'
+import { useTranslation } from '../../i18n'
 
 const PAGE_SIZE = 6
 
@@ -70,6 +71,7 @@ function formatDateTime(value: string): string {
 }
 
 export function FanApplicationsPage() {
+  const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedStatus = searchParams.get('status')
   const statusFilter: StatusFilter = isStatusFilter(requestedStatus)
@@ -153,28 +155,28 @@ export function FanApplicationsPage() {
           to="/fan/mypage/profile"
         >
           <ArrowLeft aria-hidden size={18} weight="bold" />
-          프로필로 돌아가기
+          {t('fanApplicationsPage.t1')}
         </Link>
-        <h1 className="mt-5 text-4xl font-black tracking-[-0.045em]">마이페이지</h1>
+        <h1 className="mt-5 text-4xl font-black tracking-[-0.045em]">{t('fanApplicationsPage.t2')}</h1>
         <p className="mt-3 text-[var(--color-text-secondary)]">
-          내 정보와 참여 내역을 관리하세요.
+          {t('fanApplicationsPage.t3')}
         </p>
       </header>
 
       <section>
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-black tracking-[-0.035em]">응모한 이벤트</h2>
+            <h2 className="text-2xl font-black tracking-[-0.035em]">{t('fanApplicationsPage.t4')}</h2>
             <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-              응모한 이벤트와 결과를 확인하세요.
+              {t('fanApplicationsPage.t5')}
             </p>
           </div>
           <p className="text-sm font-bold text-[var(--color-text-secondary)]">
-            총 {totalElements}개
+            {t('fanApplicationsPage.t6')} {totalElements}{t('fanApplicationsPage.t7')}
           </p>
         </div>
 
-        <div aria-label="응모 상태 필터" className="mt-6 flex flex-wrap gap-2" role="group">
+        <div aria-label={t('fanApplicationsPage.t8')} className="mt-6 flex flex-wrap gap-2" role="group">
           {statusFilterItems.map((item) => (
             <button
               aria-pressed={statusFilter === item.value}
@@ -197,14 +199,14 @@ export function FanApplicationsPage() {
         </div>
 
         {error ? (
-          <AlertBanner className="mt-6" title="응모 내역을 확인할 수 없습니다" variant="error">
+          <AlertBanner className="mt-6" title={t('fanApplicationsPage.t9')} variant="error">
             {error}
           </AlertBanner>
         ) : null}
 
         {isLoading ? (
           <div className="flex justify-center py-24">
-            <Spinner label="응모 내역을 불러오는 중" />
+            <Spinner label={t('fanApplicationsPage.t10')} />
           </div>
         ) : (
           <>
@@ -225,7 +227,7 @@ export function FanApplicationsPage() {
                         />
                       ) : (
                         <div className="flex aspect-[16/5.5] w-full items-center justify-center bg-[var(--color-divider)] text-sm text-[var(--color-text-secondary)]">
-                          이미지 준비 중
+                          {t('fanApplicationsPage.t11')}
                         </div>
                       )}
                       <Badge
@@ -238,20 +240,20 @@ export function FanApplicationsPage() {
 
                     <CardContent>
                       <p className="text-xs font-bold text-[var(--color-primary-coral)]">
-                        응모 이벤트
+                        {t('fanApplicationsPage.t12')}
                       </p>
                       <h3 className="mt-2 text-xl font-black tracking-[-0.025em]">
                         {application.meetingTitle}
                       </h3>
                       <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                        인플루언서 {application.influencerName}
+                        {t('fanApplicationsPage.t13')} {application.influencerName}
                       </p>
 
                       <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-[var(--color-divider)] pt-5">
                         <div>
                           <p className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-tertiary)]">
                             <CalendarBlank aria-hidden size={16} />
-                            팬미팅 일정
+                            {t('fanApplicationsPage.t14')}
                           </p>
                           <p className="mt-1 text-sm font-bold">
                             {formatDateTime(application.scheduledStartAt)}
@@ -262,7 +264,7 @@ export function FanApplicationsPage() {
                             className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 py-1.5 text-sm font-semibold transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
                             to={`/fan/events/${application.meetingId}`}
                           >
-                            상세히 보기
+                            {t('fanApplicationsPage.t15')}
                           </Link>
                           {resultDecided &&
                           statusFilter !== 'SELECTED' &&
@@ -271,7 +273,7 @@ export function FanApplicationsPage() {
                               className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
                               to={`/fan/events/${application.meetingId}/application-result`}
                             >
-                              결과 확인
+                              {t('fanApplicationsPage.t16')}
                               <ArrowRight aria-hidden size={18} weight="bold" />
                             </Link>
                           ) : null}
@@ -292,9 +294,9 @@ export function FanApplicationsPage() {
               />
             ) : !error ? (
               <div className="mt-6 rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
-                <h3 className="font-bold">응모 내역이 없습니다</h3>
+                <h3 className="font-bold">{t('fanApplicationsPage.t17')}</h3>
                 <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                  이벤트 목록에서 마음에 드는 팬미팅에 응모해 보세요.
+                  {t('fanApplicationsPage.t18')}
                 </p>
               </div>
             ) : null}

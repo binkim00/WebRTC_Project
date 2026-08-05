@@ -15,6 +15,7 @@ import {
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 import { fanMeetingStatusContent } from './fanMeetingStatus'
+import { useTranslation } from '../../i18n'
 
 /** 백엔드 LocalDateTime 문자열을 한국어 날짜·시각 표기로 바꾼다. */
 function formatDateTime(value: string): string {
@@ -32,6 +33,7 @@ function formatDateTime(value: string): string {
 
 /** 인플루언서 한 명의 소개와 공개 팬미팅 목록을 보여 준다. 로그인 없이도 볼 수 있다. */
 export function FanInfluencerDetailPage() {
+  const { t } = useTranslation()
   const influencerId = Number(useParams().influencerId)
   const validId = Number.isInteger(influencerId) && influencerId > 0
 
@@ -66,8 +68,8 @@ export function FanInfluencerDetailPage() {
   if (!validId) {
     return (
       <InvalidRouteState
-        message="올바른 인플루언서를 선택해 주세요."
-        title="인플루언서 정보가 없습니다"
+        message={t('fanInfluencerDetailPage.t1')}
+        title={t('fanInfluencerDetailPage.t2')}
       />
     )
   }
@@ -75,7 +77,7 @@ export function FanInfluencerDetailPage() {
   if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
-        <Spinner label="인플루언서 정보를 불러오는 중" size="lg" />
+        <Spinner label={t('fanInfluencerDetailPage.t3')} size="lg" />
       </div>
     )
   }
@@ -87,9 +89,9 @@ export function FanInfluencerDetailPage() {
           className="inline-flex w-fit items-center gap-2 text-sm font-semibold"
           to="/fan/influencers"
         >
-          <ArrowLeft size={17} /> 인플루언서 탐색으로
+          <ArrowLeft size={17} /> {t('fanInfluencerDetailPage.t4')}
         </Link>
-        <AlertBanner title="인플루언서 정보를 표시할 수 없습니다" variant="error">
+        <AlertBanner title={t('fanInfluencerDetailPage.t5')} variant="error">
           {error ?? '해당 인플루언서를 찾을 수 없습니다.'}
         </AlertBanner>
       </div>
@@ -102,7 +104,7 @@ export function FanInfluencerDetailPage() {
         className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]"
         to="/fan/influencers"
       >
-        <ArrowLeft size={17} /> 인플루언서 탐색으로
+        <ArrowLeft size={17} /> {t('fanInfluencerDetailPage.t6')}
       </Link>
 
       <header className="flex flex-wrap items-center gap-6">
@@ -115,7 +117,7 @@ export function FanInfluencerDetailPage() {
           <h1 className="text-3xl font-black tracking-[-0.04em]">{detail.influencerName}</h1>
           <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--color-text-secondary)]">
             <UsersThree aria-hidden size={17} weight="duotone" />
-            팔로워 {detail.followerCount.toLocaleString('ko-KR')}명
+            {t('fanInfluencerDetailPage.t7')} {detail.followerCount.toLocaleString('ko-KR')}{t('fanInfluencerDetailPage.t8')}
           </p>
           {detail.socialUrl ? (
             <a
@@ -125,7 +127,7 @@ export function FanInfluencerDetailPage() {
               target="_blank"
             >
               <LinkSimple aria-hidden size={16} weight="bold" />
-              소셜 링크
+              {t('fanInfluencerDetailPage.t9')}
             </a>
           ) : null}
         </div>
@@ -134,7 +136,7 @@ export function FanInfluencerDetailPage() {
       {detail.introduction ? (
         <Card>
           <CardContent className="grid gap-3">
-            <h2 className="text-xl font-black tracking-[-0.03em]">소개</h2>
+            <h2 className="text-xl font-black tracking-[-0.03em]">{t('fanInfluencerDetailPage.t10')}</h2>
             <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-secondary)]">
               {detail.introduction}
             </p>
@@ -143,11 +145,11 @@ export function FanInfluencerDetailPage() {
       ) : null}
 
       <section className="grid gap-5">
-        <h2 className="text-xl font-black tracking-[-0.03em]">공개 팬미팅</h2>
+        <h2 className="text-xl font-black tracking-[-0.03em]">{t('fanInfluencerDetailPage.t11')}</h2>
         {detail.meetings.length === 0 ? (
           <EmptyState
-            description="이 인플루언서의 공개된 팬미팅이 아직 없습니다."
-            title="예정된 팬미팅이 없습니다"
+            description={t('fanInfluencerDetailPage.t12')}
+            title={t('fanInfluencerDetailPage.t13')}
           />
         ) : (
           <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -176,7 +178,7 @@ export function FanInfluencerDetailPage() {
                       className="inline-flex items-center gap-1.5 text-sm font-bold text-[var(--color-primary-coral)]"
                       to={`/fan/events/${meeting.meetingId}`}
                     >
-                      자세히 보기
+                      {t('fanInfluencerDetailPage.t14')}
                       <ArrowRight aria-hidden size={15} weight="bold" />
                     </Link>
                   </CardContent>

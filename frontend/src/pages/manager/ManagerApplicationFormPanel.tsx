@@ -20,6 +20,7 @@ import {
   Textarea,
 } from '../../components'
 import { toErrorMessage } from './meetingLifecycle'
+import { useTranslation } from '../../i18n'
 
 /** 백엔드가 응모 답변으로 허용하는 질문 유형은 주관식 두 가지뿐이다. */
 const QUESTION_TYPE_OPTIONS = [
@@ -55,6 +56,7 @@ export function ManagerApplicationFormPanel({
   editable: boolean
   lockedReason?: string
 }) {
+  const { t } = useTranslation()
   const [formDescription, setFormDescription] = useState('')
   const [questions, setQuestions] = useState<EditableFormQuestion[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -162,51 +164,50 @@ export function ManagerApplicationFormPanel({
   return (
     <form className="grid gap-5" onSubmit={save}>
       {!editable ? (
-        <AlertBanner title="응모 폼을 수정할 수 없습니다" variant="info">
+        <AlertBanner title={t('managerApplicationFormPanel.t1')} variant="info">
           {lockedReason ?? '응모가 시작된 뒤에는 응모 폼을 수정할 수 없습니다. 현재 내용은 확인만 가능합니다.'}
         </AlertBanner>
       ) : null}
 
       <Card>
         <CardHeader>
-          <Badge variant="primary">응모 폼</Badge>
-          <CardTitle as="h2" className="mt-3">팬 응모 질문 구성</CardTitle>
+          <Badge variant="primary">{t('managerApplicationFormPanel.t2')}</Badge>
+          <CardTitle as="h2" className="mt-3">{t('managerApplicationFormPanel.t3')}</CardTitle>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            저장한 질문의 내용과 순서가 팬의 응모 화면에 반영됩니다.
-            답변은 단답형과 장문형 중에서 선택할 수 있습니다.
+            {t('managerApplicationFormPanel.t4')}
           </p>
         </CardHeader>
         <CardContent className="grid gap-5">
           {!loaded && !error ? (
-            <p className="text-sm text-[var(--color-text-secondary)]">응모 폼을 불러오는 중입니다.</p>
+            <p className="text-sm text-[var(--color-text-secondary)]">{t('managerApplicationFormPanel.t5')}</p>
           ) : null}
 
           <Textarea
             disabled={!editable}
-            label="응모 폼 안내 문구"
+            label={t('managerApplicationFormPanel.t6')}
             maxLength={MAX_FORM_DESCRIPTION_LENGTH}
             onChange={(event) => setFormDescription(event.target.value)}
-            placeholder="응모자에게 보여 줄 안내 문구를 입력해 주세요."
+            placeholder={t('managerApplicationFormPanel.t7')}
             rows={3}
             value={formDescription}
           />
 
           {questions.length === 0 ? (
             <p className="rounded-xl border border-dashed border-[var(--color-divider)] p-5 text-center text-sm text-[var(--color-text-secondary)]">
-              등록된 질문이 없습니다. 질문을 추가해 주세요.
+              {t('managerApplicationFormPanel.t8')}
             </p>
           ) : (
             <div className="grid gap-4">
               {questions.map((question, index) => (
                 <div className="grid gap-4 rounded-2xl border border-[var(--color-divider)] p-5" key={question.key}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <Badge variant="neutral">질문 {index + 1}</Badge>
+                    <Badge variant="neutral">{t('managerApplicationFormPanel.t9')} {index + 1}</Badge>
                     {editable ? (
                       <div className="flex gap-2">
-                        <Button aria-label="위로 이동" disabled={index === 0} onClick={() => moveQuestion(index, -1)} size="sm" type="button" variant="secondary">
+                        <Button aria-label={t('managerApplicationFormPanel.t10')} disabled={index === 0} onClick={() => moveQuestion(index, -1)} size="sm" type="button" variant="secondary">
                           <CaretUp size={15} />
                         </Button>
-                        <Button aria-label="아래로 이동" disabled={index === questions.length - 1} onClick={() => moveQuestion(index, 1)} size="sm" type="button" variant="secondary">
+                        <Button aria-label={t('managerApplicationFormPanel.t11')} disabled={index === questions.length - 1} onClick={() => moveQuestion(index, 1)} size="sm" type="button" variant="secondary">
                           <CaretDown size={15} />
                         </Button>
                         <Button
@@ -216,7 +217,7 @@ export function ManagerApplicationFormPanel({
                           type="button"
                           variant="danger"
                         >
-                          삭제
+                          {t('managerApplicationFormPanel.t12')}
                         </Button>
                       </div>
                     ) : null}
@@ -224,16 +225,16 @@ export function ManagerApplicationFormPanel({
                   <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
                     <TextField
                       disabled={!editable}
-                      label="질문 내용"
+                      label={t('managerApplicationFormPanel.t13')}
                       maxLength={MAX_QUESTION_TEXT_LENGTH}
                       onChange={(event) => updateQuestion(question.key, { questionText: event.target.value })}
-                      placeholder="예: 이번 팬미팅에서 가장 나누고 싶은 이야기는 무엇인가요?"
+                      placeholder={t('managerApplicationFormPanel.t14')}
                       required
                       value={question.questionText}
                     />
                     <Select
                       disabled={!editable}
-                      label="답변 형식"
+                      label={t('managerApplicationFormPanel.t15')}
                       onChange={(event) =>
                         updateQuestion(question.key, {
                           questionType: event.target.value === 'LONG_TEXT' ? 'LONG_TEXT' : 'SHORT_TEXT',
@@ -246,7 +247,7 @@ export function ManagerApplicationFormPanel({
                   <Checkbox
                     checked={question.required}
                     disabled={!editable}
-                    label="필수 응답 질문입니다."
+                    label={t('managerApplicationFormPanel.t16')}
                     onChange={(event) => updateQuestion(question.key, { required: event.target.checked })}
                   />
                 </div>
@@ -268,16 +269,16 @@ export function ManagerApplicationFormPanel({
                 type="button"
                 variant="secondary"
               >
-                질문 추가 ({questions.length}/{MAX_QUESTIONS})
+                {t('managerApplicationFormPanel.t17')}{questions.length}/{MAX_QUESTIONS})
               </Button>
             </div>
           ) : null}
         </CardContent>
       </Card>
 
-      {error ? <AlertBanner title="응모 폼 작업을 완료하지 못했습니다" variant="error">{error}</AlertBanner> : null}
+      {error ? <AlertBanner title={t('managerApplicationFormPanel.t18')} variant="error">{error}</AlertBanner> : null}
       {message ? (
-        <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 결과" variant="success">
+        <AlertBanner onDismiss={() => setMessage(undefined)} title={t('managerApplicationFormPanel.t19')} variant="success">
           {message}
         </AlertBanner>
       ) : null}
@@ -285,7 +286,7 @@ export function ManagerApplicationFormPanel({
       {editable ? (
         <div className="flex justify-end">
           <Button disabled={!loaded} leadingIcon={<FloppyDisk size={18} />} loading={saving} type="submit">
-            응모 폼 저장
+            {t('managerApplicationFormPanel.t20')}
           </Button>
         </div>
       ) : null}

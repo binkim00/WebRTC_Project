@@ -10,6 +10,7 @@ import {
 import { getAuthSession } from '../../api/authSession'
 import { AlertBanner, Button, Pagination, Spinner, TextField } from '../../components'
 import { toErrorMessage } from './meetingLifecycle'
+import { useTranslation } from '../../i18n'
 
 const applicationStatusContent: Record<
   ApplicationStatus,
@@ -49,6 +50,7 @@ export function ManagerApplicantsPanel({
   onPublishResults: () => void
   refreshToken?: number
 }) {
+  const { t } = useTranslation()
   const [stats, setStats] = useState<ApplicationStatisticsResponse>()
   const [list, setList] = useState<ApplicantListResponse>()
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | ''>('')
@@ -148,16 +150,16 @@ export function ManagerApplicantsPanel({
   return (
     <div className="grid gap-6">
       {error ? (
-        <AlertBanner title="응모자 목록을 불러오지 못했습니다" variant="error">
+        <AlertBanner title={t('managerApplicantsPanel.t1')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
 
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
-          <h2 className="text-2xl font-black tracking-[-0.035em]">응모자 관리</h2>
+          <h2 className="text-2xl font-black tracking-[-0.035em]">{t('managerApplicantsPanel.t2')}</h2>
           <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
-            {meetingTitle} · 모집 {capacity}명
+            {meetingTitle} {t('managerApplicantsPanel.t3')} {capacity}{t('managerApplicantsPanel.t4')}
           </p>
         </div>
         <p className={`whitespace-nowrap text-sm font-bold ${headColor}`}>
@@ -166,19 +168,19 @@ export function ManagerApplicantsPanel({
       </div>
 
       <section
-        aria-label="선정 현황"
+        aria-label={t('managerApplicantsPanel.t5')}
         className="grid grid-cols-2 border-y border-[var(--color-divider)] sm:grid-cols-4"
       >
         <MetricFilter
           active={statusFilter === ''}
-          label="전체 응모"
+          label={t('managerApplicantsPanel.t6')}
           onClick={() => applyStatusFilter('')}
           value={stats?.totalApplications}
         />
         <MetricFilter
           active={statusFilter === 'SELECTED'}
           className="border-l border-[var(--color-divider)]"
-          label="선정"
+          label={t('managerApplicantsPanel.t7')}
           onClick={() => applyStatusFilter('SELECTED')}
           tone="success"
           value={stats?.selectedCount}
@@ -186,7 +188,7 @@ export function ManagerApplicantsPanel({
         <MetricFilter
           active={statusFilter === 'NOT_SELECTED'}
           className="border-t border-[var(--color-divider)] sm:border-l sm:border-t-0"
-          label="미선정"
+          label={t('managerApplicantsPanel.t8')}
           onClick={() => applyStatusFilter('NOT_SELECTED')}
           tone="error"
           value={stats?.notSelectedCount}
@@ -194,7 +196,7 @@ export function ManagerApplicantsPanel({
         <MetricFilter
           active={statusFilter === 'SUBMITTED'}
           className="border-l border-t border-[var(--color-divider)] sm:border-t-0"
-          label="미검토"
+          label={t('managerApplicantsPanel.t9')}
           onClick={() => applyStatusFilter('SUBMITTED')}
           value={stats?.submittedCount}
         />
@@ -205,9 +207,9 @@ export function ManagerApplicantsPanel({
           <form className="flex items-end gap-3" onSubmit={handleSearch} role="search">
             <TextField
               containerClassName="min-w-0 flex-1"
-              label="응모자 검색"
+              label={t('managerApplicantsPanel.t10')}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="닉네임"
+              placeholder={t('managerApplicantsPanel.t11')}
               type="search"
               value={keyword}
             />
@@ -218,7 +220,7 @@ export function ManagerApplicantsPanel({
               type="button"
               variant="outline"
             >
-              랜덤 선정
+              {t('managerApplicantsPanel.t12')}
             </Button>
           </form>
           {!canRunDraw ? (
@@ -229,17 +231,17 @@ export function ManagerApplicantsPanel({
 
           {loading ? (
             <div className="flex min-h-[240px] items-center justify-center">
-              <Spinner label="응모자 목록을 불러오는 중" />
+              <Spinner label={t('managerApplicantsPanel.t13')} />
             </div>
           ) : (
-            <div className="mt-5" role="table" aria-label="응모자 목록">
+            <div className="mt-5" role="table" aria-label={t('managerApplicantsPanel.t14')}>
               <div
                 className="hidden grid-cols-[150px_minmax(0,1fr)_90px] gap-4 border-b border-[var(--color-border-control)] pb-3 sm:grid"
                 role="row"
               >
-                <span className="text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">닉네임</span>
-                <span className="text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">질문 답변</span>
-                <span className="text-right text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">상태</span>
+                <span className="text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">{t('managerApplicantsPanel.t15')}</span>
+                <span className="text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">{t('managerApplicantsPanel.t16')}</span>
+                <span className="text-right text-sm font-bold text-[var(--color-text-secondary)]" role="columnheader">{t('managerApplicantsPanel.t17')}</span>
               </div>
               {list?.content.map((applicant) => {
                 const status = applicationStatusContent[applicant.applicationStatus]
@@ -280,10 +282,10 @@ export function ManagerApplicantsPanel({
         </div>
 
         <aside
-          aria-label="응모자 상세"
+          aria-label={t('managerApplicantsPanel.t18')}
           className="min-w-0 rounded-[var(--radius-control)] border border-[var(--color-divider)] p-5"
         >
-          <p className="text-sm font-bold text-[var(--color-text-secondary)]">응모자 상세</p>
+          <p className="text-sm font-bold text-[var(--color-text-secondary)]">{t('managerApplicantsPanel.t19')}</p>
           <div className="mt-2 flex items-baseline justify-between gap-3">
             <h3 className="text-xl font-black tracking-[-0.032em]">
               {selectedApplicant?.nickname ?? '-'}
@@ -294,7 +296,7 @@ export function ManagerApplicantsPanel({
           </div>
 
           <section className="mt-5 border-t border-[var(--color-divider)] pt-4">
-            <h4 className="text-sm font-extrabold">질문 답변</h4>
+            <h4 className="text-sm font-extrabold">{t('managerApplicantsPanel.t20')}</h4>
             <div className="mt-3 grid gap-4">
               {selectedApplicant?.answers.length ? (
                 selectedApplicant.answers.map((answer) => (

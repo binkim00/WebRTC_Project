@@ -14,6 +14,7 @@ import { AlertBanner } from '../../components/feedback/AlertBanner'
 import { Dialog } from '../../components/feedback/Dialog'
 import { Button } from '../../components/ui/Button'
 import { TextField, Textarea } from '../../components/ui/FormControls'
+import { useTranslation } from '../../i18n'
 
 const initialForm = {
   name: '',
@@ -69,6 +70,7 @@ const roleLabels: Record<string, string> = {
  * 이 세션에서 발급한 초대만 우측 패널에 표시한다.
  */
 export function ManagerOrganizationPage() {
+  const { t } = useTranslation()
   const [data, setData] = useState<MyOrganizationMembers | null>(null)
   const [form, setForm] = useState(initialForm)
   const [loading, setLoading] = useState(true)
@@ -263,7 +265,7 @@ export function ManagerOrganizationPage() {
   }
 
   if (loading) {
-    return <p className="py-10 text-[var(--color-text-secondary)]">조직 정보를 불러오는 중입니다.</p>
+    return <p className="py-10 text-[var(--color-text-secondary)]">{t('managerOrganizationPage.t1')}</p>
   }
 
   // dc의 "활성 상태인 구성원만 표시됩니다."와 실제 목록을 일치시킨다.
@@ -275,7 +277,7 @@ export function ManagerOrganizationPage() {
   return (
     <div className="pb-10">
       {error ? (
-        <AlertBanner className="mb-6" title="조직 요청 실패" variant="error">
+        <AlertBanner className="mb-6" title={t('managerOrganizationPage.t2')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
@@ -283,11 +285,10 @@ export function ManagerOrganizationPage() {
       {!data ? (
         <div className="max-w-[560px] py-10 sm:py-16">
           <h1 className="text-[25px] font-black tracking-[-0.035em] text-[var(--color-text-primary)]">
-            조직 관리
+            {t('managerOrganizationPage.t3')}
           </h1>
           <p className="mt-2.5 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
-            아직 소속된 조직이 없습니다. 조직을 만들면 인플루언서를 초대하고 팬미팅 운영을 함께
-            관리할 수 있어요.
+            {t('managerOrganizationPage.t4')}
           </p>
 
           <form
@@ -296,69 +297,69 @@ export function ManagerOrganizationPage() {
           >
             <div className="grid gap-5 sm:grid-cols-2">
               <TextField
-                label="조직 이름"
+                label={t('managerOrganizationPage.t5')}
                 onChange={(event) => setField('name', event.currentTarget.value)}
-                placeholder="예: MELLY 엔터테인먼트"
+                placeholder={t('managerOrganizationPage.t6')}
                 required
                 value={form.name}
               />
               <TextField
-                label="사업자등록번호"
+                label={t('managerOrganizationPage.t7')}
                 onChange={(event) => setField('businessNumber', event.currentTarget.value)}
                 required
                 value={form.businessNumber}
               />
               <TextField
-                label="대표자명"
+                label={t('managerOrganizationPage.t8')}
                 onChange={(event) => setField('representativeName', event.currentTarget.value)}
                 required
                 value={form.representativeName}
               />
               <TextField
-                label="대표 이메일"
+                label={t('managerOrganizationPage.t9')}
                 onChange={(event) => setField('contactEmail', event.currentTarget.value)}
                 required
                 type="email"
                 value={form.contactEmail}
               />
               <TextField
-                label="대표 전화번호"
+                label={t('managerOrganizationPage.t10')}
                 onChange={(event) => setField('contactPhone', event.currentTarget.value)}
                 required
                 value={form.contactPhone}
               />
             </div>
             <Textarea
-              label="조직 설명"
+              label={t('managerOrganizationPage.t11')}
               onChange={(event) => setField('description', event.currentTarget.value)}
               rows={4}
               value={form.description}
             />
             <div>
               <Button className="min-h-[52px] px-6" disabled={!requiredFilled} loading={creating} type="submit">
-                조직 만들기
+                {t('managerOrganizationPage.t12')}
               </Button>
               {!requiredFilled ? (
                 <p className="mt-2 text-sm font-medium text-[var(--color-text-tertiary)]">
-                  필수 항목을 모두 입력하면 만들 수 있어요.
+                  {t('managerOrganizationPage.t13')}
                 </p>
               ) : null}
             </div>
           </form>
           <p className="mt-3 text-sm font-medium leading-[1.6] text-[var(--color-text-tertiary)]">
-            조직을 만들면 내가 관리자로 함께 등록됩니다.
+            {t('managerOrganizationPage.t14')}
           </p>
         </div>
       ) : (
         <>
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div className="min-w-0">
-              <p className="text-sm font-bold text-[var(--color-text-tertiary)]">조직 관리</p>
+              <p className="text-sm font-bold text-[var(--color-text-tertiary)]">{t('managerOrganizationPage.t15')}</p>
               <h1 className="mt-2 text-[25px] font-black tracking-[-0.035em] text-[var(--color-text-primary)]">
                 {data.organization.name}
               </h1>
               <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-tertiary)]">
-                조직에 소속된 인플루언서와 관리자를 확인하고 초대하세요.
+                {t('managerOrganizationPage.t16')}
               </p>
             </div>
             <button
@@ -369,12 +370,12 @@ export function ManagerOrganizationPage() {
               }}
               type="button"
             >
-              인플루언서 초대
+              {t('managerOrganizationPage.t17')}
             </button>
           </div>
 
           <section
-            aria-label="조직 현황"
+            aria-label={t('managerOrganizationPage.t18')}
             className="mt-[22px] grid grid-cols-2 border-y border-[var(--color-divider)] md:grid-cols-4"
           >
             {(
@@ -405,17 +406,17 @@ export function ManagerOrganizationPage() {
             <div className="min-w-0">
               <div className="flex items-end justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-extrabold tracking-[-0.028em]">구성원</h2>
+                  <h2 className="text-lg font-extrabold tracking-[-0.028em]">{t('managerOrganizationPage.t19')}</h2>
                   <p className="mt-1 text-sm font-medium text-[var(--color-text-tertiary)]">
-                    활성 상태인 구성원만 표시됩니다.
+                    {t('managerOrganizationPage.t20')}
                   </p>
                 </div>
                 <p className="whitespace-nowrap text-[15px] font-extrabold tabular-nums">
-                  {members.length}명
+                  {members.length}{t('managerOrganizationPage.t21')}
                 </p>
               </div>
 
-              <div aria-label="조직 구성원 목록" className="mt-4" role="table">
+              <div aria-label={t('managerOrganizationPage.t22')} className="mt-4" role="table">
                 <div
                   className="hidden gap-4 border-b border-[var(--color-border-control)] pb-2.5 md:grid md:grid-cols-[minmax(0,1fr)_110px_130px_88px]"
                   role="row"
@@ -443,7 +444,7 @@ export function ManagerOrganizationPage() {
                           {member.nickname}
                         </strong>
                         <span className="mt-1 block text-sm font-medium text-[var(--color-text-tertiary)] [overflow-wrap:anywhere]">
-                          회원번호 {member.userId}
+                          {t('managerOrganizationPage.t23')} {member.userId}
                         </span>
                       </div>
                       <span
@@ -475,7 +476,7 @@ export function ManagerOrganizationPage() {
                           }}
                           type="button"
                         >
-                          소속 해제
+                          {t('managerOrganizationPage.t24')}
                         </button>
                       </div>
                     </div>
@@ -483,8 +484,7 @@ export function ManagerOrganizationPage() {
                 })}
               </div>
               <p className="mt-3.5 text-sm font-medium leading-[1.6] text-[var(--color-text-tertiary)]">
-                본인은 소속을 해제할 수 없습니다. 해제된 구성원은 기록에 남으며 다시 초대할 수
-                있어요.
+                {t('managerOrganizationPage.t25')}
               </p>
             </div>
 
@@ -494,10 +494,10 @@ export function ManagerOrganizationPage() {
             >
               <div className="flex items-baseline justify-between gap-3">
                 <h2 className="text-[17px] font-extrabold tracking-[-0.028em]" id="og-invites">
-                  보낸 초대
+                  {t('managerOrganizationPage.t26')}
                 </h2>
                 <span className="whitespace-nowrap text-sm font-semibold tabular-nums text-[var(--color-text-tertiary)]">
-                  {pendingCount}건
+                  {pendingCount}{t('managerOrganizationPage.t27')}
                 </span>
               </div>
 
@@ -506,7 +506,7 @@ export function ManagerOrganizationPage() {
                   className="mt-4 rounded-lg border border-dashed border-[var(--color-border-control)] px-4 py-8 text-center text-[15px] font-medium leading-[1.6] text-[var(--color-text-tertiary)]"
                   role="status"
                 >
-                  대기 중인 초대가 없습니다.
+                  {t('managerOrganizationPage.t28')}
                 </p>
               ) : (
                 <>
@@ -524,7 +524,7 @@ export function ManagerOrganizationPage() {
                         >
                           <div className="flex items-baseline justify-between gap-3">
                             <strong className="text-[15px] font-extrabold text-[var(--color-text-primary)] [overflow-wrap:anywhere]">
-                              회원번호 {invitation.influencerId}
+                              {t('managerOrganizationPage.t29')} {invitation.influencerId}
                             </strong>
                             <span
                               className={`whitespace-nowrap text-[13px] font-extrabold ${expired ? 'text-[var(--color-text-tertiary)]' : 'text-[var(--color-warning)]'}`}
@@ -561,8 +561,7 @@ export function ManagerOrganizationPage() {
                     })}
                   </div>
                   <p className="mt-3.5 text-[13px] font-medium leading-[1.55] text-[var(--color-text-tertiary)]">
-                    초대 링크는 표시된 만료 시각까지 한 번만 사용할 수 있습니다. 재발급하면 새
-                    링크를 전달해 주세요.
+                    {t('managerOrganizationPage.t30')}
                   </p>
                 </>
               )}
@@ -572,18 +571,18 @@ export function ManagerOrganizationPage() {
       )}
 
       <Dialog
-        description="초대 링크가 일회성 토큰으로 발급됩니다. 링크를 대상 인플루언서에게 직접 전달해 주세요."
+        description={t('managerOrganizationPage.t31')}
         footer={
           <>
             <Button disabled={sending} onClick={() => setInviteOpen(false)} variant="secondary">
-              취소
+              {t('managerOrganizationPage.t32')}
             </Button>
             <Button
               disabled={!inviteIdValid}
               loading={sending}
               onClick={() => void handleSendInvite()}
             >
-              초대 보내기
+              {t('managerOrganizationPage.t33')}
             </Button>
           </>
         }
@@ -591,25 +590,25 @@ export function ManagerOrganizationPage() {
           if (!open && !sending) setInviteOpen(false)
         }}
         open={inviteOpen}
-        title="인플루언서 초대"
+        title={t('managerOrganizationPage.t34')}
       >
         <div className="grid gap-2">
           <TextField
             error={inviteInputError}
-            label="인플루언서 회원번호"
+            label={t('managerOrganizationPage.t35')}
             min={1}
             onChange={(event) => {
               setInviteId(event.currentTarget.value)
               setInviteTouched(true)
             }}
-            placeholder="예: 42"
+            placeholder={t('managerOrganizationPage.t36')}
             required
             type="number"
             value={inviteId}
           />
           {!inviteIdValid && !inviteInputError ? (
             <p className="text-sm font-medium text-[var(--color-text-tertiary)]">
-              인플루언서 프로필의 회원번호를 입력하면 보낼 수 있어요.
+              {t('managerOrganizationPage.t37')}
             </p>
           ) : null}
           {inviteServerError ? (
@@ -621,14 +620,14 @@ export function ManagerOrganizationPage() {
       </Dialog>
 
       <Dialog
-        description="진행 중이거나 예정된 팬미팅 담당에서 제외됩니다. 기록은 남으며 다시 초대할 수 있습니다."
+        description={t('managerOrganizationPage.t38')}
         footer={
           <>
             <Button disabled={removing} onClick={() => setRemoveTarget(undefined)} variant="secondary">
-              취소
+              {t('managerOrganizationPage.t39')}
             </Button>
             <Button loading={removing} onClick={() => void handleRemove()} variant="danger">
-              소속 해제
+              {t('managerOrganizationPage.t40')}
             </Button>
           </>
         }
@@ -639,7 +638,7 @@ export function ManagerOrganizationPage() {
         title={`${removeTarget?.nickname ?? '구성원'} 님의 소속을 해제할까요?`}
       >
         {removeError ? (
-          <AlertBanner title="소속 해제 실패" variant="error">
+          <AlertBanner title={t('managerOrganizationPage.t41')} variant="error">
             {removeError}
           </AlertBanner>
         ) : null}

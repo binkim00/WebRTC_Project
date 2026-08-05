@@ -1,5 +1,6 @@
 import { Dialog } from '../feedback'
 import { Button } from '../ui/Button'
+import { useTranslation } from '../../i18n'
 
 type EndCallDialogProps = {
   open: boolean
@@ -21,6 +22,7 @@ export function EndCallDialog({
   onConfirm,
   onLeaveRoom,
 }: EndCallDialogProps) {
+  const { t } = useTranslation()
   const isHostMode = Boolean(onLeaveRoom)
 
   return (
@@ -33,11 +35,11 @@ export function EndCallDialog({
       footer={
         <>
           <Button onClick={() => onOpenChange(false)} variant="ghost">
-            계속 통화
+            {t('endCallDialog.t1')}
           </Button>
           {isHostMode ? (
             <Button onClick={onLeaveRoom} variant="secondary">
-              진행 종료하고 나가기
+              {t('endCallDialog.t2')}
             </Button>
           ) : null}
           <Button onClick={onConfirm} variant="danger">

@@ -62,6 +62,7 @@ import {
   toErrorMessage,
   type MeetingDetailTab,
 } from './meetingLifecycle'
+import { useTranslation } from '../../i18n'
 
 /**
  * 위험한 테스트 제어는 개발 서버에서도 명시적으로 켠 경우에만 노출한다.
@@ -340,6 +341,7 @@ function toSettingsForm(detail: PublicFanMeetingDetail): SettingsForm {
  * 액션만 노출해 잘못된 전환 요청을 사전에 막는다.
  */
 export function ManagerMeetingDetailPage() {
+  const { t } = useTranslation()
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
   const isSolo = getAuthSession()?.role === 'SOLO_INFLUENCER'
   const meetingListPath = isSolo ? '/influencer/fan-meetings' : '/manager/fan-meetings'
@@ -507,7 +509,7 @@ export function ManagerMeetingDetailPage() {
   if (loading && !detail) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
-        <Spinner label="팬미팅 정보를 불러오는 중" />
+        <Spinner label={t('managerMeetingDetailPage.t1')} />
       </div>
     )
   }
@@ -516,9 +518,9 @@ export function ManagerMeetingDetailPage() {
     return (
       <div className="grid gap-5 pb-10">
         <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold" to={meetingListPath}>
-          ← 팬미팅 목록으로
+          {t('managerMeetingDetailPage.t2')}
         </Link>
-        <AlertBanner title="팬미팅 조회 실패" variant="error">
+        <AlertBanner title={t('managerMeetingDetailPage.t3')} variant="error">
           {loadError ?? '팬미팅 정보를 찾을 수 없습니다.'}
         </AlertBanner>
       </div>
@@ -535,7 +537,7 @@ export function ManagerMeetingDetailPage() {
           className="inline-flex w-fit text-sm font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
           to={meetingListPath}
         >
-          ← 팬미팅 목록으로
+          {t('managerMeetingDetailPage.t4')}
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <span className={`text-sm font-extrabold ${meetingStatusTextClass(status)}`}>
@@ -544,18 +546,18 @@ export function ManagerMeetingDetailPage() {
           <h1 className="text-3xl font-black tracking-[-0.05em]">{detail.meeting.title}</h1>
         </div>
         <p className="text-[var(--color-text-secondary)]">
-          {detail.influencer.name} · 예정 {formatDateTime(detail.meeting.scheduledStartAt)}
+          {detail.influencer.name} {t('managerMeetingDetailPage.t5')} {formatDateTime(detail.meeting.scheduledStartAt)}
         </p>
       </header>
 
-      {error ? <AlertBanner title="요청 실패" variant="error">{error}</AlertBanner> : null}
+      {error ? <AlertBanner title={t('managerMeetingDetailPage.t6')} variant="error">{error}</AlertBanner> : null}
       {message ? (
-        <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 완료" variant="success">
+        <AlertBanner onDismiss={() => setMessage(undefined)} title={t('managerMeetingDetailPage.t7')} variant="success">
           {message}
         </AlertBanner>
       ) : null}
 
-      <nav className="flex flex-wrap gap-1 border-b border-[var(--color-divider)]" aria-label="팬미팅 관리 탭">
+      <nav className="flex flex-wrap gap-1 border-b border-[var(--color-divider)]" aria-label={t('managerMeetingDetailPage.t8')}>
         {TABS.map((item) => (
           <button
             aria-current={tab === item.id ? 'page' : undefined}
@@ -636,7 +638,7 @@ export function ManagerMeetingDetailPage() {
               onClick={() => setPendingAction(undefined)}
               variant="outline"
             >
-              돌아가기
+              {t('managerMeetingDetailPage.t9')}
             </Button>
             <Button
               disabled={busy}
@@ -656,7 +658,7 @@ export function ManagerMeetingDetailPage() {
       >
         {busy ? (
           <p className="text-sm font-medium text-[var(--color-text-secondary)]" role="status">
-            요청을 처리하는 동안 창을 닫을 수 없습니다.
+            {t('managerMeetingDetailPage.t10')}
           </p>
         ) : null}
       </Dialog>
@@ -686,6 +688,7 @@ function OverviewPanel({
   solo: boolean
   onAction: (action: MeetingOperationAction) => void
 }) {
+  const { t } = useTranslation()
   const { meeting } = detail
   const encodedId = encodeURIComponent(meetingId)
   const primaryActions: { action: MeetingOperationAction; label: string }[] = []
@@ -751,9 +754,9 @@ function OverviewPanel({
       <section aria-labelledby="meeting-actions-title" className="border-t border-[var(--color-divider)] py-6">
         <div className="flex flex-col items-start justify-between gap-5 md:flex-row">
           <div className="min-w-0">
-            <h2 className="text-lg font-extrabold" id="meeting-actions-title">운영 액션</h2>
+            <h2 className="text-lg font-extrabold" id="meeting-actions-title">{t('managerMeetingDetailPage.t11')}</h2>
             <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-              지금 단계에서 할 수 있는 작업만 보여드립니다.
+              {t('managerMeetingDetailPage.t12')}
             </p>
             <p className="mt-4 text-sm font-semibold leading-6 text-[var(--color-text-body)]" id="operation-action-note">
               {actions.startBlockedReason ?? actionNote}
@@ -786,7 +789,7 @@ function OverviewPanel({
                 title={unavailableReason}
                 variant="outline"
               >
-                취소
+                {t('managerMeetingDetailPage.t13')}
               </Button>
             )}
           </div>
@@ -794,14 +797,14 @@ function OverviewPanel({
       </section>
 
       <section aria-labelledby="meeting-flow-title" className="border-t border-[var(--color-divider)] py-6">
-        <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">진행 현황</p>
-        <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-flow-title">팬미팅 흐름</h2>
+        <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">{t('managerMeetingDetailPage.t14')}</p>
+        <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-flow-title">{t('managerMeetingDetailPage.t15')}</h2>
         <ol className="mt-5 border-y border-[var(--color-divider)]">
             <FlowStep
               current={stageIndex === -1}
               done={stageIndex >= 0}
-              description="공개하면 팬이 팬미팅 정보와 응모 안내를 볼 수 있습니다."
-              title="1. 팬미팅 공개"
+              description={t('managerMeetingDetailPage.t16')}
+              title={t('managerMeetingDetailPage.t17')}
             />
             <FlowStep
               current={stageIndex === 0}
@@ -811,39 +814,39 @@ function OverviewPanel({
                   ? `응모 기간 ${formatDateTime(meeting.application.startAt)} ~ ${formatDateTime(meeting.application.endAt)} · 모집 ${meeting.application.capacity}명`
                   : '이 팬미팅은 응모를 사용하지 않습니다.'
               }
-              title="2. 팬 응모 접수"
+              title={t('managerMeetingDetailPage.t18')}
             />
             <FlowStep
               current={stageIndex === 1}
               done={stageIndex >= 2}
               description={`추첨하면 당첨자가 참가자와 대기열로 바로 등록됩니다. 현재 확정 참가자 ${participantCount}명.`}
-              title="3. 당첨자 추첨"
+              title={t('managerMeetingDetailPage.t19')}
             />
             <FlowStep
               current={stageIndex === 2}
               done={stageIndex >= 3}
-              description="결과를 발표하면 응모자 전원에게 알림이 가고 팬미팅이 시작 대기 상태가 됩니다."
-              title="4. 결과 발표"
+              description={t('managerMeetingDetailPage.t20')}
+              title={t('managerMeetingDetailPage.t21')}
             />
             <FlowStep
               current={stageIndex === 3}
               done={stageIndex >= 4}
               description={`대기열 개방 ${formatDateTime(meeting.operation.queueOpenAt)} · 1인 통화 ${formatCallDuration(meeting.operation.callDurationSec)}`}
-              title="5. 팬미팅 진행"
+              title={t('managerMeetingDetailPage.t22')}
             />
         </ol>
       </section>
 
       <section aria-labelledby="meeting-links-title" className="border-t border-[var(--color-divider)] py-6">
-        <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">바로 가기</p>
-        <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-links-title">연결된 관리 화면</h2>
+        <p className="text-xs font-extrabold text-[var(--color-primary-coral)]">{t('managerMeetingDetailPage.t23')}</p>
+        <h2 className="mt-3 text-xl font-extrabold tracking-[-0.032em]" id="meeting-links-title">{t('managerMeetingDetailPage.t24')}</h2>
         <div className="mt-5 grid gap-x-5 sm:grid-cols-2">
-          <QuickLink label="참가 팬" to={`/manager/fan-meetings/${encodedId}/fans`} />
-          <QuickLink label="공지 관리" to={`/manager/fan-meetings/${encodedId}/notices`} />
+          <QuickLink label={t('managerMeetingDetailPage.t25')} to={`/manager/fan-meetings/${encodedId}/fans`} />
+          <QuickLink label={t('managerMeetingDetailPage.t26')} to={`/manager/fan-meetings/${encodedId}/notices`} />
           {!solo ? (
-            <QuickLink label="실시간 운영 모니터" to={`/manager/fan-meetings/${encodedId}/monitor`} />
+            <QuickLink label={t('managerMeetingDetailPage.t27')} to={`/manager/fan-meetings/${encodedId}/monitor`} />
           ) : null}
-          <QuickLink label="결과 통계" to={`/manager/fan-meetings/${encodedId}/statistics`} />
+          <QuickLink label={t('managerMeetingDetailPage.t28')} to={`/manager/fan-meetings/${encodedId}/statistics`} />
         </div>
       </section>
     </div>
@@ -916,6 +919,7 @@ function SettingsPanel({
   actions: ReturnType<typeof getAvailableActions>
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<SettingsForm>(() => toSettingsForm(detail))
   const [dirty, setDirty] = useState<Set<SettingsField>>(new Set())
   const [saving, setSaving] = useState(false)
@@ -1044,7 +1048,7 @@ function SettingsPanel({
   return (
     <form className="grid gap-5" onSubmit={save}>
       {basicLocked ? (
-        <AlertBanner title="수정할 수 없는 항목이 있습니다" variant="info">
+        <AlertBanner title={t('managerMeetingDetailPage.t29')} variant="info">
           {actions.applicationStarted
             ? '응모가 시작되어 기본 정보·응모 설정·대기열 설정은 수정할 수 없습니다. 재입장 가능 시간과 다시 호출 횟수만 변경할 수 있습니다.'
             : '진행이 시작되었거나 종료된 팬미팅은 수정할 수 없습니다.'}
@@ -1053,28 +1057,28 @@ function SettingsPanel({
 
       <Card>
         <CardHeader>
-          <Badge variant="primary">기본 정보</Badge>
-          <CardTitle as="h2" className="mt-3">팬에게 공개되는 정보</CardTitle>
+          <Badge variant="primary">{t('managerMeetingDetailPage.t30')}</Badge>
+          <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t31')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
           <TextField
             containerClassName="sm:col-span-2"
             disabled={basicLocked}
-            label="팬미팅 제목"
+            label={t('managerMeetingDetailPage.t32')}
             maxLength={200}
             onChange={(event) => setField('title', event.target.value)}
             value={form.title}
           />
           <TextField
             disabled={basicLocked}
-            label="팬미팅 시작 일시"
+            label={t('managerMeetingDetailPage.t33')}
             onChange={(event) => setField('scheduledStartAt', event.target.value)}
             type="datetime-local"
             value={form.scheduledStartAt}
           />
           <TextField
             disabled={basicLocked}
-            label="대표 이미지 주소"
+            label={t('managerMeetingDetailPage.t34')}
             maxLength={2048}
             onChange={(event) => setField('coverImageUrl', event.target.value)}
             placeholder="https://example.com/cover.jpg"
@@ -1084,9 +1088,9 @@ function SettingsPanel({
           <Textarea
             containerClassName="sm:col-span-2"
             disabled={basicLocked}
-            label="상세 소개"
+            label={t('managerMeetingDetailPage.t35')}
             onChange={(event) => setField('description', event.target.value)}
-            placeholder="팬에게 보여 줄 팬미팅 소개와 응모 안내를 입력해 주세요."
+            placeholder={t('managerMeetingDetailPage.t36')}
             rows={6}
             value={form.description}
           />
@@ -1095,22 +1099,22 @@ function SettingsPanel({
 
       <Card>
         <CardHeader>
-          <Badge variant="primary">응모 설정</Badge>
-          <CardTitle as="h2" className="mt-3">응모 기간과 모집 인원</CardTitle>
+          <Badge variant="primary">{t('managerMeetingDetailPage.t37')}</Badge>
+          <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t38')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5">
           <Checkbox
             checked={form.applicationEnabled}
-            description="응모 진행 여부는 팬미팅을 만들 때 정해집니다. 지금은 변경할 수 없습니다."
+            description={t('managerMeetingDetailPage.t39')}
             disabled
-            label="팬 응모를 진행합니다."
+            label={t('managerMeetingDetailPage.t40')}
             readOnly
           />
           {form.applicationEnabled ? (
             <div className="grid gap-5 sm:grid-cols-2">
               <TextField
                 disabled={basicLocked}
-                label="응모 시작 일시"
+                label={t('managerMeetingDetailPage.t41')}
                 onChange={(event) => setField('applicationStartAt', event.target.value)}
                 type="datetime-local"
                 value={form.applicationStartAt}
@@ -1118,7 +1122,7 @@ function SettingsPanel({
               <TextField
                 disabled={basicLocked}
                 error={scheduleErrors.find((item) => item.startsWith('응모 마감'))}
-                label="응모 마감 일시"
+                label={t('managerMeetingDetailPage.t42')}
                 onChange={(event) => setField('applicationEndAt', event.target.value)}
                 type="datetime-local"
                 value={form.applicationEndAt}
@@ -1126,14 +1130,14 @@ function SettingsPanel({
               <TextField
                 disabled={basicLocked}
                 error={scheduleErrors.find((item) => item.startsWith('결과 발표'))}
-                label="결과 발표 일시"
+                label={t('managerMeetingDetailPage.t43')}
                 onChange={(event) => setField('resultAnnouncementAt', event.target.value)}
                 type="datetime-local"
                 value={form.resultAnnouncementAt}
               />
               <TextField
                 disabled={basicLocked}
-                label="모집 인원"
+                label={t('managerMeetingDetailPage.t44')}
                 min={1}
                 onChange={(event) => setField('capacity', Number(event.target.value))}
                 type="number"
@@ -1146,24 +1150,24 @@ function SettingsPanel({
 
       <Card>
         <CardHeader>
-          <Badge variant="primary">운영 설정</Badge>
-          <CardTitle as="h2" className="mt-3">대기열과 영상통화 조건</CardTitle>
+          <Badge variant="primary">{t('managerMeetingDetailPage.t45')}</Badge>
+          <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t46')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
           <TextField
             disabled={operationLocked}
             error={scheduleErrors.find((item) => item.startsWith('대기열 오픈'))}
-            label="대기열 오픈 일시"
+            label={t('managerMeetingDetailPage.t47')}
             onChange={(event) => setField('queueOpenAt', event.target.value)}
             type="datetime-local"
             value={form.queueOpenAt}
           />
           <TextField
             disabled={operationLocked}
-            endAdornment={<span className="pr-3 text-sm text-[var(--color-text-secondary)]">분</span>}
+            endAdornment={<span className="pr-3 text-sm text-[var(--color-text-secondary)]">{t('managerMeetingDetailPage.t48')}</span>}
             error={callDurationError}
             helperText={`${CALL_DURATION_MIN_MINUTES}~${CALL_DURATION_MAX_MINUTES}분 사이로 입력합니다.`}
-            label="1인 통화 시간"
+            label={t('managerMeetingDetailPage.t49')}
             max={CALL_DURATION_MAX_MINUTES}
             min={CALL_DURATION_MIN_MINUTES}
             step={1}
@@ -1180,13 +1184,13 @@ function SettingsPanel({
             <Checkbox
               checked={form.recordingEnabled}
               disabled={operationLocked}
-              label="통화 녹화를 사용합니다."
+              label={t('managerMeetingDetailPage.t50')}
               onChange={(event) => setField('recordingEnabled', event.target.checked)}
             />
             <Checkbox
               checked={form.translationEnabled}
               disabled={operationLocked}
-              label="실시간 번역을 사용합니다."
+              label={t('managerMeetingDetailPage.t51')}
               onChange={(event) => setField('translationEnabled', event.target.checked)}
             />
           </div>
@@ -1195,10 +1199,10 @@ function SettingsPanel({
 
       <Card>
         <CardHeader>
-          <Badge variant="primary">연결 설정</Badge>
-          <CardTitle as="h2" className="mt-3">연결 및 재입장</CardTitle>
+          <Badge variant="primary">{t('managerMeetingDetailPage.t52')}</Badge>
+          <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t53')}</CardTitle>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            연결이 끊기거나 입장 요청에 응답하지 않은 팬의 처리 기준을 설정합니다.
+            {t('managerMeetingDetailPage.t54')}
           </p>
         </CardHeader>
         <CardContent className="grid items-start gap-5 sm:grid-cols-2">
@@ -1207,11 +1211,11 @@ function SettingsPanel({
             disabled={!actions.canEditPolicy}
             endAdornment={
               <span className="whitespace-nowrap px-3 text-sm text-[var(--color-text-muted)]">
-                초 동안 재입장 가능
+                {t('managerMeetingDetailPage.t55')}
               </span>
             }
-            helperText="통화 연결이 끊긴 팬이 다시 입장할 수 있는 시간을 설정합니다."
-            label="연결이 끊긴 후 재입장 가능 시간"
+            helperText={t('managerMeetingDetailPage.t56')}
+            label={t('managerMeetingDetailPage.t57')}
             min={0}
             onChange={(event) => setField('reconnectGraceSec', Number(event.target.value))}
             step={1}
@@ -1223,11 +1227,11 @@ function SettingsPanel({
             disabled={!actions.canEditPolicy}
             endAdornment={
               <span className="whitespace-nowrap px-3 text-sm text-[var(--color-text-muted)]">
-                회까지 다시 호출
+                {t('managerMeetingDetailPage.t58')}
               </span>
             }
-            helperText="입장 요청에 응답하지 않은 팬을 다시 호출할 수 있는 최대 횟수입니다."
-            label="응답 없는 팬 다시 호출"
+            helperText={t('managerMeetingDetailPage.t59')}
+            label={t('managerMeetingDetailPage.t60')}
             min={0}
             onChange={(event) => setField('maxRecallCount', Number(event.target.value))}
             step={1}
@@ -1237,9 +1241,9 @@ function SettingsPanel({
         </CardContent>
       </Card>
 
-      {error ? <AlertBanner title="저장 실패" variant="error">{error}</AlertBanner> : null}
+      {error ? <AlertBanner title={t('managerMeetingDetailPage.t61')} variant="error">{error}</AlertBanner> : null}
       {message ? (
-        <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 결과" variant="success">
+        <AlertBanner onDismiss={() => setMessage(undefined)} title={t('managerMeetingDetailPage.t62')} variant="success">
           {message}
         </AlertBanner>
       ) : null}
@@ -1252,7 +1256,7 @@ function SettingsPanel({
             title={scheduleErrors.length > 0 ? scheduleErrors.join(' ') : undefined}
             type="submit"
           >
-            변경 내용 저장
+            {t('managerMeetingDetailPage.t63')}
           </Button>
         </div>
       ) : null}
@@ -1340,6 +1344,7 @@ function TestControlPanel({
   detail: PublicFanMeetingDetail
   onApplied: () => void
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<TestControlForm>(() => toTestControlForm(detail))
   // 상태만 확인하려는 테스트에서 기존 행사 일정을 실수로 덮어쓰지 않도록 기본값은 꺼 둔다.
   const [autoSchedule, setAutoSchedule] = useState(false)
@@ -1407,19 +1412,18 @@ function TestControlPanel({
 
   return (
     <form className="grid gap-5" onSubmit={apply}>
-      <AlertBanner title="시연·테스트 전용 기능입니다" variant="warning">
-        상태 전환 규칙과 일정 검증을 모두 건너뛰고 값을 그대로 덮어씁니다. 실제 운영에서는 개요 탭의
-        발행·시작·종료 버튼을 사용해 주세요.
+      <AlertBanner title={t('managerMeetingDetailPage.t64')} variant="warning">
+        {t('managerMeetingDetailPage.t65')}
       </AlertBanner>
 
       <Card>
         <CardHeader>
-          <Badge variant="warning">테스트 제어</Badge>
-          <CardTitle as="h2" className="mt-3">상태·일정 강제 변경</CardTitle>
+          <Badge variant="warning">{t('managerMeetingDetailPage.t66')}</Badge>
+          <CardTitle as="h2" className="mt-3">{t('managerMeetingDetailPage.t67')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
           <Select
-            label="팬미팅 상태"
+            label={t('managerMeetingDetailPage.t68')}
             onChange={(event) => changeStatus(event.target.value as FanMeetingStatus)}
             options={TEST_CONTROL_STATUS_OPTIONS.map((option) => ({
               value: option.value,
@@ -1430,41 +1434,41 @@ function TestControlPanel({
           <div className="grid content-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-4 py-3">
             <Checkbox
               checked={autoSchedule}
-              label="상태에 맞춰 일시 자동 조정"
+              label={t('managerMeetingDetailPage.t69')}
               onChange={(event) => changeAutoSchedule(event.target.checked)}
             />
           </div>
           <TextField
             disabled={autoSchedule}
-            label="팬미팅 시작 일시"
+            label={t('managerMeetingDetailPage.t70')}
             onChange={(event) => setField('scheduledStartAt', event.target.value)}
             type="datetime-local"
             value={form.scheduledStartAt}
           />
           <TextField
             disabled={autoSchedule}
-            label="응모 시작 일시"
+            label={t('managerMeetingDetailPage.t71')}
             onChange={(event) => setField('applicationOpenAt', event.target.value)}
             type="datetime-local"
             value={form.applicationOpenAt}
           />
           <TextField
             disabled={autoSchedule}
-            label="응모 종료 일시"
+            label={t('managerMeetingDetailPage.t72')}
             onChange={(event) => setField('applicationCloseAt', event.target.value)}
             type="datetime-local"
             value={form.applicationCloseAt}
           />
           <TextField
             disabled={autoSchedule}
-            label="결과 발표 일시"
+            label={t('managerMeetingDetailPage.t73')}
             onChange={(event) => setField('resultAnnouncementAt', event.target.value)}
             type="datetime-local"
             value={form.resultAnnouncementAt}
           />
           <TextField
             disabled={autoSchedule}
-            label="대기실 오픈 일시"
+            label={t('managerMeetingDetailPage.t74')}
             onChange={(event) => setField('waitingRoomOpenAt', event.target.value)}
             type="datetime-local"
             value={form.waitingRoomOpenAt}
@@ -1477,16 +1481,16 @@ function TestControlPanel({
         </CardContent>
       </Card>
 
-      {error ? <AlertBanner title="실행 실패" variant="error">{error}</AlertBanner> : null}
+      {error ? <AlertBanner title={t('managerMeetingDetailPage.t75')} variant="error">{error}</AlertBanner> : null}
       {message ? (
-        <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 완료" variant="success">
+        <AlertBanner onDismiss={() => setMessage(undefined)} title={t('managerMeetingDetailPage.t76')} variant="success">
           {message}
         </AlertBanner>
       ) : null}
 
       <div className="flex justify-end">
         <Button loading={saving} type="submit">
-          강제 변경 실행
+          {t('managerMeetingDetailPage.t77')}
         </Button>
       </div>
     </form>

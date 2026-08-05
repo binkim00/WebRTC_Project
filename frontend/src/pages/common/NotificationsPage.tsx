@@ -19,6 +19,7 @@ import {
   Spinner,
   type BadgeVariant,
 } from '../../components'
+import { useTranslation } from '../../i18n'
 
 const PAGE_SIZE = 10
 
@@ -68,6 +69,7 @@ function formatDateTime(iso: string): string {
 }
 
 export function NotificationsPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [session] = useState(() => getAuthSession())
   const [unreadOnly, setUnreadOnly] = useState(false)
@@ -154,13 +156,13 @@ export function NotificationsPage() {
   if (!session) {
     return (
       <div className="mx-auto grid w-full max-w-4xl gap-6">
-        <h1 className="text-4xl font-black tracking-[-0.045em]">알림</h1>
-        <AlertBanner title="로그인이 필요합니다" variant="warning">
-          알림을 확인하려면{' '}
+        <h1 className="text-4xl font-black tracking-[-0.045em]">{t('notificationsPage.t1')}</h1>
+        <AlertBanner title={t('notificationsPage.t2')} variant="warning">
+          {t('notificationsPage.t3')}{' '}
           <Link className="font-semibold underline" to="/login">
-            로그인
+            {t('notificationsPage.t4')}
           </Link>
-          해 주세요.
+          {t('notificationsPage.t5')}
         </AlertBanner>
       </div>
     )
@@ -173,9 +175,9 @@ export function NotificationsPage() {
     <div className="mx-auto grid w-full max-w-4xl gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black tracking-[-0.045em]">알림</h1>
+          <h1 className="text-4xl font-black tracking-[-0.045em]">{t('notificationsPage.t6')}</h1>
           <p className="mt-3 text-[var(--color-text-secondary)]">
-            응모 결과, 팬미팅 입장 안내 등 나에게 도착한 알림을 확인하세요.
+            {t('notificationsPage.t7')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -187,7 +189,7 @@ export function NotificationsPage() {
             size="sm"
             variant={unreadOnly ? 'secondary' : 'primary'}
           >
-            전체
+            {t('notificationsPage.t8')}
           </Button>
           <Button
             onClick={() => {
@@ -197,20 +199,20 @@ export function NotificationsPage() {
             size="sm"
             variant={unreadOnly ? 'primary' : 'secondary'}
           >
-            읽지 않음
+            {t('notificationsPage.t9')}
           </Button>
         </div>
       </header>
 
       {error ? (
-        <AlertBanner title="알림을 불러오지 못했습니다" variant="error">
+        <AlertBanner title={t('notificationsPage.t10')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <Spinner label="알림을 불러오는 중" />
+          <Spinner label={t('notificationsPage.t11')} />
         </div>
       ) : notifications.length === 0 ? (
         <EmptyState
@@ -219,7 +221,7 @@ export function NotificationsPage() {
               ? '읽지 않은 알림이 없습니다.'
               : '아직 도착한 알림이 없습니다.'
           }
-          title="알림이 없습니다"
+          title={t('notificationsPage.t12')}
         />
       ) : (
         <Card>
@@ -242,7 +244,7 @@ export function NotificationsPage() {
                         <Badge variant={typeContent.variant}>{typeContent.label}</Badge>
                         {isUnread ? (
                           <span
-                            aria-label="읽지 않은 알림"
+                            aria-label={t('notificationsPage.t13')}
                             className="size-2 rounded-full bg-[var(--color-primary-coral)]"
                           />
                         ) : null}

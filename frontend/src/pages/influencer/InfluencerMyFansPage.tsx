@@ -9,6 +9,7 @@ import {
   type ParticipantFanSummary,
 } from '../../api/fanMeetingParticipants'
 import { AlertBanner, Spinner } from '../../components'
+import { useTranslation } from '../../i18n'
 
 type SortKey = 'recent' | 'count'
 
@@ -30,6 +31,7 @@ function formatDate(value: string): string {
  * 팬이 참가한 회차 목록 자체는 API가 없어, 상세의 이력에는 실제 남긴 메모만 표시한다.
  */
 export function InfluencerMyFansPage() {
+  const { t } = useTranslation()
   const [fans, setFans] = useState<ParticipantFanSummary[]>()
   const [memoCounts, setMemoCounts] = useState<Record<string, number>>({})
   const [error, setError] = useState<string>()
@@ -151,26 +153,26 @@ export function InfluencerMyFansPage() {
   return (
     <div className="pb-10">
       <h1 className="text-[25px] font-black tracking-[-0.035em] text-[var(--color-text-primary)]">
-        내 팬
+        {t('influencerMyFansPage.t1')}
       </h1>
       <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-tertiary)]">
-        지금까지 팬미팅에서 만난 사람들과 남긴 메모입니다.
+        {t('influencerMyFansPage.t2')}
       </p>
 
       {error ? (
-        <AlertBanner className="mt-5" title="내 팬 정보를 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mt-5" title={t('influencerMyFansPage.t3')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
 
       {loading ? (
         <div className="flex justify-center py-20">
-          <Spinner label="내 팬 목록을 불러오는 중" />
+          <Spinner label={t('influencerMyFansPage.t4')} />
         </div>
       ) : (
         <>
           <section
-            aria-label="누적 기록"
+            aria-label={t('influencerMyFansPage.t5')}
             className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] lg:grid-cols-4"
           >
             {summary.map((cell, index) => (
@@ -195,7 +197,7 @@ export function InfluencerMyFansPage() {
               <form className="flex items-end gap-3" onSubmit={(event) => event.preventDefault()}>
                 <label className="min-w-0 flex-1">
                   <span className="block text-[13px] font-bold text-[var(--color-text-tertiary)]">
-                    팬 검색
+                    {t('influencerMyFansPage.t6')}
                   </span>
                   <input
                     className="mt-[7px] min-h-11 w-full rounded-lg border border-[var(--color-border-control)] bg-white px-3 text-[15px] font-semibold text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
@@ -203,29 +205,29 @@ export function InfluencerMyFansPage() {
                       setQuery(event.currentTarget.value)
                       setSelectedFanId(undefined)
                     }}
-                    placeholder="닉네임"
+                    placeholder={t('influencerMyFansPage.t7')}
                     type="search"
                     value={query}
                   />
                 </label>
                 <label className="w-40">
                   <span className="block text-[13px] font-bold text-[var(--color-text-tertiary)]">
-                    정렬
+                    {t('influencerMyFansPage.t8')}
                   </span>
                   <select
                     className="mt-[7px] min-h-11 w-full rounded-lg border border-[var(--color-border-control)] bg-white px-2.5 text-[15px] font-semibold text-[var(--color-text-primary)] outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
                     onChange={(event) => setSort(event.currentTarget.value as SortKey)}
                     value={sort}
                   >
-                    <option value="recent">최근 만남순</option>
-                    <option value="count">참여 횟수순</option>
+                    <option value="recent">{t('influencerMyFansPage.t9')}</option>
+                    <option value="count">{t('influencerMyFansPage.t10')}</option>
                   </select>
                 </label>
               </form>
 
               <div className="mt-[22px] flex items-baseline justify-between gap-4">
-                <h2 className="text-lg font-extrabold tracking-[-0.028em]">전체</h2>
-                <span className="text-[15px] font-extrabold tabular-nums">{list.length}명</span>
+                <h2 className="text-lg font-extrabold tracking-[-0.028em]">{t('influencerMyFansPage.t11')}</h2>
+                <span className="text-[15px] font-extrabold tabular-nums">{list.length}{t('influencerMyFansPage.t12')}</span>
               </div>
 
               {list.length === 0 ? (
@@ -268,16 +270,16 @@ export function InfluencerMyFansPage() {
                             </span>
                             {fan.participatedMeetingCount >= 2 ? (
                               <span className="whitespace-nowrap text-xs font-extrabold text-[var(--color-primary-coral)]">
-                                재참여
+                                {t('influencerMyFansPage.t13')}
                               </span>
                             ) : null}
                           </span>
                           <span className="mt-1 block text-sm font-medium text-[var(--color-text-tertiary)]">
-                            회원번호 {fan.fanId}
+                            {t('influencerMyFansPage.t14')} {fan.fanId}
                           </span>
                         </span>
                         <span className="text-[15px] font-bold tabular-nums text-[var(--color-text-primary)] max-sm:hidden">
-                          {fan.participatedMeetingCount}회 참여
+                          {fan.participatedMeetingCount}{t('influencerMyFansPage.t15')}
                         </span>
                         <span
                           className={`whitespace-nowrap text-sm font-bold ${memoCount ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
@@ -296,7 +298,7 @@ export function InfluencerMyFansPage() {
             </div>
 
             <aside
-              aria-label="팬 상세"
+              aria-label={t('influencerMyFansPage.t16')}
               className="min-w-0 rounded-[10px] border border-[var(--color-divider)] p-[22px]"
             >
               {selected ? (
@@ -321,7 +323,7 @@ export function InfluencerMyFansPage() {
                         {selected.nickname}
                       </h2>
                       <p className="mt-1 text-[15px] font-medium text-[var(--color-text-tertiary)]">
-                        회원번호 {selected.fanId}
+                        {t('influencerMyFansPage.t17')} {selected.fanId}
                       </p>
                     </div>
                   </div>
@@ -329,15 +331,15 @@ export function InfluencerMyFansPage() {
                   <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-[var(--color-divider)] pt-4">
                     <div>
                       <dt className="text-[13px] font-bold text-[var(--color-text-tertiary)]">
-                        참여 횟수
+                        {t('influencerMyFansPage.t18')}
                       </dt>
                       <dd className="mt-[5px] text-lg font-extrabold tabular-nums">
-                        {selected.participatedMeetingCount}회
+                        {selected.participatedMeetingCount}{t('influencerMyFansPage.t19')}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-[13px] font-bold text-[var(--color-text-tertiary)]">
-                        최근 만남
+                        {t('influencerMyFansPage.t20')}
                       </dt>
                       <dd className="mt-[5px] text-lg font-extrabold tabular-nums">
                         {formatDate(selected.lastParticipatedAt)}
@@ -348,7 +350,7 @@ export function InfluencerMyFansPage() {
                   <section className="mt-[22px] border-t border-[var(--color-divider)] pt-[18px]">
                     <div className="flex items-baseline justify-between gap-3">
                       <h3 className="text-[15px] font-extrabold text-[var(--color-text-primary)]">
-                        팬미팅별 메모
+                        {t('influencerMyFansPage.t21')}
                       </h3>
                       <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-[var(--color-text-tertiary)]">
                         {selectedMemos === undefined
@@ -357,12 +359,12 @@ export function InfluencerMyFansPage() {
                       </span>
                     </div>
                     <p className="mt-[7px] border-b border-[var(--color-divider)] pb-3.5 text-sm font-medium leading-[1.55] text-[var(--color-text-tertiary)]">
-                      팬미팅마다 메모를 하나씩 남길 수 있어요.
+                      {t('influencerMyFansPage.t22')}
                     </p>
 
                     {selectedMemos === undefined ? (
                       <div className="flex justify-center py-8">
-                        <Spinner label="메모를 불러오는 중" />
+                        <Spinner label={t('influencerMyFansPage.t23')} />
                       </div>
                     ) : selectedMemos.length > 0 ? (
                       <div className="mt-3.5 grid gap-2.5">
@@ -387,7 +389,7 @@ export function InfluencerMyFansPage() {
                       </div>
                     ) : (
                       <p className="mt-3.5 text-[15px] font-medium italic leading-[1.7] text-[var(--color-text-tertiary)]">
-                        아직 이 팬에게 남긴 메모가 없어요.
+                        {t('influencerMyFansPage.t24')}
                       </p>
                     )}
 
@@ -396,11 +398,11 @@ export function InfluencerMyFansPage() {
                         className="mj-font-label mt-4 flex min-h-[46px] items-center justify-center rounded-lg border border-[var(--color-border-control)] bg-white text-[15px] transition-colors hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
                         to={`/influencer/fan-meetings/${encodeURIComponent(latestMemo.meetingId)}/fans/${encodeURIComponent(selected.fanId)}/records?tab=memo`}
                       >
-                        메모 관리
+                        {t('influencerMyFansPage.t25')}
                       </Link>
                     ) : selectedMemos !== undefined ? (
                       <p className="mt-4 text-sm font-medium text-[var(--color-text-tertiary)]">
-                        메모는 팬미팅 진행 화면의 팬 기록에서 남길 수 있어요.
+                        {t('influencerMyFansPage.t26')}
                       </p>
                     ) : null}
                   </section>
@@ -410,7 +412,7 @@ export function InfluencerMyFansPage() {
                   className="py-10 text-center text-[15px] font-medium leading-[1.6] text-[var(--color-text-tertiary)]"
                   role="status"
                 >
-                  팬을 선택하면 참여 기록과 메모를 볼 수 있어요.
+                  {t('influencerMyFansPage.t27')}
                 </p>
               )}
             </aside>

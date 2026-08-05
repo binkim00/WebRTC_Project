@@ -24,6 +24,7 @@ import {
   Spinner,
   TextField,
 } from '../../components'
+import { useTranslation } from '../../i18n'
 
 type ParticipantView = FanMeetingParticipant & {
   queueEntry?: QueueEntry
@@ -276,6 +277,7 @@ export type InfluencerFanListPageProps = {
 }
 
 export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps = {}) {
+  const { t } = useTranslation()
   const { fanMeetingId } = useParams<{ fanMeetingId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -632,10 +634,10 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
             {meeting?.title ?? '팬미팅'}
           </p>
           <h1 className="mt-2 text-2xl font-black tracking-[-0.035em]">
-            참가 팬
+            {t('influencerFanListPage.t1')}
           </h1>
           <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
-            참가자의 진행 상태와 입장 준비 정보를 한눈에 확인하세요.
+            {t('influencerFanListPage.t2')}
           </p>
         </div>
         <p className="whitespace-nowrap text-sm font-bold text-[var(--color-text-secondary)]">
@@ -644,13 +646,13 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
       </header>
 
       {loadError ? (
-        <AlertBanner className="mt-6" title="팬 리스트를 불러오지 못했습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('influencerFanListPage.t3')} variant="error">
           {loadError}
         </AlertBanner>
       ) : null}
 
       <section
-        aria-label="팬미팅 요약"
+        aria-label={t('influencerFanListPage.t4')}
         className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] lg:grid-cols-4"
       >
         {[
@@ -691,13 +693,13 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
           >
             <TextField
               containerClassName="col-span-2 md:col-span-1"
-              label="팬 검색"
+              label={t('influencerFanListPage.t5')}
               onChange={(event) => setKeywordInput(event.currentTarget.value)}
-              placeholder="팬 이름 또는 닉네임"
+              placeholder={t('influencerFanListPage.t6')}
               value={keywordInput}
             />
             <Select
-              label="상태"
+              label={t('influencerFanListPage.t7')}
               onChange={(event) => {
                 setPage(1)
                 setStatusFilter(event.currentTarget.value)
@@ -707,7 +709,7 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
             />
             <Select
               disabled={!canUseFanRecords}
-              label="메모"
+              label={t('influencerFanListPage.t8')}
               onChange={(event) => {
                 setPage(1)
                 setMemoFilter(event.currentTarget.value)
@@ -716,7 +718,7 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
               value={memoFilter}
             />
             <Button className="whitespace-nowrap" type="submit">
-              검색
+              {t('influencerFanListPage.t9')}
             </Button>
           </form>
 
@@ -726,33 +728,33 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
             */}
           {!canUseFanRecords ? (
             <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
-              담당 인플루언서만 팬 메모를 확인할 수 있어 메모 필터를 쓸 수 없습니다.
+              {t('influencerFanListPage.t10')}
             </p>
           ) : null}
 
           <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="text-lg font-extrabold tracking-[-0.028em]">참가자 목록</h2>
+              <h2 className="text-lg font-extrabold tracking-[-0.028em]">{t('influencerFanListPage.t11')}</h2>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                팬미팅 참가자 {participantTotal}명 중 현재 페이지입니다.
+                {t('influencerFanListPage.t12')} {participantTotal}{t('influencerFanListPage.t13')}
               </p>
             </div>
             <p className="whitespace-nowrap text-sm font-extrabold">
-              {visibleViews.length}명 표시
+              {visibleViews.length}{t('influencerFanListPage.t14')}
             </p>
           </div>
 
           {loading ? (
             <div className="flex min-h-80 items-center justify-center">
-              <Spinner label="팬 목록을 불러오는 중" />
+              <Spinner label={t('influencerFanListPage.t15')} />
             </div>
           ) : memoFilter !== 'ALL' && memoScanning ? (
             // 메모 유무를 팬마다 확인하는 중이다. 절반만 확인된 목록을 결과로 보여 주지 않는다.
             <div className="flex min-h-80 items-center justify-center">
-              <Spinner label="메모 여부를 확인하는 중" />
+              <Spinner label={t('influencerFanListPage.t16')} />
             </div>
           ) : visibleViews.length ? (
-            <div className="mt-4" role="table" aria-label="참가자 목록">
+            <div className="mt-4" role="table" aria-label={t('influencerFanListPage.t17')}>
               <div
                 className="hidden grid-cols-[52px_minmax(0,1fr)_84px_96px_66px_74px] gap-3 border-b border-[var(--color-border-control)] pb-3 md:grid"
                 role="row"
@@ -836,11 +838,11 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
           ) : (
             <div className="mt-4 grid min-h-72 place-items-center border-t border-[var(--color-border-control)] px-5 text-center" role="status">
               <div>
-                <strong className="text-lg font-extrabold tracking-[-0.03em]">검색 결과가 없습니다</strong>
+                <strong className="text-lg font-extrabold tracking-[-0.03em]">{t('influencerFanListPage.t18')}</strong>
                 <span className="mt-2 block text-sm font-medium text-[var(--color-text-secondary)]">
-                  팬 이름과 필터 조건을 다시 확인해 주세요.
+                  {t('influencerFanListPage.t19')}
                 </span>
-                <Button className="mt-4" onClick={resetFilters} variant="outline">검색 초기화</Button>
+                <Button className="mt-4" onClick={resetFilters} variant="outline">{t('influencerFanListPage.t20')}</Button>
               </div>
             </div>
           )}
@@ -857,19 +859,19 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
         </div>
 
         <aside
-          aria-label="선택한 팬 요약"
+          aria-label={t('influencerFanListPage.t21')}
           className="min-w-0 rounded-[var(--radius-control)] border border-[var(--color-divider)] p-5"
         >
           {selectedParticipant ? (
             <>
-                <p className="text-xs font-bold text-[var(--color-text-secondary)]">선택한 팬 요약</p>
+                <p className="text-xs font-bold text-[var(--color-text-secondary)]">{t('influencerFanListPage.t22')}</p>
                 <div className="mt-2 flex items-baseline justify-between gap-4">
                   <div className="min-w-0">
                     <h2 className="truncate text-xl font-black tracking-[-0.032em]">
                       {selectedParticipant.nickname}
                     </h2>
                     <p className="mt-1 text-sm font-medium text-[var(--color-text-secondary)]">
-                      @{selectedParticipant.fanId} · {selectedParticipant.callOrder}번째
+                      @{selectedParticipant.fanId} · {selectedParticipant.callOrder}{t('influencerFanListPage.t23')}
                     </p>
                   </div>
                   <span className={`whitespace-nowrap text-sm font-extrabold ${queueStatusClass(selectedQueueStatus)}`}>
@@ -878,14 +880,14 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
                 </div>
 
                 <section className="mt-5 border-t border-[var(--color-divider)] pt-4">
-                  <h3 className="text-sm font-extrabold">최근 메모</h3>
+                  <h3 className="text-sm font-extrabold">{t('influencerFanListPage.t24')}</h3>
                   {!canUseFanRecords ? (
                     <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
-                      담당 인플루언서만 팬 메모를 확인할 수 있습니다.
+                      {t('influencerFanListPage.t25')}
                     </p>
                   ) : detailLoading ? (
                     <div className="mt-3">
-                      <Spinner label="팬 메모를 불러오는 중" />
+                      <Spinner label={t('influencerFanListPage.t26')} />
                     </div>
                   ) : recentMemo ? (
                     <>
@@ -893,23 +895,23 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
                         {recentMemo.content}
                       </p>
                       <button className="mt-3 min-h-11 font-bold hover:text-[var(--color-primary-coral)]" onClick={openMemo} type="button">
-                        메모 보기
+                        {t('influencerFanListPage.t27')}
                       </button>
                     </>
                   ) : (
                     <>
                       <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
-                        아직 작성된 메모가 없습니다.
+                        {t('influencerFanListPage.t28')}
                       </p>
                       <button className="mt-2 min-h-11 font-extrabold text-[var(--color-primary-coral)]" onClick={openMemo} type="button">
-                        메모 작성 →
+                        {t('influencerFanListPage.t29')}
                       </button>
                     </>
                   )}
                 </section>
 
                 <section className="mt-5 border-t border-[var(--color-divider)] pt-4">
-                  <h3 className="text-sm font-extrabold">장비 점검 상태</h3>
+                  <h3 className="text-sm font-extrabold">{t('influencerFanListPage.t30')}</h3>
                   <dl className="mt-3 grid gap-3">
                     {[
                       {
@@ -950,7 +952,7 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
                   </dl>
                   {equipmentWarning ? (
                     <p className="mt-4 rounded-[var(--radius-control)] bg-[var(--color-warning-soft)] px-3 py-2 text-sm font-semibold leading-6 text-[var(--color-warning)]" role="status">
-                      입장 준비가 완료되지 않았습니다. 해당 장비 상태를 확인해 주세요.
+                      {t('influencerFanListPage.t31')}
                     </p>
                   ) : null}
                 </section>

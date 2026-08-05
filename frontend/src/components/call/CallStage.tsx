@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 /** 화자 이름이 붙은 자막 한 줄이다. */
 export type CaptionLine = {
@@ -85,12 +86,13 @@ export function CallStage({
   onCaptionToggle,
   onLeave,
 }: CallStageProps) {
+  const { t } = useTranslation()
   const deviceButtonClass =
     'min-h-9 whitespace-nowrap rounded-md px-1.5 text-[13px] font-bold transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-60'
 
   return (
     <section
-      aria-label="영상통화 화면"
+      aria-label={t('callStage.t1')}
       className="relative overflow-hidden rounded-xl bg-[var(--color-surface-dark-media)] max-lg:min-h-[520px] lg:aspect-video"
     >
       <div className="absolute inset-0">{remoteVideo}</div>
@@ -135,7 +137,7 @@ export function CallStage({
               onClick={onMicrophoneToggle}
               type="button"
             >
-              마이크 {microphoneEnabled ? '정상' : '꺼짐'}
+              {t('callStage.t2')} {microphoneEnabled ? '정상' : '꺼짐'}
             </button>
             <button
               aria-label={`카메라 ${cameraEnabled ? '끄기' : '켜기'}`}
@@ -147,14 +149,14 @@ export function CallStage({
               onClick={onCameraToggle}
               type="button"
             >
-              카메라 {cameraEnabled ? '정상' : '꺼짐'}
+              {t('callStage.t3')} {cameraEnabled ? '정상' : '꺼짐'}
             </button>
             <button
               className="min-h-9 whitespace-nowrap rounded-md px-1.5 text-[13px] font-bold text-[var(--color-error-on-dark)] transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               onClick={onLeave}
               type="button"
             >
-              통화 종료
+              {t('callStage.t4')}
             </button>
           </p>
         </div>
@@ -192,7 +194,7 @@ export function CallStage({
         <div className="relative aspect-[4/3] w-full">{localVideo}</div>
         <figcaption className="absolute bottom-2 left-2 flex items-center gap-[7px] rounded-[5px] bg-[rgb(15_17_21/82%)] px-[9px] py-[5px]">
           <span className="text-xs font-extrabold text-white">{localParticipantLabel}</span>
-          <span className="text-xs font-bold text-[var(--color-success-on-dark)]">연결됨</span>
+          <span className="text-xs font-bold text-[var(--color-success-on-dark)]">{t('callStage.t5')}</span>
         </figcaption>
       </figure>
 
@@ -230,7 +232,7 @@ export function CallStage({
 
       {/* 자막 토글 */}
       <div className="absolute bottom-[18px] left-[18px] z-10 flex items-center gap-2.5 rounded-lg bg-[rgb(15_17_21/78%)] px-3 py-2">
-        <span className="text-sm font-bold text-white/90">자막</span>
+        <span className="text-sm font-bold text-white/90">{t('callStage.t6')}</span>
         <button
           aria-checked={captionEnabled}
           aria-label={`자막 ${captionEnabled ? '끄기' : '켜기'}`}
@@ -266,7 +268,7 @@ export function CallStage({
             </p>
             {overlay.showLink ? (
               <div
-                aria-label="연결을 준비하고 있습니다"
+                aria-label={t('callStage.t7')}
                 className="relative mx-auto mt-[22px] h-4 w-[220px]"
                 role="img"
               >

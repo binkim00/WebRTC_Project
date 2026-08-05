@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '../data-display'
 import { AlertBanner } from '../feedback'
+import { useTranslation } from '../../i18n'
 
 type ScreenPageProps = {
   screenId: string
@@ -17,23 +18,24 @@ type InvalidRouteStateProps = {
 }
 
 export function InvalidRouteState({ title, message }: InvalidRouteStateProps) {
+  const { t } = useTranslation()
   return (
     <Card className="overflow-hidden">
       <CardHeader className="bg-amber-50">
-        <Badge variant="warning">잘못된 라우트 상태</Badge>
+        <Badge variant="warning">{t('screenPage.t1')}</Badge>
         <CardTitle as="h1" className="mt-3 text-2xl">
           {title}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <AlertBanner title="주소를 확인해 주세요" variant="warning">
+        <AlertBanner title={t('screenPage.t2')} variant="warning">
           {message}
         </AlertBanner>
         <Link
           className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
           to="/"
         >
-          메인으로 이동
+          {t('screenPage.t3')}
         </Link>
       </CardContent>
     </Card>
@@ -47,6 +49,7 @@ export function ScreenPage({
   requiredParams = [],
   children,
 }: ScreenPageProps) {
+  const { t } = useTranslation()
   const params = useParams()
   const missingParam = requiredParams.find((paramName) => !params[paramName]?.trim())
 
@@ -54,7 +57,7 @@ export function ScreenPage({
     return (
       <InvalidRouteState
         message={`URL에 필요한 ${missingParam} 값이 없습니다. 이전 화면에서 올바른 식별자를 사용해 다시 이동해 주세요.`}
-        title="필수 URL 파라미터가 없습니다"
+        title={t('screenPage.t4')}
       />
     )
   }
@@ -68,7 +71,7 @@ export function ScreenPage({
       <CardHeader className="bg-gradient-to-br from-violet-50 to-white">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Badge variant="primary">{screenId}</Badge>
-          <Badge>라우팅 구현 화면</Badge>
+          <Badge>{t('screenPage.t5')}</Badge>
         </div>
         <CardTitle as="h1" className="mt-4 text-3xl tracking-tight">
           {title}
@@ -92,9 +95,8 @@ export function ScreenPage({
 
         {children}
 
-        <AlertBanner title="현재 구현 범위" variant="info">
-          현재 단계에서는 URL 연결과 공통 화면 구조를 제공합니다. 실제 데이터와 업무 기능은 API와
-          상세 디자인이 확정된 뒤 연결합니다.
+        <AlertBanner title={t('screenPage.t6')} variant="info">
+          {t('screenPage.t7')}
         </AlertBanner>
       </CardContent>
     </Card>

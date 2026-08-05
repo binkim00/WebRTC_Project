@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { I18nProvider } from '../../i18n'
 
 const mocks = vi.hoisted(() => ({
   getAuthSession: vi.fn(),
@@ -32,16 +33,21 @@ function page(size: number) {
   return { page: 0, size, totalElements: size, totalPages: 1, hasNext: false }
 }
 
+// 화면 문구가 사전에서 오므로 실제 사용처와 같이 I18nProvider 안에서 렌더링한다.
+// 한국어 문구로 요소를 찾는 검증이 있어 저장값을 ko로 고정해 브라우저 기본 언어에 흔들리지 않게 한다.
 function renderPage() {
+  window.localStorage.setItem('melly-locale', 'ko')
   return render(
-    <MemoryRouter initialEntries={['/influencer/fan-meetings/10/fans/fan-1/records']}>
-      <Routes>
-        <Route
-          element={<InfluencerFanRecordPage />}
-          path="/influencer/fan-meetings/:fanMeetingId/fans/:fanId/records"
-        />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={['/influencer/fan-meetings/10/fans/fan-1/records']}>
+        <Routes>
+          <Route
+            element={<InfluencerFanRecordPage />}
+            path="/influencer/fan-meetings/:fanMeetingId/fans/:fanId/records"
+          />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   )
 }
 

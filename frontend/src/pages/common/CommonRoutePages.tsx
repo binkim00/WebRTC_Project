@@ -23,6 +23,7 @@ import {
 } from '../../api/meetingManagement'
 import { AlertBanner, IconButton, Skeleton, Spinner } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { useTranslation } from '../../i18n'
 
 type FeaturedMeeting = {
   id: number
@@ -74,6 +75,7 @@ function formatSchedule(scheduledStartAt: string): string {
 }
 
 export function HomePage() {
+  const { t } = useTranslation()
   const [featuredMeetings, setFeaturedMeetings] = useState<FeaturedMeeting[]>()
   const [activeMeetingIndex, setActiveMeetingIndex] = useState(0)
 
@@ -121,17 +123,17 @@ export function HomePage() {
             MEETING × JELLY × MEMORY
           </p>
           <h1 className="mt-7 max-w-[580px] text-[46px] font-black leading-[1.18] tracking-[-0.055em] text-[var(--color-text-primary)] sm:text-[58px] lg:text-[60px]">
-            기다림은 설렘으로,
+            {t('commonRoutePages.t1')}
             <br />
-            만남은 기억으로.
+            {t('commonRoutePages.t2')}
           </h1>
           <p className="mt-7 text-lg text-[var(--color-text-secondary)]">
-            좋아하는 인플루언서와 단둘이 만나는 1:1 영상 팬미팅.
+            {t('commonRoutePages.t3')}
           </p>
         </div>
         <div className="relative flex min-h-[330px] items-center justify-center overflow-hidden lg:min-h-[440px]">
           <img
-            alt="서로 기대어 웃고 있는 코랄색과 보라색 젤리 캐릭터"
+            alt={t('commonRoutePages.t4')}
             className="h-full max-h-[510px] w-full object-cover object-center mix-blend-multiply"
             src={heroJellies}
           />
@@ -140,13 +142,13 @@ export function HomePage() {
 
       {featuredMeetings === undefined ? (
         <section className="flex justify-center pb-8">
-          <Spinner label="팬미팅 소식을 불러오는 중" />
+          <Spinner label={t('commonRoutePages.t5')} />
         </section>
       ) : !activeMeeting ? (
         <section className="rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border-control)] px-6 py-16 text-center">
-          <h2 className="font-bold">아직 소개할 팬미팅이 없어요</h2>
+          <h2 className="font-bold">{t('commonRoutePages.t6')}</h2>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            새로운 팬미팅이 공개되면 이곳에서 가장 먼저 알려드릴게요.
+            {t('commonRoutePages.t7')}
           </p>
         </section>
       ) : (
@@ -155,7 +157,7 @@ export function HomePage() {
           className="relative grid items-center gap-8 pb-8 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-12"
         >
           <IconButton
-            aria-label="이전 팬미팅"
+            aria-label={t('commonRoutePages.t8')}
             className="absolute left-0 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_10px_30px_rgb(35_38_47_/_12%)] lg:inline-flex"
             icon={<ArrowLeftIcon aria-hidden="true" size={22} weight="bold" />}
             onClick={() => moveMeeting(-1)}
@@ -176,17 +178,17 @@ export function HomePage() {
             <dl className="mt-8 grid gap-4 text-[15px] text-[var(--color-text-secondary)]">
               <div className="flex items-center gap-3">
                 <UserIcon aria-hidden="true" size={21} />
-                <dt className="sr-only">인플루언서</dt>
+                <dt className="sr-only">{t('commonRoutePages.t9')}</dt>
                 <dd>{activeMeeting.influencer}</dd>
               </div>
               <div className="flex items-center gap-3">
                 <CalendarBlankIcon aria-hidden="true" size={21} />
-                <dt className="sr-only">일정</dt>
+                <dt className="sr-only">{t('commonRoutePages.t10')}</dt>
                 <dd>{activeMeeting.schedule}</dd>
               </div>
               <div className="flex items-center gap-3 font-bold text-[var(--color-primary-coral)]">
                 <UsersThreeIcon aria-hidden="true" size={21} weight="fill" />
-                <dt className="sr-only">모집 상태</dt>
+                <dt className="sr-only">{t('commonRoutePages.t11')}</dt>
                 <dd>{activeMeeting.status}</dd>
               </div>
             </dl>
@@ -194,7 +196,7 @@ export function HomePage() {
               className="mt-8 inline-flex min-h-[var(--control-height)] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-transparent bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] py-2 text-sm font-semibold text-white shadow-[var(--shadow-control)] transition-colors hover:bg-[var(--color-primary-coral-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary-coral)]"
               to={`/fan/events/${activeMeeting.id}`}
             >
-              상세 보기
+              {t('commonRoutePages.t12')}
             </Link>
           </div>
 
@@ -205,7 +207,7 @@ export function HomePage() {
               src={activeMeeting.image}
             />
             <IconButton
-              aria-label="다음 팬미팅"
+              aria-label={t('commonRoutePages.t13')}
               className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/95 shadow-[0_10px_30px_rgb(35_38_47_/_14%)] lg:-right-0"
               icon={<ArrowRightIcon aria-hidden="true" size={22} weight="bold" />}
               onClick={() => moveMeeting(1)}
@@ -271,6 +273,7 @@ type StatisticsMetric = {
 }
 
 export function MeetingStatisticsPage() {
+  const { t } = useTranslation()
   const { fanMeetingId } = useParams()
   const authSession = getAuthSession()
   const authToken = authSession?.accessToken
@@ -344,8 +347,8 @@ export function MeetingStatisticsPage() {
   if (!fanMeetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 fanMeetingId 값이 없습니다. 이전 화면에서 올바른 팬미팅을 선택해 주세요."
-        title="필수 URL 파라미터가 없습니다"
+        message={t('commonRoutePages.t14')}
+        title={t('commonRoutePages.t15')}
       />
     )
   }
@@ -409,10 +412,10 @@ export function MeetingStatisticsPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
-          <p className="text-sm font-bold text-[var(--color-text-muted)]">종료된 팬미팅</p>
-          <h1 className="mt-[9px] text-[25px] font-black tracking-[-0.035em]">팬미팅 통계</h1>
+          <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('commonRoutePages.t16')}</p>
+          <h1 className="mt-[9px] text-[25px] font-black tracking-[-0.035em]">{t('commonRoutePages.t17')}</h1>
           <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
-            실제 1:1 영상통화 팬미팅의 핵심 운영 결과를 확인하세요.
+            {t('commonRoutePages.t18')}
           </p>
         </div>
         <p className="whitespace-nowrap text-sm font-bold text-[var(--color-text-muted)]">
@@ -421,17 +424,17 @@ export function MeetingStatisticsPage() {
       </div>
 
       {error ? (
-        <AlertBanner className="mt-6" title="팬미팅 통계를 확인할 수 없습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('commonRoutePages.t19')} variant="error">
           {error}
         </AlertBanner>
       ) : !loaded ? (
         <div className="flex justify-center py-24">
-          <Spinner label="팬미팅 통계를 불러오는 중" />
+          <Spinner label={t('commonRoutePages.t20')} />
         </div>
       ) : (
         <>
           <section
-            aria-label="팬미팅 정보"
+            aria-label={t('commonRoutePages.t21')}
             className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] sm:grid-cols-4"
           >
             {[
@@ -451,9 +454,9 @@ export function MeetingStatisticsPage() {
           </section>
 
           <div className="mt-8">
-            <h2 className="text-xl font-extrabold tracking-[-0.03em]">핵심 결과</h2>
+            <h2 className="text-xl font-extrabold tracking-[-0.03em]">{t('commonRoutePages.t22')}</h2>
             <p className="mt-1.5 text-[15px] font-medium text-[var(--color-text-muted)]">
-              완료된 세션을 기준으로 집계한 운영 결과입니다.
+              {t('commonRoutePages.t23')}
             </p>
           </div>
 
@@ -463,10 +466,10 @@ export function MeetingStatisticsPage() {
               role="status"
             >
               <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
-                집계할 수 있는 세션이 없습니다
+                {t('commonRoutePages.t24')}
               </strong>
               <span className="mt-[9px] max-w-[420px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
-                정상적으로 완료된 세션이 없어 핵심 결과 지표를 표시할 수 없습니다.
+                {t('commonRoutePages.t25')}
               </span>
             </div>
           ) : null}
@@ -477,10 +480,10 @@ export function MeetingStatisticsPage() {
               role="status"
             >
               <strong className="block text-base font-extrabold text-[var(--color-warning)]">
-                팬미팅 결과를 집계하고 있습니다
+                {t('commonRoutePages.t26')}
               </strong>
               <p className="mt-1.5 text-[15px] font-medium leading-[1.55] text-[var(--color-warning)]">
-                완료된 세션을 확인한 뒤 통계와 결과 파일을 준비합니다.
+                {t('commonRoutePages.t27')}
               </p>
             </div>
           ) : null}
@@ -523,11 +526,11 @@ export function MeetingStatisticsPage() {
           ) : null}
 
           <section
-            aria-label="팬미팅 결과"
+            aria-label={t('commonRoutePages.t28')}
             className="mt-[34px] flex flex-col items-stretch justify-between gap-4 border-t border-[var(--color-divider)] pt-[26px] sm:flex-row sm:items-end"
           >
             <div className="min-w-0">
-              <h2 className="text-lg font-extrabold tracking-[-0.028em]">팬미팅 결과 상세</h2>
+              <h2 className="text-lg font-extrabold tracking-[-0.028em]">{t('commonRoutePages.t29')}</h2>
               <p className="mt-1.5 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
                 {canOperateExport
                   ? '참가자별 상태를 확인하거나 운영 결과 파일을 준비할 수 있습니다.'
@@ -539,7 +542,7 @@ export function MeetingStatisticsPage() {
                 className="mj-font-emphasis inline-flex min-h-[50px] items-center whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
                 to={`/fan-meetings/${encodeURIComponent(fanMeetingId)}/fans`}
               >
-                팬 리스트 보기
+                {t('commonRoutePages.t30')}
               </Link>
               {canOperateExport ? (
                 <button

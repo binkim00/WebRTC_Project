@@ -15,12 +15,14 @@ import {
   Spinner,
   TextField,
 } from '../../components'
+import { useTranslation } from '../../i18n'
 
 /** 3열 그리드가 정확히 채워지도록 12개씩 끊어 받는다. */
 const PAGE_SIZE = 12
 
 /** 공개 인플루언서를 검색하고 상세로 이동하는 탐색 화면이다. 로그인 없이도 볼 수 있다. */
 export function FanInfluencerListPage() {
+  const { t } = useTranslation()
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
   const [influencers, setInfluencers] = useState<InfluencerSummaryResponse[]>([])
@@ -68,9 +70,9 @@ export function FanInfluencerListPage() {
   return (
     <div className="grid gap-6">
       <header className="grid gap-2">
-        <h1 className="text-3xl font-black tracking-[-0.04em]">인플루언서 탐색</h1>
+        <h1 className="text-3xl font-black tracking-[-0.04em]">{t('fanInfluencerListPage.t1')}</h1>
         <p className="text-sm text-[var(--color-text-secondary)]">
-          관심 있는 인플루언서를 찾고 예정된 팬미팅을 확인해 보세요.
+          {t('fanInfluencerListPage.t2')}
         </p>
       </header>
 
@@ -87,25 +89,25 @@ export function FanInfluencerListPage() {
                   size={18}
                 />
               }
-              label="검색"
+              label={t('fanInfluencerListPage.t3')}
               name="keyword"
-              placeholder="활동명 또는 소개"
+              placeholder={t('fanInfluencerListPage.t4')}
               type="search"
             />
-            <Button type="submit">검색</Button>
+            <Button type="submit">{t('fanInfluencerListPage.t5')}</Button>
           </form>
         </CardContent>
       </Card>
 
       {error ? (
-        <AlertBanner title="목록을 불러오지 못했습니다" variant="error">
+        <AlertBanner title={t('fanInfluencerListPage.t6')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
 
       {loading ? (
         <div className="flex min-h-[320px] items-center justify-center">
-          <Spinner label="인플루언서를 불러오는 중" size="lg" />
+          <Spinner label={t('fanInfluencerListPage.t7')} size="lg" />
         </div>
       ) : influencers.length === 0 ? (
         <EmptyState
@@ -114,7 +116,7 @@ export function FanInfluencerListPage() {
               ? '검색어와 일치하는 인플루언서가 없습니다. 다른 검색어를 입력해 보세요.'
               : '아직 공개된 인플루언서가 없습니다.'
           }
-          title="인플루언서를 찾을 수 없습니다"
+          title={t('fanInfluencerListPage.t8')}
         />
       ) : (
         <>
@@ -133,7 +135,7 @@ export function FanInfluencerListPage() {
                         <p className="text-lg font-extrabold">{influencer.influencerName}</p>
                         <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-secondary)]">
                           <UsersThree aria-hidden size={15} weight="duotone" />
-                          팔로워 {influencer.followerCount.toLocaleString('ko-KR')}명
+                          {t('fanInfluencerListPage.t9')} {influencer.followerCount.toLocaleString('ko-KR')}{t('fanInfluencerListPage.t10')}
                         </p>
                       </div>
                     </div>
@@ -146,7 +148,7 @@ export function FanInfluencerListPage() {
                       className="inline-flex items-center gap-1.5 text-sm font-bold text-[var(--color-primary-coral)]"
                       to={`/fan/influencers/${influencer.influencerId}`}
                     >
-                      프로필 보기
+                      {t('fanInfluencerListPage.t11')}
                       <ArrowRight aria-hidden size={15} weight="bold" />
                     </Link>
                   </CardContent>
