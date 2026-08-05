@@ -16,6 +16,8 @@ import {
 } from '../../api/pendingRecordings'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { AlertBanner, Button, Card, CardContent } from '../../components'
+// 카드 렌더링 코드는 이 화면에서만 쓰므로 공통 배럴을 거치지 않고 직접 가져온다.
+import { FanCardSection } from '../../components/fanCard/FanCardSection'
 import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 
@@ -40,6 +42,19 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / 1024 ** exponent).toFixed(exponent === 0 ? 0 : 1)}${units[exponent]}`
 }
 
+/**
+ * 기념 카드에 넣을 날짜 문구를 만든다.
+ *
+ * 통화 종료 시각을 알 수 없으면 카드를 만드는 날짜로 대체한다.
+ */
+function formatCardDate(iso: string | null | undefined): string {
+    const parsed = iso ? new Date(iso) : new Date()
+    const target = Number.isNaN(parsed.getTime()) ? new Date() : parsed
+    const pad = (value: number) => String(value).padStart(2, '0')
+
+    return `${target.getFullYear()}.${pad(target.getMonth() + 1)}.${pad(target.getDate())}`
+}
+
 /** 초 단위 재생 시간을 분:초 형식으로 바꾼다. */
 function formatDuration(seconds: number | null): string {
     if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return '-'
@@ -53,12 +68,16 @@ export function FanMeetingCompletePage() {
     const routeState = location.state as {
         meetingTitle?: string
         pendingRecordingSessionId?: string
+        /** 통화 화면이 넘겨 준 세션 식별자다. 기념 카드는 통화 세션 단위로 만든다. */
+        callSessionId?: string
     } | null
     const [session] = useState(() => getAuthSession())
     const [recording, setRecording] = useState<RecordingSummaryResponse | null>(null)
     const [detail, setDetail] = useState<RecordingDetailResponse>()
     const [playbackUrl, setPlaybackUrl] = useState<string>()
     const [recordingEnabled, setRecordingEnabled] = useState<boolean>()
+    const [influencerName, setInfluencerName] = useState<string>()
+    const [detailTitle, setDetailTitle] = useState<string>()
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState<string>()
     const [downloading, setDownloading] = useState(false)
@@ -130,6 +149,9 @@ export function FanMeetingCompletePage() {
         ])
             .then(async ([matched, meeting]) => {
                 setRecordingEnabled(meeting?.meeting.operation.recordingEnabled)
+                // 기념 카드에 넣을 이름과 제목이라 녹화 유무와 무관하게 보관한다.
+                setInfluencerName(meeting?.influencer.name)
+                setDetailTitle(meeting?.meeting.title)
                 setRecording(matched ?? null)
                 if (!matched) return
 
@@ -261,8 +283,16 @@ export function FanMeetingCompletePage() {
 
     // 상세를 받았으면 상세의 playable을 우선하고, 아직이면 목록 요약값을 쓴다.
     const isRecordingReady = Boolean(detail?.playable ?? recording?.playable)
-    const meetingTitle = recording?.meetingTitle ?? routeState?.meetingTitle ?? '팬미팅'
+    const meetingTitle = recording?.meetingTitle
+        ?? routeState?.meetingTitle
+        ?? detailTitle
+        ?? '팬미팅'
     const endedAt = recording?.completedAt
+
+    // 통화가 끝나면 대기열 응답에서 callSessionId가 사라지므로 통화 화면이 넘겨 준 값을 우선 쓰고,
+    // 새로고침 등으로 라우터 state가 없으면 녹화 정보에서 되찾는다.
+    const fanCardSessionId = routeState?.callSessionId
+        ?? (recording ? String(recording.callSessionId) : routeState?.pendingRecordingSessionId)
 
     let recordingTitle = '녹화 영상이 없습니다'
     let recordingDescription = recordingEnabled === false
@@ -455,6 +485,17 @@ export function FanMeetingCompletePage() {
                             </div>
                         </section>
                     )}
+                    {/* 기념 카드는 녹화와 무관하므로 녹화가 없거나 실패해도 제공한다. */}
+                    {session && fanCardSessionId ? (
+                        <FanCardSection
+                            authToken={session.accessToken}
+                            callSessionId={fanCardSessionId}
+                            dateLabel={formatCardDate(endedAt)}
+                            fanNickname={session.nickname}
+                            influencerName={influencerName ?? '인플루언서'}
+                            meetingTitle={meetingTitle}
+                        />
+                    ) : null}
                 </CardContent>
             </Card>
         </div>

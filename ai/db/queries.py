@@ -63,6 +63,7 @@ async def start_call_summary(pool, call_session_id: int) -> None:
                     status = 'GENERATING',
                     summary = NULL,
                     keywords = NULL,
+                    card_candidates = NULL,
                     completed_at = NULL,
                     failure_reason = NULL,
                     created_at = new.created_at
@@ -73,11 +74,14 @@ async def start_call_summary(pool, call_session_id: int) -> None:
 
 
 # 요약 생성 성공
+# card_candidates는 팬이 기념 카드 문구를 고를 때 백엔드가 그대로 내려주는 후보 목록이다.
+# 요약과 같은 모델 호출에서 함께 받으므로 여기서 한 번에 저장한다.
 async def complete_call_summary(
     pool,
     call_session_id: int,
     summary: str,
     keywords: list[str],
+    card_candidates: list[str] | None = None,
 ) -> None:
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
@@ -86,12 +90,14 @@ async def complete_call_summary(
                 UPDATE ai_call_summary
                    SET summary = %s,
                        keywords = %s,
+                       card_candidates = %s,
                        status = 'COMPLETED',
                        completed_at = %s,
                        failure_reason = NULL
                  WHERE call_session_id = %s
                 """,
                 (summary, json.dumps(keywords, ensure_ascii=False),
+                 json.dumps(card_candidates or [], ensure_ascii=False),
                  now_kst(), call_session_id),
             )
             await conn.commit()
@@ -112,6 +118,7 @@ async def fail_call_summary(pool, call_session_id: int, reason: str) -> None:
                     status = 'FAILED',
                     summary = NULL,
                     keywords = NULL,
+                    card_candidates = NULL,
                     completed_at = new.completed_at,
                     failure_reason = new.failure_reason
                 """,

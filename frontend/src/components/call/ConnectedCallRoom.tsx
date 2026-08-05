@@ -63,6 +63,17 @@ export function ConnectedCallRoom({
     onReconnectNeeded,
 }: ConnectedCallRoomProps) {
   const navigate = useNavigate()
+  /**
+   * 완료 화면에 넘길 라우터 state다.
+   *
+   * 통화가 끝나면 대기열 스냅샷의 callSessionId가 null로 바뀌어(CALLED·IN_CALL에서만 채워진다)
+   * 완료 화면이 세션을 다시 찾을 방법이 없다. 기념 카드는 통화 세션 단위라 이 값이 필요하므로
+   * 화면을 떠나는 시점에 함께 넘긴다.
+   */
+  const endNavigationState = useMemo(
+    () => (callSessionId ? { callSessionId } : undefined),
+    [callSessionId],
+  )
   const room = useRoomContext()
   const connectionState = useConnectionState()
   const participants = useParticipants()
@@ -252,11 +263,12 @@ export function ConnectedCallRoom({
         setDeparturePending(true)
         return
       }
-      navigate(endTo)
+      navigate(endTo, { state: endNavigationState })
     },
     [
       authSession,
       callSessionId,
+      endNavigationState,
       endTo,
       forceEndOnLeave,
       hostStaysConnected,
@@ -274,12 +286,12 @@ export function ConnectedCallRoom({
   const leaveRoom = useCallback(async () => {
     leavingRef.current = true
     await room.disconnect()
-    navigate(endTo)
-  }, [endTo, navigate, room])
+    navigate(endTo, { state: endNavigationState })
+  }, [endNavigationState, endTo, navigate, room])
 
   async function handleRecordingRetry() {
     const uploaded = await retryUpload()
-    if (uploaded && departurePending) navigate(endTo)
+    if (uploaded && departurePending) navigate(endTo, { state: endNavigationState })
   }
 
   useEffect(() => {
@@ -298,8 +310,8 @@ export function ConnectedCallRoom({
     // IndexedDB에 보관한 세션 ID를 완료 화면에 전달해 그곳에서도 재시도할 수 있게 한다.
     navigate(endTo, {
       state: hasPendingRecording && pendingRecordingPersisted && callSessionId
-        ? { pendingRecordingSessionId: callSessionId }
-        : undefined,
+        ? { ...endNavigationState, pendingRecordingSessionId: callSessionId }
+        : endNavigationState,
     })
   }
 
@@ -326,12 +338,20 @@ export function ConnectedCallRoom({
     void stopAndUpload().then(async (recordingSaved) => {
       await room.disconnect()
       if (recordingSaved) {
-        navigate(endTo, { replace: true })
+        navigate(endTo, { replace: true, state: endNavigationState })
       } else {
         setDeparturePending(true)
       }
     })
-  }, [endTo, hostStaysConnected, navigate, room, sessionStatus.status, stopAndUpload])
+  }, [
+    endNavigationState,
+    endTo,
+    hostStaysConnected,
+    navigate,
+    room,
+    sessionStatus.status,
+    stopAndUpload,
+  ])
 
   useEffect(() => {
     if (isConnected) wasConnectedRef.current = true

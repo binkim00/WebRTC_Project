@@ -114,6 +114,9 @@ public enum ErrorCode {
     AI_MODERATION_NOT_FOUND(HttpStatus.NOT_FOUND, "모니터링 감지 건을 찾을 수 없습니다."),
     AI_MODERATION_ALREADY_REVIEWED(HttpStatus.CONFLICT, "이미 검토가 완료된 건입니다."),
 
+    // 통화 기념 카드
+    FAN_CARD_TEXT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "카드에 담을 수 없는 문구입니다."),
+
     // 회원탈퇴 (USER-003)
     // 이미 인증된 요청의 본인 재확인 실패이므로 401이 아니라 400을 쓴다.
     // 401을 주면 프론트가 토큰 재발급이나 자동 로그아웃 흐름으로 오해한다.

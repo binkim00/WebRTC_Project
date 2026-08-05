@@ -250,6 +250,13 @@ public class SecurityConfig {
                                 .hasAnyRole("MANAGER", "SOLO_INFLUENCER", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/moderations/*/review")
                                 .hasAnyRole("MANAGER", "SOLO_INFLUENCER", "ADMIN")
+
+                        // 통화 기념 카드 — 팬 본인의 기념물이므로 운영자·인플루언서는 접근하지 못한다.
+                        // 통화 당사자 여부는 FanCardService 에서 다시 검증한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/call-sessions/*/fan-card-candidates")
+                                .hasRole("FAN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/call-sessions/*/fan-card")
+                                .hasRole("FAN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)
