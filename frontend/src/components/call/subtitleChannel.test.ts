@@ -21,6 +21,8 @@ const NAMES = { influencer: '서은', fan: '민지' }
 function payload(overrides: Partial<SubtitlePayload> = {}): SubtitlePayload {
   return {
     subtitleId: '1',
+    segmentId: null,
+    isFinal: true,
     speakerRole: 'FAN',
     originalText: '안녕하세요',
     originalLang: 'ko',
@@ -66,6 +68,9 @@ describe('parseSubtitlePayload', () => {
     expect(parsed).toEqual({
       // 숫자로 와도 문자열로 정규화해 갱신 대상 비교가 어긋나지 않게 한다.
       subtitleId: '12',
+      // segment_id·is_final이 없는 구버전 payload는 확정 자막 하나로 본다.
+      segmentId: null,
+      isFinal: true,
       speakerRole: 'INFLUENCER',
       originalText: '반가워요',
       originalLang: 'ko',
@@ -128,6 +133,25 @@ describe('parseSubtitlePayload', () => {
     const second = parseSubtitlePayload(encode({ speaker_role: 'FAN', original_text: '네' }))
 
     expect(first?.subtitleId).not.toBe(second?.subtitleId)
+  })
+
+  it('segment_id와 is_final을 해석하고, 없으면 확정 자막으로 본다', () => {
+    const interim = parseSubtitlePayload(
+      encode({
+        segment_id: 12,
+        is_final: false,
+        speaker_role: 'INFLUENCER',
+        original_text: '안녕하세요. 반가',
+        subtitle_id: null,
+      }),
+    )
+    expect(interim?.segmentId).toBe('12')
+    expect(interim?.isFinal).toBe(false)
+
+    // 구버전 워커·한↔한 통화 — 두 필드 없이 final만 온다.
+    const legacy = parseSubtitlePayload(encode({ speaker_role: 'FAN', original_text: '네' }))
+    expect(legacy?.segmentId).toBeNull()
+    expect(legacy?.isFinal).toBe(true)
   })
 })
 
@@ -227,6 +251,89 @@ describe('appendSubtitleLine', () => {
 
     expect(theirs).toHaveLength(1)
     expect(theirs[0]?.text).toBe('팬 말')
+  })
+
+  it('같은 segment의 부분 자막이 한 줄에서 자라다가 final에서 굳는다', () => {
+    // interim 1 — 원문만 먼저 온다.
+    let lines = appendSubtitleLine(
+      [],
+      payload({ segmentId: '12', isFinal: false, originalText: '안녕하', translatedText: null }),
+      'INFLUENCER',
+      NAMES,
+    )
+    expect(lines).toHaveLength(1)
+    expect(lines[0]?.text).toBe('안녕하')
+    expect(lines[0]?.pending).toBe(true)
+
+    // interim 2 — 번역이 따라붙으면 번역문으로 교체된다. 줄은 늘어나지 않는다.
+    lines = appendSubtitleLine(
+      lines,
+      payload({
+        segmentId: '12',
+        isFinal: false,
+        originalText: '안녕하세요. 반가',
+        translatedText: 'Hello, nice to',
+      }),
+      'INFLUENCER',
+      NAMES,
+    )
+    expect(lines).toHaveLength(1)
+    expect(lines[0]?.text).toBe('Hello, nice to')
+    expect(lines[0]?.pending).toBe(true)
+
+    // final — 같은 줄이 확정된다.
+    lines = appendSubtitleLine(
+      lines,
+      payload({
+        segmentId: '12',
+        isFinal: true,
+        originalText: '안녕하세요. 반가워요',
+        translatedText: 'Hello, nice to meet you',
+      }),
+      'INFLUENCER',
+      NAMES,
+    )
+    expect(lines).toHaveLength(1)
+    expect(lines[0]?.text).toBe('Hello, nice to meet you')
+    expect(lines[0]?.pending).toBe(false)
+  })
+
+  it('final 뒤에 늦게 도착한 interim은 확정된 줄을 되돌리지 않는다', () => {
+    // interim은 유실될 수 있는 전송이라 순서가 어긋날 수 있다.
+    const finalized = appendSubtitleLine(
+      [],
+      payload({ segmentId: '3', isFinal: true, translatedText: 'Hello there' }),
+      'INFLUENCER',
+      NAMES,
+    )
+    const afterLateInterim = appendSubtitleLine(
+      finalized,
+      payload({ segmentId: '3', isFinal: false, translatedText: 'Hello th' }),
+      'INFLUENCER',
+      NAMES,
+    )
+
+    expect(afterLateInterim).toHaveLength(1)
+    expect(afterLateInterim[0]?.text).toBe('Hello there')
+    expect(afterLateInterim[0]?.pending).toBe(false)
+  })
+
+  it('다음 문장(segment)이 오면 이전 문장을 밀어낸다', () => {
+    const first = appendSubtitleLine(
+      [],
+      payload({ segmentId: '1', isFinal: true, translatedText: 'first sentence' }),
+      'INFLUENCER',
+      NAMES,
+    )
+    const second = appendSubtitleLine(
+      first,
+      payload({ segmentId: '2', isFinal: false, translatedText: 'second sen' }),
+      'INFLUENCER',
+      NAMES,
+    )
+
+    expect(second).toHaveLength(SUBTITLE_HISTORY_SIZE)
+    expect(second.at(-1)?.text).toBe('second sen')
   })
 
   it('같은 subtitleId는 새로 붙이지 않고 교체한다', () => {
