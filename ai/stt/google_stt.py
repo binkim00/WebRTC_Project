@@ -33,6 +33,7 @@ class GoogleSTTAdapter(STTAdapter):
         audio_stream, #구독 중인 오디오
         language: str, #사용하는 언어
         on_final: Callable, #전체 문장이면 call
+        on_interim: Callable | None = None,  # 한-한은 interim 미사용(무시). 인터페이스 호환용.
     ) -> None:
         """
         AudioStream → Google STT streaming API → concluded 시 on_final 콜백.
@@ -94,6 +95,10 @@ class GoogleSTTAdapter(STTAdapter):
                 requests=request_generator()
             )
 
+            # 문장(발화)마다 증가하는 식별자. 한-한은 interim이 없어 final마다 새 문장이다.
+            # 프론트가 (speaker_role, segment_id)로 자막 줄을 구분하므로 final도 고유 id가 필요하다.
+            segment_seq = 0
+
             # self._stop에 즉시 break하지 않는다 — 입력이 끊긴 뒤 Google이 내보내는
             # '마지막 final'까지 모두 읽어 저장한다(마지막 문장 유실 방지).
             async for response in responses:
@@ -101,12 +106,14 @@ class GoogleSTTAdapter(STTAdapter):
                     if result.is_final:
                         text = result.alternatives[0].transcript
                         if text.strip(): #.strip() 공백제거
+                            segment_seq += 1
                             transcript = FinalTranscript(
                                 text=text,
                                 language=language,
                                 spoken_at=now_kst(),
                                 translated_text=None, # 한-한 미팅인 경우 번역 필요 없음
                                 translated_lang=None,
+                                segment_id=segment_seq,
                             )
                             await on_final(transcript)
 

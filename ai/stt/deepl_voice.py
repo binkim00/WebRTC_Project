@@ -49,6 +49,7 @@ class DeepLVoiceAdapter(STTAdapter):
         audio_stream,
         language: str,
         on_final: Callable,
+        on_interim: Callable | None = None,
     ) -> None:
         # 1. 세션 생성
         streaming_url, token = await self._create_session(language)
@@ -67,6 +68,7 @@ class DeepLVoiceAdapter(STTAdapter):
         recv_task = asyncio.create_task(
             self._receive_results(
                 on_final=on_final,
+                on_interim=on_interim,
                 source_lang=source_lang,
             )
         )
@@ -192,32 +194,42 @@ class DeepLVoiceAdapter(STTAdapter):
         *,
         on_final: Callable,
         source_lang: str,
+        on_interim: Callable | None = None,
     ) -> None:
         """
         WebSocket에서 concluded를 수신하고, 문장 단위로 모아서 on_final 호출.
 
         원문/번역 각각 텍스트 버퍼 + 침묵 타이머를 관리.
         타이머 만료 시 버퍼에 모인 텍스트를 하나의 문장으로 on_final에 전달.
+
+        on_interim이 있으면 concluded 조각이 올 때마다 지금까지 누적된 부분 자막을
+        같은 segment_id로 전달한다(문장 확정 전에도 자막이 뜨게 함). interim의 text는
+        델타가 아니라 '지금까지의 문장 전체'다.
         """
         # 원문/번역 문장 버퍼
         source_buffer: list[str] = []
         target_buffer: list[str] = []
 
+        # 문장(발화) 식별자. 새 문장이 시작될 때 채번하고, 그 문장의 interim들과 final이 공유한다.
+        segment_seq = 0
+        current_segment_id: int | None = None
+
         # 침묵 타이머
         flush_timer: asyncio.Task | None = None
 
-        async def flush_sentence():
-            """타이머 만료 시 호출 — 버퍼에 모인 텍스트로 on_final 호출."""
-            nonlocal flush_timer
+        def ensure_segment() -> None:
+            """버퍼가 비어 있던 상태에서 첫 조각이 오면 새 문장 id를 채번한다."""
+            nonlocal segment_seq, current_segment_id
+            if current_segment_id is None:
+                segment_seq += 1
+                current_segment_id = segment_seq
 
-            # 타이머 대기
-            await asyncio.sleep(SENTENCE_TIMEOUT)
-
-            # 원문이 있으면 문장 확정
+        async def emit_final() -> None:
+            """버퍼에 모인 텍스트를 하나의 문장으로 on_final에 전달하고 버퍼·문장 id를 비운다."""
+            nonlocal current_segment_id
             if source_buffer:
                 source_text = "".join(source_buffer).strip()
                 target_text = "".join(target_buffer).strip() if target_buffer else None
-
                 if source_text:
                     transcript = FinalTranscript(
                         text=source_text,
@@ -225,21 +237,31 @@ class DeepLVoiceAdapter(STTAdapter):
                         spoken_at=now_kst(),
                         translated_text=target_text if target_text else None,
                         translated_lang=self._target_lang if target_text else None,
+                        segment_id=current_segment_id or 0,
                     )
-                    logger.info(
-                        "문장 확정: %s → %s",
-                        source_text,
-                        target_text or "(번역 없음)",
-                    )
+                    logger.info("문장 확정: %s → %s", source_text, target_text or "(번역 없음)")
                     await on_final(transcript)
+            source_buffer.clear()
+            target_buffer.clear()
+            current_segment_id = None
 
-                # 버퍼 비움
-                source_buffer.clear()
-                target_buffer.clear()
+        async def push_interim() -> None:
+            """지금까지 누적된 부분 자막을 현재 문장 id로 전달(원문이 아직 없으면 생략)."""
+            if on_interim is None:
+                return
+            source_text = "".join(source_buffer).strip()
+            target_text = "".join(target_buffer).strip() or None
+            if source_text:
+                await on_interim(source_text, target_text, current_segment_id or 0)
 
+        async def flush_sentence() -> None:
+            """타이머 만료 시 호출 — 버퍼에 모인 텍스트로 on_final 호출."""
+            nonlocal flush_timer
+            await asyncio.sleep(SENTENCE_TIMEOUT)
+            await emit_final()
             flush_timer = None
 
-        def reset_timer():
+        def reset_timer() -> None:
             """새 concluded가 올 때마다 타이머 리셋."""
             nonlocal flush_timer
             if flush_timer and not flush_timer.done():
@@ -262,8 +284,10 @@ class DeepLVoiceAdapter(STTAdapter):
                     for seg in update.get("concluded", []):
                         text = seg.get("text", "")
                         if text:
+                            ensure_segment()
                             source_buffer.append(text)
                             reset_timer()
+                            await push_interim()
 
                 # 번역
                 elif "target_transcript_update" in message:
@@ -271,29 +295,16 @@ class DeepLVoiceAdapter(STTAdapter):
                     for seg in update.get("concluded", []):
                         text = seg.get("text", "")
                         if text:
+                            ensure_segment()
                             target_buffer.append(text)
                             reset_timer()
+                            await push_interim()
 
                 # 스트림 종료 — 남은 버퍼 즉시 flush
                 elif "end_of_source_transcript" in message or "end_of_stream" in message:
                     if flush_timer and not flush_timer.done():
                         flush_timer.cancel()
-                    # 남은 버퍼가 있으면 마지막 문장으로 처리
-                    if source_buffer:
-                        source_text = "".join(source_buffer).strip()
-                        target_text = "".join(target_buffer).strip() if target_buffer else None
-                        if source_text:
-                            transcript = FinalTranscript(
-                                text=source_text,
-                                language=source_lang,
-                                spoken_at=now_kst(),
-                                translated_text=target_text if target_text else None,
-                                translated_lang=self._target_lang if target_text else None,
-                            )
-                            logger.info("스트림 종료 — 마지막 문장: %s → %s", source_text, target_text or "(번역 없음)")
-                            await on_final(transcript)
-                        source_buffer.clear()
-                        target_buffer.clear()
+                    await emit_final()
                     break
 
         except (asyncio.CancelledError, websockets.exceptions.ConnectionClosed):
