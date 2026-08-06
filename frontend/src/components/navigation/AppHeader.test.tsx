@@ -21,16 +21,25 @@ beforeEach(() => {
  * 라벨은 사전 키로 정의되어 있으므로(언어 전환 대응) 키와 함께 한국어 표시 문구를 적어 둔다.
  * 키가 바뀌면 계약 비교에서, 문구가 바뀌면 렌더링 비교에서 잡힌다.
  */
+// 서비스 전체 공지는 역할과 무관한 공용 안내라 모든 역할 메뉴에 들어간다.
+const serviceNoticesItem = {
+  labelKey: 'app.nav.serviceNotices',
+  label: '공지사항',
+  to: '/service-notices',
+} as const
+
 const expectedNavigation = {
   FAN: [
     { labelKey: 'nav.fan.events', label: '이벤트', to: '/fan/events' },
     { labelKey: 'nav.fan.influencers', label: '인플루언서', to: '/fan/influencers' },
+    serviceNoticesItem,
     { labelKey: 'nav.fan.mypage', label: '마이페이지', to: '/fan/mypage/profile' },
     { labelKey: 'nav.notifications', label: '알림', to: '/notifications' },
   ],
   INFLUENCER: [
     { labelKey: 'nav.influencer.meetings', label: '내 팬미팅', to: '/influencer/fan-meetings' },
     { labelKey: 'nav.influencer.fans', label: '내 팬', to: '/influencer/fans' },
+    serviceNoticesItem,
     {
       labelKey: 'nav.influencer.mypage',
       label: '마이페이지',
@@ -41,6 +50,7 @@ const expectedNavigation = {
   SOLO_INFLUENCER: [
     { labelKey: 'nav.influencer.meetings', label: '내 팬미팅', to: '/influencer/fan-meetings' },
     { labelKey: 'nav.influencer.fans', label: '내 팬', to: '/influencer/fans' },
+    serviceNoticesItem,
     {
       labelKey: 'nav.influencer.mypage',
       label: '마이페이지',
@@ -51,15 +61,18 @@ const expectedNavigation = {
   MANAGER: [
     { labelKey: 'nav.manager.meetings', label: '팬미팅 관리', to: '/manager/fan-meetings' },
     { labelKey: 'nav.manager.organization', label: '조직 관리', to: '/manager/organization' },
+    serviceNoticesItem,
     { labelKey: 'nav.manager.mypage', label: '마이페이지', to: '/manager/mypage' },
   ],
   // 서비스 운영자는 팬미팅 운영 화면이 없고 서비스 단위 업무만 갖는다.
+  // 공지사항(공개 화면)은 게시된 모습 확인용으로 함께 둔다.
   ADMIN: [
     {
       labelKey: 'nav.admin.serviceNotices',
       label: '전체 공지 관리',
       to: '/admin/service-notices',
     },
+    serviceNoticesItem,
   ],
 } as const satisfies Record<
   LoginRole,
