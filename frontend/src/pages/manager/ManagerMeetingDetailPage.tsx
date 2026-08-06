@@ -546,14 +546,24 @@ export function ManagerMeetingDetailPage() {
         <p className="text-[var(--color-text-secondary)]">
           {detail.influencer.name} {t('managerMeetingDetailPage.t5')} {formatDateTime(detail.meeting.scheduledStartAt)}
         </p>
-        {/* 다른 관리 화면으로 가는 링크는 탭과 무관하므로 헤더에 두어 어느 탭에서도 바로 이동할 수 있게 한다. */}
+        {/*
+          다른 관리 화면으로 가는 링크는 탭과 무관하므로 헤더에 두어 어느 탭에서도 바로 이동할 수 있게 한다.
+          다만 팬미팅 단계에서 쓸 일이 없는 링크는 숨겨 "지금 할 수 있는 일"만 보이게 한다.
+          - 참가 팬: 추첨이 확정되는 결과 발표(READY) 이후에만 참가자가 존재한다.
+          - 운영 모니터: 대기열·통화가 살아 있는 READY·LIVE에서만 볼 것이 있다.
+          - 공지 관리: 임시 저장 단계에는 공지를 받아볼 대상이 없다.
+          - 결과 통계: 종료된 팬미팅에서만 의미가 있어 팬미팅 목록의 종료 행에서 진입한다.
+        */}
         <nav aria-label={t('managerMeetingDetailPage.t93')} className="mt-1 flex flex-wrap gap-2">
-          <QuickLink label={t('managerMeetingDetailPage.t94')} to={`/manager/fan-meetings/${encodedMeetingId}/fans`} />
-          <QuickLink label={t('managerMeetingDetailPage.t95')} to={`/manager/fan-meetings/${encodedMeetingId}/notices`} />
-          {!isSolo ? (
+          {status === 'READY' || status === 'LIVE' || status === 'ENDED' ? (
+            <QuickLink label={t('managerMeetingDetailPage.t94')} to={`/manager/fan-meetings/${encodedMeetingId}/fans`} />
+          ) : null}
+          {status !== 'DRAFT' ? (
+            <QuickLink label={t('managerMeetingDetailPage.t95')} to={`/manager/fan-meetings/${encodedMeetingId}/notices`} />
+          ) : null}
+          {!isSolo && (status === 'READY' || status === 'LIVE') ? (
             <QuickLink label={t('managerMeetingDetailPage.t96')} to={`/manager/fan-meetings/${encodedMeetingId}/monitor`} />
           ) : null}
-          <QuickLink label={t('managerMeetingDetailPage.t97')} to={`/manager/fan-meetings/${encodedMeetingId}/statistics`} />
         </nav>
       </header>
 

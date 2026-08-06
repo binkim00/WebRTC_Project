@@ -25,10 +25,6 @@ import {
   type ParticipantSelectionType,
 } from '../../api/managerOperations'
 import {
-  getFanMeetingStatistics,
-  type FanMeetingStatisticsResponse,
-} from '../../api/meetingManagement'
-import {
   createMeetingNotice,
   deleteMeetingNotice,
   getMeetingNotice,
@@ -2087,111 +2083,6 @@ export function ManagerNoticesPage() {
         open={deleteTarget !== undefined}
         title={t('managerRoutePages.t122')}
       />
-    </div>
-  )
-}
-
-/** 초 단위를 mm:ss 문자열로 표시한다. */
-function formatMinuteSecond(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds))
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
-}
-
-/** 초 단위를 시간·분 단위의 한국어 문구로 표시한다. */
-function formatLongDuration(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds))
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const rest = total % 60
-  if (hours > 0) return translate('managerRoutePages.t320', { p0: hours, p1: minutes })
-  if (minutes > 0) return translate('managerRoutePages.t321', { p0: minutes, p1: rest })
-  return translate('managerRoutePages.t322', { p0: rest })
-}
-
-/** 팬미팅 운영 결과 지표를 실제 통계 API로 보여주는 페이지다. */
-export function ManagerStatisticsPage() {
-  const { t } = useTranslation()
-  const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
-  const [stats, setStats] = useState<FanMeetingStatisticsResponse>()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string>()
-
-  useEffect(() => {
-    if (!meetingId) {
-      setError(t('managerRoutePages.t275'))
-      setLoading(false)
-      return
-    }
-
-    const token = getAuthSession()?.accessToken
-    if (!token) {
-      setError(t('managerRoutePages.t276'))
-      setLoading(false)
-      return
-    }
-
-    const controller = new AbortController()
-    getFanMeetingStatistics(meetingId, token, controller.signal)
-      .then(setStats)
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) setError(toErrorMessage(cause, t('managerRoutePages.t277')))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-
-    return () => controller.abort()
-    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meetingId])
-
-  const completionPercent = stats && stats.participantCount > 0
-    ? Math.round((stats.completedCallCount / stats.participantCount) * 100)
-    : 0
-
-  const metrics: Array<[string, string]> = stats
-    ? [
-        [t('managerRoutePages.t278'), t('managerRoutePages.t323', { p0: stats.applicationCount })],
-        [t('managerRoutePages.t279'), t('managerRoutePages.t324', { p0: stats.selectedCount })],
-        [t('managerRoutePages.t280'), t('managerRoutePages.t325', { p0: stats.participantCount })],
-        [t('managerRoutePages.t281'), t('managerRoutePages.t326', { p0: stats.completedCallCount })],
-        [t('managerRoutePages.t282'), t('managerRoutePages.t327', { p0: stats.noShowCount })],
-        [t('managerRoutePages.t283'), t('managerRoutePages.t328', { p0: stats.failedCallCount })],
-        [t('managerRoutePages.t284'), formatMinuteSecond(stats.averageCallDurationSec)],
-        [t('managerRoutePages.t285'), formatLongDuration(stats.totalMeetingDurationSec)],
-      ]
-    : []
-
-  return (
-    <div className="grid gap-7 pb-10">
-      <PageHeader title={t('managerRoutePages.t123')} description={t('managerRoutePages.t124')} backTo={`/manager/fan-meetings/${meetingId}/monitor`} />
-      {error ? <AlertBanner title={t('managerRoutePages.t125')} variant="error">{error}</AlertBanner> : null}
-      {loading ? (
-        <div className="flex min-h-[240px] items-center justify-center"><Spinner label={t('managerRoutePages.t126')} /></div>
-      ) : stats ? (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {metrics.map(([label, value]) => (
-              <Card className="p-5" key={label}>
-                <p className="text-sm text-[var(--color-text-secondary)]">{label}</p>
-                <p className="mt-3 text-3xl font-black">{value}</p>
-              </Card>
-            ))}
-          </div>
-          <Card>
-            <CardHeader><CardTitle as="h2">{t('managerRoutePages.t127')}</CardTitle></CardHeader>
-            <CardContent className="grid gap-5">
-              <div className="flex items-center justify-between text-sm">
-                <span>{t('managerRoutePages.t128')} {stats.completedCallCount}{t('managerRoutePages.t129')} {stats.participantCount}{t('managerRoutePages.t130')}</span>
-                <strong className="text-[var(--color-primary-coral)]">{completionPercent}%</strong>
-              </div>
-              <div className="h-4 overflow-hidden rounded-full bg-[var(--color-surface-page)]">
-                <div className="h-full rounded-full bg-[var(--color-primary-coral)]" style={{ width: `${Math.min(100, completionPercent)}%` }} />
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      ) : null}
     </div>
   )
 }

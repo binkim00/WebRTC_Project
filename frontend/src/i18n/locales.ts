@@ -1051,6 +1051,10 @@ const ko = {
   'influencerFanRecordPage.t9': '팬미팅마다 메모를 하나씩 남길 수 있어요.',
   'influencerFanRecordPage.t10': '대화 요약',
   'influencerFanRecordPage.t11': '통화가 끝나면 자동으로 기록돼요.',
+  'influencerFanRecordPage.summary.noRecord':
+    '이 브라우저에 남은 통화 기록이 없어 요약을 불러올 수 없어요. 통화를 진행한 브라우저에서 확인해 주세요.',
+  'influencerFanRecordPage.summary.generating': '요약을 만드는 중이에요. 잠시 뒤 다시 확인해 주세요.',
+  'influencerFanRecordPage.summary.failed': '요약을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
   'influencerFanRecordPage.t12': '내 메모',
   'influencerFanRecordPage.t13': '내 메모',
   'influencerFanRecordPage.t14': '예: 다음 통화에서는 과학 동아리 활동이 어땠는지 물어보기.',
@@ -1328,6 +1332,7 @@ const ko = {
   'managerMeetingListPage.t19': '상세 관리',
   'managerMeetingListPage.t20': '참가자',
   'managerMeetingListPage.t21': '운영',
+  'managerMeetingListPage.statistics': '결과 통계',
   'managerMeetingListPage.t22': '발행',
   'managerMeetingListPage.t23': '삭제',
   'managerMeetingListPage.t24': '취소',
@@ -3576,6 +3581,12 @@ const en: Partial<Record<TranslationKey, string>> = {
   'influencerFanRecordPage.t9': 'You can leave one note per fan meeting.',
   'influencerFanRecordPage.t10': 'Conversation summary',
   'influencerFanRecordPage.t11': 'Recorded automatically when the call ends.',
+  'influencerFanRecordPage.summary.noRecord':
+    "No call record is left in this browser, so the summary can't be loaded. Open it from the browser used during the call.",
+  'influencerFanRecordPage.summary.generating':
+    'The summary is being generated. Check again shortly.',
+  'influencerFanRecordPage.summary.failed':
+    'Could not load the summary. Please try again shortly.',
   'influencerFanRecordPage.t12': 'My note',
   'influencerFanRecordPage.t13': 'My note',
   'influencerFanRecordPage.t14':
@@ -3880,6 +3891,7 @@ const en: Partial<Record<TranslationKey, string>> = {
   'managerMeetingListPage.t19': 'Manage',
   'managerMeetingListPage.t20': 'Participants',
   'managerMeetingListPage.t21': 'Operations',
+  'managerMeetingListPage.statistics': 'Statistics',
   'managerMeetingListPage.t22': 'Publish',
   'managerMeetingListPage.t23': 'Delete',
   'managerMeetingListPage.t24': 'Cancel',
