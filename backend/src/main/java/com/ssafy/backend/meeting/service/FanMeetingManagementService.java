@@ -41,6 +41,8 @@ import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import com.ssafy.backend.user.domain.UserStatus;
 import com.ssafy.backend.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -64,6 +66,8 @@ public class FanMeetingManagementService {
             FanMeetingStatus.APPLICATION_CLOSED,
             FanMeetingStatus.READY
     );
+
+    private static final Logger log = LoggerFactory.getLogger(FanMeetingManagementService.class);
 
     /** 팔로워 알림을 한 번에 저장하는 건수다. 커질수록 왕복은 줄지만 메모리에 오래 쌓인다. */
     private static final int NOTIFICATION_CHUNK_SIZE = 500;
@@ -498,10 +502,29 @@ public class FanMeetingManagementService {
         }
 
         String roomId = LiveKitRoomNames.forMeeting(meetingId);
-        roomParticipantService.deleteRoom(roomId);
+        deleteRoomQuietly(roomId, meetingId);
         realtimeStore.clearMeeting(meetingId, roomId);
         meeting.end(endedAt);
         return response(meeting);
+    }
+
+    /**
+     * 팬미팅 공유 Room을 지운다. 실패해도 종료를 막지 않는다.
+     *
+     * <p>이 호출이 예외를 올리면 앞서 정리한 통화·대기열과 종료 상태가 모두 롤백된다. 그러면
+     * 매니저가 팬미팅을 끝낼 수 없고 상태는 LIVE 로 남는다. Room 은 참가자가 빠지면 LiveKit 이
+     * 스스로 닫으므로, 지우지 못한 대가보다 끝내지 못하는 대가가 크다.
+     *
+     * @param roomId 팬미팅 공유 Room 이름
+     * @param meetingId 팬미팅 식별자
+     */
+    private void deleteRoomQuietly(String roomId, Long meetingId) {
+        try {
+            roomParticipantService.deleteRoom(roomId);
+        } catch (RuntimeException exception) {
+            log.warn("팬미팅을 종료하며 Room을 지우지 못했습니다. 종료는 계속합니다."
+                    + " meetingId={} roomId={}", meetingId, roomId, exception);
+        }
     }
 
     /** 팬미팅과 두 운영 설정을 관리 응답으로 변환한다. */

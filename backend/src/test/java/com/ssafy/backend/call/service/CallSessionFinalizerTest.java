@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -52,6 +53,42 @@ class CallSessionFinalizerTest {
         verify(realtimeStore).clearCurrent(7L, 20L);
         verify(realtimeStore).clearFanConnected(100L);
         verify(realtimeStore).clearDisconnectRole(100L);
+    }
+
+    /**
+     * 팬을 Room에서 내보내지 못해도 통화 마감을 끝까지 진행하는지 검증한다.
+     *
+     * <p>여기서 예외가 밖으로 나가면 통화는 ACTIVE, 대기열은 IN_CALL 로 롤백되어 다음 팬을
+     * 호출할 수 없다. LiveKit 이 잠깐 흔들렸다고 팬미팅 진행이 멈추면 안 된다.
+     */
+    @Test
+    void finalizesCallEvenWhenRoomCleanupFails() {
+        LiveKitRoomParticipantService participantService =
+                mock(LiveKitRoomParticipantService.class);
+        QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        RecordingEgressCoordinator recordingEgressCoordinator =
+                mock(RecordingEgressCoordinator.class);
+        CallSessionFinalizer finalizer = new CallSessionFinalizer(
+                participantService, realtimeStore, recordingEgressCoordinator);
+        CallSession callSession = mock(CallSession.class);
+        QueueEntry queueEntry = mock(QueueEntry.class);
+        FanMeeting meeting = mock(FanMeeting.class);
+        LocalDateTime endedAt = LocalDateTime.of(2026, 7, 28, 11, 0);
+        when(callSession.getId()).thenReturn(100L);
+        when(callSession.getRoomId()).thenReturn("meeting-room-7");
+        when(callSession.getQueueEntry()).thenReturn(queueEntry);
+        when(queueEntry.getId()).thenReturn(20L);
+        when(queueEntry.getMeeting()).thenReturn(meeting);
+        when(meeting.getId()).thenReturn(7L);
+        doThrow(new IllegalStateException("LiveKit 응답 없음"))
+                .when(participantService).removeFan("meeting-room-7", 100L);
+
+        finalizer.end(callSession, endedAt, CallEndReason.TIMEOUT, null);
+
+        verify(callSession).end(endedAt, CallEndReason.TIMEOUT, null);
+        verify(queueEntry).complete();
+        verify(realtimeStore).updateStatus(7L, 20L, QueueEntryStatus.DONE);
+        verify(realtimeStore).clearCurrent(7L, 20L);
     }
 
     /** 연결되지 못한 통화를 노쇼로 마감하고 Redis 호출 선점을 비우는지 검증한다. */

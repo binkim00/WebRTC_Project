@@ -8,6 +8,8 @@ import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
 import com.ssafy.backend.recording.egress.RecordingEgressCoordinator;
 import com.ssafy.backend.user.domain.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -15,6 +17,8 @@ import java.time.LocalDateTime;
 /** 모든 종료 경로에서 통화·대기열·LiveKit·Redis 상태를 동일하게 마무리한다. */
 @Component
 public class CallSessionFinalizer {
+
+    private static final Logger log = LoggerFactory.getLogger(CallSessionFinalizer.class);
 
     private final LiveKitRoomParticipantService participantService;
     private final QueueRealtimeStore realtimeStore;
@@ -53,13 +57,37 @@ public class CallSessionFinalizer {
         QueueEntry queueEntry = callSession.getQueueEntry();
         Long meetingId = queueEntry.getMeeting().getId();
         recordingEgressCoordinator.prepareStop(callSession);
-        participantService.removeFan(callSession.getRoomId(), callSession.getId());
+        removeFanQuietly(callSession);
         callSession.end(endedAt, endReason, endedBy);
         queueEntry.complete();
         realtimeStore.updateStatus(meetingId, queueEntry.getId(), QueueEntryStatus.DONE);
         realtimeStore.clearCurrent(meetingId, queueEntry.getId());
         realtimeStore.clearFanConnected(callSession.getId());
         realtimeStore.clearDisconnectRole(callSession.getId());
+    }
+
+    /**
+     * 공유 Room에서 팬을 내보낸다. 실패해도 통화 마감을 막지 않는다.
+     *
+     * <p>이 호출이 예외를 올리면 아래의 통화 종료와 대기열 정리가 함께 롤백된다. 그러면 통화는
+     * ACTIVE, 대기열은 IN_CALL 로 남아 <b>다음 팬을 호출할 수 없다.</b> 통화 시간 만료·팬의 종료·
+     * 운영자 강제 종료가 모두 이 경로를 지나므로, LiveKit 이 잠깐 흔들리면 팬미팅 진행 전체가
+     * 멈춘다. 마감을 막는 대가가 정리를 못 하는 대가보다 크다.
+     *
+     * <p>정리를 못 한 팬은 방에 남는다. 방이 팬미팅당 하나라 다음 통화와 겹칠 수 있지만, 팬 화면은
+     * 통화 상태를 확인해 종료를 알아채면 스스로 나가고, 남더라도 운영자가 강제 종료로 정리할 수
+     * 있다. 팬미팅이 멈추는 쪽이 훨씬 나쁘다.
+     *
+     * @param callSession 마감 중인 통화 세션
+     */
+    private void removeFanQuietly(CallSession callSession) {
+        try {
+            participantService.removeFan(callSession.getRoomId(), callSession.getId());
+        } catch (RuntimeException exception) {
+            log.warn("통화를 마감하며 팬을 Room에서 내보내지 못했습니다. 마감은 계속합니다."
+                    + " callSessionId={} roomId={}",
+                    callSession.getId(), callSession.getRoomId(), exception);
+        }
     }
 
     /**

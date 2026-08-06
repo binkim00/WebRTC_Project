@@ -50,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -677,6 +678,42 @@ class FanMeetingManagementServiceTest {
         verify(entry).complete();
         verify(entry).remove();
         verify(roomParticipantService).deleteRoom("meeting-room-1");
+        verify(realtimeStore).clearMeeting(1L, "meeting-room-1");
+    }
+
+    /**
+     * Room을 지우지 못해도 팬미팅 종료를 끝까지 진행하는지 검증한다.
+     *
+     * <p>여기서 예외가 밖으로 나가면 앞서 정리한 통화·대기열과 종료 상태가 모두 롤백되어 매니저가
+     * 팬미팅을 끝낼 수 없다. Room 은 참가자가 빠지면 LiveKit 이 스스로 닫으므로, 지우지 못한
+     * 대가보다 끝내지 못하는 대가가 크다.
+     */
+    @Test
+    void endsMeetingEvenWhenRoomDeletionFails() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = publishedMeeting(solo);
+        meeting.openApplications();
+        meeting.closeApplications();
+        meeting.markReady();
+        meeting.start(LocalDateTime.now(Clock.fixed(NOW, SEOUL)).minusMinutes(1));
+        MeetingApplicationSetting application = applicationSetting(meeting);
+        MeetingOperationSetting operation = operationSetting(meeting);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+        when(fanMeetingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(meeting));
+        when(applicationSettingRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(operationSettingRepository.findById(1L)).thenReturn(Optional.of(operation));
+        when(callSessionRepository.findByQueueEntry_Meeting_IdAndStatusIn(
+                org.mockito.ArgumentMatchers.eq(1L), anyList()
+        )).thenReturn(List.of());
+        when(queueEntryRepository.findAllByMeetingIdForUpdate(1L)).thenReturn(List.of());
+        doThrow(new IllegalStateException("LiveKit 응답 없음"))
+                .when(roomParticipantService).deleteRoom("meeting-room-1");
+
+        FanMeetingManagementResponse response = service.end(1L, principal);
+
+        assertThat(response.status()).isEqualTo(FanMeetingStatus.ENDED);
         verify(realtimeStore).clearMeeting(1L, "meeting-room-1");
     }
 
