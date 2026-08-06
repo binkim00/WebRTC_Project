@@ -287,12 +287,17 @@ export function ManagerMeetingCreatePage() {
   const scheduledStartDate = new Date(form.scheduledStartAt)
   const hasScheduledStart =
     Boolean(form.scheduledStartAt) && !Number.isNaN(scheduledStartDate.getTime())
-  /** 시작 일시에서 ms만큼 앞선 시각이다. 과거가 되면 현재 시각으로 끌어올려 검증에 걸리지 않게 한다. */
+  /**
+   * 시작 일시에서 ms만큼 앞선 시각이다.
+   *
+   * 과거가 되면 "지금"이 아니라 10분 뒤로 끌어올린다. 정확히 현재 시각으로 채우면 남은
+   * 단계를 작성하는 사이 과거가 되어 생성 요청이 거절되기 쉽다.
+   */
   const presetBeforeStart = (ms: number) => {
     if (!hasScheduledStart) return ''
     const derived = new Date(scheduledStartDate.getTime() - ms)
-    const now = new Date()
-    return toLocalInputValue(derived > now ? derived : now)
+    const floor = new Date(Date.now() + 10 * 60 * 1000)
+    return toLocalInputValue(derived > floor ? derived : floor)
   }
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [templateDownloadError, setTemplateDownloadError] = useState<string>()
@@ -1297,12 +1302,17 @@ export function ManagerMeetingCreatePage() {
                     <div className="grid gap-5 sm:grid-cols-2">
                       <div>
                         <TextField label={t('managerRoutePages.t54')} required reserveMessageSpace type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
+                        {/*
+                          "지금"은 두지 않는다. 남은 단계를 작성하는 사이 시각이 과거가 되어
+                          생성이 거절되기 쉽다. 여유를 둔 가까운 미래만 제안한다.
+                        */}
                         <SchedulePresetChips
                           onPick={(value) =>
                             setForm({ ...form, application: { ...form.application, startAt: value } })
                           }
                           options={[
-                            { label: t('managerCreate.preset.now'), value: toLocalInputValue(new Date()) },
+                            { label: t('managerCreate.preset.inMinutes', { p0: 10 }), value: toLocalInputValue(new Date(Date.now() + 10 * 60 * 1000)) },
+                            { label: t('managerCreate.preset.inHours', { p0: 1 }), value: toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)) },
                           ]}
                         />
                       </div>
