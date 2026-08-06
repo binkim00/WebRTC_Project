@@ -88,6 +88,14 @@ export type FanCardTheme = {
   accent: string
   /** 배경 위에 얹는 장식이며 NONE 이면 얹지 않는다 */
   ornament: CardOrnament
+  /**
+   * 네 구석에 얹을 그림의 스티커 코드다.
+   *
+   * <p>도형만으로는 참고하던 사진 부스 프레임의 아기자기한 느낌이 나지 않는다. 이미 갖고 있는
+   * 입체 스티커를 구석에 큼직하게 얹어 프레임처럼 보이게 한다. 팬이 직접 붙이는 스티커와 달리
+   * 도안에 딸린 그림이라 옮기거나 뗄 수 없다.
+   */
+  corners: readonly string[]
 }
 
 /** 도안별 색 묶음이다. NIGHT 는 지금까지 쓰던 색이라 기본값으로 둔다. */
@@ -98,6 +106,7 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     slot: 'rgba(255, 255, 255, 0.18)',
     accent: 'rgba(255, 255, 255, 0.26)',
     ornament: 'STARS',
+    corners: ['1f31f', '1f320', '2728', '1f319'],
   },
   LAVENDER: {
     background: ['#efe6ff', '#e3d6fb', '#d8c9f5'],
@@ -105,6 +114,7 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     slot: 'rgba(88, 60, 140, 0.22)',
     accent: 'rgba(120, 86, 180, 0.3)',
     ornament: 'PETALS',
+    corners: ['1f337', '1f98b', '1f49c', '1f338'],
   },
   SKY: {
     background: ['#e4f2ff', '#cfe7fb', '#bcdcf6'],
@@ -112,6 +122,7 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     slot: 'rgba(30, 80, 130, 0.22)',
     accent: 'rgba(50, 110, 170, 0.3)',
     ornament: 'CLOUDS',
+    corners: ['2601', '1f308', '1f426', '2600'],
   },
   CREAM: {
     background: ['#fdf6e6', '#f7ead0', '#f0dcbb'],
@@ -119,6 +130,7 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     slot: 'rgba(120, 88, 48, 0.22)',
     accent: 'rgba(150, 110, 60, 0.3)',
     ornament: 'SPARKS',
+    corners: ['1f36a', '2615', '1f9f8', '1f36f'],
   },
   PEACH: {
     background: ['#ffeeee', '#ffdede', '#ffcdd2'],
@@ -126,6 +138,7 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     slot: 'rgba(170, 70, 90, 0.22)',
     accent: 'rgba(200, 90, 110, 0.3)',
     ornament: 'PETALS',
+    corners: ['1f353', '1f497', '1f380', '1f490'],
   },
   MINT: {
     background: ['#e6f8f1', '#d3f0e5', '#c0e8d9'],
@@ -133,6 +146,7 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     slot: 'rgba(30, 110, 90, 0.22)',
     accent: 'rgba(50, 140, 115, 0.3)',
     ornament: 'BUBBLES',
+    corners: ['1f33f', '1f30a', '1f95b', '1f340'],
   },
   SUNSET: {
     background: ['#ff9a6b', '#f2678f', '#a94bb4'],
@@ -140,6 +154,7 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     slot: 'rgba(255, 255, 255, 0.22)',
     accent: 'rgba(255, 255, 255, 0.3)',
     ornament: 'CONFETTI',
+    corners: ['1f389', '1f38a', '1f3a1', '1f386'],
   },
   MONO: {
     background: ['#1a1a1c', '#2a2a2e', '#3a3a40'],
@@ -147,6 +162,7 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     slot: 'rgba(255, 255, 255, 0.16)',
     accent: 'rgba(255, 255, 255, 0.24)',
     ornament: 'SPARKS',
+    corners: ['1f4f8', '1f39e', '2734', '1f4fd'],
   },
 }
 
@@ -368,6 +384,53 @@ function drawThemeOrnaments(
   }
 
   ctx.restore()
+}
+
+/**
+ * 도안에 딸린 코너 그림을 네 구석에 얹는다.
+ *
+ * <p>배경과 도형 장식 위, 사진과 글자 아래에 그린다. 구석마다 크기와 기울기를 달리해 찍어 낸
+ * 듯 보이지 않게 하고, 진하기를 낮춰 사진과 글자를 방해하지 않게 한다.
+ *
+ * <p>그림을 아직 받지 못했으면 조용히 건너뛴다. 장식은 없어도 카드가 성립한다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param theme 적용할 도안
+ * @param width 카드 너비
+ * @param height 카드 높이
+ */
+async function drawThemeCorners(
+  ctx: CanvasRenderingContext2D,
+  theme: FanCardTheme,
+  width: number,
+  height: number,
+): Promise<void> {
+  if (theme.corners.length === 0) return
+
+  const images = await Promise.all(
+    theme.corners.map((code) => loadStickerImage(code).catch(() => undefined)),
+  )
+  // 카드가 좁으면(세로 스트립·필름) 구석 그림이 사진을 덮으므로 함께 줄인다.
+  const base = Math.min(width, height) * 0.16
+  const places = [
+    { x: base * 0.72, y: base * 0.72, scale: 1, rotation: -0.22 },
+    { x: width - base * 0.7, y: base * 0.62, scale: 0.78, rotation: 0.3 },
+    { x: base * 0.66, y: height - base * 0.66, scale: 0.84, rotation: 0.16 },
+    { x: width - base * 0.74, y: height - base * 0.74, scale: 1.04, rotation: -0.3 },
+  ]
+
+  images.forEach((image, index) => {
+    const place = places[index]
+    if (!image || !place) return
+
+    const size = base * place.scale
+    ctx.save()
+    ctx.globalAlpha = 0.9
+    ctx.translate(place.x, place.y)
+    ctx.rotate(place.rotation)
+    ctx.drawImage(image, -size / 2, -size / 2, size, size)
+    ctx.restore()
+  })
 }
 
 /**
@@ -927,6 +990,10 @@ export async function drawFanCard(
         drawQuoteOnlyCard(ctx, artwork, fontFamily)
     }
   }
+
+  // 도안에 딸린 코너 그림 — 레이아웃을 다 그린 뒤 구석에 얹는다. 배경 직후에 넣으면 사진이
+  // 덮어 버리고, 그림 불러오기가 비동기라 레이아웃 함수 안에서는 기다릴 수 없다.
+  await drawThemeCorners(ctx, themeOf(artwork.themeKey), size.width, size.height)
 
   // 인플루언서 싸인 — 도안 위, 꾸미기 요소 아래에 얹는다.
   const signatureFont = await resolveSignatureFontFamily()
