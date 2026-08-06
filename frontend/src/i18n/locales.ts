@@ -76,6 +76,7 @@ const ko = {
   'fanCard.entry.description':
     '통화에서 인상 깊었던 한마디와 남긴 사진으로 카드를 만들어 보세요. 사진은 통화가 끝나고 하루 동안만 이 기기에 보관합니다.',
   'fanCard.entry.action': '기념 카드 만들러 가기',
+  'callStage.recording': '이 통화는 녹화되고 있어요',
   'callStage.capture': '사진',
   'callStage.captureAria': '기념 사진 찍기',
   'callStage.captureCountdownLabel': '같이 찍어요',
@@ -3516,6 +3517,7 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanCard.entry.description':
     'Make a card from a line that stayed with you and the photos you took. Photos are kept on this device for one day after the call.',
   'fanCard.entry.action': 'Make a keepsake card',
+  'callStage.recording': 'This call is being recorded',
   'callStage.capture': 'Photo',
   'callStage.captureAria': 'Take a keepsake photo',
   'callStage.captureCountdownLabel': 'Smile together!',

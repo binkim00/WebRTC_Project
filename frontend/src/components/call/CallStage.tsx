@@ -137,6 +137,11 @@ export type CallStageProps = {
    * "찍혔고, 저기에 쌓인다"를 한 번에 알린다. id가 바뀔 때마다 연출이 다시 돈다.
    */
   captureFlight?: { url: string; id: number }
+  /**
+   * 통화 녹화가 진행 중인지다. 상시 배너 대신 타이머 옆 REC 표시로 알려
+   * 무대 아래 공간을 차지하지 않는다.
+   */
+  recordingActive?: boolean
 }
 
 /**
@@ -178,6 +183,7 @@ export function CallStage({
   captureDisabled,
   captureCountdown,
   captureFlight,
+  recordingActive,
 }: CallStageProps) {
   const { t } = useTranslation()
   // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
@@ -293,9 +299,10 @@ export function CallStage({
     <section
       aria-label={t('callStage.t1')}
       // 폭 기준 16:9로 그리면 넓은 화면에서 세로가 뷰포트를 넘어 스크롤이 생긴다.
-      // 항상 "뷰포트 높이 - 헤더 - 아래 안내 여유"만큼만 차지해 어떤 기기에서도 화면 안에
-      // 들어오게 하고, 영상은 object-cover라 비율이 달라져도 잘리기만 할 뿐 찌그러지지 않는다.
-      className="relative h-[calc(100dvh-var(--service-header-height)-150px)] min-h-[320px] overflow-hidden rounded-xl bg-[var(--color-surface-dark-media)]"
+      // 부모(flex 세로 축)가 뷰포트에 맞춘 높이를 갖고 무대는 flex-1로 **남는 공간을 전부**
+      // 채우므로, 아래에 메모·안내가 붙어도 무대가 그만큼 줄어들 뿐 화면이 넘치지 않는다.
+      // 영상은 object-cover라 비율이 달라져도 잘리기만 할 뿐 찌그러지지 않는다.
+      className="relative min-h-[280px] flex-1 overflow-hidden rounded-xl bg-[var(--color-surface-dark-media)]"
     >
       <div className="absolute inset-0">{remoteVideo}</div>
 
@@ -409,6 +416,19 @@ export function CallStage({
         남는다. 종료가 임박하면 타이머가 경고색으로 바뀌고 떨린다.
       */}
       <div className="absolute right-3.5 top-3 z-20 flex items-center gap-1 [filter:drop-shadow(0_1px_6px_rgb(0_0_0/80%))]">
+        {/* 녹화 표시 — 상시 배너 대신 REC 점 하나로 알린다. */}
+        {recordingActive ? (
+          <span className="mr-1 flex items-center gap-1" title={t('callStage.recording')}>
+            <span
+              aria-hidden="true"
+              className="size-2 rounded-full bg-[var(--color-error-on-dark)] motion-safe:animate-pulse"
+            />
+            <span className="text-[11px] font-black tracking-[0.08em] text-[var(--color-error-on-dark)]">
+              REC
+            </span>
+            <span className="sr-only">{t('callStage.recording')}</span>
+          </span>
+        ) : null}
         <p className="mr-2 flex items-baseline gap-1.5">
           <span className="sr-only">{timeLabel}</span>
           {/*
