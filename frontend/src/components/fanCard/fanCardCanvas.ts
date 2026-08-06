@@ -591,10 +591,12 @@ function roundedRectPath(
 }
 
 /**
- * 사진을 지정한 사각형에 비율을 유지한 채 가득 채워 그린다.
+ * 사진을 지정한 사각형에 **자르지 않고** 전부 담아 그린다.
  *
- * <p>가로세로 비가 맞지 않으면 넘치는 쪽을 중앙 기준으로 잘라 낸다. 늘려 맞추면 얼굴이
- * 찌그러지므로 크롭을 택한다.
+ * <p>통화 캡처는 가로 영상(상대 화면 + 셀프뷰)이라 칸 비율에 맞춰 잘라 내면 사람 얼굴이나
+ * 셀프뷰 창이 통째로 잘려 나간다. 그래서 원본 전체를 비율대로 담고(contain), 남는 띠는
+ * 같은 사진을 흐리게 확대한 채움으로 메워 빈 여백처럼 보이지 않게 한다.
+ * 칸과 사진 비율이 같으면 채움이 완전히 덮여 이전과 똑같이 보인다.
  *
  * @param ctx 그릴 대상 컨텍스트
  * @param photo 그릴 사진
@@ -622,9 +624,27 @@ function drawPhotoCover(
   }
   ctx.clip()
 
-  const scale = Math.max(width / photo.width, height / photo.height)
-  const drawWidth = photo.width * scale
-  const drawHeight = photo.height * scale
+  // 1) 배경 — 흐린 확대 채움. 블러가 가장자리에서 옅어지지 않게 살짝 키워 그린다.
+  const coverScale = Math.max(width / photo.width, height / photo.height) * 1.12
+  const coverWidth = photo.width * coverScale
+  const coverHeight = photo.height * coverScale
+  ctx.filter = 'blur(26px)'
+  ctx.drawImage(
+    photo,
+    x + (width - coverWidth) / 2,
+    y + (height - coverHeight) / 2,
+    coverWidth,
+    coverHeight,
+  )
+  ctx.filter = 'none'
+  // 흐린 배경을 한 단계 눌러 원본 사진이 또렷하게 도드라지게 한다.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+  ctx.fillRect(x, y, width, height)
+
+  // 2) 전경 — 원본 전체를 비율대로 담는다.
+  const containScale = Math.min(width / photo.width, height / photo.height)
+  const drawWidth = photo.width * containScale
+  const drawHeight = photo.height * containScale
   ctx.drawImage(
     photo,
     x + (width - drawWidth) / 2,

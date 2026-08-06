@@ -30,6 +30,29 @@ export type UseCallPhotoCaptureResult = {
   capturing: boolean
 }
 
+/** 모서리가 둥근 사각형 경로를 만든다. 셀프뷰 창의 둥근 모서리에 쓴다. */
+function roundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const limit = Math.min(radius, width / 2, height / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + limit, y)
+  ctx.lineTo(x + width - limit, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + limit)
+  ctx.lineTo(x + width, y + height - limit)
+  ctx.quadraticCurveTo(x + width, y + height, x + width - limit, y + height)
+  ctx.lineTo(x + limit, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - limit)
+  ctx.lineTo(x, y + limit)
+  ctx.quadraticCurveTo(x, y, x + limit, y)
+  ctx.closePath()
+}
+
 /**
  * 지정한 영역을 꽉 채우도록 영상을 잘라 그린다. (CSS object-fit: cover와 같은 규칙)
  *
@@ -70,8 +93,9 @@ function drawVideoCover(
 /**
  * 통화 화면에서 팬이 누른 셔터로 정지 프레임을 남기는 훅이다.
  *
- * <p>상대(인플루언서) 영상만 찍지 않고, 내(팬) 카메라가 켜져 있으면 두 영상을 나란히
- * 합성해 **함께 찍힌 사진**을 만든다. 내 카메라가 꺼져 있으면 상대 영상만 남긴다.
+ * <p>내(팬) 카메라가 켜져 있으면 **실제 통화 화면과 같은 구도**로 합성한다 — 상대
+ * (인플루언서) 영상을 전체에 깔고, 내 영상을 오른쪽 아래 작은 창(셀프뷰 PiP)으로 얹는다.
+ * 내 카메라가 꺼져 있으면 상대 영상만 남긴다.
  *
  * <p>LiveKit이 준 MediaStreamTrack은 같은 출처의 스트림이라 canvas가 오염되지 않는다.
  * 그래서 그린 프레임을 그대로 PNG로 뽑을 수 있고, 기념 카드에 합성할 때도 제약이 없다.
@@ -213,13 +237,12 @@ export function useCallPhotoCapture({
     setCaptureError(undefined)
 
     try {
-      // 내 카메라가 켜져 있고 프레임이 준비됐으면 상대와 나란히 함께 찍는다.
+      // 내 카메라가 켜져 있고 프레임이 준비됐으면 통화 화면과 같은 구도로 함께 찍는다.
       const localVideo = localVideoRef.current
       const includeLocal = Boolean(localVideo && localVideo.readyState >= 2)
 
       const canvas = canvasRef.current ?? document.createElement('canvas')
       canvasRef.current = canvas
-      // 함께 찍을 때는 상대 프레임 크기의 반쪽 두 칸을 이어 붙인 가로 사진이 된다.
       canvas.width = width
       canvas.height = height
 
@@ -229,9 +252,32 @@ export function useCallPhotoCapture({
       }
 
       if (includeLocal && localVideo) {
-        const halfWidth = Math.floor(width / 2)
-        drawVideoCover(ctx, video, 0, 0, halfWidth, height, false)
-        drawVideoCover(ctx, localVideo, halfWidth, 0, width - halfWidth, height, true)
+        // 상대 영상을 전체에 깔고, 내 영상을 오른쪽 아래 셀프뷰 창으로 얹는다.
+        // 크기·위치·둥근 모서리는 통화 화면(CallStage)의 셀프뷰 비율을 따른다.
+        drawVideoCover(ctx, video, 0, 0, width, height, false)
+
+        const pipWidth = Math.round(width * 0.2)
+        const pipHeight = Math.round((pipWidth * 3) / 4)
+        const margin = Math.round(width * 0.025)
+        const pipX = width - pipWidth - margin
+        const pipY = height - pipHeight - margin
+        const pipRadius = Math.round(pipWidth * 0.06)
+
+        // 창 뒤 그림자 — 화면 위에 떠 있는 셀프뷰 인상을 그대로 남긴다.
+        ctx.save()
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+        ctx.shadowBlur = Math.round(width * 0.015)
+        ctx.shadowOffsetY = Math.round(width * 0.004)
+        roundedRectPath(ctx, pipX, pipY, pipWidth, pipHeight, pipRadius)
+        ctx.fillStyle = '#23242a'
+        ctx.fill()
+        ctx.restore()
+
+        ctx.save()
+        roundedRectPath(ctx, pipX, pipY, pipWidth, pipHeight, pipRadius)
+        ctx.clip()
+        drawVideoCover(ctx, localVideo, pipX, pipY, pipWidth, pipHeight, true)
+        ctx.restore()
       } else {
         ctx.drawImage(video, 0, 0, width, height)
       }

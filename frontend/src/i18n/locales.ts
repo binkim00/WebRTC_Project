@@ -2986,6 +2986,8 @@ const ko = {
   'meetingLifecycle.t23': '응모 마감 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
   'meetingLifecycle.t24': '결과 발표 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
   'meetingLifecycle.t25': '대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
+  'meetingLifecycle.resultBeforeQueueOpen':
+    '결과 발표 일시는 대기열 오픈 일시보다 이전이어야 합니다.',
 
   // 3차 코드모드로 추출한 화면 문구 (컴포넌트 밖 헬퍼·상태 라벨·api 오류 메시지 포함)
   'capturedPhotos.t1': '이 브라우저는 통화 사진 보관을 지원하지 않습니다.',
@@ -6277,6 +6279,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'meetingLifecycle.t23': 'The application closing time must be before the fan meeting start time.',
   'meetingLifecycle.t24': 'The results announcement time must be before the fan meeting start time.',
   'meetingLifecycle.t25': 'The queue open time must be before the fan meeting start time.',
+  'meetingLifecycle.resultBeforeQueueOpen':
+    'The results announcement time must be before the queue open time.',
 
   // 3차 코드모드 문구의 영어 번역
   'capturedPhotos.t1': 'This browser cannot store call photos.',
