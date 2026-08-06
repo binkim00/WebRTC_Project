@@ -21,6 +21,16 @@ import java.util.List;
 @Component
 public class ExternalParticipantCsvParser {
 
+    /**
+     * 한 번에 받아들이는 최대 참가자 수다.
+     *
+     * <p>파일 크기 한도는 녹화 업로드에 맞춘 값이라 CSV에는 사실상 제한이 없는 것과 같다. 상한이
+     * 없으면 잘못 만든 파일 하나가 모든 줄을 메모리에 쌓고 그대로 한 트랜잭션에 들어가 서버를
+     * 멈춘다. 1:1 통화는 한 명당 몇 분씩 걸려 한 회차에 이만큼도 부르기 어려우므로, 실수를 막는
+     * 방어선으로 넉넉히 잡는다.
+     */
+    private static final int MAX_ROWS = 2_000;
+
     /** 명단 CSV가 반드시 가져야 하는 헤더다. */
     public static final String HEADER = "email,callOrder";
 
@@ -68,6 +78,11 @@ public class ExternalParticipantCsvParser {
                 rowNumber++;
                 if (line.isBlank()) {
                     continue;
+                }
+                if (rows.size() >= MAX_ROWS) {
+                    // 남은 줄은 읽지 않고 끊는다. 끝까지 읽어야 개수를 알 수 있는 구조로 두면
+                    // 상한을 두는 의미가 없다.
+                    throw new BusinessException(ErrorCode.EXTERNAL_PARTICIPANT_CSV_TOO_MANY_ROWS);
                 }
                 String[] columns = line.split(",", -1);
                 rows.add(new ExternalParticipantCsvRow(

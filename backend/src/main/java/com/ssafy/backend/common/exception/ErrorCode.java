@@ -138,6 +138,8 @@ public enum ErrorCode {
             "등록할 CSV 파일이 필요합니다."),
     EXTERNAL_PARTICIPANT_CSV_INVALID(HttpStatus.BAD_REQUEST,
             "CSV 내용이 올바르지 않아 명단을 등록할 수 없습니다."),
+    EXTERNAL_PARTICIPANT_CSV_TOO_MANY_ROWS(HttpStatus.BAD_REQUEST,
+            "한 번에 등록할 수 있는 참가자 수를 넘었습니다. 파일을 나눠 올려 주세요."),
 
     // 이메일 인증 (AUTH-005~008)
     EMAIL_VERIFICATION_REQUIRED(HttpStatus.FORBIDDEN, "이메일 인증을 먼저 완료해야 합니다."),
