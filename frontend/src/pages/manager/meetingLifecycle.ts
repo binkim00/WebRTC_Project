@@ -256,6 +256,10 @@ export function getScheduleErrors(input: MeetingScheduleInput): string[] {
     if (resultAnnouncement && scheduledStart && resultAnnouncement >= scheduledStart) {
       errors.push(translate('meetingLifecycle.t24'))
     }
+    // 팬은 결과를 확인한 뒤에야 대기열에 들어올 수 있으므로 발표가 오픈보다 앞서야 한다.
+    if (resultAnnouncement && queueOpen && resultAnnouncement >= queueOpen) {
+      errors.push(translate('meetingLifecycle.resultBeforeQueueOpen'))
+    }
   }
 
   if (queueOpen && scheduledStart && queueOpen >= scheduledStart) {

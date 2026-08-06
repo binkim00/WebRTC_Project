@@ -1,13 +1,11 @@
 import { useState } from 'react'
 
-import { Button, Slider, TextField } from '..'
+import { Button, TextField } from '..'
 import { selectableChipClass } from './fanCardChipClass'
 import {
   CARD_STICKER_CATEGORIES,
-  cardStickerName,
   cardStickerUrl,
 } from './cardStickers'
-import type { CardDecoration } from './fanCardCanvas'
 import { useTranslation } from '../../i18n'
 
 /** 팬이 조절할 수 있는 스티커·글자 크기 범위다. */
@@ -17,31 +15,23 @@ export const MAX_DECORATION_SIZE = 420
 type FanCardStickerPanelProps = {
   /** 카드에 얹혀 있는 요소 수. 안내 문구를 고르는 데 쓴다. */
   decorationCount: number
-  /** 지금 고른 요소이며 없으면 조절 부분을 숨긴다 */
-  selectedDecoration?: CardDecoration
   /** 스티커를 골랐을 때 호출한다 */
   onAddSticker: (code: string) => void
   /** 글자를 올릴 때 호출한다 */
   onAddText: (text: string) => void
-  /** 고른 요소의 크기나 기울기를 바꿀 때 호출한다 */
-  onUpdateSelected: (patch: Partial<Pick<CardDecoration, 'size' | 'rotation'>>) => void
-  /** 고른 요소를 뗄 때 호출한다 */
-  onRemoveSelected: () => void
 }
 
 /**
- * 카드 위에 얹을 스티커와 글자를 고르고, 얹어 둔 것을 조절하는 부분이다.
+ * 카드 위에 얹을 스티커와 글자를 고르는 부분이다.
  *
- * <p>어느 갈래를 보고 있는지는 화면에서만 쓰는 값이라 이 안에서 들고 있는다. 실제로 얹힌
- * 요소는 카드를 그리는 쪽이 갖고 있으므로 바꿀 일이 생기면 위로 알린다.
+ * <p>얹어 둔 요소의 이동·크기·기울기·삭제는 카드 미리보기 위에서 직접 조작한다
+ * (끌기와 모서리 핸들). 아래에 조절 바를 따로 두면 시선이 카드와 바 사이를 오가야 해
+ * 번거롭기 때문이다. 어느 갈래를 보고 있는지는 화면에서만 쓰는 값이라 이 안에서 들고 있는다.
  */
 export function FanCardStickerPanel({
   decorationCount,
-  selectedDecoration,
   onAddSticker,
   onAddText,
-  onUpdateSelected,
-  onRemoveSelected,
 }: FanCardStickerPanelProps) {
   const { t } = useTranslation()
   const [categoryKey, setCategoryKey] = useState(
@@ -122,44 +112,6 @@ export function FanCardStickerPanel({
            {t('fanCardStickerPanel.t6')} </Button>
       </div>
 
-      {selectedDecoration ? (
-        <div className="mt-4 rounded-[var(--radius-panel)] border border-[var(--color-divider)] bg-[var(--color-surface-page)] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[15px] font-extrabold text-[var(--color-text-primary)]">
-              {selectedDecoration.kind === 'STICKER'
-                ? cardStickerName(selectedDecoration.content)
-                : `“${selectedDecoration.content}”`}
-              <span className="ml-2 text-[13px] font-semibold text-[var(--color-text-muted)]">
-                 {t('fanCardStickerPanel.t7')} </span>
-            </p>
-            <Button onClick={onRemoveSelected} size="sm" variant="secondary">
-               {t('fanCardStickerPanel.t8')} </Button>
-          </div>
-
-          {/*
-            공용 Slider를 쓴다. 값 표시·포커스 링·비활성 색이 서비스의 다른 슬라이더와 같아지고,
-            직접 만든 range 입력에는 없던 접근성 처리도 함께 따라온다.
-          */}
-          <div className="mt-4 grid gap-4">
-            <Slider
-              label={t('fanCardStickerPanel.t9')}
-              max={MAX_DECORATION_SIZE}
-              min={MIN_DECORATION_SIZE}
-              onChange={(event) => onUpdateSelected({ size: Number(event.target.value) })}
-              value={selectedDecoration.size}
-            />
-            <Slider
-              label={t('fanCardStickerPanel.t10')}
-              max={180}
-              min={-180}
-              onChange={(event) =>
-                onUpdateSelected({ rotation: (Number(event.target.value) * Math.PI) / 180 })
-              }
-              value={Math.round((selectedDecoration.rotation * 180) / Math.PI)}
-            />
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

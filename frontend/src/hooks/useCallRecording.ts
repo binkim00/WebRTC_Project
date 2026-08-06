@@ -423,6 +423,7 @@ export function useCallRecording({
         for (const track of audioTracks) stream.addTrack(track)
       }
 
+
       chunksRef.current = []
       const recorder = startRecorderWithFallback(stream, 1_000, (candidate) => {
         // 앞 후보가 조각을 남기고 실패했을 수 있으므로 시도마다 비운다. 형식이 섞인 조각을

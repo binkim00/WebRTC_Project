@@ -9,6 +9,8 @@ export type CaptionLine = {
   text: string
   /** 본문 아래에 덧붙일 보조 줄이다. 지금은 채우지 않지만 표시 능력은 남겨 둔다. */
   translatedText?: string
+  /** 아직 자라는 중인 부분 자막(interim)이면 true다. 확정 자막보다 옅게 표시한다. */
+  pending?: boolean
   /** 줄을 구분할 안정적인 식별자다. 같은 문장이 반복돼도 React key가 겹치지 않게 한다. */
   id?: string
 }
@@ -305,7 +307,13 @@ export function CallStage({
               key={line.id ?? `${line.speaker}:${line.text}`}
             >
               <strong className="text-sm font-extrabold text-white/75">{line.speaker}</strong>
-              <span className="mt-[3px] block text-lg font-semibold leading-[1.45] text-white">
+              {/* 자라는 중인 부분 자막은 옅게 두어 "아직 확정 전"임이 드러나게 한다. */}
+              <span
+                className={cn(
+                  'mt-[3px] block text-lg font-semibold leading-[1.45]',
+                  line.pending ? 'text-white/75' : 'text-white',
+                )}
+              >
                 {line.text}
               </span>
               {/* 번역문은 원문을 대체하지 않고 아래에 덧붙인다. 원문과 구분되게 한 단계 흐리게 둔다. */}

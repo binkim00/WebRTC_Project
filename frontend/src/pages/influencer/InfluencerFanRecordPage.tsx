@@ -93,6 +93,8 @@ export function InfluencerFanRecordPage() {
   const [savedMeetingId, setSavedMeetingId] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [summaryLines, setSummaryLines] = useState<string[]>([])
+  /** 요약을 보여 줄 수 없을 때의 이유 안내다. 요약이 표시되면 비운다. */
+  const [summaryNotice, setSummaryNotice] = useState<string>()
 
   const loadMemos = useCallback(
     async (signal?: AbortSignal) => {
@@ -256,30 +258,41 @@ export function InfluencerFanRecordPage() {
   useEffect(() => {
     if (!summarySessionId || !authToken) {
       setSummaryLines([])
+      // 세션 기록이 없으면 왜 비어 있는지 알려 준다. 통화 기록은 브라우저에만 남기 때문이다.
+      setSummaryNotice(selected ? t('influencerFanRecordPage.summary.noRecord') : undefined)
       return
     }
 
     const controller = new AbortController()
+    setSummaryNotice(undefined)
 
     void getCallSummary(summarySessionId, authToken, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return
-        setSummaryLines(
-          result.state === 'COMPLETED'
-            ? result.summary.summary
-                .split('\n')
-                .map((line) => line.trim())
-                .filter(Boolean)
-            : [],
-        )
+        if (result.state === 'COMPLETED') {
+          setSummaryLines(
+            result.summary.summary
+              .split('\n')
+              .map((line) => line.trim())
+              .filter(Boolean),
+          )
+          setSummaryNotice(undefined)
+          return
+        }
+        setSummaryLines([])
+        setSummaryNotice(t('influencerFanRecordPage.summary.generating'))
       })
       .catch(() => {
         // 요약이 아직 없거나 조회에 실패하면 줄을 비워 두고 안내 문구만 남긴다.
-        if (!controller.signal.aborted) setSummaryLines([])
+        if (controller.signal.aborted) return
+        setSummaryLines([])
+        setSummaryNotice(t('influencerFanRecordPage.summary.failed'))
       })
 
     return () => controller.abort()
-  }, [authToken, summarySessionId])
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, selected, summarySessionId])
 
   const editing = Boolean(selected && editingMeetingId === selected.meetingId)
   const hasMemo = Boolean(selected?.memo.trim())
@@ -498,6 +511,11 @@ export function InfluencerFanRecordPage() {
               <p className="mt-[7px] text-sm font-medium leading-[1.55] text-[var(--color-text-muted)]">
                 {t('influencerFanRecordPage.t11')}
               </p>
+              {summaryLines.length === 0 && summaryNotice ? (
+                <p className="mt-[11px] text-sm font-semibold text-[var(--color-text-muted)]">
+                  {summaryNotice}
+                </p>
+              ) : null}
               {summaryLines.map((line) => (
                 <p
                   className="mt-[11px] max-w-[60ch] text-base font-medium leading-[1.75] text-[var(--color-text-body)]"

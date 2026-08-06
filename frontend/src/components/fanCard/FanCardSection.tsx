@@ -21,7 +21,7 @@ import {
   DEFAULT_PHOTO_ADJUSTMENT,
   drawFanCard,
   fanCardSizeOf,
-  minPhotoScale,
+  photoOffsetLimits,
   type CardDecoration,
   type FanCardFont,
   type FanCardLayout,
@@ -32,7 +32,11 @@ import { FanCardQuotePicker } from './FanCardQuotePicker'
 import { FanCardLayoutPicker } from './FanCardLayoutPicker'
 import { photoCountOf } from './fanCardLayoutOptions'
 import { FanCardFontPicker } from './FanCardFontPicker'
-import { FanCardStickerPanel } from './FanCardStickerPanel'
+import {
+  FanCardStickerPanel,
+  MAX_DECORATION_SIZE,
+  MIN_DECORATION_SIZE,
+} from './FanCardStickerPanel'
 import { useTranslation } from '../../i18n'
 
 /** AI 추천 문구가 생성 중일 때 다시 조회하는 간격이다. */
@@ -90,6 +94,49 @@ function toCardPoint(
   }
 }
 
+/** 요소 중심에서 테두리까지의 반높이·반너비다. 글자는 글자 수만큼 가로로 넓다. */
+function decorationExtents(decoration: CardDecoration): { half: number; halfWidth: number } {
+  const half = decoration.size / 2
+  const halfWidth = decoration.kind === 'TEXT'
+    ? Math.max(half, (decoration.content.length * decoration.size * 0.6) / 2)
+    : half
+  return { half, halfWidth }
+}
+
+/** 선택 테두리(점선)와 요소 사이의 간격이다. 핸들도 이 테두리 모서리에 앉는다. */
+const SELECTION_INSET = 8
+
+/** 카드 좌표계 기준 핸들 원의 반지름(그리기)과 판정 반경이다. 손가락으로도 집히게 판정을 넉넉히 둔다. */
+const HANDLE_DRAW_RADIUS = 26
+const HANDLE_HIT_RADIUS = 48
+
+/**
+ * 선택한 요소의 조절 핸들(오른쪽 아래)과 삭제 핸들(오른쪽 위)의 카드 좌표다.
+ *
+ * <p>요소가 회전해 있으면 핸들도 테두리를 따라 함께 돈다.
+ */
+function decorationHandlePositions(decoration: CardDecoration): {
+  transform: { x: number; y: number }
+  remove: { x: number; y: number }
+} {
+  const { half, halfWidth } = decorationExtents(decoration)
+  const cos = Math.cos(decoration.rotation)
+  const sin = Math.sin(decoration.rotation)
+  const rotated = (x: number, y: number) => ({
+    x: decoration.x + x * cos - y * sin,
+    y: decoration.y + x * sin + y * cos,
+  })
+
+  return {
+    transform: rotated(halfWidth + SELECTION_INSET, half + SELECTION_INSET),
+    remove: rotated(halfWidth + SELECTION_INSET, -half - SELECTION_INSET),
+  }
+}
+
+function distanceBetween(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
 /**
  * 누른 지점에 있는 꾸미기 요소를 찾는다.
  *
@@ -108,14 +155,11 @@ function findDecorationAt(
     const decoration = decorations[index]
     if (!decoration) continue
 
-    const halfHeight = decoration.size / 2
-    const halfWidth = decoration.kind === 'TEXT'
-      ? Math.max(halfHeight, (decoration.content.length * decoration.size * 0.6) / 2)
-      : halfHeight
+    const { half, halfWidth } = decorationExtents(decoration)
 
     if (
       Math.abs(point.x - decoration.x) <= halfWidth
-      && Math.abs(point.y - decoration.y) <= halfHeight
+      && Math.abs(point.y - decoration.y) <= half
     ) {
       return decoration
     }
@@ -191,30 +235,36 @@ export function FanCardSection({
   const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
   const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
   const decorationCounterRef = useRef(0)
-  /**
-   * 지금 끌고 있는 대상이다.
-   *
-   * <p>꾸미기 요소와 사진은 끄는 방식이 다르다. 요소는 카드 좌표로 중심을 옮기지만, 사진은
-   * 칸 안에서 보이는 부분을 비율로 밀기 때문에 집은 시점의 값을 기준으로 누적해야 한다.
-   */
+  /** 진행 중인 끌기다. move는 위치 이동, transform은 모서리 핸들로 크기·기울기 조절이다. */
   const draggingRef = useRef<
-    | { kind: 'DECORATION'; id: string; offsetX: number; offsetY: number }
+    | { kind: 'move'; id: string; offsetX: number; offsetY: number }
     | {
-        kind: 'PHOTO'
+        kind: 'transform'
+        id: string
+        center: { x: number; y: number }
+        startDistance: number
+        startAngle: number
+        startSize: number
+        startRotation: number
+      }
+    | {
+        // 사진은 칸 안에서 보이는 부분을 비율로 미는 것이라, 집은 시점의 값에 누적해야 한다.
+        kind: 'photo'
         index: number
         slot: PhotoSlotRect
         startX: number
         startY: number
         base: PhotoAdjustment
       }
+    | undefined
   >(undefined)
   /** 보관해 둔 상태를 다 불러왔는지. 불러오기 전에 저장하면 초기값이 덮어쓴다. */
   const draftLoadedRef = useRef(false)
-  /** 사진별 배치다. 손대지 않은 사진은 목록에 없고 기본 배치로 그려진다. */
+  /** 사진별 배치다. 손대지 않은 사진은 기본 배치(원본 전체)로 그려진다. */
   const [photoAdjustments, setPhotoAdjustments] = useState<readonly PhotoAdjustment[]>([])
   /** 방금 그린 카드에서 사진이 놓인 자리다. 어느 칸을 눌렀는지 판단하는 데 쓴다. */
   const [photoSlots, setPhotoSlots] = useState<readonly PhotoSlotRect[]>([])
-  /** 칸에 들어간 사진의 원본 크기이며 줄일 수 있는 한계를 구하는 데 쓴다. */
+  /** 칸에 들어간 사진의 원본 크기이며 밀 수 있는 범위를 구하는 데 쓴다. */
   const [photoSizes, setPhotoSizes] = useState<readonly { width: number; height: number }[]>([])
   /** 지금 고른 사진 칸이며 없으면 아무 칸도 고르지 않은 상태다. */
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>()
@@ -230,41 +280,6 @@ export function FanCardSection({
    * 없으면 빈 도안만 남으므로 그때는 미리보기와 내려받기를 열지 않는다.
    */
   const canCompose = Boolean(selectedText) || selectedPhotoIndexes.length > 0
-
-  /**
-   * 고른 사진을 줄일 수 있는 한계다.
-   *
-   * <p>사진 전체가 칸 안에 들어오는 지점까지만 허용한다. 그보다 작게 두면 칸 안에서 사진이
-   * 떠다니기만 하고 얻는 것이 없다.
-   */
-  const selectedPhotoScaleRange = (() => {
-    if (selectedPhotoIndex === undefined) return { min: 1 }
-    const slot = photoSlots.find((candidate) => candidate.index === selectedPhotoIndex)
-    const size = photoSizes[selectedPhotoIndex]
-    if (!slot || !size) return { min: 1 }
-    return { min: minPhotoScale(slot.width, slot.height, size.width, size.height) }
-  })()
-
-  /**
-   * 사진 한 장의 배치를 바꾼다.
-   *
-   * <p>목록은 사진 순번과 나란히 두고, 아직 손대지 않은 앞자리는 기본 배치로 메운다. 배열을
-   * 성기게 두면 저장·복원에서 구멍이 생긴다.
-   *
-   * @param index 사진 순번
-   * @param patch 바꿀 값만 담은 배치
-   */
-  const updatePhotoAdjustment = useCallback(
-    (index: number, patch: Partial<PhotoAdjustment>) => {
-      setPhotoAdjustments((current) => {
-        const next = [...current]
-        while (next.length <= index) next.push({ ...DEFAULT_PHOTO_ADJUSTMENT })
-        next[index] = { ...(next[index] ?? DEFAULT_PHOTO_ADJUSTMENT), ...patch }
-        return next
-      })
-    },
-    [],
-  )
 
   /**
    * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
@@ -291,23 +306,6 @@ export function FanCardSection({
     [layout],
   )
 
-  /**
-   * 선택한 요소의 값을 바꾼다.
-   *
-   * @param patch 바꿀 속성만 담은 값
-   */
-  const updateSelectedDecoration = useCallback(
-    (patch: Partial<Pick<CardDecoration, 'x' | 'y' | 'size' | 'rotation'>>) => {
-      if (!selectedDecorationId) return
-      setDecorations((current) =>
-        current.map((decoration) =>
-          decoration.id === selectedDecorationId ? { ...decoration, ...patch } : decoration,
-        ),
-      )
-    },
-    [selectedDecorationId],
-  )
-
   /** 선택한 요소를 카드에서 뗀다. */
   const removeSelectedDecoration = useCallback(() => {
     if (!selectedDecorationId) return
@@ -318,23 +316,73 @@ export function FanCardSection({
   }, [selectedDecorationId])
 
   /**
-   * 카드를 눌렀을 때 그 자리의 요소를 집는다. 빈 곳을 누르면 선택을 푼다.
+   * 카드를 눌렀을 때 그 자리의 요소나 핸들을 집는다. 빈 곳을 누르면 선택을 푼다.
+   *
+   * <p>선택한 요소에는 카드 위에 삭제(×)·조절(모서리) 핸들이 떠 있다. 핸들을 먼저 판정해야
+   * 요소 밖으로 살짝 나가 있는 핸들이 빈 곳 클릭으로 오인되지 않는다.
    *
    * @param event 포인터 누름 이벤트
    */
+  /**
+   * 사진 한 장의 배치를 바꾼다.
+   *
+   * <p>목록은 사진 순번과 나란히 두고, 아직 손대지 않은 앞자리는 기본 배치로 메운다. 배열을
+   * 성기게 두면 저장·복원에서 구멍이 생긴다.
+   *
+   * @param index 사진 순번
+   * @param patch 바꿀 값만 담은 배치
+   */
+  const updatePhotoAdjustment = useCallback(
+    (index: number, patch: Partial<PhotoAdjustment>) => {
+      setPhotoAdjustments((current) => {
+        const next = [...current]
+        while (next.length <= index) next.push({ ...DEFAULT_PHOTO_ADJUSTMENT })
+        next[index] = { ...(next[index] ?? DEFAULT_PHOTO_ADJUSTMENT), ...patch }
+        return next
+      })
+    },
+    [],
+  )
+
   const handleCanvasPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
       const canvas = event.currentTarget
       const point = toCardPoint(canvas, event.clientX, event.clientY)
+
+      if (selectedDecoration) {
+        const handles = decorationHandlePositions(selectedDecoration)
+
+        // 삭제 핸들 — 누르는 즉시 뗀다.
+        if (distanceBetween(point, handles.remove) <= HANDLE_HIT_RADIUS) {
+          removeSelectedDecoration()
+          return
+        }
+
+        // 조절 핸들 — 중심에서 멀어지면 커지고, 중심을 축으로 돌리면 기울어진다.
+        if (distanceBetween(point, handles.transform) <= HANDLE_HIT_RADIUS) {
+          const center = { x: selectedDecoration.x, y: selectedDecoration.y }
+          draggingRef.current = {
+            kind: 'transform',
+            id: selectedDecoration.id,
+            center,
+            startDistance: Math.max(1, distanceBetween(point, center)),
+            startAngle: Math.atan2(point.y - center.y, point.x - center.x),
+            startSize: selectedDecoration.size,
+            startRotation: selectedDecoration.rotation,
+          }
+          canvas.setPointerCapture(event.pointerId)
+          return
+        }
+      }
+
       const hit = findDecorationAt(decorations, point)
 
       setSelectedDecorationId(hit?.id)
       if (hit) {
-        // 꾸미기 요소가 사진 위에 얹혀 있으므로 요소를 먼저 집는다.
         setSelectedPhotoIndex(undefined)
         // 집은 지점과 요소 중심의 차이를 기억해야 끌 때 요소가 튀지 않는다.
         draggingRef.current = {
-          kind: 'DECORATION',
+          kind: 'move',
           id: hit.id,
           offsetX: point.x - hit.x,
           offsetY: point.y - hit.y,
@@ -343,6 +391,7 @@ export function FanCardSection({
         return
       }
 
+      // 꾸미기 요소가 사진 위에 얹히므로 요소를 먼저 집고, 빈 곳이면 사진 칸을 집는다.
       const slot = photoSlots.find(
         (candidate) =>
           point.x >= candidate.x
@@ -354,7 +403,7 @@ export function FanCardSection({
       if (!slot) return
 
       draggingRef.current = {
-        kind: 'PHOTO',
+        kind: 'photo',
         index: slot.index,
         slot,
         startX: point.x,
@@ -363,11 +412,17 @@ export function FanCardSection({
       }
       canvas.setPointerCapture(event.pointerId)
     },
-    [decorations, photoAdjustments, photoSlots],
+    [
+      decorations,
+      photoAdjustments,
+      photoSlots,
+      removeSelectedDecoration,
+      selectedDecoration,
+    ],
   )
 
   /**
-   * 집은 요소를 끌어 옮긴다.
+   * 집은 요소를 끌어 옮기거나, 조절 핸들로 크기·기울기를 바꾼다.
    *
    * @param event 포인터 이동 이벤트
    */
@@ -379,21 +434,38 @@ export function FanCardSection({
       const canvas = event.currentTarget
       const point = toCardPoint(canvas, event.clientX, event.clientY)
 
-      if (dragging.kind === 'PHOTO') {
+      if (dragging.kind === 'photo') {
         const size = photoSizes[dragging.index]
         if (!size) return
 
         const { slot, base } = dragging
-        // 사진이 칸보다 큰 만큼만 밀 수 있다. 더 밀면 칸 안에 빈 곳이 생겨 도안이 비친다.
-        const cover = Math.max(slot.width / size.width, slot.height / size.height)
-        const drawWidth = size.width * cover * base.scale
-        const drawHeight = size.height * cover * base.scale
-        const limitX = Math.abs(drawWidth - slot.width) / 2 / slot.width
-        const limitY = Math.abs(drawHeight - slot.height) / 2 / slot.height
+        // 한계 계산은 카드를 그리는 쪽과 같은 함수를 쓴다. 두 곳이 갈라지면 미리보기에서 끌던
+        // 위치와 저장본이 어긋난다.
+        const limits = photoOffsetLimits(
+          slot.width, slot.height, size.width, size.height, base.scale,
+        )
 
-        const offsetX = clamp(base.offsetX + (point.x - dragging.startX) / slot.width, limitX)
-        const offsetY = clamp(base.offsetY + (point.y - dragging.startY) / slot.height, limitY)
-        updatePhotoAdjustment(dragging.index, { offsetX, offsetY })
+        updatePhotoAdjustment(dragging.index, {
+          offsetX: clamp(base.offsetX + (point.x - dragging.startX) / slot.width, limits.x),
+          offsetY: clamp(base.offsetY + (point.y - dragging.startY) / slot.height, limits.y),
+        })
+        return
+      }
+
+      if (dragging.kind === 'transform') {
+        const distance = Math.max(1, distanceBetween(point, dragging.center))
+        const size = Math.min(
+          MAX_DECORATION_SIZE,
+          Math.max(MIN_DECORATION_SIZE, dragging.startSize * (distance / dragging.startDistance)),
+        )
+        const angle = Math.atan2(point.y - dragging.center.y, point.x - dragging.center.x)
+        const rotation = dragging.startRotation + (angle - dragging.startAngle)
+
+        setDecorations((current) =>
+          current.map((decoration) =>
+            decoration.id === dragging.id ? { ...decoration, size, rotation } : decoration,
+          ),
+        )
         return
       }
 
@@ -439,8 +511,8 @@ export function FanCardSection({
           setLayout(draft.layout)
           setFontKey(draft.fontKey)
           setSelectedPhotoIndexes(draft.selectedPhotoIndexes)
-          setDecorations(draft.decorations)
           setPhotoAdjustments(draft.photoAdjustments ?? [])
+          setDecorations(draft.decorations)
           // 이어 붙일 식별자가 겹치지 않게 이미 쓴 번호 뒤에서 시작한다.
           decorationCounterRef.current = draft.decorations.length
         } else if (stored && stored.photos.length > 0) {
@@ -476,8 +548,8 @@ export function FanCardSection({
         layout,
         fontKey,
         selectedPhotoIndexes: [...selectedPhotoIndexes],
-        decorations: [...decorations],
         photoAdjustments: [...photoAdjustments],
+        decorations: [...decorations],
         savedAt: new Date().toISOString(),
       }).catch(() => undefined)
     }, DRAFT_SAVE_DELAY_MS)
@@ -589,42 +661,91 @@ export function FanCardSection({
 
         // 고른 사진 칸도 점선으로 알려 준다. 저장본에는 남지 않는다.
         const selectedSlot = slots?.find((slot) => slot.index === selectedPhotoIndex)
-        if (selectedSlot) {
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            ctx.save()
-            ctx.setLineDash([14, 10])
-            ctx.lineWidth = 4
-            ctx.strokeStyle = resolveSelectionColor()
-            ctx.strokeRect(
-              selectedSlot.x + 2,
-              selectedSlot.y + 2,
-              selectedSlot.width - 4,
-              selectedSlot.height - 4,
-            )
-            ctx.restore()
-          }
-        }
+        if (!selectedSlot) return
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.save()
+        ctx.setLineDash([14, 10])
+        ctx.lineWidth = 4
+        ctx.strokeStyle = resolveSelectionColor()
+        ctx.strokeRect(
+          selectedSlot.x + 2,
+          selectedSlot.y + 2,
+          selectedSlot.width - 4,
+          selectedSlot.height - 4,
+        )
+        ctx.restore()
       })
       .then(() => {
-        // 고른 요소를 알아볼 수 있게 점선을 두른다. 이 표시는 미리보기에만 그리고
+        // 고른 요소를 알아볼 수 있게 점선을 두르고, 카드 위에서 바로 조작할 수 있는
+        // 삭제(×)·조절(↔) 핸들을 모서리에 그린다. 이 표시는 미리보기에만 그리고
         // 내려받을 때는 따로 그린 캔버스를 쓰므로 저장본에는 남지 않는다.
         if (!active || !selectedDecoration) return
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
-        const half = selectedDecoration.size / 2
-        const halfWidth = selectedDecoration.kind === 'TEXT'
-          ? Math.max(half, (selectedDecoration.content.length * selectedDecoration.size * 0.6) / 2)
-          : half
+        const { half, halfWidth } = decorationExtents(selectedDecoration)
+        const selectionColor = resolveSelectionColor()
 
         ctx.save()
         ctx.translate(selectedDecoration.x, selectedDecoration.y)
         ctx.rotate(selectedDecoration.rotation)
         ctx.setLineDash([14, 10])
         ctx.lineWidth = 4
-        ctx.strokeStyle = resolveSelectionColor()
-        ctx.strokeRect(-halfWidth - 8, -half - 8, halfWidth * 2 + 16, half * 2 + 16)
+        ctx.strokeStyle = selectionColor
+        ctx.strokeRect(
+          -halfWidth - SELECTION_INSET,
+          -half - SELECTION_INSET,
+          halfWidth * 2 + SELECTION_INSET * 2,
+          half * 2 + SELECTION_INSET * 2,
+        )
+        ctx.setLineDash([])
+
+        /** 테두리 모서리에 흰 원 핸들 하나를 그린다. */
+        const drawHandleCircle = (x: number, y: number) => {
+          ctx.beginPath()
+          ctx.arc(x, y, HANDLE_DRAW_RADIUS, 0, Math.PI * 2)
+          ctx.fillStyle = '#ffffff'
+          ctx.fill()
+          ctx.lineWidth = 4
+          ctx.strokeStyle = selectionColor
+          ctx.stroke()
+        }
+
+        const cornerX = halfWidth + SELECTION_INSET
+        const cornerY = half + SELECTION_INSET
+        const iconRadius = HANDLE_DRAW_RADIUS * 0.42
+
+        // 오른쪽 위 — 삭제(×) 핸들
+        drawHandleCircle(cornerX, -cornerY)
+        ctx.lineWidth = 5
+        ctx.lineCap = 'round'
+        ctx.strokeStyle = selectionColor
+        ctx.beginPath()
+        ctx.moveTo(cornerX - iconRadius, -cornerY - iconRadius)
+        ctx.lineTo(cornerX + iconRadius, -cornerY + iconRadius)
+        ctx.moveTo(cornerX + iconRadius, -cornerY - iconRadius)
+        ctx.lineTo(cornerX - iconRadius, -cornerY + iconRadius)
+        ctx.stroke()
+
+        // 오른쪽 아래 — 크기·기울기 조절(↔) 핸들
+        drawHandleCircle(cornerX, cornerY)
+        ctx.beginPath()
+        ctx.moveTo(cornerX - iconRadius, cornerY + iconRadius)
+        ctx.lineTo(cornerX + iconRadius, cornerY - iconRadius)
+        ctx.stroke()
+        for (const [tipX, tipY] of [
+          [cornerX + iconRadius, cornerY - iconRadius],
+          [cornerX - iconRadius, cornerY + iconRadius],
+        ] as const) {
+          const direction = tipY < cornerY ? 1 : -1
+          ctx.beginPath()
+          ctx.moveTo(tipX - direction * iconRadius * 0.9, tipY)
+          ctx.lineTo(tipX, tipY)
+          ctx.lineTo(tipX, tipY + direction * iconRadius * 0.9)
+          ctx.stroke()
+        }
+
         ctx.restore()
       })
       .catch(() => {
@@ -638,6 +759,8 @@ export function FanCardSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     canCompose,
+    photoAdjustments,
+    selectedPhotoIndex,
     dateLabel,
     decorations,
     fanNickname,
@@ -645,10 +768,8 @@ export function FanCardSection({
     influencerName,
     layout,
     meetingTitle,
-    photoAdjustments,
     resolveSelectedPhotos,
     selectedDecoration,
-    selectedPhotoIndex,
     selectedText,
   ])
 
@@ -839,7 +960,7 @@ export function FanCardSection({
                 }
                 // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
                 className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
-                  decorations.length > 0 || photoSlots.length > 0 ? 'cursor-grab' : ''
+                  decorations.length > 0 ? 'cursor-grab' : ''
                 }`}
                 onPointerCancel={handleCanvasPointerUp}
                 onPointerDown={handleCanvasPointerDown}
@@ -872,7 +993,7 @@ export function FanCardSection({
                         className="h-1.5 flex-1 cursor-pointer accent-[var(--color-primary-coral)]"
                         id="fan-card-photo-scale"
                         max={3}
-                        min={selectedPhotoScaleRange.min}
+                        min={1}
                         onChange={(event) =>
                           updatePhotoAdjustment(selectedPhotoIndex, {
                             scale: Number(event.target.value),
@@ -903,9 +1024,6 @@ export function FanCardSection({
                 decorationCount={decorations.length}
                 onAddSticker={(code) => addDecoration('STICKER', code)}
                 onAddText={(text) => addDecoration('TEXT', text)}
-                onRemoveSelected={removeSelectedDecoration}
-                onUpdateSelected={updateSelectedDecoration}
-                selectedDecoration={selectedDecoration}
               />
 
               {saveError ? (

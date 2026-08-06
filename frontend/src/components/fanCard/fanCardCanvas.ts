@@ -128,26 +128,40 @@ export type PhotoSlotRect = {
 }
 
 /**
- * 사진을 칸 안에서 얼마까지 줄일 수 있는지 구한다.
+ * 사진을 칸 안에서 얼마나 밀 수 있는지 구한다.
  *
- * <p>사진 전체가 보이는 지점(contain)이 하한이다. 그보다 더 줄이면 칸 안에서 사진이 떠다니기만
- * 하고 얻는 것이 없다.
+ * <p>기본 배치는 원본 전체를 담으므로(contain) 손대지 않으면 밀 여지가 없다. 팬이 키운 만큼만
+ * 칸을 넘어가고, 넘어간 폭의 절반까지만 밀 수 있다. 더 밀면 칸 한쪽에 빈 자리가 생겨 흐린 배경이
+ * 드러난다.
+ *
+ * <p>칸을 그리는 쪽과 끌기를 처리하는 쪽이 같은 값을 써야 미리보기와 저장본이 어긋나지 않아
+ * 한곳에 둔다.
  *
  * @param slotWidth 칸 너비
  * @param slotHeight 칸 높이
  * @param photoWidth 사진 너비
  * @param photoHeight 사진 높이
- * @returns 최소 확대율이며 칸과 사진 비율이 같으면 1이다
+ * @param zoom 확대율이며 1이면 원본 전체가 담긴다
+ * @returns 칸 크기에 대한 비율로 나타낸 가로·세로 이동 한계
  */
-export function minPhotoScale(
+export function photoOffsetLimits(
   slotWidth: number,
   slotHeight: number,
   photoWidth: number,
   photoHeight: number,
-): number {
-  const cover = Math.max(slotWidth / photoWidth, slotHeight / photoHeight)
+  zoom: number,
+): { x: number; y: number } {
+  if (slotWidth <= 0 || slotHeight <= 0 || photoWidth <= 0 || photoHeight <= 0) {
+    return { x: 0, y: 0 }
+  }
+
   const contain = Math.min(slotWidth / photoWidth, slotHeight / photoHeight)
-  return cover > 0 ? contain / cover : 1
+  const drawWidth = photoWidth * contain * zoom
+  const drawHeight = photoHeight * contain * zoom
+  return {
+    x: Math.max(0, (drawWidth - slotWidth) / 2 / slotWidth),
+    y: Math.max(0, (drawHeight - slotHeight) / 2 / slotHeight),
+  }
 }
 
 /** 카드에 담을 정보다. */
@@ -664,10 +678,16 @@ function roundedRectPath(
 }
 
 /**
- * 사진을 지정한 사각형에 비율을 유지한 채 가득 채워 그린다.
+ * 사진을 지정한 사각형에 **자르지 않고** 전부 담아 그린다.
  *
- * <p>가로세로 비가 맞지 않으면 넘치는 쪽을 중앙 기준으로 잘라 낸다. 늘려 맞추면 얼굴이
- * 찌그러지므로 크롭을 택한다.
+ * <p>통화 캡처는 가로 영상(상대 화면 + 셀프뷰)이라 칸 비율에 맞춰 잘라 내면 사람 얼굴이나
+ * 셀프뷰 창이 통째로 잘려 나간다. 그래서 원본 전체를 비율대로 담고(contain), 남는 띠는
+ * 같은 사진을 흐리게 확대한 채움으로 메워 빈 여백처럼 보이지 않게 한다.
+ * 칸과 사진 비율이 같으면 채움이 완전히 덮여 이전과 똑같이 보인다.
+ *
+ * <p>팬이 배치를 손댄 경우에는 그 값만큼 키우고 밀어 그린다. 기본값은 확대율 1이라 아무것도
+ * 하지 않으면 위 설명 그대로 전체가 담긴다. 얼굴을 크게 담고 싶은 팬은 키워서 원하는 부분만
+ * 남길 수 있고, 그때는 칸을 넘어간 만큼만 밀 수 있다.
  *
  * @param ctx 그릴 대상 컨텍스트
  * @param photo 그릴 사진
@@ -696,22 +716,34 @@ function drawPhotoCover(
   }
   ctx.clip()
 
-  const zoom = adjustment?.scale ?? 1
-  // 줄여서 여백이 생기면 그 자리에 카드 도안이 그대로 비친다. 옅게 깔아 사진 칸임을 남긴다.
-  if (zoom < 1) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.06)'
-    ctx.fillRect(x, y, width, height)
-  }
+  // 1) 배경 — 흐린 확대 채움. 블러가 가장자리에서 옅어지지 않게 살짝 키워 그린다.
+  const coverScale = Math.max(width / photo.width, height / photo.height) * 1.12
+  const coverWidth = photo.width * coverScale
+  const coverHeight = photo.height * coverScale
+  ctx.filter = 'blur(26px)'
+  ctx.drawImage(
+    photo,
+    x + (width - coverWidth) / 2,
+    y + (height - coverHeight) / 2,
+    coverWidth,
+    coverHeight,
+  )
+  ctx.filter = 'none'
+  // 흐린 배경을 한 단계 눌러 원본 사진이 또렷하게 도드라지게 한다.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+  ctx.fillRect(x, y, width, height)
 
-  const scale = Math.max(width / photo.width, height / photo.height) * zoom
-  const drawWidth = photo.width * scale
-  const drawHeight = photo.height * scale
-  // 레이아웃을 바꾸면 칸 비율이 달라져 예전 이동량이 한계를 넘을 수 있다. 그대로 두면 칸 한쪽에
-  // 빈 자리가 생기므로 그릴 때 다시 붙잡아 둔다.
-  const limitX = Math.abs(drawWidth - width) / 2 / width
-  const limitY = Math.abs(drawHeight - height) / 2 / height
-  const offsetX = Math.min(Math.max(adjustment?.offsetX ?? 0, -limitX), limitX)
-  const offsetY = Math.min(Math.max(adjustment?.offsetY ?? 0, -limitY), limitY)
+  // 2) 전경 — 기본은 원본 전체를 담고(contain), 팬이 키운 만큼만 확대한다. 손대지 않으면
+  // zoom 이 1이라 사진이 잘리지 않고, 키우면 그만큼 칸을 넘어가며 배경 채움이 가려진다.
+  const zoom = adjustment?.scale ?? 1
+  const containScale = Math.min(width / photo.width, height / photo.height)
+  const drawWidth = photo.width * containScale * zoom
+  const drawHeight = photo.height * containScale * zoom
+  // 칸을 넘어간 만큼만 밀 수 있다. 확대하지 않았으면 이동 여지가 없어 가운데에 머문다.
+  // 레이아웃을 바꿔 칸 비율이 달라졌을 때 예전 이동량이 남아 사진이 밀리는 것도 여기서 막는다.
+  const limits = photoOffsetLimits(width, height, photo.width, photo.height, zoom)
+  const offsetX = Math.min(Math.max(adjustment?.offsetX ?? 0, -limits.x), limits.x)
+  const offsetY = Math.min(Math.max(adjustment?.offsetY ?? 0, -limits.y), limits.y)
   ctx.drawImage(
     photo,
     x + (width - drawWidth) / 2 + offsetX * width,

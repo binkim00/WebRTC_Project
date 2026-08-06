@@ -133,7 +133,9 @@ export function createInitialMeetingForm(influencerId?: number): FanMeetingForm 
       queueOpenAt: '',
       callDurationSec: 180,
       recordingEnabled: true,
-      translationEnabled: false,
+      // 번역 자막은 화면에서 켜고 끄는 항목이 아니다. 자막은 AI 워커가 참가자 언어를 보고
+      // 알아서 제공하므로 API가 요구하는 값은 항상 켬으로 보낸다.
+      translationEnabled: true,
       reconnectGraceSec: null,
       earlyStartMinutes: null,
       maxRecallCount: null,
@@ -186,7 +188,17 @@ export function readMeetingCreateLocalDraft(userId?: number): MeetingCreateLocal
     if (!serialized) return undefined
 
     const parsed: unknown = JSON.parse(serialized)
-    if (isMeetingCreateLocalDraft(parsed)) return parsed
+    if (isMeetingCreateLocalDraft(parsed)) {
+      // 번역 자막 토글이 화면에서 사라져 이제 항상 켬으로 보낸다. 토글이 있던 시절의
+      // 초안이 꺼짐(false)을 들고 있어도 복구 시점에 켬으로 맞춰 준다.
+      return {
+        ...parsed,
+        form: {
+          ...parsed.form,
+          operation: { ...parsed.form.operation, translationEnabled: true },
+        },
+      }
+    }
 
     window.localStorage.removeItem(storageKey(userId))
     return undefined

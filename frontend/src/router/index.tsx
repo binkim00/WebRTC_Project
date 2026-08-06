@@ -422,10 +422,12 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            // 매니저도 인플루언서와 같은 공용 통계 화면을 쓴다. 공용 화면이 역할에 따라
+            // 라벨과 CSV 내보내기 권한을 스스로 분기하므로 매니저 전용 화면을 따로 두지 않는다.
             path: 'fan-meetings/:fanMeetingId/statistics',
             lazy: lazyPage(
-              () => import('../pages/manager/ManagerRoutePages'),
-              'ManagerStatisticsPage',
+              () => import('../pages/common/CommonRoutePages'),
+              'MeetingStatisticsPage',
             ),
           },
           {

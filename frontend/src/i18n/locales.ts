@@ -1059,6 +1059,10 @@ const ko = {
   'influencerFanRecordPage.t9': '팬미팅마다 메모를 하나씩 남길 수 있어요.',
   'influencerFanRecordPage.t10': '대화 요약',
   'influencerFanRecordPage.t11': '통화가 끝나면 자동으로 기록돼요.',
+  'influencerFanRecordPage.summary.noRecord':
+    '이 브라우저에 남은 통화 기록이 없어 요약을 불러올 수 없어요. 통화를 진행한 브라우저에서 확인해 주세요.',
+  'influencerFanRecordPage.summary.generating': '요약을 만드는 중이에요. 잠시 뒤 다시 확인해 주세요.',
+  'influencerFanRecordPage.summary.failed': '요약을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
   'influencerFanRecordPage.t12': '내 메모',
   'influencerFanRecordPage.t13': '내 메모',
   'influencerFanRecordPage.t14': '예: 다음 통화에서는 과학 동아리 활동이 어땠는지 물어보기.',
@@ -1336,6 +1340,7 @@ const ko = {
   'managerMeetingListPage.t19': '상세 관리',
   'managerMeetingListPage.t20': '참가자',
   'managerMeetingListPage.t21': '운영',
+  'managerMeetingListPage.statistics': '결과 통계',
   'managerMeetingListPage.t22': '발행',
   'managerMeetingListPage.t23': '삭제',
   'managerMeetingListPage.t24': '취소',
@@ -1469,8 +1474,16 @@ const ko = {
   'managerRoutePages.t43': '회까지 다시 호출',
   'managerRoutePages.t44': '입장 요청에 응답하지 않은 팬을 다시 호출할 수 있는 최대 횟수입니다. 입력하지 않으면 서비스 기본값이 적용됩니다.',
   'managerRoutePages.t45': '응답 없는 팬 다시 호출',
-  'managerRoutePages.t46': '녹화 및 실시간 기능',
-  'managerRoutePages.t47': '통화 중 사용할 녹화와 번역 자막 기능을 선택합니다.',
+  'managerCreate.preset.inMinutes': '{p0}분 뒤부터',
+  'managerCreate.preset.inHours': '{p0}시간 뒤부터',
+  'managerCreate.preset.minutesBefore': '시작 {p0}분 전',
+  'managerCreate.preset.hoursBefore': '시작 {p0}시간 전',
+  'managerCreate.preset.daysBefore': '시작 {p0}일 전',
+  'managerCreate.preset.needStart': '기본 정보에서 시작 일시를 먼저 정해 주세요.',
+  'connectedCallRoom.memo.title': '대기실에서 남긴 메모',
+  'managerRoutePages.t46': '녹화 기능',
+  'managerRoutePages.t47':
+    '통화 중 사용할 녹화 기능을 선택합니다. 번역 자막은 참가자 언어에 맞춰 자동으로 제공돼요.',
   'managerRoutePages.t48': '영상통화를 녹화합니다. 녹화 영상은 팬미팅 종료 후 5일 동안 보관된 뒤 삭제됩니다.',
   'managerRoutePages.t49': '영상통화 녹화',
   'managerRoutePages.t50': '통화 중 팬과 인플루언서에게 실시간 번역 자막을 제공합니다.',
@@ -2986,6 +2999,8 @@ const ko = {
   'meetingLifecycle.t23': '응모 마감 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
   'meetingLifecycle.t24': '결과 발표 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
   'meetingLifecycle.t25': '대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
+  'meetingLifecycle.resultBeforeQueueOpen':
+    '결과 발표 일시는 대기열 오픈 일시보다 이전이어야 합니다.',
 
   // 3차 코드모드로 추출한 화면 문구 (컴포넌트 밖 헬퍼·상태 라벨·api 오류 메시지 포함)
   'capturedPhotos.t1': '이 브라우저는 통화 사진 보관을 지원하지 않습니다.',
@@ -3126,7 +3141,8 @@ const ko = {
   'fanCardSection.t22': '되돌리기',
   'fanCardSection.t23': '{p0}번째 사진을 골랐어요',
   'fanCardStickerPanel.t1': '스티커로 꾸미기',
-  'fanCardStickerPanel.t2': '카드 위에서 끌어 옮길 수 있어요.',
+  'fanCardStickerPanel.t2':
+    '카드에서 끌어 옮기고, 모서리 핸들로 크기·기울기를, × 핸들로 삭제할 수 있어요.',
   'fanCardStickerPanel.t3': '눌러서 카드에 올려 보세요.',
   'fanCardStickerPanel.t4': '카드에 올릴 글자',
   'fanCardStickerPanel.t5': '카드에 올릴 짧은 글자',
@@ -3633,6 +3649,12 @@ const en: Partial<Record<TranslationKey, string>> = {
   'influencerFanRecordPage.t9': 'You can leave one note per fan meeting.',
   'influencerFanRecordPage.t10': 'Conversation summary',
   'influencerFanRecordPage.t11': 'Recorded automatically when the call ends.',
+  'influencerFanRecordPage.summary.noRecord':
+    "No call record is left in this browser, so the summary can't be loaded. Open it from the browser used during the call.",
+  'influencerFanRecordPage.summary.generating':
+    'The summary is being generated. Check again shortly.',
+  'influencerFanRecordPage.summary.failed':
+    'Could not load the summary. Please try again shortly.',
   'influencerFanRecordPage.t12': 'My note',
   'influencerFanRecordPage.t13': 'My note',
   'influencerFanRecordPage.t14':
@@ -3937,6 +3959,7 @@ const en: Partial<Record<TranslationKey, string>> = {
   'managerMeetingListPage.t19': 'Manage',
   'managerMeetingListPage.t20': 'Participants',
   'managerMeetingListPage.t21': 'Operations',
+  'managerMeetingListPage.statistics': 'Statistics',
   'managerMeetingListPage.t22': 'Publish',
   'managerMeetingListPage.t23': 'Delete',
   'managerMeetingListPage.t24': 'Cancel',
@@ -4379,8 +4402,16 @@ const en: Partial<Record<TranslationKey, string>> = {
   'managerRoutePages.t44':
     'The maximum number of times a fan who did not answer can be called again. Leave it empty to use the service default.',
   'managerRoutePages.t45': 'Recall unresponsive fans',
-  'managerRoutePages.t46': 'Recording and live features',
-  'managerRoutePages.t47': 'Choose the recording and translated subtitles used during calls.',
+  'managerCreate.preset.inMinutes': 'From {p0} min from now',
+  'managerCreate.preset.inHours': 'From {p0} hr from now',
+  'managerCreate.preset.minutesBefore': '{p0} min before start',
+  'managerCreate.preset.hoursBefore': '{p0} hr before start',
+  'managerCreate.preset.daysBefore': '{p0} days before start',
+  'managerCreate.preset.needStart': 'Set the start time in Basic info first.',
+  'connectedCallRoom.memo.title': 'Note you left in the waiting room',
+  'managerRoutePages.t46': 'Recording',
+  'managerRoutePages.t47':
+    'Choose whether calls are recorded. Translated subtitles are provided automatically based on participant languages.',
   'managerRoutePages.t48':
     'Record the video calls. Recordings are kept for 5 days after the fan meeting and then deleted.',
   'managerRoutePages.t49': 'Record video calls',
@@ -6315,6 +6346,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'meetingLifecycle.t23': 'The application closing time must be before the fan meeting start time.',
   'meetingLifecycle.t24': 'The results announcement time must be before the fan meeting start time.',
   'meetingLifecycle.t25': 'The queue open time must be before the fan meeting start time.',
+  'meetingLifecycle.resultBeforeQueueOpen':
+    'The results announcement time must be before the queue open time.',
 
   // 3차 코드모드 문구의 영어 번역
   'capturedPhotos.t1': 'This browser cannot store call photos.',
@@ -6455,7 +6488,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanCardSection.t22': 'Reset',
   'fanCardSection.t23': 'Photo {p0} selected',
   'fanCardStickerPanel.t1': 'Decorate with stickers',
-  'fanCardStickerPanel.t2': 'You can drag them around on the card.',
+  'fanCardStickerPanel.t2':
+    'Drag to move, use the corner handle to resize and tilt, and the × handle to delete.',
   'fanCardStickerPanel.t3': 'Tap one to put it on the card.',
   'fanCardStickerPanel.t4': 'Text to put on the card',
   'fanCardStickerPanel.t5': 'A short line for the card',
