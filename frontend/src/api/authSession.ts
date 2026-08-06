@@ -1,4 +1,10 @@
-export type LoginRole = 'FAN' | 'INFLUENCER' | 'MANAGER' | 'SOLO_INFLUENCER'
+/**
+ * 로그인 응답의 역할이며 백엔드 `UserRole` enum과 같은 값을 쓴다.
+ *
+ * `ADMIN`은 서비스 운영자다. 팬미팅을 운영하는 역할(MANAGER·SOLO_INFLUENCER)과 달리
+ * 서비스 전체 공지 작성·조직 구성원 추가처럼 서비스 단위 권한을 가진다.
+ */
+export type LoginRole = 'FAN' | 'INFLUENCER' | 'MANAGER' | 'SOLO_INFLUENCER' | 'ADMIN'
 
 export type LoginResponse = {
   accessToken: string
@@ -19,7 +25,8 @@ export function isLoginRole(value: unknown): value is LoginRole {
     value === 'FAN' ||
     value === 'INFLUENCER' ||
     value === 'MANAGER' ||
-    value === 'SOLO_INFLUENCER'
+    value === 'SOLO_INFLUENCER' ||
+    value === 'ADMIN'
   )
 }
 

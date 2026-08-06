@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
 export type ManagerEvent = {
   eventId: string
@@ -125,20 +126,25 @@ function normalizeCoverImageUrl(value: string | null): string | null {
   }
 
   if (trimmed.length > 2048) {
-    throw new TypeError('커버 이미지 URL은 2048자 이하로 입력해 주세요.')
+    throw new TypeError(translate('managerOperations.t1'))
   }
 
   let normalizedUrl: URL
+  // 프로토콜 오류는 catch로 흘러 들어가도 그대로 다시 던져야 한다. 이전에는 오류 메시지 문자열을
+  // 비교해 구분했는데, 메시지가 번역되면서 그 비교가 항상 실패해 프로토콜 오류까지 "올바른 URL이
+  // 아니다"라는 엉뚱한 안내로 바뀌었다. 그래서 플래그로 구분한다.
+  let protocolRejected = false
   try {
     normalizedUrl = new URL(trimmed)
     if (normalizedUrl.protocol !== 'http:' && normalizedUrl.protocol !== 'https:') {
-      throw new TypeError('커버 이미지는 http 또는 https URL이어야 합니다.')
+      protocolRejected = true
+      throw new TypeError(translate('managerOperations.t2'))
     }
   } catch (error) {
-    if (error instanceof TypeError && error.message === '커버 이미지는 http 또는 https URL이어야 합니다.') {
+    if (protocolRejected) {
       throw error
     }
-    throw new TypeError('커버 이미지는 올바른 URL이어야 합니다.')
+    throw new TypeError(translate('managerOperations.t3'))
   }
 
   // Java URL 검증기에서 경로의 대괄호를 거부할 수 있어 퍼센트 인코딩한다.
@@ -147,31 +153,38 @@ function normalizeCoverImageUrl(value: string | null): string | null {
   return normalizedUrl.toString()
 }
 
-/** 서버 요청 전에 필수 값과 숫자 범위를 검사해 잘못된 요청을 빠르게 차단한다. */
+/**
+ * 서버 요청 전에 필수 값과 숫자 범위를 검사해 잘못된 요청을 빠르게 차단한다.
+ *
+ * 참고: `participantSelectionType`은 생성 마법사가 폼에서 직접 받는다(ManagerRoutePages의
+ * 참가자 선별 방식 선택). 이 값을 보내지 않으면 백엔드가 `APPLICATION`으로 간주하고, 그 상태에서
+ * 응모가 꺼져 있으면 "Application based meetings require enabled applications."로 생성을
+ * 거부하므로(FanMeetingService.validateParticipantSelection) 요청 본문에 항상 함께 보낸다.
+ */
 function assertFanMeetingCreateRequest(payload: FanMeetingCreateRequest) {
   normalizeCoverImageUrl(payload.coverImageUrl)
 
   if (!Number.isInteger(payload.influencerId) || payload.influencerId <= 0) {
-    throw new TypeError('담당 인플루언서 ID는 1 이상의 정수여야 합니다.')
+    throw new TypeError(translate('managerOperations.t4'))
   }
 
   if (!payload.title.trim()) {
-    throw new TypeError('팬미팅명을 입력해 주세요.')
+    throw new TypeError(translate('managerOperations.t5'))
   }
 
   if (!payload.scheduledStartAt.trim()) {
-    throw new TypeError('팬미팅 시작 일시를 입력해 주세요.')
+    throw new TypeError(translate('managerOperations.t6'))
   }
 
   if (!payload.operation.queueOpenAt.trim()) {
-    throw new TypeError('대기열 오픈 일시를 입력해 주세요.')
+    throw new TypeError(translate('managerOperations.t7'))
   }
 
   if (
     !Number.isInteger(payload.operation.callDurationSec) ||
     payload.operation.callDurationSec <= 0
   ) {
-    throw new TypeError('1인 통화 시간은 1초 이상의 정수여야 합니다.')
+    throw new TypeError(translate('managerOperations.t8'))
   }
 
   if (payload.application.enabled) {
@@ -182,16 +195,16 @@ function assertFanMeetingCreateRequest(payload: FanMeetingCreateRequest) {
       !Number.isInteger(payload.application.capacity) ||
       payload.application.capacity <= 0
     ) {
-      throw new TypeError('응모를 사용하는 경우 응모 기간·결과 발표 일시·정원을 입력해 주세요.')
+      throw new TypeError(translate('managerOperations.t9'))
     }
   }
 
   if (payload.participantSelectionType === 'EXTERNAL_SELECTION') {
     if (payload.application.enabled) {
-      throw new TypeError('CSV 직접 등록 방식은 응모 기능과 함께 사용할 수 없습니다.')
+      throw new TypeError(translate('managerOperations.t10'))
     }
     if (!Number.isInteger(payload.application.capacity) || payload.application.capacity <= 0) {
-      throw new TypeError('CSV로 등록할 참가자 정원을 1명 이상 입력해 주세요.')
+      throw new TypeError(translate('managerOperations.t11'))
     }
   }
 }
@@ -217,6 +230,7 @@ export async function createEvent(
     description: payload.description?.trim() || null,
     coverImageUrl: normalizeCoverImageUrl(payload.coverImageUrl),
     scheduledStartAt: payload.scheduledStartAt,
+    // 폼이 고른 선별 방식을 그대로 보낸다. 값이 없으면 백엔드 기본값과 같은 APPLICATION이다.
     participantSelectionType: payload.participantSelectionType ?? 'APPLICATION',
     application: payload.application.enabled
       ? {
@@ -259,7 +273,7 @@ export async function createEvent(
   )
 
   if (!isFanMeetingCreateResponse(value)) {
-    throw new TypeError('이벤트 생성 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('managerOperations.t12'))
   }
 
   return value
@@ -272,7 +286,7 @@ export async function updateFanMeeting(
   authToken: string,
 ): Promise<FanMeetingUpdateResponse> {
   if (!Number.isInteger(meetingId) || meetingId <= 0) {
-    throw new TypeError('수정할 팬미팅 ID가 올바르지 않습니다.')
+    throw new TypeError(translate('managerOperations.t13'))
   }
 
   assertFanMeetingCreateRequest(payload)
@@ -283,6 +297,8 @@ export async function updateFanMeeting(
     description: payload.description?.trim() || null,
     coverImageUrl: normalizeCoverImageUrl(payload.coverImageUrl),
     scheduledStartAt: payload.scheduledStartAt,
+    // 수정에서도 선별 방식을 함께 보내 생성 때와 계약을 맞춘다.
+    participantSelectionType: payload.participantSelectionType ?? 'APPLICATION',
     application: payload.application.enabled
       ? {
           ...payload.application,
@@ -316,7 +332,7 @@ export async function updateFanMeeting(
   )
 
   if (typeof value !== 'object' || value === null) {
-    throw new TypeError('팬미팅 수정 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('managerOperations.t14'))
   }
 
   const response = value as Record<string, unknown>
@@ -324,7 +340,7 @@ export async function updateFanMeeting(
     response.meetingId !== meetingId ||
     typeof response.status !== 'string'
   ) {
-    throw new TypeError('팬미팅 수정 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('managerOperations.t15'))
   }
 
   return {
@@ -339,7 +355,7 @@ export async function publishFanMeeting(
   authToken: string,
 ): Promise<FanMeetingPublishResponse> {
   if (!Number.isInteger(meetingId) || meetingId <= 0) {
-    throw new TypeError('게시할 팬미팅 ID가 올바르지 않습니다.')
+    throw new TypeError(translate('managerOperations.t16'))
   }
 
   const value = unwrap(
@@ -350,12 +366,12 @@ export async function publishFanMeeting(
   )
 
   if (typeof value !== 'object' || value === null) {
-    throw new TypeError('팬미팅 게시 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('managerOperations.t17'))
   }
 
   const response = value as Record<string, unknown>
   if (response.meetingId !== meetingId || response.status !== 'PUBLISHED') {
-    throw new TypeError('팬미팅 게시 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('managerOperations.t18'))
   }
 
   return {

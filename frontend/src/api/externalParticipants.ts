@@ -1,6 +1,7 @@
 import { apiRequest } from './client'
 import { unwrapEnvelope } from './envelope'
 import type { FanMeetingStatus } from './meetingManagement'
+import { translate } from '../i18n'
 
 /** 명단 CSV가 반드시 가져야 하는 헤더다. (백엔드 ExternalParticipantCsvParser.HEADER) */
 export const EXTERNAL_PARTICIPANT_CSV_HEADER = 'email,callOrder'
@@ -47,7 +48,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown, fieldName: string): string {
   if (typeof value === 'string') return value
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('externalParticipants.t1', { p0: fieldName }))
 }
 
 function readOptionalString(value: unknown): string | null {
@@ -60,16 +61,16 @@ function readOptionalNumber(value: unknown): number | null {
 
 function readNumber(value: unknown, fieldName: string): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('externalParticipants.t2', { p0: fieldName }))
 }
 
 function readBoolean(value: unknown, fieldName: string): boolean {
   if (typeof value === 'boolean') return value
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('externalParticipants.t3', { p0: fieldName }))
 }
 
 function parseFileError(value: unknown): ExternalParticipantFileError {
-  if (!isRecord(value)) throw new TypeError('명단 오류 응답 형식이 올바르지 않습니다.')
+  if (!isRecord(value)) throw new TypeError(translate('externalParticipants.t4'))
   return {
     errorCode: readString(value.errorCode, 'errorCode'),
     errorMessage: readString(value.errorMessage, 'errorMessage'),
@@ -77,7 +78,7 @@ function parseFileError(value: unknown): ExternalParticipantFileError {
 }
 
 function parseRow(value: unknown): ExternalParticipantRow {
-  if (!isRecord(value)) throw new TypeError('명단 행 응답 형식이 올바르지 않습니다.')
+  if (!isRecord(value)) throw new TypeError(translate('externalParticipants.t5'))
   return {
     rowNumber: readNumber(value.rowNumber, 'rowNumber'),
     email: readString(value.email, 'email'),
@@ -93,7 +94,7 @@ function parseRow(value: unknown): ExternalParticipantRow {
 function parsePreviewResponse(value: unknown): ExternalParticipantPreviewResponse {
   const record = unwrapEnvelope<Record<string, unknown>>(value)
   if (!isRecord(record) || !Array.isArray(record.rows) || !Array.isArray(record.fileErrors)) {
-    throw new TypeError('명단 미리보기 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('externalParticipants.t6'))
   }
   return {
     totalRowCount: readNumber(record.totalRowCount, 'totalRowCount'),
@@ -107,7 +108,7 @@ function parsePreviewResponse(value: unknown): ExternalParticipantPreviewRespons
 
 function parseConfirmResponse(value: unknown): ExternalParticipantConfirmResponse {
   const record = unwrapEnvelope<Record<string, unknown>>(value)
-  if (!isRecord(record)) throw new TypeError('명단 확정 응답 형식이 올바르지 않습니다.')
+  if (!isRecord(record)) throw new TypeError(translate('externalParticipants.t7'))
   return {
     meetingId: readNumber(record.meetingId, 'meetingId'),
     participantCount: readNumber(record.participantCount, 'participantCount'),
@@ -134,7 +135,7 @@ export async function downloadExternalParticipantCsvTemplate(
   )
 
   if (!response.ok) {
-    throw new Error(`명단 양식을 내려받지 못했습니다. (HTTP ${response.status})`)
+    throw new Error(translate('externalParticipants.t8', { p0: response.status }))
   }
 
   const disposition = response.headers.get('Content-Disposition') ?? ''

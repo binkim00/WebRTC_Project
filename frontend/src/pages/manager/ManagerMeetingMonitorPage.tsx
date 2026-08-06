@@ -41,7 +41,9 @@ import {
 } from '../../api/queueManagement'
 import { isQueueNotInitialized } from '../../api/queue'
 import { AlertBanner, Badge, Button, Card, Spinner } from '../../components'
+import { MeetingWrapUp } from '../../components/call/MeetingWrapUp'
 import { getAvailableActions } from './meetingLifecycle'
+import { translate, useTranslation } from '../../i18n'
 
 const previewQueue: MeetingQueue = {
   currentCall: {
@@ -59,27 +61,27 @@ const previewQueue: MeetingQueue = {
   ],
 }
 
-const statusLabels: Record<QueueStatus, string> = {
-  WAITING: '대기',
-  CALLED: '호출됨',
-  IN_CALL: '통화 중',
-  COMPLETED: '완료',
-  NO_SHOW: '노쇼',
-  SKIPPED: '건너뜀',
-  REMOVED: '제외',
-}
+const statusLabels = (): Record<QueueStatus, string> => ({
+  WAITING: translate('managerMeetingMonitorPage.t81'),
+  CALLED: translate('managerMeetingMonitorPage.t82'),
+  IN_CALL: translate('managerMeetingMonitorPage.t83'),
+  COMPLETED: translate('managerMeetingMonitorPage.t84'),
+  NO_SHOW: translate('managerMeetingMonitorPage.t85'),
+  SKIPPED: translate('managerMeetingMonitorPage.t86'),
+  REMOVED: translate('managerMeetingMonitorPage.t87'),
+})
 
 /** 팬미팅 상태 코드를 화면용 한국어 라벨로 바꾼다. */
-const meetingStatusLabels: Record<string, string> = {
-  DRAFT: '초안',
-  PUBLISHED: '발행됨',
-  APPLICATION_OPEN: '응모 접수 중',
-  APPLICATION_CLOSED: '응모 마감',
-  READY: '진행 준비',
-  LIVE: '진행 중',
-  ENDED: '종료',
-  CANCELED: '취소됨',
-}
+const meetingStatusLabels = (): Record<string, string> => ({
+  DRAFT: translate('managerMeetingMonitorPage.t88'),
+  PUBLISHED: translate('managerMeetingMonitorPage.t89'),
+  APPLICATION_OPEN: translate('managerMeetingMonitorPage.t90'),
+  APPLICATION_CLOSED: translate('managerMeetingMonitorPage.t91'),
+  READY: translate('managerMeetingMonitorPage.t92'),
+  LIVE: translate('managerMeetingMonitorPage.t93'),
+  ENDED: translate('managerMeetingMonitorPage.t94'),
+  CANCELED: translate('managerMeetingMonitorPage.t95'),
+})
 
 function statusBadge(status: QueueStatus): 'primary' | 'success' | 'warning' | 'danger' | 'neutral' {
   if (status === 'IN_CALL') return 'primary'
@@ -90,6 +92,7 @@ function statusBadge(status: QueueStatus): 'primary' | 'success' | 'warning' | '
 }
 
 export function ManagerMeetingMonitorPage() {
+  const { t } = useTranslation()
   const { fanMeetingId } = useParams<{ fanMeetingId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -132,7 +135,7 @@ export function ManagerMeetingMonitorPage() {
 
   const loadQueue = useCallback(async (showSpinner = false) => {
     if (!fanMeetingId) {
-      setError('팬미팅 식별자가 없습니다.')
+      setError(t('managerMeetingMonitorPage.t45'))
       setLoading(false)
       return
     }
@@ -145,7 +148,7 @@ export function ManagerMeetingMonitorPage() {
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('로그인 후 영상 모니터링 화면을 이용할 수 있습니다.')
+      setError(t('managerMeetingMonitorPage.t46'))
       setLoading(false)
       return
     }
@@ -178,13 +181,15 @@ export function ManagerMeetingMonitorPage() {
         return
       }
       setQueueUnavailable(false)
-      setError(reason instanceof ApiError ? reason.message : '대기열 정보를 불러오지 못했습니다.')
+      setError(reason instanceof ApiError ? reason.message : t('managerMeetingMonitorPage.t47'))
     } finally {
       if (requestId === queueRequestIdRef.current) {
         setLoading(false)
         setRefreshing(false)
       }
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId, isPreview])
 
   /** 대기 중(PENDING)인 순서 변경 요청 목록을 갱신한다. 실패해도 대기열 운영은 막지 않는다. */
@@ -218,7 +223,7 @@ export function ManagerMeetingMonitorPage() {
   const loadMeetingStatus = useCallback(async () => {
     if (!fanMeetingId) {
       setMeetingStatus(undefined)
-      setStatusError('팬미팅 상태를 확인할 수 없어 시작·종료 기능을 잠갔습니다.')
+      setStatusError(t('managerMeetingMonitorPage.t48'))
       return
     }
 
@@ -233,7 +238,7 @@ export function ManagerMeetingMonitorPage() {
     const token = getAuthSession()?.accessToken
     if (!token) {
       setMeetingStatus(undefined)
-      setStatusError('로그인 정보가 없어 팬미팅 상태 변경 기능을 잠갔습니다.')
+      setStatusError(t('managerMeetingMonitorPage.t49'))
       return
     }
 
@@ -261,7 +266,7 @@ export function ManagerMeetingMonitorPage() {
         setParticipantCount(undefined)
         setStatusError(
           detailResult.value.status === 'READY'
-            ? '확정 참가자 수를 확인할 수 없어 팬미팅 시작 기능을 잠갔습니다.'
+            ? t('managerMeetingMonitorPage.t50')
             : undefined,
         )
       }
@@ -273,9 +278,11 @@ export function ManagerMeetingMonitorPage() {
       setStatusError(
         reason instanceof ApiError
           ? reason.message
-          : '팬미팅 상태를 확인할 수 없어 시작·종료 기능을 잠갔습니다.',
+          : t('managerMeetingMonitorPage.t51'),
       )
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId, isPreview])
 
   /** 세 조회가 모두 끝난 뒤 다음 폴링을 예약해 느린 네트워크에서도 요청이 중첩되지 않게 한다. */
@@ -311,7 +318,7 @@ export function ManagerMeetingMonitorPage() {
     if (busyEntryId !== undefined || requestBusyId !== undefined) return
     if (!isPreview && (meetingStatus !== 'LIVE' || statusError)) {
       // 백엔드 호출 API가 팬미팅 상태를 검사하지 않으므로 프론트에서 LIVE를 확인해 조기 세션 생성을 막는다.
-      setError(statusError ?? '팬미팅을 시작한 뒤에만 팬을 호출하거나 노쇼 처리할 수 있습니다.')
+      setError(statusError ?? t('managerMeetingMonitorPage.t52'))
       return
     }
 
@@ -327,7 +334,7 @@ export function ManagerMeetingMonitorPage() {
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('대기열을 운영하려면 다시 로그인해 주세요.')
+      setError(t('managerMeetingMonitorPage.t53'))
       return
     }
 
@@ -349,7 +356,7 @@ export function ManagerMeetingMonitorPage() {
       }
       await loadQueue()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '대기열 상태 변경에 실패했습니다.')
+      setError(reason instanceof Error ? reason.message : t('managerMeetingMonitorPage.t54'))
     } finally {
       setBusyEntryId(undefined)
     }
@@ -370,24 +377,24 @@ export function ManagerMeetingMonitorPage() {
     if (!actionAllowed || statusError) {
       setError(
         action === 'start' || action === 'startNow'
-          ? lifecycleActions.startBlockedReason ?? statusError ?? '현재 상태에서는 팬미팅을 시작할 수 없습니다.'
-          : statusError ?? '진행 중인 팬미팅만 종료할 수 있습니다.',
+          ? lifecycleActions.startBlockedReason ?? statusError ?? t('managerMeetingMonitorPage.t55')
+          : statusError ?? t('managerMeetingMonitorPage.t56'),
       )
       return
     }
 
     const confirmText = action === 'openQueue'
-      ? '대기열을 지금 오픈할까요? 당첨된 팬이 장비 점검 후 대기실에서 기다릴 수 있습니다.'
+      ? t('managerMeetingMonitorPage.t57')
       : action === 'start'
-      ? '팬미팅을 시작할까요? 대기열도 함께 오픈되어 당첨된 팬이 바로 입장할 수 있습니다.'
+      ? t('managerMeetingMonitorPage.t58')
       : action === 'startNow'
-        ? '예약 일시 전에 팬미팅을 즉시 시작할까요? 예정 시작 시각이 현재로 변경됩니다.'
-        : '팬미팅을 종료할까요? 종료하면 대기열 운영이 마무리됩니다.'
+        ? t('managerMeetingMonitorPage.t59')
+        : t('managerMeetingMonitorPage.t60')
     if (!window.confirm(confirmText)) return
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('팬미팅 상태를 변경하려면 다시 로그인해 주세요.')
+      setError(t('managerMeetingMonitorPage.t61'))
       return
     }
 
@@ -412,7 +419,7 @@ export function ManagerMeetingMonitorPage() {
       // 시작했는데 대기열이 아직 닫혀 있으면 팬은 입장 시 409로 막힌다. 조용히 넘기지 않고 알린다.
       setWaitingRoomWarning(
         action !== 'end' && !isWaitingRoomOpen(updated.operation.queueOpenAt)
-          ? '대기열 오픈 시각이 아직 지나지 않아 팬이 대기실에 입장할 수 없습니다. ‘대기열 지금 오픈’을 눌러 주세요.'
+          ? t('managerMeetingMonitorPage.t62')
           : undefined,
       )
       if (action === 'end') {
@@ -427,7 +434,7 @@ export function ManagerMeetingMonitorPage() {
         await Promise.all([loadQueue(), loadMeetingStatus()])
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '팬미팅 상태 변경에 실패했습니다.')
+      setError(reason instanceof Error ? reason.message : t('managerMeetingMonitorPage.t63'))
     } finally {
       setLifecycleBusy(false)
     }
@@ -437,12 +444,12 @@ export function ManagerMeetingMonitorPage() {
   async function changePosition(entry: QueueEntry) {
     if (busyEntryId !== undefined || requestBusyId !== undefined) return
 
-    const input = window.prompt(`${entry.nickname}님의 새 순번을 입력해 주세요. (1 이상)`, String(entry.position))
+    const input = window.prompt(t('managerMeetingMonitorPage.t96', { p0: entry.nickname }), String(entry.position))
     if (input === null) return
 
     const newPosition = Number(input.trim())
     if (!Number.isInteger(newPosition) || newPosition < 1) {
-      setError('순번은 1 이상의 정수로 입력해 주세요.')
+      setError(t('managerMeetingMonitorPage.t64'))
       return
     }
 
@@ -450,7 +457,7 @@ export function ManagerMeetingMonitorPage() {
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('순서를 변경하려면 다시 로그인해 주세요.')
+      setError(t('managerMeetingMonitorPage.t65'))
       return
     }
 
@@ -460,7 +467,7 @@ export function ManagerMeetingMonitorPage() {
       await changeQueuePosition(entry.queueEntryId, newPosition, token)
       await loadQueue()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '대기열 순서 변경에 실패했습니다.')
+      setError(reason instanceof Error ? reason.message : t('managerMeetingMonitorPage.t66'))
     } finally {
       setBusyEntryId(undefined)
     }
@@ -475,14 +482,14 @@ export function ManagerMeetingMonitorPage() {
     // 팬에게 전달할 알림 경로도 아직 없다. 사유를 물으면 전달된다고 오해하게 되므로
     // 백엔드가 저장·알림을 지원할 때까지 승인과 같은 확인만 받는다.
     if (decision === 'APPROVED') {
-      if (!window.confirm(`${request.nickname}님의 순서 변경 요청을 승인할까요? 승인하면 대기열 마지막 순서로 이동합니다.`)) return
-    } else if (!window.confirm(`${request.nickname}님의 순서 변경 요청을 거절할까요?`)) {
+      if (!window.confirm(t('managerMeetingMonitorPage.t97', { p0: request.nickname }))) return
+    } else if (!window.confirm(t('managerMeetingMonitorPage.t98', { p0: request.nickname }))) {
       return
     }
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('요청을 처리하려면 다시 로그인해 주세요.')
+      setError(t('managerMeetingMonitorPage.t67'))
       return
     }
 
@@ -492,7 +499,7 @@ export function ManagerMeetingMonitorPage() {
       await decideQueueChangeRequest(request.requestId, { decision }, token)
       await Promise.all([loadQueue(), loadChangeRequests()])
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '순서 변경 요청 처리에 실패했습니다.')
+      setError(reason instanceof Error ? reason.message : t('managerMeetingMonitorPage.t68'))
     } finally {
       setRequestBusyId(undefined)
     }
@@ -533,26 +540,28 @@ export function ManagerMeetingMonitorPage() {
 
     if (meetingStatus === 'ENDED') {
       return {
-        title: '팬미팅이 종료되었습니다',
-        body: '대기열과 통화 방이 모두 정리되었습니다. 진행 결과는 통계 화면에서 확인할 수 있습니다.',
+        title: t('managerMeetingMonitorPage.t69'),
+        body: t('managerMeetingMonitorPage.t70'),
       }
     }
     if (meetingStatus === 'CANCELED') {
       return {
-        title: '팬미팅이 취소되었습니다',
-        body: '취소된 팬미팅은 대기열을 운영하지 않습니다.',
+        title: t('managerMeetingMonitorPage.t71'),
+        body: t('managerMeetingMonitorPage.t72'),
       }
     }
     if (participantCount === 0) {
       return {
-        title: '아직 대기열이 만들어지지 않았습니다',
-        body: '당첨자 추첨을 실행하면 참가자와 대기열이 함께 만들어집니다. 응모 관리에서 추첨을 먼저 진행해 주세요.',
+        title: t('managerMeetingMonitorPage.t73'),
+        body: t('managerMeetingMonitorPage.t74'),
       }
     }
     return {
-      title: '대기열을 아직 사용할 수 없습니다',
-      body: '참가자는 확정되었지만 대기열이 준비되지 않았습니다. 잠시 후 자동으로 다시 조회합니다.',
+      title: t('managerMeetingMonitorPage.t75'),
+      body: t('managerMeetingMonitorPage.t76'),
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingStatus, participantCount, queueUnavailable])
 
   const endDisabled = lifecycleBusy || queueMutationBusy || Boolean(statusError) || !lifecycleActions.canEnd
@@ -561,6 +570,21 @@ export function ManagerMeetingMonitorPage() {
     ? queue.entries.find((entry) => entry.participantId === queue.currentCall?.participantId)
     : undefined
   const consoleLinkClass = 'inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-[var(--control-padding-inline)] text-sm font-semibold transition-colors hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]'
+
+  /**
+   * 마무리 화면에 보여 줄 진행 결과다.
+   *
+   * 종료 처리가 대기열을 비우기 전에 마지막으로 읽어 둔 항목으로 집계한다. 대기열이 이미
+   * 비었으면 숫자를 보여 주지 않는다(0명으로 잘못 안내하지 않기 위해).
+   */
+  const wrapUpTally = queue.entries.length
+    ? {
+        completed: queue.entries.filter((entry) => entry.status === 'COMPLETED').length,
+        missed: queue.entries.filter(
+          (entry) => entry.status === 'NO_SHOW' || entry.status === 'SKIPPED',
+        ).length,
+      }
+    : undefined
 
   /** 솔로 운영 콘솔에서 팬의 메모·통화 기록으로 바로 이동할 수 있는 경로를 만든다. */
   function fanRecordPath(entry: QueueEntry): string {
@@ -574,19 +598,32 @@ export function ManagerMeetingMonitorPage() {
   }
 
   if (loading) {
-    return <div className="flex min-h-[420px] items-center justify-center"><Spinner label="대기열 정보를 불러오는 중" /></div>
+    return <div className="flex min-h-[420px] items-center justify-center"><Spinner label={t('managerMeetingMonitorPage.t1')} /></div>
+  }
+
+  // 매니저가 종료 버튼을 눌러 팬미팅이 끝났으면, 인플루언서가 정상 종료했을 때와 같은
+  // 마무리 화면을 보여 준다. 이전에는 종료 후에도 빈 대기열이 남은 모니터 화면에 머물러
+  // 무엇이 끝났고 다음에 무엇을 할지 알 수 없었다.
+  if (meetingStatus === 'ENDED' || meetingStatus === 'CANCELED') {
+    return (
+      <MeetingWrapUp
+        meetingId={fanMeetingId ?? ''}
+        reason={meetingStatus}
+        tally={wrapUpTally}
+      />
+    )
   }
 
   return (
     <div className="grid min-w-0 gap-5 pb-10">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-[var(--color-primary-coral)]">팬미팅 #{fanMeetingId}</p>
+          <p className="text-sm font-semibold text-[var(--color-primary-coral)]">{t('managerMeetingMonitorPage.t2')}{fanMeetingId}</p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h1 className="text-4xl font-black tracking-[-0.05em]">
-              {isSoloInfluencer ? '솔로 팬미팅 운영 콘솔' : '실시간 대기열 운영'}
+              {isSoloInfluencer ? t('managerMeetingMonitorPage.t77') : t('managerMeetingMonitorPage.t78')}
             </h1>
-            {meetingStatus ? <Badge variant={meetingStatus === 'LIVE' ? 'primary' : 'neutral'}>{meetingStatusLabels[meetingStatus] ?? meetingStatus}</Badge> : null}
+            {meetingStatus ? <Badge variant={meetingStatus === 'LIVE' ? 'primary' : 'neutral'}>{meetingStatusLabels()[meetingStatus] ?? meetingStatus}</Badge> : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--color-text-secondary)]">
@@ -596,17 +633,17 @@ export function ManagerMeetingMonitorPage() {
             onClick={() => void runLifecycle('start')}
             title={lifecycleActions.startBlockedReason ?? statusError}
           >
-            팬미팅 시작
+            {t('managerMeetingMonitorPage.t3')}
           </Button>
           {meetingStatus === 'READY' || meetingStatus === 'LIVE' ? (
             <Button
               disabled={lifecycleBusy || Boolean(statusError)}
               leadingIcon={<Clock size={17} weight="bold" />}
               onClick={() => void runLifecycle('openQueue')}
-              title="대기실 오픈 시각을 현재로 당겨 당첨된 팬이 바로 입장할 수 있게 합니다."
+              title={t('managerMeetingMonitorPage.t4')}
               variant="secondary"
             >
-              대기열 지금 오픈
+              {t('managerMeetingMonitorPage.t5')}
             </Button>
           ) : null}
           {lifecycleActions.canStartNow && !lifecycleActions.canStart ? (
@@ -614,51 +651,51 @@ export function ManagerMeetingMonitorPage() {
               disabled={immediateStartDisabled}
               leadingIcon={<Play size={17} weight="bold" />}
               onClick={() => void runLifecycle('startNow')}
-              title="예정 시작 시각을 현재로 변경한 뒤 팬미팅을 시작합니다."
+              title={t('managerMeetingMonitorPage.t6')}
               variant="secondary"
             >
-              일정 전에 즉시 시작
+              {t('managerMeetingMonitorPage.t7')}
             </Button>
           ) : null}
-          <Button disabled={endDisabled} leadingIcon={<Stop size={17} weight="bold" />} onClick={() => void runLifecycle('end')} variant="danger">팬미팅 종료</Button>
+          <Button disabled={endDisabled} leadingIcon={<Stop size={17} weight="bold" />} onClick={() => void runLifecycle('end')} variant="danger">{t('managerMeetingMonitorPage.t8')}</Button>
           <Button disabled={refreshing} onClick={() => void refreshMonitor(true)} variant="ghost" leadingIcon={<ArrowsClockwise size={18} weight="bold" />}>
-            {refreshing ? '갱신 중…' : '새로고침'}
+            {refreshing ? t('managerMeetingMonitorPage.t79') : t('managerMeetingMonitorPage.t80')}
           </Button>
-          <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-500" />자동 갱신: 5초</span>
+          <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-500" />{t('managerMeetingMonitorPage.t9')}</span>
         </div>
       </header>
 
-      {isPreview ? <AlertBanner title="개발 미리보기" variant="warning">대기열 상태 변경은 현재 화면에만 반영됩니다.</AlertBanner> : null}
-      {statusError ? <AlertBanner title="상태 변경 기능이 잠겼습니다" variant="warning">{statusError}</AlertBanner> : null}
-      {waitingRoomWarning ? <AlertBanner title="팬이 아직 대기실에 입장할 수 없습니다" variant="warning">{waitingRoomWarning}</AlertBanner> : null}
+      {isPreview ? <AlertBanner title={t('managerMeetingMonitorPage.t10')} variant="warning">{t('managerMeetingMonitorPage.t11')}</AlertBanner> : null}
+      {statusError ? <AlertBanner title={t('managerMeetingMonitorPage.t12')} variant="warning">{statusError}</AlertBanner> : null}
+      {waitingRoomWarning ? <AlertBanner title={t('managerMeetingMonitorPage.t13')} variant="warning">{waitingRoomWarning}</AlertBanner> : null}
       {queueUnavailableNotice ? (
         <AlertBanner title={queueUnavailableNotice.title} variant="info">
           {queueUnavailableNotice.body}
         </AlertBanner>
       ) : null}
-      {error ? <AlertBanner title="대기열 작업을 완료할 수 없습니다" variant="error">{error}</AlertBanner> : null}
+      {error ? <AlertBanner title={t('managerMeetingMonitorPage.t14')} variant="error">{error}</AlertBanner> : null}
 
       {isSoloInfluencer ? (
         <Card className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-extrabold">1인 운영은 대기실에서</h2>
+              <h2 className="text-lg font-extrabold">{t('managerMeetingMonitorPage.t15')}</h2>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                대기열 오픈, 장비 점검, 팬 정보와 메모, 통화 입장을 대기실에서 이어서 처리하세요.
+                {t('managerMeetingMonitorPage.t16')}
               </p>
             </div>
             <Link className={consoleLinkClass} to={`/influencer/fan-meetings/${encodedMeetingId}/ready`}>
-              <VideoCamera aria-hidden size={18} weight="bold" />대기실로 이동
+              <VideoCamera aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t17')}
             </Link>
           </div>
         </Card>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard icon={<Clock size={20} />} label="대기" value={counts.waiting} />
-        <SummaryCard icon={<PhoneCall size={20} />} label="호출됨" value={counts.called} />
-        <SummaryCard icon={<CheckCircle size={20} />} label="완료" value={counts.completed} />
-        <SummaryCard icon={<UserMinus size={20} />} label="노쇼" value={counts.noShow} />
+        <SummaryCard icon={<Clock size={20} />} label={t('managerMeetingMonitorPage.t18')} value={counts.waiting} />
+        <SummaryCard icon={<PhoneCall size={20} />} label={t('managerMeetingMonitorPage.t19')} value={counts.called} />
+        <SummaryCard icon={<CheckCircle size={20} />} label={t('managerMeetingMonitorPage.t20')} value={counts.completed} />
+        <SummaryCard icon={<UserMinus size={20} />} label={t('managerMeetingMonitorPage.t21')} value={counts.noShow} />
       </div>
 
       <Card className="p-5 sm:p-6">
@@ -668,10 +705,10 @@ export function ManagerMeetingMonitorPage() {
             {queue.currentCall ? (
               <>
                 <h2 className="mt-2 text-2xl font-black">{queue.currentCall.nickname}</h2>
-                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">통화 세션 #{queue.currentCall.callSessionId}</p>
+                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t22')}{queue.currentCall.callSessionId}</p>
               </>
             ) : (
-              <h2 className="mt-2 text-2xl font-black">현재 진행 중인 통화가 없습니다</h2>
+              <h2 className="mt-2 text-2xl font-black">{t('managerMeetingMonitorPage.t23')}</h2>
             )}
           </div>
           {queue.currentCall ? (
@@ -681,16 +718,16 @@ export function ManagerMeetingMonitorPage() {
                   className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
                   to={`/influencer/fan-meetings/${encodedMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`}
                 >
-                  <VideoCamera aria-hidden size={18} weight="bold" />현재 통화 입장
+                  <VideoCamera aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t24')}
                 </Link>
               ) : null}
               {isSoloInfluencer && currentCallEntry ? (
                 <Link className={consoleLinkClass} to={fanRecordPath(currentCallEntry)}>
-                  <NotePencil aria-hidden size={18} weight="bold" />현재 팬 메모
+                  <NotePencil aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t25')}
                 </Link>
               ) : null}
               <Link className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-danger)] px-[var(--control-padding-inline)] text-sm font-semibold text-white" to={`/manager/fan-meetings/${encodedMeetingId}/monitor/risk?callSessionId=${encodeURIComponent(queue.currentCall.callSessionId)}`}>
-                <Warning size={18} weight="bold" />통화 강제 종료
+                <Warning size={18} weight="bold" />{t('managerMeetingMonitorPage.t26')}
               </Link>
             </div>
           ) : null}
@@ -699,11 +736,11 @@ export function ManagerMeetingMonitorPage() {
 
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-[var(--color-divider)] p-5">
-          <h2 className="text-lg font-extrabold">순서 변경 요청</h2>
-          <span className="text-sm text-[var(--color-text-secondary)]">대기 중 {changeRequests.length}건</span>
+          <h2 className="text-lg font-extrabold">{t('managerMeetingMonitorPage.t27')}</h2>
+          <span className="text-sm text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t28')} {changeRequests.length}{t('managerMeetingMonitorPage.t29')}</span>
         </div>
         {changeRequests.length === 0 ? (
-          <div className="p-6 text-center text-sm text-[var(--color-text-secondary)]">처리 대기 중인 순서 변경 요청이 없습니다.</div>
+          <div className="p-6 text-center text-sm text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t30')}</div>
         ) : (
           <div className="divide-y divide-[var(--color-divider)]">
             {changeRequests.map((request) => (
@@ -717,12 +754,12 @@ export function ManagerMeetingMonitorPage() {
                   <div className="min-w-0">
                     <strong>{request.nickname}</strong>
                     <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{request.requestReason}</p>
-                    <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">요청 {new Date(request.requestedAt).toLocaleString('ko-KR')}{request.previousPosition !== null ? ` · 현재 ${request.previousPosition}번` : ''}</p>
+                    <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t('managerMeetingMonitorPage.t31')} {new Date(request.requestedAt).toLocaleString('ko-KR')}{request.previousPosition !== null ? t('managerMeetingMonitorPage.t99', { p0: request.previousPosition }) : ''}</p>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button disabled={queueMutationBusy} onClick={() => void decideRequest(request, 'APPROVED')} size="sm">승인</Button>
-                  <Button disabled={queueMutationBusy} onClick={() => void decideRequest(request, 'REJECTED')} size="sm" variant="danger">거절</Button>
+                  <Button disabled={queueMutationBusy} onClick={() => void decideRequest(request, 'APPROVED')} size="sm">{t('managerMeetingMonitorPage.t32')}</Button>
+                  <Button disabled={queueMutationBusy} onClick={() => void decideRequest(request, 'REJECTED')} size="sm" variant="danger">{t('managerMeetingMonitorPage.t33')}</Button>
                 </div>
               </div>
             ))}
@@ -732,11 +769,11 @@ export function ManagerMeetingMonitorPage() {
 
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-[var(--color-divider)] p-5">
-          <h2 className="text-lg font-extrabold">대기열</h2>
-          <span className="text-sm text-[var(--color-text-secondary)]">총 {queue.entries.length}명</span>
+          <h2 className="text-lg font-extrabold">{t('managerMeetingMonitorPage.t34')}</h2>
+          <span className="text-sm text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t35')} {queue.entries.length}{t('managerMeetingMonitorPage.t36')}</span>
         </div>
         {queue.entries.length === 0 ? (
-          <div className="p-8 text-center text-[var(--color-text-secondary)]">현재 대기열에 참가자가 없습니다.</div>
+          <div className="p-8 text-center text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t37')}</div>
         ) : (
           <div className="divide-y divide-[var(--color-divider)]">
             {queue.entries.map((entry) => (
@@ -744,26 +781,26 @@ export function ManagerMeetingMonitorPage() {
                 <span className="flex size-10 items-center justify-center rounded-full bg-[var(--color-surface-page)] font-black">{entry.position}</span>
                 <div>
                   <strong>{entry.nickname}</strong>
-                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">호출 시도 {entry.callAttemptCount}회</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{t('managerMeetingMonitorPage.t38')} {entry.callAttemptCount}{t('managerMeetingMonitorPage.t39')}</p>
                 </div>
-                <Badge variant={statusBadge(entry.status)}>{statusLabels[entry.status]}</Badge>
+                <Badge variant={statusBadge(entry.status)}>{statusLabels()[entry.status]}</Badge>
                 <div className="flex flex-wrap justify-end gap-2">
                   {isSoloInfluencer ? (
                     <Link
                       className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--color-divider)] px-3 text-xs font-semibold hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
                       to={fanRecordPath(entry)}
                     >
-                      <NotePencil aria-hidden size={15} />메모
+                      <NotePencil aria-hidden size={15} />{t('managerMeetingMonitorPage.t40')}
                     </Link>
                   ) : null}
                   {entry.status === 'WAITING' ? (
                     <>
-                      <Button disabled={queueCallDisabled} onClick={() => void runQueueAction(entry, 'CALL')} size="sm" leadingIcon={<MonitorPlay size={16} />}>호출</Button>
-                      <Button disabled={queueMutationBusy} onClick={() => void changePosition(entry)} size="sm" variant="secondary" leadingIcon={<ArrowsDownUp size={16} />}>순서 변경</Button>
+                      <Button disabled={queueCallDisabled} onClick={() => void runQueueAction(entry, 'CALL')} size="sm" leadingIcon={<MonitorPlay size={16} />}>{t('managerMeetingMonitorPage.t41')}</Button>
+                      <Button disabled={queueMutationBusy} onClick={() => void changePosition(entry)} size="sm" variant="secondary" leadingIcon={<ArrowsDownUp size={16} />}>{t('managerMeetingMonitorPage.t42')}</Button>
                     </>
                   ) : null}
                   {entry.status === 'CALLED' ? (
-                    <Button disabled={queueCallDisabled} onClick={() => void runQueueAction(entry, 'NO_SHOW')} size="sm" variant="danger" leadingIcon={<UserMinus size={16} />}>노쇼 처리</Button>
+                    <Button disabled={queueCallDisabled} onClick={() => void runQueueAction(entry, 'NO_SHOW')} size="sm" variant="danger" leadingIcon={<UserMinus size={16} />}>{t('managerMeetingMonitorPage.t43')}</Button>
                   ) : null}
                 </div>
               </div>
@@ -776,10 +813,11 @@ export function ManagerMeetingMonitorPage() {
 }
 
 function SummaryCard({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+  const { t } = useTranslation()
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">{icon}{label}</div>
-      <p className="mt-3 text-3xl font-black">{value}<span className="ml-1 text-sm font-semibold">명</span></p>
+      <p className="mt-3 text-3xl font-black">{value}<span className="ml-1 text-sm font-semibold">{t('managerMeetingMonitorPage.t44')}</span></p>
     </Card>
   )
 }

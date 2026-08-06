@@ -1,5 +1,7 @@
 import { CheckCircle, ProhibitInset, UsersThree } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
+import { getAuthSession } from '../../api/authSession'
+import { useTranslation } from '../../i18n'
 
 /**
  * 팬미팅이 끝난 이유다.
@@ -34,17 +36,22 @@ export function MeetingWrapUp({
   reason: MeetingWrapUpReason
   tally?: MeetingWrapUpTally
 }) {
+  const { t } = useTranslation()
+  // 팬미팅 목록 경로는 역할마다 다르다. 매니저를 인플루언서 경로로 보내면 라우터 가드에 막힌다.
+  const role = getAuthSession()?.role
+  const meetingListPath =
+    role === 'MANAGER' ? '/manager/fan-meetings' : '/influencer/fan-meetings'
   const canceled = reason === 'CANCELED'
   const title = canceled
-    ? '팬미팅이 취소되었어요'
+    ? t('meetingWrapUp.t6')
     : reason === 'ENDED'
-      ? '팬미팅이 종료되었어요'
-      : '팬미팅을 모두 마쳤어요'
+      ? t('meetingWrapUp.t7')
+      : t('meetingWrapUp.t8')
   const description = canceled
-    ? '진행이 취소되어 영상통화방을 닫았습니다. 남은 팬에게는 응모 결과가 그대로 유지됩니다.'
+    ? t('meetingWrapUp.t9')
     : reason === 'ENDED'
-      ? '팬미팅이 종료되어 영상통화방을 닫았습니다.'
-      : '대기열의 팬을 모두 만났습니다. 오늘 통화 기록과 대화 요약은 팬별 기록에서 다시 볼 수 있어요.'
+      ? t('meetingWrapUp.t10')
+      : t('meetingWrapUp.t11')
 
   return (
     <div className="mx-auto grid w-full max-w-3xl gap-8 py-14">
@@ -78,13 +85,13 @@ export function MeetingWrapUp({
       {tally && !canceled ? (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-divider)]">
           <div className="bg-[var(--color-surface-panel)] px-6 py-5 text-center">
-            <p className="text-sm font-bold text-[var(--color-text-muted)]">만난 팬</p>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('meetingWrapUp.t1')}</p>
             <p className="mt-1.5 text-[34px] font-black leading-none tracking-[-0.04em] tabular-nums">
               {tally.completed}
             </p>
           </div>
           <div className="bg-[var(--color-surface-panel)] px-6 py-5 text-center">
-            <p className="text-sm font-bold text-[var(--color-text-muted)]">못 만난 팬</p>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('meetingWrapUp.t2')}</p>
             <p
               className={`mt-1.5 text-[34px] font-black leading-none tracking-[-0.04em] tabular-nums ${
                 tally.missed > 0 ? 'text-[var(--color-warning)]' : ''
@@ -97,27 +104,30 @@ export function MeetingWrapUp({
       ) : null}
 
       <div className="grid gap-2.5">
-        {/* 가장 자연스러운 다음 행동은 방금 만난 팬들의 기록을 보는 것이다. */}
+        {/*
+          가장 자연스러운 다음 행동은 방금 만난 팬들의 기록을 보는 것이다.
+          참가 팬 화면은 역할 공용 경로(/fan-meetings/{id}/fans)라 매니저·인플루언서 모두 열 수 있다.
+        */}
         {canceled ? null : (
           <Link
             className="mj-font-emphasis flex min-h-14 items-center justify-center gap-2 rounded-[10px] bg-[var(--color-primary-coral)] px-6 text-[17px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
-            to={`/influencer/fan-meetings/${encodeURIComponent(meetingId)}/fans`}
+            to={`/fan-meetings/${encodeURIComponent(meetingId)}/fans`}
           >
             <UsersThree aria-hidden size={20} weight="bold" />
-            오늘 만난 팬 기록 보기
+            {t('meetingWrapUp.t3')}
           </Link>
         )}
         <Link
           className="mj-font-label flex min-h-12 items-center justify-center rounded-[10px] border border-[var(--color-border-control)] px-6 text-base font-bold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-text-tertiary)]"
-          to="/influencer/fan-meetings"
+          to={meetingListPath}
         >
-          팬미팅 목록으로 가기
+          {t('meetingWrapUp.t4')}
         </Link>
         <Link
           className="mj-font-label flex min-h-11 items-center justify-center text-[15px] text-[var(--color-text-muted)] hover:text-[var(--color-primary-coral)]"
           to="/"
         >
-          홈으로
+          {t('meetingWrapUp.t5')}
         </Link>
       </div>
     </div>

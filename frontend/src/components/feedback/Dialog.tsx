@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { IconButton } from '../ui/Button'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 export type DialogProps = {
   open: boolean
@@ -27,9 +28,12 @@ export function Dialog({
   description,
   children,
   footer,
-  closeLabel = '팝업 닫기',
+  closeLabel,
   className,
 }: DialogProps) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const closeLabelResolved = closeLabel ?? t('dialog.t1')
   const dialogRef = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const descriptionId = useId()
@@ -86,7 +90,7 @@ export function Dialog({
           ) : null}
         </div>
         <IconButton
-          aria-label={closeLabel}
+          aria-label={closeLabelResolved}
           icon="×"
           onClick={() => onOpenChange(false)}
           size="sm"

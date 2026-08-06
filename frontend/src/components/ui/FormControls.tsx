@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { Button } from './Button'
 import { cn } from './cn'
+import { useTranslation } from '../../i18n'
 
 type FieldFrameProps = {
   id: string
@@ -184,12 +185,15 @@ export type SearchFieldProps = Omit<TextFieldProps, 'type'> & {
 }
 
 export function SearchField({
-  buttonLabel = '검색',
+  buttonLabel,
   onSearch,
   formClassName,
   name,
   ...props
 }: SearchFieldProps) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const resolvedButtonLabel = buttonLabel ?? t('formControls.t1')
   const generatedName = useId()
   const fieldName = name ?? `search-${generatedName}`
 
@@ -202,7 +206,7 @@ export function SearchField({
   return (
     <form className={cn('flex items-end gap-2', formClassName)} onSubmit={handleSubmit} role="search">
       <TextField containerClassName="min-w-0 flex-1" name={fieldName} type="search" {...props} />
-      <Button type="submit">{buttonLabel}</Button>
+      <Button type="submit">{resolvedButtonLabel}</Button>
     </form>
   )
 }

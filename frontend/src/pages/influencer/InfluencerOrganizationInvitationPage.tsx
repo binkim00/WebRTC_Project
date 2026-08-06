@@ -5,6 +5,7 @@ import { getAuthSession } from '../../api/authSession'
 import { acceptOrganizationInvitation, getMyOrganization } from '../../api/organizations'
 import { AlertBanner } from '../../components/feedback/AlertBanner'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { translate, useTranslation } from '../../i18n'
 
 type InvitationView = 'pending' | 'accepted' | 'expired' | 'conflict'
 
@@ -17,13 +18,13 @@ const footnoteClass =
 /** 수락 실패 응답을 만료·소속 충돌 화면으로 분류한다. 둘 다 아니면 pending에 오류 배너만 띄운다. */
 function classifyAcceptFailure(reason: unknown): InvitationView | undefined {
   if (!(reason instanceof ApiError)) return undefined
-  if (reason.status === 409 || reason.message.includes('소속')) return 'conflict'
+  if (reason.status === 409 || reason.message.includes(translate('influencerOrganizationInvitationPage.t30'))) return 'conflict'
   if (
     reason.status === 404 ||
     reason.status === 410 ||
-    reason.message.includes('만료') ||
-    reason.message.includes('유효하지 않') ||
-    reason.message.includes('사용')
+    reason.message.includes(translate('influencerOrganizationInvitationPage.t31')) ||
+    reason.message.includes(translate('influencerOrganizationInvitationPage.t32')) ||
+    reason.message.includes(translate('influencerOrganizationInvitationPage.t33'))
   ) {
     return 'expired'
   }
@@ -38,6 +39,7 @@ function classifyAcceptFailure(reason: unknown): InvitationView | undefined {
  * 만료·소속 충돌 여부도 수락 응답으로만 판별된다.
  */
 export function InfluencerOrganizationInvitationPage() {
+  const { t } = useTranslation()
   const { token } = useParams<{ token: string }>()
   const navigate = useNavigate()
   const [view, setView] = useState<InvitationView>('pending')
@@ -49,8 +51,8 @@ export function InfluencerOrganizationInvitationPage() {
   if (!token?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 초대 토큰이 없습니다. 매니저에게 받은 초대 링크로 다시 접속해 주세요."
-        title="초대 토큰이 없습니다"
+        message={t('influencerOrganizationInvitationPage.t1')}
+        title={t('influencerOrganizationInvitationPage.t2')}
       />
     )
   }
@@ -58,7 +60,7 @@ export function InfluencerOrganizationInvitationPage() {
   async function handleAccept() {
     const authToken = getAuthSession()?.accessToken
     if (!authToken) {
-      setError('초대를 수락하려면 인플루언서 계정으로 로그인해 주세요.')
+      setError(t('influencerOrganizationInvitationPage.t25'))
       return
     }
 
@@ -82,7 +84,7 @@ export function InfluencerOrganizationInvitationPage() {
       if (failureView) {
         setView(failureView)
       } else {
-        setError(reason instanceof Error ? reason.message : '조직 초대 수락에 실패했습니다.')
+        setError(reason instanceof Error ? reason.message : t('influencerOrganizationInvitationPage.t26'))
       }
     } finally {
       setSubmitting(false)
@@ -98,29 +100,28 @@ export function InfluencerOrganizationInvitationPage() {
     <div className="mx-auto w-full max-w-[720px] pb-16 pt-10 sm:pt-14">
       {view === 'pending' ? (
         <div className={cardClass}>
-          <p className={`${eyebrowClass} text-[var(--color-primary-coral)]`}>조직 초대</p>
+          <p className={`${eyebrowClass} text-[var(--color-primary-coral)]`}>{t('influencerOrganizationInvitationPage.t3')}</p>
           <h1 className="mt-3.5 text-[32px] font-black leading-[1.14] tracking-[-0.045em] text-[var(--color-text-primary)] [text-wrap:balance]">
-            조직에 합류하시겠어요?
+            {t('influencerOrganizationInvitationPage.t4')}
           </h1>
           <p className={bodyClass}>
-            매니저가 회원님을 조직에 초대했습니다. 합류하면 이 조직의 매니저가 회원님의 팬미팅
-            일정과 운영을 함께 관리합니다.
+            {t('influencerOrganizationInvitationPage.t5')}
           </p>
 
           <dl className="mt-[30px] grid border-t border-[var(--color-divider)] pt-[9px]">
             <div className="flex items-baseline justify-between gap-5 border-b border-[var(--color-border-row)] py-[13px]">
               <dt className="text-[15px] font-semibold text-[var(--color-text-tertiary)]">
-                내 역할
+                {t('influencerOrganizationInvitationPage.t6')}
               </dt>
               <dd className="m-0 text-base font-extrabold text-[var(--color-primary-coral)]">
-                인플루언서
+                {t('influencerOrganizationInvitationPage.t7')}
               </dd>
             </div>
           </dl>
 
           {error ? (
             <div className="mt-5">
-              <AlertBanner title="초대를 수락하지 못했습니다" variant="error">
+              <AlertBanner title={t('influencerOrganizationInvitationPage.t8')} variant="error">
                 {error}
               </AlertBanner>
             </div>
@@ -133,7 +134,7 @@ export function InfluencerOrganizationInvitationPage() {
               onClick={() => void handleAccept()}
               type="button"
             >
-              {submitting ? '수락 처리 중…' : '초대 수락하기'}
+              {submitting ? t('influencerOrganizationInvitationPage.t27') : t('influencerOrganizationInvitationPage.t28')}
             </button>
             <button
               className="min-h-14 whitespace-nowrap rounded-[10px] border border-[var(--color-border-control)] bg-white px-[22px] text-base font-bold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
@@ -141,68 +142,67 @@ export function InfluencerOrganizationInvitationPage() {
               onClick={handleLater}
               type="button"
             >
-              나중에
+              {t('influencerOrganizationInvitationPage.t9')}
             </button>
           </div>
           <p className="mt-[13px] text-sm font-medium leading-[1.6] text-[var(--color-text-tertiary)]">
-            수락하면 초대 링크는 즉시 사용 완료되며, 한 번에 하나의 조직에만 소속될 수 있습니다.
+            {t('influencerOrganizationInvitationPage.t10')}
           </p>
         </div>
       ) : null}
 
       {view === 'accepted' ? (
         <div className={cardClass} role="status">
-          <p className={`${eyebrowClass} text-[var(--color-success)]`}>합류 완료</p>
+          <p className={`${eyebrowClass} text-[var(--color-success)]`}>{t('influencerOrganizationInvitationPage.t11')}</p>
           <h1 className="mt-3.5 text-[32px] font-black leading-[1.14] tracking-[-0.045em] text-[var(--color-text-primary)]">
-            {organizationName}에 합류했어요
+            {organizationName}{t('influencerOrganizationInvitationPage.t12')}
           </h1>
           <p className={bodyClass}>
-            이제 조직 매니저가 팬미팅을 등록하면 나의 팬미팅에서 일정을 확인할 수 있습니다.
+            {t('influencerOrganizationInvitationPage.t13')}
           </p>
           <Link
             className="mj-font-emphasis mt-7 inline-flex min-h-[54px] items-center rounded-[10px] bg-[var(--color-primary-coral)] px-6 text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
             to="/influencer/mypage/fan-meetings"
           >
-            나의 팬미팅으로 가기
+            {t('influencerOrganizationInvitationPage.t14')}
           </Link>
         </div>
       ) : null}
 
       {view === 'expired' ? (
         <div className={cardClass} role="alert">
-          <p className={`${eyebrowClass} text-[var(--color-text-tertiary)]`}>초대 만료</p>
+          <p className={`${eyebrowClass} text-[var(--color-text-tertiary)]`}>{t('influencerOrganizationInvitationPage.t15')}</p>
           <h1 className="mt-3.5 text-[30px] font-black leading-[1.16] tracking-[-0.045em] text-[var(--color-text-primary)]">
-            초대 링크가 만료됐어요
+            {t('influencerOrganizationInvitationPage.t16')}
           </h1>
           <p className={bodyClass}>
-            초대 링크는 발급 후 일정 시간 동안만 사용할 수 있습니다. 매니저에게 새 초대를 요청해
-            주세요.
+            {t('influencerOrganizationInvitationPage.t17')}
           </p>
-          <p className={footnoteClass}>이미 사용한 링크로도 이 화면이 표시됩니다.</p>
+          <p className={footnoteClass}>{t('influencerOrganizationInvitationPage.t18')}</p>
         </div>
       ) : null}
 
       {view === 'conflict' ? (
         <div className={cardClass} role="alert">
-          <p className={`${eyebrowClass} text-[var(--color-warning)]`}>합류할 수 없음</p>
+          <p className={`${eyebrowClass} text-[var(--color-warning)]`}>{t('influencerOrganizationInvitationPage.t19')}</p>
           <h1 className="mt-3.5 text-[30px] font-black leading-[1.16] tracking-[-0.045em] text-[var(--color-text-primary)]">
-            이미 다른 조직에 소속되어 있어요
+            {t('influencerOrganizationInvitationPage.t20')}
           </h1>
           <p className={bodyClass}>
-            한 번에 하나의 조직에만 소속될 수 있습니다. 현재{' '}
+            {t('influencerOrganizationInvitationPage.t21')}{' '}
             {currentOrganizationName ? (
               <>
                 <strong className="font-extrabold text-[var(--color-text-primary)]">
                   {currentOrganizationName}
                 </strong>
-                에
+                {t('influencerOrganizationInvitationPage.t22')}
               </>
             ) : (
-              '다른 조직에'
+              t('influencerOrganizationInvitationPage.t29')
             )}{' '}
-            소속되어 있어 이 초대를 수락할 수 없습니다.
+            {t('influencerOrganizationInvitationPage.t23')}
           </p>
-          <p className={footnoteClass}>기존 조직에서 소속 해제된 뒤 다시 초대를 받아 주세요.</p>
+          <p className={footnoteClass}>{t('influencerOrganizationInvitationPage.t24')}</p>
         </div>
       ) : null}
     </div>

@@ -17,10 +17,12 @@ import { Button } from '../ui/Button'
 import { ConnectedCallRoom } from './ConnectedCallRoom'
 import { MeetingWrapUp } from './MeetingWrapUp'
 import type { VideoCallRoomProps } from './types'
+import { useTranslation } from '../../i18n'
 
 export type { VideoCallRoomProps } from './types'
 
 export function VideoCallRoom(props: VideoCallRoomProps) {
+  const { t } = useTranslation()
   const [connectionInfo, setConnectionInfo] = useState<LiveKitAccessTokenResponse>()
   const [sessionStatus, setSessionStatus] = useState<CallSessionStatusResponse>()
   const [connectionError, setConnectionError] = useState<string>()
@@ -59,7 +61,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   const loadConnectionInfo = useCallback(
     async (signal: AbortSignal) => {
       if (!connectSessionId) {
-        setConnectionError('통화 연결에 필요한 callSessionId가 없습니다.')
+        setConnectionError(t('videoCallRoom.t6'))
         setLoading(false)
         return
       }
@@ -99,7 +101,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
           // 정책을 확인하지 못한 경우에는 개인정보 보호를 위해 녹화를 시작하지 않는다.
           // 카운트다운은 서버가 보내는 남은 시간으로 계속 동작하므로 통화 자체는 막지 않는다.
           if (authSession?.role === 'FAN') {
-            setRecordingPolicyError('팬미팅 녹화 설정을 확인하지 못해 녹화를 시작하지 않았습니다.')
+            setRecordingPolicyError(t('videoCallRoom.t7'))
           }
         }
 
@@ -117,7 +119,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         setConnectionError(
           error instanceof Error
             ? error.message
-            : 'LiveKit 통화 연결 정보를 가져오지 못했습니다.',
+            : t('videoCallRoom.t8'),
         )
       } finally {
         if (!signal.aborted) {
@@ -125,6 +127,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         }
       }
     },
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [connectSessionId, props.meetingId],
   )
 
@@ -132,6 +136,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     const abortController = new AbortController()
     void loadConnectionInfo(abortController.signal)
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadConnectionInfo, retryCount])
 
   /**
@@ -256,10 +262,12 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       } catch (error: unknown) {
         if (signal.aborted) return
         setStatusError(
-          error instanceof Error ? error.message : '통화 상태를 갱신하지 못했습니다.',
+          error instanceof Error ? error.message : t('videoCallRoom.t9'),
         )
       }
     },
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 폴링 콜백이 다시 만들어진다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeCallSessionId],
   )
 
@@ -273,6 +281,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   const handlePeerCallEnded = useCallback(() => {
     const controller = new AbortController()
     void refreshStatus(controller.signal)
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshStatus])
 
   // usePolling은 직렬 폴링이라 느린 요청이 겹쳐 오래된 통화 상태가 최신 상태를 덮지 않는다.
@@ -315,23 +325,23 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         <header>
           <Badge variant="primary">{props.screenId}</Badge>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-            영상 통화
+            {t('videoCallRoom.t1')}
           </h1>
           <p className="mt-3 text-[var(--color-text-secondary)]">
-            통화 세션 ID: <span className="font-mono">{props.callSessionId ?? '없음'}</span>
+            {t('videoCallRoom.t2')} <span className="font-mono">{props.callSessionId ?? t('videoCallRoom.t10')}</span>
           </p>
         </header>
         <AlertBanner
-          title={loading ? 'LiveKit 입장 정보 확인 중' : '영상통화에 입장할 수 없습니다'}
+          title={loading ? t('videoCallRoom.t11') : t('videoCallRoom.t12')}
           variant={loading ? 'info' : 'error'}
         >
           {loading
-            ? '백엔드에서 LiveKit 접속 토큰과 통화 상태를 요청하고 있습니다.'
+            ? t('videoCallRoom.t13')
             : connectionError}
         </AlertBanner>
         {!loading ? (
           <div>
-            <Button onClick={() => setRetryCount((count) => count + 1)}>다시 시도</Button>
+            <Button onClick={() => setRetryCount((count) => count + 1)}>{t('videoCallRoom.t3')}</Button>
           </div>
         ) : null}
       </div>
@@ -348,7 +358,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       onError={(error) => setConnectionError(error.message)}
       onMediaDeviceFailure={() => {
         setConnectionError(
-          '카메라 또는 마이크를 사용할 수 없습니다. 브라우저 권한과 장치 연결을 확인해 주세요.',
+          t('videoCallRoom.t14'),
         )
       }}
       serverUrl={connectionInfo.liveKitUrl}
@@ -368,14 +378,14 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       />
       {connectionError ? (
         <div className="mt-4">
-          <AlertBanner title="LiveKit 연결 오류" variant="error">
+          <AlertBanner title={t('videoCallRoom.t4')} variant="error">
             {connectionError}
           </AlertBanner>
         </div>
       ) : null}
       {statusError ? (
         <div className="mt-4">
-          <AlertBanner title="통화 상태 갱신 오류" variant="warning">
+          <AlertBanner title={t('videoCallRoom.t5')} variant="warning">
             {statusError}
           </AlertBanner>
         </div>

@@ -20,6 +20,7 @@ import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { AlertBanner, Button, Spinner } from '../../components'
 import { RecordingVideo } from '../../components/media/RecordingVideo'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { useTranslation, type TranslationKey } from '../../i18n'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -43,15 +44,24 @@ function formatClock(seconds: number | null | undefined): string {
   return `${pad(Math.floor(seconds / 60))}:${pad(Math.floor(seconds % 60))}`
 }
 
-/** 1분 52초 — 제목 문장에 쓰는 표기다. */
-function formatSpokenDuration(seconds: number | null | undefined): string | undefined {
+/**
+ * 1분 52초 — 제목 문장에 쓰는 표기다.
+ *
+ * 모듈 함수라 훅을 쓸 수 없어 번역 함수를 인자로 받는다.
+ */
+function formatSpokenDuration(
+  seconds: number | null | undefined,
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+): string | undefined {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) {
     return undefined
   }
   const minutes = Math.floor(seconds / 60)
   const rest = Math.floor(seconds % 60)
-  if (minutes === 0) return `${rest}초`
-  return rest > 0 ? `${minutes}분 ${rest}초` : `${minutes}분`
+  if (minutes === 0) return t('done.duration.seconds', { seconds: rest })
+  return rest > 0
+    ? t('done.duration.minutesSeconds', { minutes, seconds: rest })
+    : t('done.duration.minutes', { minutes })
 }
 
 /**
@@ -109,6 +119,7 @@ function MellySeal({ dimmed, size }: { dimmed: boolean; size: 'lg' | 'sm' }) {
 }
 
 export function FanMeetingCompletePage() {
+  const { t } = useTranslation()
   const { fanMeetingId } = useParams()
   const location = useLocation()
   const routeState = location.state as {
@@ -151,13 +162,15 @@ export function FanMeetingCompletePage() {
       })
       .catch(() => {
         if (active) {
-          setPendingRecordingError('브라우저에 보관된 녹화 영상을 확인하지 못했습니다.')
+          setPendingRecordingError(t('done.pending.checkFailed'))
         }
       })
 
     return () => {
       active = false
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId, routeState?.pendingRecordingSessionId])
 
   useEffect(() => {
@@ -222,8 +235,8 @@ export function FanMeetingCompletePage() {
             // 재생 링크 발급 실패가 녹화 정보와 다운로드 버튼까지 숨기지는 않게 한다.
             setDownloadError(
               error instanceof Error
-                ? `재생 링크를 준비하지 못했습니다: ${error.message}`
-                : '재생 링크를 준비하지 못했습니다.',
+                ? t('done.error.playbackLinkWithReason', { reason: error.message })
+                : t('done.error.playbackLink'),
             )
           }
         }
@@ -231,7 +244,7 @@ export function FanMeetingCompletePage() {
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
         setLoadError(
-          error instanceof Error ? error.message : '녹화 정보를 불러오지 못했습니다.',
+          error instanceof Error ? error.message : t('done.error.recordingLoad'),
         )
       })
       .finally(() => {
@@ -239,6 +252,8 @@ export function FanMeetingCompletePage() {
       })
 
     return () => abortController.abort()
+    // 위와 같은 이유로 t는 제외한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId, reloadKey, session])
 
   const memo = useMemo(
@@ -255,14 +270,14 @@ export function FanMeetingCompletePage() {
     try {
       const uploaded = await retryPendingRecordingUpload(pendingSessionId, session.accessToken)
       if (!uploaded) {
-        setPendingRecordingError('임시 보관된 녹화 파일을 찾을 수 없습니다.')
+        setPendingRecordingError(t('done.pending.notFound'))
         return
       }
       setPendingRecordingAvailable(false)
       setReloadKey((key) => key + 1)
     } catch (error: unknown) {
       setPendingRecordingError(
-        error instanceof Error ? error.message : '녹화 영상 재업로드에 실패했습니다.',
+        error instanceof Error ? error.message : t('done.pending.retryFailed'),
       )
     } finally {
       setRetryingPendingRecording(false)
@@ -295,7 +310,7 @@ export function FanMeetingCompletePage() {
       anchor.remove()
     } catch (error: unknown) {
       setDownloadError(
-        error instanceof Error ? error.message : '다운로드 링크 발급에 실패했습니다.',
+        error instanceof Error ? error.message : t('done.error.downloadLink'),
       )
     } finally {
       setDownloading(false)
@@ -305,8 +320,8 @@ export function FanMeetingCompletePage() {
   if (!fanMeetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 fanMeetingId 값이 없습니다."
-        title="필수 URL 파라미터가 없습니다."
+        message={t('done.invalid.message')}
+        title={t('done.invalid.title')}
       />
     )
   }
@@ -317,45 +332,45 @@ export function FanMeetingCompletePage() {
   // dc.html의 두 단계 — 처리 중(proc) / 완료(done). 만료·녹화 없음은 실제 상태에 맞춰 변형한다.
   const proc = loading || (Boolean(currentRecording) && !isReady && !isExpired)
   const durationSec = detail?.durationSec ?? currentRecording?.durationSec ?? null
-  const spokenDuration = formatSpokenDuration(durationSec)
+  const spokenDuration = formatSpokenDuration(durationSec, t)
   // 보관 기한을 모르는 경우(녹화 미완료·실패)도 null이 되어 아래 recMeta에서 표기를 생략한다.
   const daysLeft = remainingDays(currentRecording?.availableUntil)
 
   const headline = proc
-    ? '기록을 만들고 있어요'
+    ? t('done.headline.processing')
     : influencerName && spokenDuration
-      ? `${influencerName}님과 ${spokenDuration}를 함께했어요`
-      : '팬미팅을 함께했어요'
+      ? t('done.headline.withDuration', { influencer: influencerName, duration: spokenDuration })
+      : t('done.headline.default')
   const subline = proc
-    ? '녹화 영상과 사진을 정리하는 중입니다. 잠시만 기다려 주세요.'
+    ? t('done.subline.processing')
     : noRecordingMeeting
-      ? '이 팬미팅은 녹화하지 않도록 설정되어 있습니다.'
-      : '통화 화면이 이 기록의 영상으로 저장되었습니다.'
+      ? t('done.subline.noRecording')
+      : t('done.subline.saved')
 
   const recTitle = proc
-    ? '녹화 영상 저장 중'
+    ? t('done.rec.saving')
     : isExpired
-      ? '녹화 영상 보관 종료'
+      ? t('done.rec.expired')
       : noRecordingMeeting
-        ? '녹화하지 않는 팬미팅'
-        : '녹화 영상 저장 완료'
+        ? t('done.rec.noRecording')
+        : t('done.rec.saved')
   const recMeta = proc
-    ? '처리 중'
+    ? t('done.recMeta.processing')
     : isExpired
-      ? '영상 보관 종료'
+      ? t('done.recMeta.expired')
       : noRecordingMeeting
         ? ''
         : daysLeft !== null
-          ? `영상 ${daysLeft}일 남음`
+          ? t('done.recMeta.daysLeft', { days: daysLeft })
           : ''
   const downloadDisabled = proc || isExpired || noRecordingMeeting || downloading
   const downloadLabel = proc
-    ? '저장 중'
+    ? t('done.download.saving')
     : isExpired
-      ? '영상 보관 종료'
+      ? t('done.download.expired')
       : noRecordingMeeting
-        ? '녹화 영상 없음'
-        : '녹화 영상 다운로드'
+        ? t('done.download.none')
+        : t('done.download.ready')
 
   const eyebrowDate = formatDate(
     currentRecording?.completedAt ?? new Date().toISOString(),
@@ -374,7 +389,7 @@ export function FanMeetingCompletePage() {
   return (
     <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
       <section
-        aria-label="팬미팅 결과"
+        aria-label={t('done.sectionAria')}
         className="grid items-stretch border-b border-[var(--color-divider)] min-[1081px]:grid-cols-[minmax(0,1fr)_504px]"
       >
         <div className="relative min-h-[min(52vw,420px)] overflow-hidden bg-[var(--color-surface-muted)] min-[1081px]:min-h-[560px]">
@@ -388,7 +403,7 @@ export function FanMeetingCompletePage() {
                 preload="metadata"
                 src={playbackUrl}
               >
-                브라우저가 영상 재생을 지원하지 않습니다. 아래 다운로드 버튼을 이용해 주세요.
+                {t('done.videoFallback')}
               </RecordingVideo>
               <span
                 aria-hidden="true"
@@ -421,13 +436,13 @@ export function FanMeetingCompletePage() {
                 {proc ? (
                   <>
                     {/* 저장이 진행 중임을 움직임으로 알린다. 정지된 안내문만으로는 멈춘 것처럼 보인다. */}
-                    <Spinner label="녹화 영상을 저장하는 중" size="lg" />
+                    <Spinner label={t('done.placeholder.savingLabel')} size="lg" />
                     <div>
                       <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
-                        오늘의 기록을 만들고 있어요
+                        {t('done.placeholder.savingTitle')}
                       </strong>
                       <p className="mt-2 max-w-[34ch] text-base font-medium leading-[1.65] text-[var(--color-text-muted)]">
-                        저장이 끝나면 이 자리에서 영상을 바로 볼 수 있어요. 화면을 닫지 말아 주세요.
+                        {t('done.placeholder.savingDesc')}
                       </p>
                     </div>
                   </>
@@ -441,17 +456,17 @@ export function FanMeetingCompletePage() {
                     <div>
                       <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
                         {isExpired
-                          ? '영상 보관이 종료되었어요'
+                          ? t('done.placeholder.expiredTitle')
                           : noRecordingMeeting
-                            ? '이 팬미팅은 녹화하지 않았어요'
-                            : '저장된 영상이 없어요'}
+                            ? t('done.placeholder.noRecordingTitle')
+                            : t('done.placeholder.missingTitle')}
                       </strong>
                       <p className="mt-2 max-w-[34ch] text-base font-medium leading-[1.65] text-[var(--color-text-muted)]">
                         {isExpired
-                          ? '영상은 보관 기간이 지나 삭제되었지만, 함께한 시간과 남긴 말은 그대로 남아 있어요.'
+                          ? t('done.placeholder.expiredDesc')
                           : noRecordingMeeting
-                            ? '운영 설정에 따라 녹화하지 않는 팬미팅이었어요. 함께한 시간과 남긴 말은 기록에 남습니다.'
-                            : '영상을 찾지 못했어요. 아래 안내를 확인해 주세요.'}
+                            ? t('done.placeholder.noRecordingDesc')
+                            : t('done.placeholder.missingDesc')}
                       </p>
                     </div>
                   </>
@@ -463,7 +478,9 @@ export function FanMeetingCompletePage() {
 
         <div className="flex flex-col px-5 pb-8 pt-[26px] sm:px-[26px] sm:pb-9 sm:pt-[30px] min-[1081px]:pb-11 min-[1081px]:pl-10 min-[1081px]:pr-11 min-[1081px]:pt-[46px]">
           <p className="text-sm font-bold text-[var(--color-text-muted)]">
-            {callOrder !== null ? `${eyebrowDate} · ${callOrder}번째` : eyebrowDate}
+            {callOrder !== null
+              ? t('done.eyebrowWithOrder', { date: eyebrowDate, order: callOrder })
+              : eyebrowDate}
           </p>
           <h1 className="mt-3.5 text-[clamp(28px,2.9vw,38px)] font-black leading-[1.15] tracking-[-0.048em] [text-wrap:balance]">
             {headline}
@@ -473,7 +490,7 @@ export function FanMeetingCompletePage() {
           </p>
 
           <div className="mt-[30px] border-t border-[var(--color-divider)] pt-6">
-            <p className="text-sm font-bold text-[var(--color-text-muted)]">함께한 시간</p>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('done.sharedTime')}</p>
             <p className="mt-1.5 text-[40px] font-black leading-none tracking-[-0.045em] tabular-nums">
               {formatClock(durationSec)}
             </p>
@@ -492,8 +509,10 @@ export function FanMeetingCompletePage() {
             </div>
             {noRecordingMeeting ? null : (
               <p className="mt-2.5 text-base font-medium leading-[1.7] text-[var(--color-text-body)]">
-                영상은 <strong className="font-extrabold text-[var(--color-text-primary)]">5일 후 삭제</strong>
-                되고, 사진과 남긴 말은 계속 남습니다.
+                <strong className="font-extrabold text-[var(--color-text-primary)]">
+                  {t('done.retention.strong')}
+                </strong>{' '}
+                {t('done.retention.rest')}
               </p>
             )}
             <button
@@ -506,13 +525,13 @@ export function FanMeetingCompletePage() {
               onClick={() => void handleDownload()}
               type="button"
             >
-              {downloading ? '다운로드 준비 중' : downloadLabel}
+              {downloading ? t('done.download.preparing') : downloadLabel}
             </button>
             <Link
               className="mj-font-label mt-1.5 flex min-h-11 w-full items-center justify-center text-[15px] text-[var(--color-text-muted)] hover:text-[var(--color-primary-coral)]"
               to="/fan/mypage/fan-meetings?status=completed"
             >
-              기록 전체 보기
+              {t('done.viewAll')}
             </Link>
           </div>
         </div>
@@ -520,7 +539,7 @@ export function FanMeetingCompletePage() {
 
       <div className="mx-auto w-[min(100%-40px,1240px)] pt-12 min-[1081px]:w-[min(100%-88px,1240px)]">
         {loadError ? (
-          <AlertBanner className="mb-8" title="녹화 정보를 불러오지 못했습니다" variant="error">
+          <AlertBanner className="mb-8" title={t('done.error.recordingTitle')} variant="error">
             <p>{loadError}</p>
             <Button
               className="mt-3"
@@ -528,19 +547,19 @@ export function FanMeetingCompletePage() {
               size="sm"
               variant="secondary"
             >
-              녹화 정보 다시 불러오기
+              {t('done.error.reload')}
             </Button>
           </AlertBanner>
         ) : null}
         {pendingRecordingAvailable || pendingRecordingError ? (
           <AlertBanner
             className="mb-8"
-            title="브라우저에 보관된 녹화 영상이 있습니다"
+            title={t('done.pending.title')}
             variant={pendingRecordingError ? 'error' : 'warning'}
           >
             <p>
               {pendingRecordingError
-                ?? '통화 화면에서 업로드하지 못한 영상을 서버에 다시 저장해 주세요.'}
+                ?? t('done.pending.description')}
             </p>
             {pendingRecordingAvailable ? (
               <Button
@@ -550,23 +569,23 @@ export function FanMeetingCompletePage() {
                 size="sm"
                 variant="secondary"
               >
-                녹화 영상 다시 업로드
+                {t('done.pending.retry')}
               </Button>
             ) : null}
           </AlertBanner>
         ) : null}
         {downloadError ? (
-          <AlertBanner className="mb-8" title="다운로드에 실패했습니다" variant="error">
+          <AlertBanner className="mb-8" title={t('done.error.downloadTitle')} variant="error">
             {downloadError}
           </AlertBanner>
         ) : null}
 
         <section aria-labelledby="mj-said-title" className="max-w-[56ch]">
           <h2 className="text-base font-extrabold tracking-[-0.025em]" id="mj-said-title">
-            내가 남긴 말
+            {t('done.myNote')}
           </h2>
           <p className="mt-3.5 text-[22px] font-medium leading-[1.7]">
-            {memo ? `“${memo}”` : '남긴 말이 없어요.'}
+            {memo ? `“${memo}”` : t('done.myNote.empty')}
           </p>
         </section>
 
@@ -599,10 +618,10 @@ export function FanMeetingCompletePage() {
         >
           <div className="flex items-baseline justify-between gap-6">
             <h2 className="text-[22px] font-black tracking-[-0.032em]" id="mj-arch-title">
-              팬미팅 기록
+              {t('done.archive.title')}
             </h2>
             <span className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-              {`${archive.length}개`}
+              {t('done.archive.count', { count: archive.length })}
             </span>
           </div>
 
@@ -610,16 +629,16 @@ export function FanMeetingCompletePage() {
             <div className="mt-6 grid place-items-center px-6 py-16 text-center">
               <img alt="" className="size-[104px] object-contain opacity-60" src={moldEmptyImage} />
               <strong className="mt-4 text-[19px] font-extrabold tracking-[-0.03em]">
-                아직 기록이 없어요
+                {t('done.archive.emptyTitle')}
               </strong>
               <span className="mt-2 max-w-[400px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
-                팬미팅을 마치면 그날의 사진과 남긴 말이 여기에 쌓입니다.
+                {t('done.archive.emptyDesc')}
               </span>
               <Link
                 className="mj-font-emphasis mt-5 inline-flex min-h-12 items-center rounded-[10px] bg-[var(--color-primary-coral)] px-[22px] text-base text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
                 to="/fan/events"
               >
-                팬미팅 둘러보기
+                {t('done.archive.browse')}
               </Link>
             </div>
           ) : (
@@ -635,12 +654,12 @@ export function FanMeetingCompletePage() {
                     <article key={item.recordingId}>
                       <figure className="relative m-0 overflow-hidden rounded-[10px] bg-[var(--color-surface-muted)]">
                         <div
-                          aria-label="사진이 저장되지 않은 기록"
+                          aria-label={t('done.archive.noPhotoAria')}
                           className="grid aspect-[16/10] w-full place-items-center bg-[var(--color-surface-page)]"
                           role="img"
                         >
                           <span className="text-sm font-semibold text-[var(--color-text-muted)]">
-                            사진 없음
+                            {t('done.archive.noPhoto')}
                           </span>
                         </div>
                         {isLatest ? (
@@ -664,19 +683,21 @@ export function FanMeetingCompletePage() {
                       <p
                         className={`mt-2.5 text-[15px] font-medium leading-[1.65] ${note ? 'text-[var(--color-text-body)]' : 'text-[var(--color-text-muted)]'}`}
                       >
-                        {note ? `“${note}”` : '남긴 말 없음'}
+                        {note ? `“${note}”` : t('done.archive.noteEmpty')}
                       </p>
                       <p
                         className={`mt-3 border-t border-[var(--color-divider)] pt-3 text-sm font-bold ${expired ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-warning)]'}`}
                       >
                         {/* days가 null이면 보관 기한이 아직 정해지지 않은 것이라 남은 일수를 단정하지 않는다. */}
                         {expired
-                          ? '영상 보관 종료'
+                          ? t('done.archive.videoExpired')
                           : days === null
-                            ? '영상 저장 처리 중'
-                            : `영상 ${days}일 남음`}{' '}
+                            ? t('done.archive.videoProcessing')
+                            : t('done.archive.videoDaysLeft', { days })}{' '}
                         <span className="font-medium text-[var(--color-text-muted)]">
-                          {note || !expired ? '· 사진과 메모는 계속 보관' : '· 기록만 남음'}
+                          {note || !expired
+                            ? t('done.archive.keepPhoto')
+                            : t('done.archive.recordOnly')}
                         </span>
                       </p>
                     </article>
@@ -685,9 +706,9 @@ export function FanMeetingCompletePage() {
               </div>
 
               <p className="mt-[34px] border-t border-[var(--color-divider)] pt-[22px] text-base font-medium text-[var(--color-text-muted)]">
-                다음 팬미팅을 마치면 여기에 새 기록이 추가됩니다.{' '}
+                {t('done.archive.next')}{' '}
                 <Link className="font-bold text-[var(--color-primary-coral)]" to="/fan/events">
-                  팬미팅 둘러보기
+                  {t('done.archive.browse')}
                 </Link>
               </p>
             </>

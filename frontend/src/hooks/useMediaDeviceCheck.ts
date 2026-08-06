@@ -1,5 +1,6 @@
 import { createLocalTracks, Room, type LocalTrack } from 'livekit-client'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { translate } from '../i18n'
 
 export type MediaCheckStatus =
   | 'idle'
@@ -29,7 +30,7 @@ function getMediaErrorState(error: unknown): MediaErrorState {
   if (!(error instanceof DOMException)) {
     return {
       status: 'error',
-      message: '장비를 확인하는 중 알 수 없는 문제가 발생했습니다. 다시 시도해 주세요.',
+      message: translate('useMediaDeviceCheck.t1'),
     }
   }
 
@@ -39,28 +40,28 @@ function getMediaErrorState(error: unknown): MediaErrorState {
       return {
         status: 'denied',
         message:
-          '카메라 또는 마이크 권한이 거부되었습니다. 브라우저 주소창의 사이트 권한에서 카메라와 마이크를 허용해 주세요.',
+          translate('useMediaDeviceCheck.t2'),
       }
     case 'NotFoundError':
       return {
         status: 'no-device',
-        message: '사용할 수 있는 카메라 또는 마이크를 찾을 수 없습니다. 장치 연결을 확인해 주세요.',
+        message: translate('useMediaDeviceCheck.t3'),
       }
     case 'NotReadableError':
       return {
         status: 'error',
         message:
-          '카메라 또는 마이크를 열 수 없습니다. 다른 프로그램이 장치를 사용 중인지 확인해 주세요.',
+          translate('useMediaDeviceCheck.t4'),
       }
     case 'OverconstrainedError':
       return {
         status: 'error',
-        message: '선택한 장치를 사용할 수 없습니다. 장치를 다시 연결하거나 다른 장치를 선택해 주세요.',
+        message: translate('useMediaDeviceCheck.t5'),
       }
     default:
       return {
         status: 'error',
-        message: '카메라와 마이크를 시작하지 못했습니다. 장치와 브라우저 설정을 확인해 주세요.',
+        message: translate('useMediaDeviceCheck.t6'),
       }
   }
 }
@@ -107,7 +108,7 @@ export function useMediaDeviceCheck() {
       if (!mediaDevices?.getUserMedia || !mediaDevices.enumerateDevices) {
         setStatus('unsupported')
         setErrorMessage(
-          '현재 브라우저 환경에서는 카메라와 마이크를 사용할 수 없습니다. HTTPS 또는 localhost 환경인지 확인해 주세요.',
+          translate('useMediaDeviceCheck.t7'),
         )
         return
       }
@@ -138,7 +139,7 @@ export function useMediaDeviceCheck() {
         if (deviceLists.cameras.length === 0 || deviceLists.microphones.length === 0) {
           stopLocalTracks(nextTracks)
           setStatus('no-device')
-          setErrorMessage('카메라 또는 마이크 장치가 없습니다. 장치를 연결한 후 다시 시도해 주세요.')
+          setErrorMessage(translate('useMediaDeviceCheck.t8'))
           return
         }
 

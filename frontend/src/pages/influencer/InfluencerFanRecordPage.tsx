@@ -12,6 +12,7 @@ import {
 } from '../../api/fanMeetingParticipants'
 import { createFanMemo, updateFanMemo } from '../../api/fanMemos'
 import { Button } from '../../components'
+import { useTranslation } from '../../i18n'
 
 /** 백엔드 팬 메모 계약의 상한이다. */
 const MEMO_MAX_LENGTH = 300
@@ -70,6 +71,7 @@ function errorMessage(reason: unknown, fallback: string) {
  * 메모가 없어도 항상 넣어 첫 메모를 쓸 수 있게 한다.
  */
 export function InfluencerFanRecordPage() {
+  const { t } = useTranslation()
   const { fanMeetingId, fanId } = useParams<{ fanMeetingId: string; fanId: string }>()
   const [searchParams] = useSearchParams()
   const authToken = getAuthSession()?.accessToken
@@ -100,20 +102,22 @@ export function InfluencerFanRecordPage() {
         setPageError(undefined)
       } catch (reason) {
         if (signal?.aborted) return
-        setPageError(errorMessage(reason, '팬 메모를 불러오지 못했습니다.'))
+        setPageError(errorMessage(reason, t('influencerFanRecordPage.t18')))
       }
     },
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [authToken, fanId],
   )
 
   useEffect(() => {
     if (!fanId) {
-      setPageError('팬 식별자가 없습니다.')
+      setPageError(t('influencerFanRecordPage.t19'))
       setLoading(false)
       return
     }
     if (!authToken) {
-      setPageError('로그인 정보가 없습니다. 로그인 후 다시 시도해 주세요.')
+      setPageError(t('influencerFanRecordPage.t20'))
       setLoading(false)
       return
     }
@@ -125,6 +129,8 @@ export function InfluencerFanRecordPage() {
     })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, fanId, loadMemos])
 
   useEffect(() => {
@@ -313,29 +319,29 @@ export function InfluencerFanRecordPage() {
         return loadMemos()
       })
       .catch((reason: unknown) => {
-        setPageError(errorMessage(reason, '메모 저장에 실패했습니다.'))
+        setPageError(errorMessage(reason, t('influencerFanRecordPage.t21')))
       })
       .finally(() => setSaving(false))
   }
 
-  const fanName = participant?.nickname ?? `팬 ${fanId ?? ''}`.trim()
+  const fanName = participant?.nickname ?? t('influencerFanRecordPage.t32', { p0: fanId ?? '' }).trim()
   const recentSessionDate = formatDate(sessions.at(0)?.at)
   const memoMeta = hasMemo
     ? justSaved
-      ? '방금 저장'
+      ? t('influencerFanRecordPage.t22')
       : formatDateTime(selected?.savedAt)
-    : '아직 작성하지 않았어요.'
+    : t('influencerFanRecordPage.t23')
 
   const hint = pageError
     ? pageError
     : justSaved
-      ? '메모가 저장되었습니다. 통화 화면에서도 볼 수 있어요.'
+      ? t('influencerFanRecordPage.t24')
       : editing
         ? canSave
-          ? '저장하면 기존 메모를 덮어씁니다.'
-          : '내용을 입력하면 저장할 수 있어요.'
+          ? t('influencerFanRecordPage.t25')
+          : t('influencerFanRecordPage.t26')
         : hasMemo
-          ? '다음 통화 화면에 이 메모가 함께 표시됩니다.'
+          ? t('influencerFanRecordPage.t27')
           : ''
   const hintClassName = pageError
     ? 'text-[var(--color-error)]'
@@ -353,13 +359,13 @@ export function InfluencerFanRecordPage() {
             : '/influencer/fan-meetings'
         }
       >
-        ← 팬미팅 화면으로 돌아가기
+        {t('influencerFanRecordPage.t1')}
       </Link>
 
       <div className="mt-4 flex items-center gap-4">
         {participant?.profileImageUrl ? (
           <img
-            alt={`팬 ${fanName}`}
+            alt={t('influencerFanRecordPage.t33', { p0: fanName })}
             className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
             src={participant.profileImageUrl}
           />
@@ -373,7 +379,7 @@ export function InfluencerFanRecordPage() {
           <h1 className="text-[26px] font-black tracking-[-0.035em]">{fanName}</h1>
           {loading ? null : (
             <p className="mt-[5px] text-[15px] font-medium text-[var(--color-text-muted)]">
-              참여 {sessions.length}회 · 최근 팬미팅 {recentSessionDate}
+              {t('influencerFanRecordPage.t2')} {sessions.length}{t('influencerFanRecordPage.t3')} {recentSessionDate}
             </p>
           )}
         </div>
@@ -393,24 +399,24 @@ export function InfluencerFanRecordPage() {
             role="status"
           >
             <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
-              아직 함께한 팬미팅이 없어요
+              {t('influencerFanRecordPage.t4')}
             </strong>
             <span className="mt-[9px] max-w-[420px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
-              팬미팅을 진행하면 세션마다 대화 요약이 기록되고, 메모를 남길 수 있습니다.
+              {t('influencerFanRecordPage.t5')}
             </span>
           </div>
         )
       ) : (
         <div className="mt-[26px] grid items-start gap-7 border-t border-[var(--color-divider)] pt-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-11">
-          <nav aria-label="팬미팅" className="min-w-0">
+          <nav aria-label={t('influencerFanRecordPage.t6')} className="min-w-0">
             <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-[15px] font-extrabold">팬미팅</h2>
+              <h2 className="text-[15px] font-extrabold">{t('influencerFanRecordPage.t7')}</h2>
               <span className="text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
-                {sessions.length}회
+                {sessions.length}{t('influencerFanRecordPage.t8')}
               </span>
             </div>
             <p className="mt-[7px] text-sm font-medium leading-[1.55] text-[var(--color-text-muted)]">
-              팬미팅마다 메모를 하나씩 남길 수 있어요.
+              {t('influencerFanRecordPage.t9')}
             </p>
 
             <div className="mt-[14px]">
@@ -443,7 +449,7 @@ export function InfluencerFanRecordPage() {
                             : 'text-[var(--color-text-muted)]',
                         ].join(' ')}
                       >
-                        {sessionHasMemo ? '메모 있음' : '메모 없음'}
+                        {sessionHasMemo ? t('influencerFanRecordPage.t28') : t('influencerFanRecordPage.t29')}
                       </span>
                     </span>
                     <span
@@ -473,10 +479,10 @@ export function InfluencerFanRecordPage() {
               className="mt-[22px] rounded-[10px] bg-[var(--color-surface-subtle)] px-5 py-[18px]"
             >
               <h3 className="text-sm font-extrabold" id="fn-sum">
-                대화 요약
+                {t('influencerFanRecordPage.t10')}
               </h3>
               <p className="mt-[7px] text-sm font-medium leading-[1.55] text-[var(--color-text-muted)]">
-                통화가 끝나면 자동으로 기록돼요.
+                {t('influencerFanRecordPage.t11')}
               </p>
               {summaryLines.map((line) => (
                 <p
@@ -495,7 +501,7 @@ export function InfluencerFanRecordPage() {
               <div className="flex flex-wrap items-baseline justify-between gap-4">
                 <div className="min-w-0">
                   <h3 className="text-[17px] font-extrabold tracking-[-0.028em]" id="fn-memo">
-                    내 메모
+                    {t('influencerFanRecordPage.t12')}
                   </h3>
                   <p className="mt-1.5 text-sm font-medium text-[var(--color-text-muted)]">
                     {memoMeta}
@@ -507,7 +513,7 @@ export function InfluencerFanRecordPage() {
                     onClick={startEdit}
                     variant="secondary"
                   >
-                    {hasMemo ? '메모 수정' : '메모 작성'}
+                    {hasMemo ? t('influencerFanRecordPage.t30') : t('influencerFanRecordPage.t31')}
                   </Button>
                 )}
               </div>
@@ -515,11 +521,11 @@ export function InfluencerFanRecordPage() {
               {editing ? (
                 <>
                   <textarea
-                    aria-label="내 메모"
+                    aria-label={t('influencerFanRecordPage.t13')}
                     className="mj-font-body mt-4 min-h-[132px] w-full max-w-[60ch] resize-y rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] p-[14px] text-base leading-[1.7] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary-coral)] focus:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
                     maxLength={MEMO_MAX_LENGTH}
                     onChange={(event) => setDraft(event.target.value)}
-                    placeholder="예: 다음 통화에서는 과학 동아리 활동이 어땠는지 물어보기."
+                    placeholder={t('influencerFanRecordPage.t14')}
                     value={draft}
                   />
                   <div className="mt-3 flex flex-wrap items-center gap-2.5">
@@ -529,17 +535,17 @@ export function InfluencerFanRecordPage() {
                       loading={saving}
                       onClick={save}
                     >
-                      메모 저장
+                      {t('influencerFanRecordPage.t15')}
                     </Button>
                     <Button
                       className="hover:border-[var(--color-text-muted)]"
                       onClick={cancelEdit}
                       variant="secondary"
                     >
-                      취소
+                      {t('influencerFanRecordPage.t16')}
                     </Button>
                     <span className="text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
-                      {`${draft.length}자`}
+                      {t('influencerFanRecordPage.t34', { p0: draft.length })}
                     </span>
                   </div>
                 </>
@@ -549,7 +555,7 @@ export function InfluencerFanRecordPage() {
                 </p>
               ) : (
                 <p className="mt-4 max-w-[56ch] text-base font-medium leading-[1.7] text-[var(--color-text-muted)]">
-                  이 팬미팅의 메모가 아직 없어요. 기억하고 싶은 내용을 적어두면 다음 통화 화면에서 함께 보입니다.
+                  {t('influencerFanRecordPage.t17')}
                 </p>
               )}
 

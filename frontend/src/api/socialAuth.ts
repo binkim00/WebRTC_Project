@@ -2,6 +2,7 @@ import { apiRequest } from './client'
 import { unwrapEnvelope } from './envelope'
 import { isLoginResponse, type LoginResponse } from './authSession'
 import type { PreferredLanguage } from './auth'
+import { translate } from '../i18n'
 
 /**
  * 소셜 공급자 코드다.
@@ -18,11 +19,11 @@ export type SocialProviderPath = (typeof SOCIAL_PROVIDERS)[number]
 export type SocialProvider = 'GOOGLE' | 'KAKAO' | 'NAVER'
 
 /** 화면에 표시할 공급자 이름이다. */
-export const SOCIAL_PROVIDER_LABELS: Record<SocialProviderPath, string> = {
-  google: '구글',
-  kakao: '카카오',
-  naver: '네이버',
-}
+export const SOCIAL_PROVIDER_LABELS = (): Record<SocialProviderPath, string> => ({
+  google: translate('socialAuth.t1'),
+  kakao: translate('socialAuth.t2'),
+  naver: translate('socialAuth.t3'),
+})
 
 /** 값이 지원 공급자인지 좁힌다. 주소로 직접 들어온 경로 변수를 검증하는 데 쓴다. */
 export function isSocialProviderPath(value: unknown): value is SocialProviderPath {
@@ -140,7 +141,7 @@ export async function socialSignup(
 
   const data = unwrapEnvelope<unknown>(response)
   if (!isLoginResponse(data)) {
-    throw new TypeError('소셜 가입 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('socialAuth.t4'))
   }
 
   return data
@@ -159,7 +160,7 @@ export async function socialLink(
 
   const data = unwrapEnvelope<unknown>(response)
   if (!isLoginResponse(data)) {
-    throw new TypeError('소셜 연결 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('socialAuth.t5'))
   }
 
   return data

@@ -15,24 +15,31 @@ import {
   requiredCapabilityForPath,
 } from './router/roleCapabilities'
 import { isVideoCallPath } from './router/routeState'
+import { translate, type TranslationKey, useTranslation } from './i18n'
 
+/**
+ * 로그인 전 헤더에 노출할 항목이다.
+ *
+ * 라벨을 문장이 아니라 **사전 키**로 들고 있는 이유: 이 배열은 모듈이 로드될 때 한 번만 만들어져
+ * 그 자리에서 번역하면 처음 언어로 굳는다. 키만 두고 렌더 시점에 옮긴다.
+ */
 const publicNavigationItems = [
-  { label: '공지사항', to: '/service-notices' },
-  { label: '로그인', to: '/login' },
-] as const
+  { labelKey: 'app.nav.serviceNotices', to: '/service-notices' },
+  { labelKey: 'app.nav.login', to: '/login' },
+] as const satisfies readonly { labelKey: TranslationKey; to: string }[]
 
 /** 주소만으로도 스크린리더와 브라우저 탭이 현재 화면을 구분할 수 있게 제목을 만든다. */
 function pageTitleForPath(pathname: string): string {
   if (pathname === '/') return 'MELLY'
-  if (pathname === '/login') return '로그인 | MELLY'
-  if (pathname === '/signup') return '회원가입 | MELLY'
-  if (pathname.startsWith('/manager/fan-meetings')) return '팬미팅 운영 | MELLY'
-  if (pathname.startsWith('/influencer/fan-meetings')) return '팬미팅 진행 | MELLY'
-  if (pathname.startsWith('/fan/events')) return '팬미팅 이벤트 | MELLY'
+  if (pathname === '/login') return translate('app.t15')
+  if (pathname === '/signup') return translate('app.t16')
+  if (pathname.startsWith('/manager/fan-meetings')) return translate('app.t17')
+  if (pathname.startsWith('/influencer/fan-meetings')) return translate('app.t18')
+  if (pathname.startsWith('/fan/events')) return translate('app.t19')
   if (/^\/fan\/fan-meetings\/[^/]+\/cards\//.test(pathname)) return '기념 카드 | MELLY'
-  if (pathname.startsWith('/fan/')) return '팬 마이페이지 | MELLY'
-  if (pathname.startsWith('/notifications')) return '알림 | MELLY'
-  if (pathname.startsWith('/service-notices')) return '공지사항 | MELLY'
+  if (pathname.startsWith('/fan/')) return translate('app.t20')
+  if (pathname.startsWith('/notifications')) return translate('app.t21')
+  if (pathname.startsWith('/service-notices')) return translate('app.t22')
   return 'MELLY'
 }
 
@@ -68,10 +75,11 @@ function isAuthenticatedOnlyPath(pathname: string) {
 }
 
 function roleLabel(role: LoginRole) {
-  if (role === 'FAN') return '팬'
-  if (role === 'INFLUENCER') return '인플루언서'
-  if (role === 'SOLO_INFLUENCER') return '솔로 인플루언서'
-  return '매니저'
+  if (role === 'FAN') return translate('app.t23')
+  if (role === 'INFLUENCER') return translate('app.t24')
+  if (role === 'SOLO_INFLUENCER') return translate('app.t25')
+  if (role === 'ADMIN') return translate('app.t26')
+  return translate('app.t27')
 }
 
 /** 역할별 프로필(마이페이지) 경로를 돌려준다. */
@@ -80,11 +88,15 @@ function profilePathFor(role: LoginRole) {
   if (role === 'INFLUENCER' || role === 'SOLO_INFLUENCER') {
     return '/influencer/mypage/profile'
   }
+  // 운영자 전용 마이페이지가 아직 없어, 접근 권한이 있는 전체 공지 관리로 보낸다.
+  // (매니저 마이페이지는 USE_MANAGER_ACCOUNT 권한이라 ADMIN이 들어가면 가드에 막힌다.)
+  if (role === 'ADMIN') return '/admin/service-notices'
   return '/manager/mypage'
 }
 
 /** 상단 우측의 로그인 사용자 요약. 클릭하면 역할에 맞는 프로필 페이지로 이동한다. */
 function UserProfileSummary({ session }: { session: LoginResponse }) {
+  const { t } = useTranslation()
   return (
     <Link
       className="inline-flex items-center gap-2 text-left transition-colors hover:text-[var(--color-primary-coral)]"
@@ -98,7 +110,7 @@ function UserProfileSummary({ session }: { session: LoginResponse }) {
       />
       <span className="grid leading-tight">
         <strong className="max-w-28 truncate text-sm text-[var(--color-text-primary)]">
-          {session.nickname || '회원'}
+          {session.nickname || t('app.t14')}
         </strong>
         <span className="text-xs font-medium text-[var(--color-text-tertiary)]">
           {roleLabel(session.role)}
@@ -109,6 +121,7 @@ function UserProfileSummary({ session }: { session: LoginResponse }) {
 }
 
 function App() {
+  const { t } = useTranslation()
   const { pathname, search } = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -125,7 +138,15 @@ function App() {
   const authSession = getAuthSession()
   const isAuthenticated = authSession !== null
   const returnTo = `${pathname}${search}`
-  const loginPath = `/login?redirect=${encodeURIComponent(returnTo)}`
+  /**
+   * 가드가 막아서 보내는 로그인 경로다. 로그인 후 원래 가려던 화면으로 되돌려 준다.
+   *
+   * 사용자가 직접 누르는 '로그인' 링크에는 쓰지 않는다. 그 경우까지 `redirect`를 붙이면
+   * 로그인 화면이 "지금 보고 있던 화면으로 돌아가라"는 지시를 들고 가게 되어, 로그인 후 항상
+   * 메인으로 보내려는 규칙(`landingPathForRole`)을 덮어써 버린다. 실제로 공지사항에서
+   * 로그인하면 다시 공지사항으로 돌아오는 문제가 이 때문에 생겼다.
+   */
+  const guardedLoginPath = `/login?redirect=${encodeURIComponent(returnTo)}`
   const isQaCapture =
     import.meta.env.DEV &&
     isCallPage &&
@@ -137,9 +158,10 @@ function App() {
     ? []
     : isHomePage
       ? []
-      : publicNavigationItems.map((item) =>
-          item.to === '/login' ? { ...item, to: loginPath } : item,
-        )
+      : publicNavigationItems.map((item) => ({
+          label: t(item.labelKey),
+          to: item.to,
+        }))
   const roleHeaderRole =
     authSession && !isAuthPage && !isDeviceCheckPage
       ? authSession.role
@@ -187,7 +209,7 @@ function App() {
     !isPublicBrowse && (isRolePath(pathname) || isAuthenticatedOnlyPath(pathname))
 
   if (needsLogin && !authSession) {
-    return <Navigate replace to={loginPath} />
+    return <Navigate replace to={guardedLoginPath} />
   }
 
   // 역할 이름만 비교하지 않고 기능 권한으로 검사해 솔로 계정의 조직 관리 접근을 막는다.
@@ -207,21 +229,21 @@ function App() {
         {...headerNavigationProps}
         // 통화 중에는 알림으로 이탈하지 않도록 벨을 숨긴다. (handoff 7b)
         hideNotifications={isCallPage}
-        ariaLabel="주요 화면"
+        ariaLabel={t('app.t1')}
         centerContent={
           isDeviceCheckPage ? (
             <p className="flex items-center gap-3 text-sm text-[var(--color-text-secondary)]">
-              <span>입장 예정 팬미팅</span>
+              <span>{t('app.t2')}</span>
               <span aria-hidden="true" className="h-4 w-px bg-[var(--color-divider)]" />
               <strong className="text-[var(--color-text-primary)]">
-                선택한 팬미팅 장비 점검
+                {t('app.t3')}
               </strong>
             </p>
           ) : undefined
         }
         actions={
           isHomePage ? (
-            <nav aria-label="메인 메뉴" className="flex items-center gap-7 text-sm font-semibold">
+            <nav aria-label={t('app.t4')} className="flex items-center gap-7 text-sm font-semibold">
               {authSession ? (
                 <>
                   <UserProfileSummary session={authSession} />
@@ -230,16 +252,16 @@ function App() {
                     onClick={() => void handleLogout()}
                     type="button"
                   >
-                    로그아웃
+                    {t('app.t5')}
                   </button>
                 </>
               ) : (
                 <>
                   <Link className="hover:text-[var(--color-primary-coral)]" to="/fan/events">
-                    이벤트
+                    {t('app.t6')}
                   </Link>
-                  <Link className="hover:text-[var(--color-primary-coral)]" to={loginPath}>
-                    로그인
+                  <Link className="hover:text-[var(--color-primary-coral)]" to="/login">
+                    {t('app.t7')}
                   </Link>
                 </>
               )}
@@ -248,7 +270,7 @@ function App() {
                   className="inline-flex min-h-11 items-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-white shadow-[var(--shadow-final-cta)] transition hover:bg-[var(--color-primary-coral-hover)]"
                   to="/signup"
                 >
-                  회원가입
+                  {t('app.t8')}
                 </Link>
               ) : null}
             </nav>
@@ -258,16 +280,16 @@ function App() {
               to="/"
             >
               <SignOutIcon aria-hidden="true" size={18} />
-              나가기
+              {t('app.t9')}
             </Link>
           ) : isSignupPage ? (
             <p className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
-              <span>이미 계정이 있나요?</span>
+              <span>{t('app.t10')}</span>
               <Link
                 className="inline-flex items-center gap-1 font-bold text-[var(--color-primary-coral)] hover:underline"
                 to="/login"
               >
-                로그인
+                {t('app.t11')}
                 <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
               </Link>
             </p>
@@ -276,7 +298,7 @@ function App() {
               className="inline-flex items-center gap-1 text-sm font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-primary-coral)]"
               to="/fan/events"
             >
-              이벤트 둘러보기
+              {t('app.t12')}
               <ArrowRightIcon aria-hidden="true" size={18} weight="bold" />
             </Link>
           ) : authSession ? (
@@ -287,7 +309,7 @@ function App() {
                 onClick={() => void handleLogout()}
                 type="button"
               >
-                로그아웃
+                {t('app.t13')}
               </button>
             </div>
           ) : undefined

@@ -34,6 +34,7 @@ import {
   meetingStatusLabel,
   toErrorMessage,
 } from './meetingLifecycle'
+import { useTranslation } from '../../i18n'
 
 /** 서버 데이터가 없을 때도 페이지가 동일한 구조를 사용하도록 하는 빈 페이지 값이다. */
 const emptyPage: ManagerMeetingPage = {
@@ -66,6 +67,7 @@ function formatMeetingDate(value: string): string {
  * 상태 필터와 상태별 액션 버튼으로 두 단계를 모두 처리한다.
  */
 export function ManagerMeetingListPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -80,7 +82,7 @@ export function ManagerMeetingListPage() {
   const load = useCallback(async (signal?: AbortSignal) => {
     const session = getAuthSession()
     if (!session || (session.role !== 'MANAGER' && session.role !== 'SOLO_INFLUENCER')) {
-      setError('팬미팅을 운영할 수 있는 계정으로 로그인해 주세요.')
+      setError(t('managerMeetingListPage.t25'))
       setLoading(false)
       return
     }
@@ -111,10 +113,12 @@ export function ManagerMeetingListPage() {
       setError(undefined)
     } catch (cause) {
       if (signal?.aborted) return
-      setError(toErrorMessage(cause, '팬미팅 목록을 불러오지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerMeetingListPage.t26')))
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyword, page, statusFilter])
 
   useEffect(() => {
@@ -127,15 +131,15 @@ export function ManagerMeetingListPage() {
   async function runAction(meetingId: string, action: 'publish' | 'cancel' | 'delete') {
     const confirmText =
       action === 'publish'
-        ? '이 팬미팅을 발행할까요? 발행하면 팬에게 공개됩니다.'
+        ? t('managerMeetingListPage.t27')
         : action === 'cancel'
-          ? '이 팬미팅을 취소할까요? 취소하면 되돌릴 수 없습니다.'
-          : '이 초안을 삭제할까요? 삭제하면 되돌릴 수 없습니다.'
+          ? t('managerMeetingListPage.t28')
+          : t('managerMeetingListPage.t29')
     if (!window.confirm(confirmText)) return
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setError('작업을 수행하려면 먼저 로그인해 주세요.')
+      setError(t('managerMeetingListPage.t30'))
       return
     }
 
@@ -145,17 +149,17 @@ export function ManagerMeetingListPage() {
     try {
       if (action === 'publish') {
         await publishFanMeeting(Number(meetingId), token)
-        setMessage('팬미팅을 발행했습니다. 응모 시작 일시가 되면 응모가 열립니다.')
+        setMessage(t('managerMeetingListPage.t31'))
       } else if (action === 'cancel') {
         await cancelFanMeeting(meetingId, token)
-        setMessage('팬미팅을 취소했습니다.')
+        setMessage(t('managerMeetingListPage.t32'))
       } else {
         await deleteFanMeetingDraft(meetingId, token)
-        setMessage('초안을 삭제했습니다.')
+        setMessage(t('managerMeetingListPage.t33'))
       }
       await load()
     } catch (cause) {
-      setError(toErrorMessage(cause, '팬미팅 상태를 변경하지 못했습니다.'))
+      setError(toErrorMessage(cause, t('managerMeetingListPage.t34')))
     } finally {
       setBusyId(undefined)
     }
@@ -171,19 +175,19 @@ export function ManagerMeetingListPage() {
   return (
     <div className="grid min-w-0 gap-7 pb-10">
       <header>
-        <h1 className="text-4xl font-black tracking-[-0.05em]">팬미팅 관리</h1>
+        <h1 className="text-4xl font-black tracking-[-0.05em]">{t('managerMeetingListPage.t1')}</h1>
         <p className="mt-3 text-[var(--color-text-secondary)]">
-          홍보·응모부터 당첨자 선정과 영상통화 진행까지 팬미팅 한 건의 전체 흐름을 여기에서 관리하세요.
+          {t('managerMeetingListPage.t2')}
         </p>
       </header>
 
       {error ? (
-        <AlertBanner title="팬미팅 목록 요청 실패" variant="error">
+        <AlertBanner title={t('managerMeetingListPage.t3')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
       {message ? (
-        <AlertBanner onDismiss={() => setMessage(undefined)} title="처리 완료" variant="success">
+        <AlertBanner onDismiss={() => setMessage(undefined)} title={t('managerMeetingListPage.t4')} variant="success">
           {message}
         </AlertBanner>
       ) : null}
@@ -192,13 +196,13 @@ export function ManagerMeetingListPage() {
         <div className="flex flex-col gap-5 border-b border-[var(--color-divider)] p-5 sm:p-7 lg:flex-row lg:items-end lg:justify-between">
           <form className="flex min-w-0 flex-1 flex-col gap-2 sm:max-w-3xl sm:flex-row sm:items-end" onSubmit={handleSearch} role="search">
             <label className="grid min-w-0 flex-1 gap-2 text-sm font-bold">
-              <span>팬미팅명 검색</span>
+              <span>{t('managerMeetingListPage.t5')}</span>
               <span className="flex min-h-12 items-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-white px-4 focus-within:border-[var(--color-focus-indigo)]">
                 <MagnifyingGlass aria-hidden="true" className="shrink-0 text-[var(--color-text-tertiary)]" size={21} />
                 <input
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-tertiary)]"
                   onChange={(event) => setKeywordInput(event.target.value)}
-                  placeholder="팬미팅명을 입력하세요"
+                  placeholder={t('managerMeetingListPage.t6')}
                   type="search"
                   value={keywordInput}
                 />
@@ -206,16 +210,16 @@ export function ManagerMeetingListPage() {
             </label>
             <Select
               containerClassName="w-full sm:w-48"
-              label="진행 상태"
+              label={t('managerMeetingListPage.t7')}
               onChange={(event) => {
                 setPage(1)
                 setStatusFilter(event.target.value)
               }}
-              options={[...meetingStatusFilterOptions]}
+              options={[...meetingStatusFilterOptions()]}
               value={statusFilter}
             />
             <Button className="min-h-12 px-8" type="submit" variant="secondary">
-              검색
+              {t('managerMeetingListPage.t8')}
             </Button>
           </form>
           <Button
@@ -223,19 +227,19 @@ export function ManagerMeetingListPage() {
             leadingIcon={<Plus size={20} weight="bold" />}
             onClick={() => navigate('/manager/fan-meetings/new')}
           >
-            새 팬미팅
+            {t('managerMeetingListPage.t9')}
           </Button>
         </div>
 
         {loading ? (
           <div className="flex min-h-80 items-center justify-center">
-            <Spinner label="팬미팅 목록을 불러오는 중" />
+            <Spinner label={t('managerMeetingListPage.t10')} />
           </div>
         ) : meetingPage.content.length === 0 ? (
           <EmptyState
-            action={<Button onClick={() => navigate('/manager/fan-meetings/new')}>새 팬미팅 만들기</Button>}
-            description="검색 조건에 맞는 팬미팅이 없습니다."
-            title="팬미팅을 찾을 수 없습니다"
+            action={<Button onClick={() => navigate('/manager/fan-meetings/new')}>{t('managerMeetingListPage.t11')}</Button>}
+            description={t('managerMeetingListPage.t12')}
+            title={t('managerMeetingListPage.t13')}
           />
         ) : (
           <>
@@ -275,6 +279,7 @@ function MeetingRow({
   busy: boolean
   onAction: (meetingId: string, action: 'publish' | 'cancel' | 'delete') => void
 }) {
+  const { t } = useTranslation()
   const detailTo = `/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}`
   const actions = getAvailableActions({
     status: meeting.status,
@@ -302,7 +307,7 @@ function MeetingRow({
       </div>
 
       <div>
-        <p className="text-xs text-[var(--color-text-tertiary)] lg:hidden">인플루언서</p>
+        <p className="text-xs text-[var(--color-text-tertiary)] lg:hidden">{t('managerMeetingListPage.t14')}</p>
         <p className="mt-1 font-bold lg:mt-0">{meeting.influencerName}</p>
       </div>
 
@@ -312,8 +317,8 @@ function MeetingRow({
       </div>
 
       <div className="text-sm text-[var(--color-text-secondary)]">
-        <p>응모 {meeting.applicationCount}명</p>
-        <p className="mt-1">확정 {meeting.participantCount}명</p>
+        <p>{t('managerMeetingListPage.t15')} {meeting.applicationCount}{t('managerMeetingListPage.t16')}</p>
+        <p className="mt-1">{t('managerMeetingListPage.t17')} {meeting.participantCount}{t('managerMeetingListPage.t18')}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -321,25 +326,25 @@ function MeetingRow({
           className="inline-flex min-h-[38px] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3.5 text-sm font-bold transition-colors hover:border-[var(--color-text-tertiary)]"
           to={detailTo}
         >
-          상세 관리
+          {t('managerMeetingListPage.t19')}
         </Link>
         <Link
           className="inline-flex min-h-[38px] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3.5 text-sm font-bold transition-colors hover:border-[var(--color-text-tertiary)]"
           to={`${detailTo}/fans`}
         >
-          참가자
+          {t('managerMeetingListPage.t20')}
         </Link>
         {meeting.status === 'LIVE' ? (
           <Link
             className="inline-flex min-h-[38px] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] px-3.5 text-sm font-extrabold text-[var(--color-primary-coral)] transition-colors hover:border-[var(--color-primary-coral)] hover:bg-[var(--color-primary-coral)] hover:text-white"
             to={`${detailTo}/monitor`}
           >
-            운영
+            {t('managerMeetingListPage.t21')}
           </Link>
         ) : null}
         {actions.canPublish ? (
           <Button disabled={busy} onClick={() => onAction(meeting.meetingId, 'publish')} size="sm">
-            발행
+            {t('managerMeetingListPage.t22')}
           </Button>
         ) : null}
         {actions.canDeleteDraft ? (
@@ -349,12 +354,12 @@ function MeetingRow({
             size="sm"
             variant="danger"
           >
-            삭제
+            {t('managerMeetingListPage.t23')}
           </Button>
         ) : null}
         {actions.canCancel ? (
           <Button disabled={busy} onClick={() => onAction(meeting.meetingId, 'cancel')} size="sm" variant="danger">
-            취소
+            {t('managerMeetingListPage.t24')}
           </Button>
         ) : null}
       </div>

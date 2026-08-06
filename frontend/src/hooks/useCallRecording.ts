@@ -7,6 +7,7 @@ import {
   type PendingRecording,
 } from '../api/pendingRecordings'
 import { uploadRecording } from '../api/recordings'
+import { translate } from '../i18n'
 
 export type UseCallRecordingOptions = {
   /** FAN 역할, 통화 연결, 팬미팅 녹화 설정이 모두 참일 때만 true다. */
@@ -64,16 +65,16 @@ function pickSupportedMimeType(): string | undefined {
 function recordingErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 'RECORDING_FILE_TOO_LARGE') {
-      return '녹화 파일이 서버의 업로드 용량 제한을 초과했습니다.'
+      return translate('useCallRecording.t1')
     }
     if (error.status === 401) {
-      return '로그인이 만료되어 녹화 영상을 업로드하지 못했습니다. 다시 로그인한 뒤 재시도해 주세요.'
+      return translate('useCallRecording.t2')
     }
     return error.message
   }
   return error instanceof Error
     ? error.message
-    : '녹화 영상 업로드에 실패했습니다.'
+    : translate('useCallRecording.t3')
 }
 
 /**
@@ -123,7 +124,7 @@ export function useCallRecording({
     const uploadPromise = (async () => {
       const { callSessionId: sessionId, authToken: token } = uploadArgsRef.current
       if (!sessionId || !token) {
-        updateState('failed', '녹화 업로드에 필요한 로그인 또는 통화 정보가 없습니다.')
+        updateState('failed', translate('useCallRecording.t4'))
         return false
       }
 
@@ -190,8 +191,8 @@ export function useCallRecording({
 
         if (mountedRef.current) setHasPendingRecording(true)
         const recoveryHint = pendingPersistedRef.current
-          ? ' 녹화 파일은 이 브라우저에 보관되어 있습니다.'
-          : ' 녹화 파일을 잃지 않으려면 이 화면을 유지해 주세요.'
+          ? translate('useCallRecording.t5')
+          : translate('useCallRecording.t6')
         updateState('failed', `${recordingErrorMessage(error)}${recoveryHint}`)
         console.warn('통화 녹화 업로드에 실패해 브라우저에 임시 보관했습니다.', error)
         return false
@@ -302,7 +303,7 @@ export function useCallRecording({
         pendingPersistedRef.current = true
         setHasPendingRecording(true)
         setPendingRecordingPersisted(true)
-        updateState('failed', '이전에 업로드하지 못한 녹화 영상이 이 브라우저에 보관되어 있습니다.')
+        updateState('failed', translate('useCallRecording.t7'))
       })
       .catch((error: unknown) => {
         // IndexedDB 미지원이어도 현재 통화의 메모리 녹화는 계속할 수 있다.
@@ -328,7 +329,7 @@ export function useCallRecording({
       return
     }
     if (typeof MediaRecorder === 'undefined') {
-      updateState('unsupported', '이 브라우저는 통화 녹화를 지원하지 않습니다.')
+      updateState('unsupported', translate('useCallRecording.t8'))
       return
     }
 
@@ -369,7 +370,7 @@ export function useCallRecording({
         if (event.data.size > 0) chunksRef.current.push(event.data)
       })
       recorder.addEventListener('error', (event) => {
-        updateState('failed', '통화 녹화 중 오류가 발생했습니다.')
+        updateState('failed', translate('useCallRecording.t9'))
         console.warn('통화 녹화 중 오류가 발생했습니다.', event)
       })
       recorder.start(1_000)

@@ -1,5 +1,6 @@
 import { ApiError } from './ApiError'
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
 type ApiEnvelope<T> = {
   success: boolean
@@ -87,7 +88,7 @@ export async function enterQueue(
   )
 
   if (!response.success || !isQueueEnterResponse(response.data)) {
-    throw new TypeError('대기열 입장 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('queue.t1'))
   }
 
   return response.data
@@ -112,7 +113,7 @@ export function interpretQueueEnterError(
       message:
         error instanceof TypeError
           ? error.message
-          : '대기실에 입장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : translate('queue.t2'),
     }
   }
 
@@ -123,22 +124,22 @@ export function interpretQueueEnterError(
       return {
         alreadyEntered: false,
         message:
-          '아직 대기실이 열리지 않았습니다. 운영자가 대기열을 열면 바로 입장할 수 있습니다.',
+          translate('queue.t3'),
       }
     case 'QUEUE_NOT_INITIALIZED':
       return {
         alreadyEntered: false,
-        message: '대기열이 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.',
+        message: translate('queue.t4'),
       }
     case 'NO_PARTICIPANTS':
       return {
         alreadyEntered: false,
-        message: '확정된 참가자가 없어 대기열을 열 수 없습니다. 운영자에게 문의해 주세요.',
+        message: translate('queue.t5'),
       }
     case 'PARTICIPANT_NOT_FOUND':
       return {
         alreadyEntered: false,
-        message: '확정 참가자로 등록된 팬만 대기실에 입장할 수 있습니다.',
+        message: translate('queue.t6'),
       }
     default:
       // 상태 코드만 아는 새 오류는 재입장으로 단정하지 않고 서버 메시지를 그대로 보여 준다.
@@ -168,7 +169,7 @@ export function isQueueNotInitialized(error: unknown): boolean {
   return (
     error.code === 'QUEUE_NOT_INITIALIZED' ||
     error.code === 'FAN_MEETING_ALREADY_ENDED' ||
-    (error.status === 409 && error.message.includes('대기열이 없습니다'))
+    (error.status === 409 && error.message.includes(translate('queue.t7')))
   )
 }
 
@@ -187,7 +188,7 @@ export async function getMyQueue(
   )
 
   if (!response.success || !isQueueSnapshotResponse(response.data)) {
-    throw new TypeError('대기열 상태 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('queue.t8'))
   }
 
   return response.data

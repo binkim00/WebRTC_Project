@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 import { unwrapEnvelope } from './envelope'
+import { translate } from '../i18n'
 
 export type FanMeetingStatus =
   | 'DRAFT'
@@ -70,7 +71,8 @@ export type ImmediateFanMeetingStatus =
 const IMMEDIATE_TRANSITIONS: Partial<
   Record<FanMeetingStatus, readonly ImmediateFanMeetingStatus[]>
 > = {
-  PUBLISHED: ['APPLICATION_OPEN'],
+  // 서버의 정식 운영 명령이 상태와 일정을 한 트랜잭션으로 맞추므로 공개 직후에도 즉시 마감할 수 있다.
+  PUBLISHED: ['APPLICATION_OPEN', 'APPLICATION_CLOSED'],
   APPLICATION_OPEN: ['APPLICATION_CLOSED'],
   READY: ['LIVE'],
 }
@@ -225,7 +227,7 @@ export async function transitionFanMeetingImmediately(
   const allowedTargets = IMMEDIATE_TRANSITIONS[currentStatus]
   if (!allowedTargets?.includes(targetStatus)) {
     throw new TypeError(
-      `${currentStatus} 상태에서 ${targetStatus} 상태로 즉시 전환할 수 없습니다.`,
+      translate('meetingManagement.t1', { p0: currentStatus, p1: targetStatus }),
     )
   }
 
@@ -245,8 +247,12 @@ export async function transitionFanMeetingImmediately(
   return startFanMeeting(meetingId, authToken, signal)
 }
 
-/** 팬미팅 시작 전에도 참가자가 대기실에서 장비를 점검할 수 있도록 대기열을 즉시 연다. */
-export function openWaitingRoomImmediately(
+/**
+ * 팬미팅 시작 전에도 참가자가 대기실에서 장비를 점검할 수 있도록 대기열을 즉시 연다.
+ *
+ * 서버의 정식 운영 명령이 대기실 오픈 시각을 현재로 갱신한다.
+ */
+export async function openWaitingRoomImmediately(
   meetingId: string | number,
   authToken: string,
   signal?: AbortSignal,
@@ -370,8 +376,8 @@ export async function downloadFanMeetingStatisticsCsv(
   if (!response.ok) {
     throw new Error(
       response.status === 403
-        ? '이 팬미팅의 결과를 내보낼 권한이 없습니다.'
-        : `결과 파일을 내려받지 못했습니다. (HTTP ${response.status})`,
+        ? translate('meetingManagement.t2')
+        : translate('meetingManagement.t3', { p0: response.status }),
     )
   }
 

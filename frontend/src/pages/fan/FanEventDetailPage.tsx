@@ -438,7 +438,7 @@ export function FanEventDetailPage() {
               label: t('fanEvent.badge.open', { date: formatMonthDay(applicationEndAt) }),
               coral: true,
             }
-          : { label: fanMeetingStatusContent[meeting.status].label, coral: true }
+          : { label: fanMeetingStatusContent()[meeting.status].label, coral: true }
 
   const seam =
     panel === 'closed'
@@ -542,45 +542,58 @@ export function FanEventDetailPage() {
                   <Spinner label={t('fanEvent.form.loading')} size="sm" />
                   <span>{t('fanEvent.form.loadingText')}</span>
                 </div>
-              ) : questions.length > 0 ? (
-                <div className="mb-6 grid gap-4">
+              ) : (
+                <>
+                  {/*
+                    운영자가 남긴 응모 안내문이다. 질문 목록과 **독립적으로** 보여 준다.
+                    이전에는 `questions.length > 0` 분기 안에만 있어서, 질문 없이 안내문만 작성한
+                    팬미팅에서는 팬에게 전혀 보이지 않았다. 또 질문 라벨 사이에 옅은 본문으로 섞여
+                    있어 안내문으로 읽히지도 않았으므로 별도 블록으로 올린다.
+                    운영자가 줄바꿈으로 항목을 나눠 적는 경우가 많아 whitespace-pre-wrap으로 살린다.
+                  */}
                   {applicationForm?.formDescription ? (
-                    <p className="text-sm leading-6 text-[var(--color-text-muted)]">
-                      {applicationForm.formDescription}
-                    </p>
+                    <div className="mb-5 rounded-[var(--radius-control)] bg-[var(--color-surface-subtle)] px-4 py-3.5">
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--color-text-body)]">
+                        {applicationForm.formDescription}
+                      </p>
+                    </div>
                   ) : null}
-                  {questions.map((question) =>
-                    question.questionType === 'LONG_TEXT' ? (
-                      <Textarea
-                        disabled={!viewer.canApply}
-                        key={question.questionId}
-                        label={`${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`}
-                        rows={4}
-                        value={answers[question.questionId] ?? ''}
-                        onChange={(event) =>
-                          setAnswers((current) => ({
-                            ...current,
-                            [question.questionId]: event.target.value,
-                          }))
-                        }
-                      />
-                    ) : (
-                      <TextField
-                        disabled={!viewer.canApply}
-                        key={question.questionId}
-                        label={`${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`}
-                        value={answers[question.questionId] ?? ''}
-                        onChange={(event) =>
-                          setAnswers((current) => ({
-                            ...current,
-                            [question.questionId]: event.target.value,
-                          }))
-                        }
-                      />
-                    ),
-                  )}
-                </div>
-              ) : null}
+                  {questions.length > 0 ? (
+                    <div className="mb-6 grid gap-4">
+                      {questions.map((question) =>
+                        question.questionType === 'LONG_TEXT' ? (
+                          <Textarea
+                            disabled={!viewer.canApply}
+                            key={question.questionId}
+                            label={`${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`}
+                            rows={4}
+                            value={answers[question.questionId] ?? ''}
+                            onChange={(event) =>
+                              setAnswers((current) => ({
+                                ...current,
+                                [question.questionId]: event.target.value,
+                              }))
+                            }
+                          />
+                        ) : (
+                          <TextField
+                            disabled={!viewer.canApply}
+                            key={question.questionId}
+                            label={`${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`}
+                            value={answers[question.questionId] ?? ''}
+                            onChange={(event) =>
+                              setAnswers((current) => ({
+                                ...current,
+                                [question.questionId]: event.target.value,
+                              }))
+                            }
+                          />
+                        ),
+                      )}
+                    </div>
+                  ) : null}
+                </>
+              )}
 
               <h2 className="text-[17px] font-extrabold tracking-[-0.03em]">{t('fanEvent.agree.title')}</h2>
               <div className="mt-2.5">

@@ -1,5 +1,6 @@
 import { isLoginRole, type LoginRole } from './authSession'
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
 type ApiEnvelope<T> = {
   success: boolean
@@ -91,7 +92,7 @@ export async function getMyProfile(
   })
 
   if (!response.success || !isUserProfile(response.data)) {
-    throw new TypeError('회원정보 조회 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('users.t1'))
   }
 
   return response.data
@@ -108,7 +109,7 @@ export async function updateMyProfile(
   })
 
   if (!response.success || !isUpdatedUserProfile(response.data)) {
-    throw new TypeError('회원정보 수정 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('users.t2'))
   }
 
   return response.data
@@ -132,7 +133,7 @@ export async function withdrawMyAccount(
   })
 
   if (!response.success || !isRecord(response.data)) {
-    throw new TypeError('회원탈퇴 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('users.t3'))
   }
 
   return {

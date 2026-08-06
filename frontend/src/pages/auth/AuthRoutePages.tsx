@@ -3,11 +3,12 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
+  PREFERRED_LANGUAGE_OPTIONS,
   clearAuthSession,
+  isPreferredLanguage,
   login,
   saveAuthSession,
   signup,
-  type PreferredLanguage,
   type SignupRequest,
   type SignupRole,
 } from '../../api/auth'
@@ -15,14 +16,7 @@ import { maskEmail } from '../../api/emailVerifications'
 import { isEmailVerificationEnabled } from '../../config/features'
 import { AlertBanner, EmailVerificationNotice, SocialLoginButtons } from '../../components'
 import { useTranslation, type TranslationKey } from '../../i18n'
-
-const languageOptions = [
-  { label: '한국어', value: 'KOREAN' },
-  { label: 'English', value: 'ENGLISH' },
-  { label: '日本語', value: 'JAPANESE' },
-  { label: '中文', value: 'CHINESE' },
-  { label: 'Tiếng Việt', value: 'VIETNAMESE' },
-] as const
+import { landingPathForRole } from '../../router/roleCapabilities'
 
 /**
  * 역할 선택 옵션이다. 값은 백엔드 enum을 그대로 쓰고, 라벨·설명은 **사전 키**로 들고 있는다.
@@ -48,11 +42,6 @@ const roleOptions: readonly {
   },
   { value: 'MANAGER', labelKey: 'signup.role.manager', noteKey: 'signup.role.manager.note' },
 ]
-
-// 선택지가 늘어나도 검증이 뒤처지지 않도록 languageOptions를 그대로 기준으로 삼는다.
-function isPreferredLanguage(value: string): value is PreferredLanguage {
-  return languageOptions.some((option) => option.value === value)
-}
 
 const signupInputClass =
   'mt-2 min-h-[50px] w-full rounded-lg border bg-white px-[13px] text-base font-semibold text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]'
@@ -117,12 +106,7 @@ export function LoginPage() {
         requestedPath?.startsWith('/') && !requestedPath.startsWith('//')
           ? requestedPath
           : undefined
-      const landingPath =
-        safeRequestedPath ?? (response.role === 'FAN'
-          ? '/fan/mypage/fan-meetings?status=upcoming'
-          : response.role === 'INFLUENCER'
-            ? '/influencer/fan-meetings'
-            : '/manager/fan-meetings')
+      const landingPath = safeRequestedPath ?? landingPathForRole(response.role)
       navigate(landingPath, { replace: true })
     } catch (error: unknown) {
       setSubmitError(
@@ -385,7 +369,7 @@ export function SignupPage() {
       if (!isEmailVerificationEnabled) {
         navigate('/login', {
           replace: true,
-          state: { notice: '가입이 완료되었어요. 로그인해 주세요.' },
+          state: { notice: t('authRoutePages.t1') },
         })
         return
       }
@@ -404,7 +388,7 @@ export function SignupPage() {
         navigate('/login', {
           replace: true,
           state: {
-            notice: `가입이 완료되었어요. 로그인 후 마이페이지에서 ${maskEmail(request.email)} 주소로 인증 메일을 보낼 수 있어요.`,
+            notice: t('authRoutePages.t8', { p0: maskEmail(request.email) }),
           },
         })
       }
@@ -433,7 +417,7 @@ export function SignupPage() {
   function passwordToggle(shown: boolean, onToggle: () => void, targetLabel: string) {
     return (
       <button
-        aria-label={shown ? `${targetLabel} 숨기기` : `${targetLabel} 보기`}
+        aria-label={shown ? t('authRoutePages.t9', { p0: targetLabel }) : t('authRoutePages.t10', { p0: targetLabel })}
         aria-pressed={shown}
         className="absolute right-1.5 top-1/2 grid min-h-11 min-w-11 -translate-y-1/2 place-items-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
         onClick={onToggle}
@@ -482,8 +466,8 @@ export function SignupPage() {
           onClick={() =>
             leaveVerifyingPhase(
               phase.role === 'FAN'
-                ? '가입이 완료되었어요. 이메일 인증은 로그인 후 마이페이지에서도 할 수 있고, 팬미팅 응모 전에는 인증이 필요해요.'
-                : '가입이 완료되었어요. 이메일 인증은 로그인 후 마이페이지에서도 할 수 있어요.',
+                ? t('authRoutePages.t2')
+                : t('authRoutePages.t3'),
             )
           }
           type="button"
@@ -585,7 +569,7 @@ export function SignupPage() {
               type={showPassword ? 'text' : 'password'}
               value={password}
             />
-            {passwordToggle(showPassword, () => setShowPassword((visible) => !visible), '비밀번호')}
+            {passwordToggle(showPassword, () => setShowPassword((visible) => !visible), t('authRoutePages.t4'))}
           </span>
         </label>
         {show('password', passwordError) ? (
@@ -612,7 +596,7 @@ export function SignupPage() {
             {passwordToggle(
               showPasswordConfirm,
               () => setShowPasswordConfirm((visible) => !visible),
-              '비밀번호 확인',
+              t('authRoutePages.t5'),
             )}
           </span>
         </label>
@@ -630,7 +614,7 @@ export function SignupPage() {
             value={language}
           >
             <option value="">{t('signup.languagePlaceholder')}</option>
-            {languageOptions.map((option) => (
+            {PREFERRED_LANGUAGE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -698,13 +682,12 @@ export function SignupPage() {
               className="whitespace-nowrap text-[15px] font-bold text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-coral)]"
               onClick={() =>
                 setPolicyNotice(
-                  '이용약관 상세 URL은 현재 라우팅·API 정의서에 명시되어 있지 않습니다.',
+                  t('authRoutePages.t6'),
                 )
               }
               type="button"
             >
-              내용 보기
-            </button>
+               {t('authRoutePages.t11')} </button>
           </div>
           <div className="flex items-center justify-between gap-4">
             <label className="flex min-h-11 min-w-0 cursor-pointer items-center gap-2.5">
@@ -726,13 +709,12 @@ export function SignupPage() {
               className="whitespace-nowrap text-[15px] font-bold text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-coral)]"
               onClick={() =>
                 setPolicyNotice(
-                  '개인정보 처리방침 상세 URL은 현재 라우팅·API 정의서에 명시되어 있지 않습니다.',
+                  t('authRoutePages.t7'),
                 )
               }
               type="button"
             >
-              내용 보기
-            </button>
+               {t('authRoutePages.t12')} </button>
           </div>
         </div>
         {show('terms', termsError) ? <FieldError>{termsError}</FieldError> : null}

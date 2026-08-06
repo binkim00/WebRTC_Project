@@ -19,20 +19,21 @@ import {
   Spinner,
   type BadgeVariant,
 } from '../../components'
+import { translate, useTranslation } from '../../i18n'
 
 const PAGE_SIZE = 10
 
-const notificationTypeContent: Record<
+const notificationTypeContent = (): Record<
   NotificationType,
   { label: string; variant: BadgeVariant }
-> = {
-  APPLICATION_RESULT: { label: '응모 결과', variant: 'primary' },
-  QUEUE_ORDER_ASSIGNED: { label: '순번 배정', variant: 'info' },
-  QUEUE_CHANGE_RESULT: { label: '순번 변경', variant: 'info' },
-  ENTER_NOW: { label: '입장 안내', variant: 'success' },
-  MEETING_CHANGED: { label: '팬미팅 변경', variant: 'warning' },
-  MEETING_CANCELED: { label: '팬미팅 취소', variant: 'danger' },
-}
+> => ({
+  APPLICATION_RESULT: { label: translate('notificationsPage.t18'), variant: 'primary' },
+  QUEUE_ORDER_ASSIGNED: { label: translate('notificationsPage.t19'), variant: 'info' },
+  QUEUE_CHANGE_RESULT: { label: translate('notificationsPage.t20'), variant: 'info' },
+  ENTER_NOW: { label: translate('notificationsPage.t21'), variant: 'success' },
+  MEETING_CHANGED: { label: translate('notificationsPage.t22'), variant: 'warning' },
+  MEETING_CANCELED: { label: translate('notificationsPage.t23'), variant: 'danger' },
+})
 
 function getNotificationLink(
   type: NotificationType,
@@ -68,6 +69,7 @@ function formatDateTime(iso: string): string {
 }
 
 export function NotificationsPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [session] = useState(() => getAuthSession())
   const [unreadOnly, setUnreadOnly] = useState(false)
@@ -75,6 +77,45 @@ export function NotificationsPage() {
   const [pageData, setPageData] = useState<PageResponse<NotificationResponse>>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
+  const [markingAll, setMarkingAll] = useState(false)
+
+  /** 현재 페이지에서 아직 읽지 않은 알림 수다. 일괄 읽음 버튼의 노출과 문구에 쓴다. */
+  const unreadCount = (pageData?.content ?? []).filter((item) => !item.readAt).length
+
+  /**
+   * 현재 페이지의 읽지 않은 알림을 한 번에 읽음 처리한다.
+   *
+   * 서버에 일괄 처리 API가 없어 개별 읽음 요청을 병렬로 보낸다(벨 패널과 같은 방식).
+   * 목록은 요청 결과를 기다리지 않고 먼저 갱신해 버튼이 즉시 반응하게 하고, 실패한 건은
+   * 다음 조회에서 다시 읽지 않음으로 돌아온다.
+   */
+  async function handleMarkAllRead() {
+    if (!session || markingAll) return
+
+    const unread = (pageData?.content ?? []).filter((item) => !item.readAt)
+    if (unread.length === 0) return
+
+    setMarkingAll(true)
+    const readAt = new Date().toISOString()
+    setPageData((previous) =>
+      previous
+        ? {
+            ...previous,
+            content: previous.content.map((item) => ({ ...item, readAt: item.readAt ?? readAt })),
+          }
+        : previous,
+    )
+
+    try {
+      await Promise.all(
+        unread.map((item) =>
+          markNotificationAsRead(item.notificationId, session.accessToken).catch(() => undefined),
+        ),
+      )
+    } finally {
+      setMarkingAll(false)
+    }
+  }
 
   useEffect(() => {
     if (!session) {
@@ -104,7 +145,7 @@ export function NotificationsPage() {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : '알림 목록을 불러오지 못했습니다.',
+            : t('notificationsPage.t14'),
         )
       })
       .finally(() => {
@@ -114,6 +155,8 @@ export function NotificationsPage() {
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, unreadOnly, currentPage])
 
   async function handleNotificationClick(notification: NotificationResponse) {
@@ -140,7 +183,7 @@ export function NotificationsPage() {
             : previous,
         )
       } catch (readError: unknown) {
-        console.warn('알림 읽음 처리에 실패했습니다.', readError)
+        console.warn(t('notificationsPage.t15'), readError)
       }
     }
 
@@ -154,13 +197,13 @@ export function NotificationsPage() {
   if (!session) {
     return (
       <div className="mx-auto grid w-full max-w-4xl gap-6">
-        <h1 className="text-4xl font-black tracking-[-0.045em]">알림</h1>
-        <AlertBanner title="로그인이 필요합니다" variant="warning">
-          알림을 확인하려면{' '}
+        <h1 className="text-4xl font-black tracking-[-0.045em]">{t('notificationsPage.t1')}</h1>
+        <AlertBanner title={t('notificationsPage.t2')} variant="warning">
+          {t('notificationsPage.t3')}{' '}
           <Link className="font-semibold underline" to="/login">
-            로그인
+            {t('notificationsPage.t4')}
           </Link>
-          해 주세요.
+          {t('notificationsPage.t5')}
         </AlertBanner>
       </div>
     )
@@ -173,9 +216,9 @@ export function NotificationsPage() {
     <div className="mx-auto grid w-full max-w-4xl gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black tracking-[-0.045em]">알림</h1>
+          <h1 className="text-4xl font-black tracking-[-0.045em]">{t('notificationsPage.t6')}</h1>
           <p className="mt-3 text-[var(--color-text-secondary)]">
-            응모 결과, 팬미팅 입장 안내 등 나에게 도착한 알림을 확인하세요.
+            {t('notificationsPage.t7')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -187,7 +230,7 @@ export function NotificationsPage() {
             size="sm"
             variant={unreadOnly ? 'secondary' : 'primary'}
           >
-            전체
+            {t('notificationsPage.t8')}
           </Button>
           <Button
             onClick={() => {
@@ -197,29 +240,44 @@ export function NotificationsPage() {
             size="sm"
             variant={unreadOnly ? 'primary' : 'secondary'}
           >
-            읽지 않음
+            {t('notificationsPage.t9')}
           </Button>
+          {/*
+            하나씩 눌러 읽는 수고를 덜기 위한 일괄 읽음이다. 읽지 않은 알림이 없으면 감춘다.
+            서버에 일괄 처리 API가 없어 개별 읽음을 병렬로 보낸다(벨 패널과 같은 방식).
+          */}
+          {unreadCount > 0 ? (
+            <Button
+              disabled={markingAll}
+              loading={markingAll}
+              onClick={() => void handleMarkAllRead()}
+              size="sm"
+              variant="secondary"
+            >
+              {t('notificationsPage.markAllRead', { count: unreadCount })}
+            </Button>
+          ) : null}
         </div>
       </header>
 
       {error ? (
-        <AlertBanner title="알림을 불러오지 못했습니다" variant="error">
+        <AlertBanner title={t('notificationsPage.t10')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <Spinner label="알림을 불러오는 중" />
+          <Spinner label={t('notificationsPage.t11')} />
         </div>
       ) : notifications.length === 0 ? (
         <EmptyState
           description={
             unreadOnly
-              ? '읽지 않은 알림이 없습니다.'
-              : '아직 도착한 알림이 없습니다.'
+              ? t('notificationsPage.t16')
+              : t('notificationsPage.t17')
           }
-          title="알림이 없습니다"
+          title={t('notificationsPage.t12')}
         />
       ) : (
         <Card>
@@ -227,7 +285,7 @@ export function NotificationsPage() {
             <ul className="divide-y divide-[var(--color-divider)]">
               {notifications.map((notification) => {
                 const isUnread = notification.readAt === null
-                const typeContent = notificationTypeContent[notification.type]
+                const typeContent = notificationTypeContent()[notification.type]
 
                 return (
                   <li key={notification.notificationId}>
@@ -242,7 +300,7 @@ export function NotificationsPage() {
                         <Badge variant={typeContent.variant}>{typeContent.label}</Badge>
                         {isUnread ? (
                           <span
-                            aria-label="읽지 않은 알림"
+                            aria-label={t('notificationsPage.t13')}
                             className="size-2 rounded-full bg-[var(--color-primary-coral)]"
                           />
                         ) : null}
