@@ -1,6 +1,36 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
 
+/*
+  기념 카드에서 팬이 고르는 글꼴이다. 서비스 본문에는 쓰지 않으므로 카드를 만들 때만
+  내려받히도록 @font-face로 선언만 해 둔다(브라우저는 실제로 쓰일 때 받는다).
+  셋 다 SIL Open Font License 1.1이며 사본은 public/fonts/OFL.txt에 있다.
+  굵기 파일은 Regular 하나뿐이라 모든 굵기를 이 파일로 받게 둔다.
+*/
+@font-face {
+  font-family: "Jua";
+  src: url("/fonts/Jua-Regular.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gaegu";
+  src: url("/fonts/Gaegu-Regular.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Do Hyeon";
+  src: url("/fonts/DoHyeon-Regular.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   font-family:
     Pretendard,
@@ -49,9 +79,268 @@ textarea {
   font: inherit;
 }
 
-:where(a, button, input, select, textarea):focus-visible {
+.mj-font-body {
+  font-weight: var(--font-weight-body);
+}
+
+.mj-font-supporting {
+  font-weight: var(--font-weight-supporting);
+}
+
+.mj-font-label {
+  font-weight: var(--font-weight-label);
+}
+
+.mj-font-emphasis {
+  font-weight: var(--font-weight-emphasis);
+}
+
+.mj-font-title {
+  font-weight: var(--font-weight-title);
+}
+
+:where(a, button, input, select, summary, textarea, [tabindex]):focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus-indigo);
   outline-offset: var(--focus-ring-offset);
+}
+
+/* 키보드 사용자에게만 표시되는 본문 바로가기 링크이다. */
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: var(--z-skip-link);
+  min-height: var(--control-height);
+  padding: 0.75rem 1rem;
+  color: var(--color-text-on-dark);
+  font-weight: var(--font-weight-emphasis);
+  text-decoration: none;
+  background: var(--color-text-primary);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-modal);
+  transform: translateY(calc(-100% - 1rem));
+  transition: transform 120ms ease-out;
+}
+
+.skip-link:focus-visible {
+  outline-color: var(--color-text-on-dark);
+  outline-offset: 2px;
+  transform: translateY(0);
+}
+
+/* 스킵 링크로 이동한 본문이 고정 헤더 뒤에 가려지지 않게 한다. */
+#main-content {
+  scroll-margin-top: calc(var(--service-header-height) + 1rem);
+}
+
+@keyframes mj-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mj-scrim-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* 응모 완료 패널 등 상태 전환 블록의 안착 모션이다. (brand-expression-map 부록 B) */
+@keyframes mj-settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 통화 연결 중 — 양쪽 점이 중앙으로 접근해 하나로 합쳐지는 연결 리듬이다. (brand-expression-map 부록 B) */
+@keyframes mj-packet-left {
+  0%,
+  12% {
+    left: 0;
+    opacity: 0;
+  }
+
+  22% {
+    opacity: 1;
+  }
+
+  62% {
+    left: 42%;
+    opacity: 1;
+  }
+
+  72%,
+  100% {
+    left: 49%;
+    opacity: 0;
+  }
+}
+
+@keyframes mj-packet-right {
+  0%,
+  12% {
+    right: 0;
+    opacity: 0;
+  }
+
+  22% {
+    opacity: 1;
+  }
+
+  62% {
+    right: 42%;
+    opacity: 1;
+  }
+
+  72%,
+  100% {
+    right: 49%;
+    opacity: 0;
+  }
+}
+
+@keyframes mj-core-rhythm {
+  0%,
+  60% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25);
+  }
+
+  64% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.48);
+  }
+
+  74% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+
+  79% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.22);
+  }
+
+  85% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+
+  91% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+
+  96%,
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* 대기실 호출 카운트다운의 등장 모션이다. (brand-expression-map 부록 B) */
+@keyframes mj-lift {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 이미지·정보 열 경계 굴절의 1회 반응 모션이다. (brand-expression-map 부록 B) */
+@keyframes mj-seam-shift {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(-2px);
+  }
+}
+
+/*
+ * 통화 중 리액션 이모지가 떠오르며 사라지는 움직임이다.
+ * 좌우로 살짝 흔들어 여러 개를 연속으로 눌러도 한 줄로 겹쳐 보이지 않게 한다.
+ */
+@keyframes mj-reaction-float {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+
+  15% {
+    opacity: 1;
+    transform: translateY(-16px) scale(1.1);
+  }
+
+  55% {
+    transform: translateY(-104px) translateX(10px) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-190px) translateX(-6px) scale(0.9);
+  }
+}
+
+@keyframes jelly-soft {
+  0% {
+    transform: scale(1);
+  }
+
+  35% {
+    transform: scaleX(1.08) scaleY(0.94);
+  }
+
+  60% {
+    transform: scaleX(0.97) scaleY(1.04);
+  }
+
+  80% {
+    transform: scaleX(1.02) scaleY(0.99);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mj-switch-jelly {
+    transform-origin: center;
+    animation: jelly-soft 360ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+dialog[open].mj-dialog {
+  animation: mj-modal-in 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+dialog[open].mj-dialog::backdrop {
+  background: var(--color-scrim);
+  backdrop-filter: blur(var(--backdrop-blur));
+  animation: mj-scrim-in 220ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -66,5 +355,23 @@ textarea {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --color-scrim: rgb(15 17 21 / 78%);
+    --backdrop-blur: 0px;
+  }
+
+  dialog::backdrop,
+  [data-transparency='decorative'] {
+    backdrop-filter: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :where(a, button, input, select, summary, textarea, [tabindex]):focus-visible {
+    outline-color: Highlight;
   }
 }

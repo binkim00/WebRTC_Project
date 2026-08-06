@@ -1,15 +1,17 @@
 import type { HTMLAttributes } from 'react'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 export type SkeletonProps = HTMLAttributes<HTMLDivElement> & {
   lines?: number
 }
 
 export function Skeleton({ lines = 1, className, ...props }: SkeletonProps) {
+  const { t } = useTranslation()
   return (
     <div
       aria-busy="true"
-      aria-label="콘텐츠 불러오는 중"
+      aria-label={t('skeleton.t1')}
       className={cn('grid gap-2', className)}
       {...props}
     >

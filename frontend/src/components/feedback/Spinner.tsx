@@ -1,4 +1,5 @@
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 export type SpinnerProps = {
   label?: string
@@ -12,7 +13,11 @@ const spinnerSizeClasses = {
   lg: 'size-10 border-4',
 } as const
 
-export function Spinner({ label = '불러오는 중', size = 'md', className }: SpinnerProps) {
+export function Spinner({ label, size = 'md', className }: SpinnerProps) {
+  const { t } = useTranslation()
+  // 기본 문구는 파라미터 기본값이 아니라 본문에서 정한다. 파라미터 기본값은 훅보다 먼저
+  // 평가되므로 그 자리에서는 t를 쓸 수 없다.
+  const resolvedLabel = label ?? t('spinner.t1')
   return (
     <span className={cn('inline-flex items-center gap-2', className)} role="status">
       <span
@@ -22,7 +27,7 @@ export function Spinner({ label = '불러오는 중', size = 'md', className }: 
           spinnerSizeClasses[size],
         )}
       />
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{resolvedLabel}</span>
     </span>
   )
 }

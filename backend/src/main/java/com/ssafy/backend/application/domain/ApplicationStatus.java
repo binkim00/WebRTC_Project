@@ -5,6 +5,7 @@ package com.ssafy.backend.application.domain;
  */
 public enum ApplicationStatus {
     SUBMITTED,
+    WITHDRAWN,
     SELECTED,
     NOT_SELECTED
 }

@@ -4,7 +4,13 @@ services:
     container_name: mysql
     restart: unless-stopped
 
+    # NOW() 등 DB가 직접 만드는 시각을 한국시간으로 맞춘다. 컨테이너 기본은 UTC 라서
+    # 그대로 두면 애플리케이션이 쓴 시각과 9시간 어긋난다. 이름 있는 시간대는 tz 테이블을
+    # 미리 적재해야 하므로, 서머타임이 없는 한국은 고정 오프셋으로 지정하는 편이 안전하다.
+    command: --default-time-zone=+09:00
+
     environment:
+      TZ: Asia/Seoul
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USERNAME}
@@ -37,6 +43,9 @@ services:
 
     command: redis-server --appendonly yes
 
+    environment:
+      TZ: Asia/Seoul
+
     volumes:
       - /home/ubuntu/docker/project/redis/data:/data
 
@@ -54,12 +63,25 @@ services:
     container_name: livekit
     restart: unless-stopped
 
-    command:
-      - --config
-      - /etc/livekit.yaml
-
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      # Compose가 배포 시점에 key/secret을 치환한 뒤 LiveKit이 전체 YAML을 읽는다.
+      # keys와 webhook.api_key가 같은 key를 사용하므로 서명 검증 쌍이 어긋나지 않는다.
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: true
+        redis:
+          address: redis:6379
+          db: 1
+        keys:
+          "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}": "${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}"
+        webhook:
+          api_key: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}"
+          urls:
+            - http://backend:8080/api/v1/livekit/webhook
 
     depends_on:
       redis:
@@ -73,7 +95,71 @@ services:
       - "7882:7882/udp"
 
     volumes:
-      - ./livekit/livekit.prod.yaml:/etc/livekit.yaml:ro
+      # 다른 서비스와 달리 TZ 환경변수를 쓰지 않는다. 이 이미지에는 tzdata 가 없어
+      # TZ 를 넣으면 Go 런타임이 Asia/Seoul 을 찾지 못하고 /etc/localtime 도 무시한 채
+      # UTC 로 고정된다. 실측: TZ 만 설정하면 UTC, 이 마운트만 하면 KST.
+      # 호스트의 시간대 파일을 직접 붙이므로 호스트 시간대 설정과도 무관하다.
+      - /usr/share/zoneinfo/Asia/Seoul:/etc/localtime:ro
+
+    networks:
+      - melly-network
+
+  egress:
+    profiles: ["egress"]
+    image: ${LIVEKIT_EGRESS_IMAGE:-livekit/egress:v1.13.0}
+    container_name: livekit-egress
+    restart: unless-stopped
+
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: "${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}"
+        api_secret: "${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}"
+        ws_url: ws://livekit:7880
+        insecure: true
+        redis:
+          address: redis:6379
+          db: 1
+        health_port: 8081
+        prometheus_port: 9090
+        logging:
+          level: info
+          json: true
+        backup_storage: /out/egress-backup
+        # 공식 seccomp profile 적용 전까지 LiveKit 이미지의 기본값과 같은 비활성 상태로 운용한다.
+        enable_chrome_sandbox: false
+        cpu_cost:
+          room_composite_cpu_cost: 3.0
+          web_cpu_cost: 3.0
+          track_composite_cpu_cost: 2.0
+          track_cpu_cost: 1.0
+        session_limits:
+          file_output_max_duration: 10m
+
+    cpus: 3.0
+    mem_limit: 4g
+    shm_size: 1gb
+    pids_limit: 512
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+
+    expose:
+      - "8081"
+      - "9090"
+
+    volumes:
+      # backend의 RECORDING_STORAGE_ROOT와 /out이 같은 호스트 디렉터리를 가리켜야 한다.
+      - ${RECORDING_STORAGE_ROOT:-/srv/melly/uploads}:/out
+
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec ': > /dev/tcp/127.0.0.1/8081'"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
 
     networks:
       - melly-network
@@ -88,6 +174,9 @@ services:
     restart: unless-stopped
 
     environment:
+      # 이미지에도 같은 값을 넣어 두었지만, 컨테이너 시간대를 여기서 한눈에 보이게 둔다.
+      TZ: Asia/Seoul
+
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_NAME: ${DB_NAME}
@@ -106,6 +195,60 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       JWT_SECRET: ${JWT_SECRET}
 
+      # 활성 ADMIN이 하나도 없을 때만 기동 시 운영자 계정을 만든다. 값을 비우면 만들지 않는다.
+      ADMIN_BOOTSTRAP_LOGIN_ID: ${ADMIN_BOOTSTRAP_LOGIN_ID:-}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-}
+      ADMIN_BOOTSTRAP_NICKNAME: ${ADMIN_BOOTSTRAP_NICKNAME:-멜리관리자}
+
+      RECORDING_STORAGE_ROOT: ${RECORDING_STORAGE_ROOT:-/srv/melly/uploads}
+      RECORDING_RETENTION_DAYS: ${RECORDING_RETENTION_DAYS:-7}
+      # Egress 컨테이너와 저장 경로 연동이 완료될 때까지 반드시 false로 유지한다.
+      RECORDING_EGRESS_ENABLED: ${RECORDING_EGRESS_ENABLED:-false}
+      RECORDING_EGRESS_OUTPUT_ROOT: ${RECORDING_EGRESS_OUTPUT_ROOT:-/out}
+      RECORDING_EGRESS_LAYOUT: ${RECORDING_EGRESS_LAYOUT:-grid}
+      RECORDING_EGRESS_MAX_CONCURRENT: ${RECORDING_EGRESS_MAX_CONCURRENT:-1}
+      RECORDING_EGRESS_CAPACITY_LEASE_SECONDS: ${RECORDING_EGRESS_CAPACITY_LEASE_SECONDS:-7200}
+      RECORDING_EGRESS_RECOVERY_CHECK_DELAY_MS: ${RECORDING_EGRESS_RECOVERY_CHECK_DELAY_MS:-30000}
+      RECORDING_EGRESS_RECOVERY_STALE_SECONDS: ${RECORDING_EGRESS_RECOVERY_STALE_SECONDS:-60}
+      RECORDING_EGRESS_RECOVERY_BATCH_SIZE: ${RECORDING_EGRESS_RECOVERY_BATCH_SIZE:-20}
+
+      ATTACHMENT_STORAGE_ROOT: ${ATTACHMENT_STORAGE_ROOT:-/srv/melly/attachments}
+
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS}
+
+      EMAIL_VERIFY_DELIVERY: ${EMAIL_VERIFY_DELIVERY}
+      EMAIL_VERIFY_BASE_URL: ${EMAIL_VERIFY_BASE_URL}
+      DEVICE_TOKEN_SECURE: ${DEVICE_TOKEN_SECURE}
+
+      # 소셜 로그인(구글·카카오·네이버).
+      # 콜백은 프론트 라우트라 운영에서는 https://<도메인>/oauth/callback 을 써야 하고,
+      # 3사 콘솔에 등록한 Redirect URI 와 문자 하나까지 같아야 한다.
+      # 값을 비우면 해당 공급자만 사용 불가로 처리되고 애플리케이션은 정상 기동한다.
+      # 빈 문자열이 들어오면 Spring 이 기본값으로 되돌리지 않고 @NotBlank 검증에서 기동이 실패한다.
+      # 그래서 여기서 운영 기본값을 지정한다.
+      OAUTH_REDIRECT_BASE_URL: ${OAUTH_REDIRECT_BASE_URL:-https://i15e106.p.ssafy.io/oauth/callback}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET}
+      OAUTH_KAKAO_CLIENT_ID: ${OAUTH_KAKAO_CLIENT_ID}
+      OAUTH_KAKAO_CLIENT_SECRET: ${OAUTH_KAKAO_CLIENT_SECRET}
+      OAUTH_NAVER_CLIENT_ID: ${OAUTH_NAVER_CLIENT_ID}
+      OAUTH_NAVER_CLIENT_SECRET: ${OAUTH_NAVER_CLIENT_SECRET}
+
+      APPLICATION_EMAIL_VERIFICATION_REQUIRED: ${APPLICATION_EMAIL_VERIFICATION_REQUIRED:-false}
+
+    volumes:
+      # 업로드 파일은 컨테이너가 아니라 호스트 디스크에 남겨야 재생성·재배포 후에도 보존된다.
+      # 컨테이너 안의 경로를 호스트와 같게 두어 설정값을 그대로 쓸 수 있게 한다.
+      - ${RECORDING_STORAGE_ROOT:-/srv/melly/uploads}:${RECORDING_STORAGE_ROOT:-/srv/melly/uploads}
+      - ${ATTACHMENT_STORAGE_ROOT:-/srv/melly/attachments}:${ATTACHMENT_STORAGE_ROOT:-/srv/melly/attachments}
+
     depends_on:
       mysql:
         condition: service_healthy
@@ -119,10 +262,73 @@ services:
     build:
       context: ../../frontend
       dockerfile: Dockerfile
+      args:
+        # 백엔드 Egress 기능 플래그와 같은 값으로 빌드해 이중 녹화를 방지한다.
+        VITE_RECORDING_EGRESS_ENABLED: ${RECORDING_EGRESS_ENABLED:-false}
 
     image: melly-frontend:local
     container_name: frontend
     restart: unless-stopped
+
+    # 베이스가 nginx:1.27-alpine 이라 tzdata 가 들어 있어 TZ 만으로 적용된다.
+    environment:
+      TZ: Asia/Seoul
+
+    networks:
+      - melly-network
+
+  ai-agent:
+    build:
+      context: ../../ai
+      dockerfile: Dockerfile
+
+    image: melly-ai-agent:local
+    container_name: ai-agent
+    restart: unless-stopped
+
+    environment:
+      # LiveKit worker 로 등록된다. 같은 Docker 네트워크라 nginx 를 거치지 않는다.
+      # (nginx 의 /agent 경로는 로컬 PC 에서 worker 를 붙일 때 쓰던 통로다.)
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+
+      # 에이전트는 백엔드 API 를 호출하지 않고 자막·요약을 DB 에 직접 쓴다.
+      # 컨테이너 사이 통신이라 호스트에 노출한 3307 이 아니라 컨테이너 포트 3306 이다.
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      DEEPL_API_KEY: ${DEEPL_API_KEY}
+      GMS_API_KEY: ${GMS_API_KEY}
+
+      # 키 값이 아니라 컨테이너 안의 파일 경로다. 아래 볼륨의 오른쪽 경로와 같아야 한다.
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/google-credentials.json
+
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://apac.api.smith.langchain.com}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-Melly}
+
+    volumes:
+      # 저장소 안(`./secrets/...`)이 아니라 호스트 절대경로에 둔다. 배포가 workspace 를
+      # 정리하면 저장소 안의 secret 은 조용히 사라진다. mysql/redis 데이터와 같은 관례다.
+      - /home/ubuntu/docker/project/secrets/google-credentials.json:/app/secrets/google-credentials.json:ro
+
+      # livekit·portainer 와 같은 이유로 TZ 를 쓰지 않는다. python:3.11-slim 의 tzdata 포함
+      # 여부를 실측하지 못했고, tzdata 가 없는데 TZ 를 넣으면 /etc/localtime 까지 무시한 채
+      # UTC 로 고정된다. 이 마운트는 tzdata 유무와 무관하게 동작한다.
+      # DB 에 쓰는 시각은 코드가 KST 고정 오프셋(ai/db/timeutil.py)을 쓰므로 영향이 없고,
+      # 여기서 맞추는 것은 컨테이너 로그 시각이다.
+      - /usr/share/zoneinfo/Asia/Seoul:/etc/localtime:ro
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+      livekit:
+        condition: service_started
 
     networks:
       - melly-network
@@ -139,6 +345,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
+      # livekit 과 같은 Go 바이너리 이미지라 같은 방식으로 붙인다. 다만 이 이미지에는
+      # 쉘이 없어 date 로 확인할 수단이 없다. 읽기 전용 마운트라 실패해도 무해하다.
+      - /usr/share/zoneinfo/Asia/Seoul:/etc/localtime:ro
 
     networks:
       - melly-network
@@ -158,6 +367,9 @@ services:
       - "80:80"
       - "443:443"
 
+    environment:
+      TZ: Asia/Seoul
+
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
@@ -175,8 +387,18 @@ services:
     restart: unless-stopped
     user: root
 
+    # 베이스가 jenkins/jenkins:lts-jdk21(Debian) 이라 tzdata 가 들어 있다.
+    # 빌드 로그와 Jenkins JVM 시각이 함께 한국시간이 된다.
+    environment:
+      TZ: Asia/Seoul
+      # Nginx의 /jenkins/ 경로와 Jenkins context path를 일치시킨다.
+      JENKINS_OPTS: "--prefix=/jenkins"
+
+    # Jenkins UI는 Nginx가 같은 Docker 네트워크에서만 접근한다.
+    expose:
+      - "8080"
+
     ports:
-      - "8080:8080"
       - "50000:50000"
 
     volumes:

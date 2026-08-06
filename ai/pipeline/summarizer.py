@@ -2,6 +2,7 @@
 통화 종료 후 자막 데이터를 기반으로 요약 및 키워드를 생성.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -41,30 +42,153 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", GMS_API_KEY)
 MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """당신은 인플루언서의 팬미팅 보조 AI입니다.
-    인플루언서와 팬의 대화 자막을 분석하여 인플루언서가 팬을 기억하는 데 도움이 되는 메모 초안을 작성합니다."""
+    인플루언서와 팬의 대화 자막을 분석하여 인플루언서가 팬을 기억하는 데 도움이 되는 메모 초안을 작성하고,
+    팬이 기념 카드로 간직할 문구 후보를 골라 줍니다."""
 
 USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 자막입니다.
 
     [대화 내용]
     {subtitles}
 
-    다음 기준으로 팬에 대한 메모 초안을 작성해주세요:
+    다음 두 가지를 작성해주세요.
+
+    1) 팬에 대한 메모 초안 (인플루언서용)
     - 팬의 근황, 성취, 특별한 사건 (졸업, 수상, 취업 등)
     - 팬의 관심사, 좋아하는 것
     - 팬이 인플루언서에게 바라는 것, 다음에 하고 싶은 것
     - 인플루언서가 기억하면 좋을 특이사항
 
+    2) 팬이 기념 카드로 간직할 문구 후보 3개 (팬용)
+    - 반드시 **인플루언서가 실제로 한 말**에서만 고릅니다. 팬의 발화는 쓰지 않습니다.
+    - 자막 문장을 거의 그대로 쓰고, 말끝이 잘렸으면 자연스럽게만 다듬습니다.
+      인플루언서가 하지 않은 말을 새로 만들어내지 않습니다.
+    - 팬이 나중에 다시 읽을 때 기분이 좋아지는 따뜻한 문장을 고릅니다.
+    - 각 문구는 {card_limit}자 이내로 합니다.
+    - 전화번호, 이메일, 주소, 계정 아이디, 실명처럼 개인정보가 담긴 문장은 제외합니다.
+    - 고를 만한 문장이 없으면 빈 배열로 둡니다.
+{language_rules}
     반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:
     {{
     "summary": "2~4문장의 메모 초안",
-    "keywords": ["핵심키워드1", "핵심키워드2"]
+    "keywords": ["핵심키워드1", "핵심키워드2"],
+    "card_candidates": ["문구1", "문구2", "문구3"]
     }}
 
     대화 내용이 너무 짧거나 특별한 내용이 없으면:
     {{
     "summary": "특별한 내용 없음",
-    "keywords": []
+    "keywords": [],
+    "card_candidates": []
     }}"""
+
+# 팬 카드 문구 후보 제한. 프롬프트에 같은 값을 명시하지만 모델이 어길 수 있어 저장 전에 다시 자른다.
+CARD_CANDIDATE_MAX_COUNT = 3
+CARD_CANDIDATE_MAX_LENGTH = 60
+
+# 라틴 문자 언어는 같은 뜻을 담는 데 글자 수가 훨씬 많이 든다. 한국어 40자 문장을 영어로
+# 옮기면 70자를 넘기 일쑤라, 60자를 그대로 적용하면 옮긴 문구가 전부 잘려 후보가 빈 배열이
+# 된다. 백엔드 FanCard.MAX_TEXT_LENGTH가 200자라 100자까지는 저장에도 걸리지 않는다.
+CARD_CANDIDATE_MAX_LENGTH_BY_LANG = {"en": 100, "vi": 100}
+
+# 백엔드(QueueCommandService.toLanguageCode)가 쓰는 언어 코드와 프롬프트에 넣을 이름.
+# 모델이 어떤 언어인지 확실히 알도록 해당 언어 표기를 함께 적는다.
+LANGUAGE_LABELS = {
+    "ko": "한국어",
+    "en": "영어(English)",
+    "ja": "일본어(日本語)",
+    "zh": "중국어(中文)",
+    "vi": "베트남어(Tiếng Việt)",
+}
+
+# 언어를 알아내지 못했을 때의 기본값. agent.py의 DEFAULT_INFLUENCER_LANG과 같은 값이며,
+# 이 값으로 떨어지면 수정 전과 완전히 같은 프롬프트가 만들어진다.
+DEFAULT_LANG = "ko"
+
+# 팬·인플루언서 언어가 모두 기본값일 때는 아래 블록을 통째로 비워 기존 프롬프트를 그대로 쓴다.
+# 지금 정상 동작 중인 한국어 통화의 요약 품질을 건드리지 않기 위한 장치다.
+SYSTEM_PROMPT_LANGUAGE_SUFFIX = (
+    "\n    메모 초안은 {influencer_label}로, 팬 카드 문구는 {fan_label}로 작성합니다."
+)
+
+
+def _normalize_lang(code: str | None) -> str:
+    """
+    통화에서 받은 언어 코드를 프롬프트에 쓸 수 있는 코드로 정규화한다.
+
+    아는 코드가 아니면 기본값으로 되돌린다. 모르는 값을 그대로 프롬프트에 넣어 엉뚱한
+    언어로 답하게 만드느니, 수정 전과 같은 한국어 결과를 내는 편이 안전하다.
+
+    :param code: 통화에서 받은 언어 코드
+    :return: LANGUAGE_LABELS에 있는 언어 코드
+    """
+    if not isinstance(code, str):
+        return DEFAULT_LANG
+
+    normalized = code.strip().lower().split("-")[0]
+    if normalized not in LANGUAGE_LABELS:
+        if normalized:
+            logger.warning(
+                "알 수 없는 언어 코드 '%s' — %s로 간주한다", code, DEFAULT_LANG
+            )
+        return DEFAULT_LANG
+    return normalized
+
+
+def _card_candidate_max_length(fan_lang: str) -> int:
+    """
+    팬 언어에 맞는 카드 문구 길이 상한을 고른다.
+
+    :param fan_lang: 정규화된 팬 언어 코드
+    :return: 해당 언어의 글자 수 상한
+    """
+    return CARD_CANDIDATE_MAX_LENGTH_BY_LANG.get(fan_lang, CARD_CANDIDATE_MAX_LENGTH)
+
+
+def _build_language_rules(fan_lang: str, influencer_lang: str) -> str:
+    """
+    프롬프트에 끼워 넣을 출력 언어 규칙 블록을 만든다.
+
+    두 언어가 모두 기본값이면 빈 문자열을 돌려주고, 그 결과 완성된 프롬프트는 수정 전과
+    글자 하나까지 같아진다.
+
+    :param fan_lang: 정규화된 팬 언어 코드
+    :param influencer_lang: 정규화된 인플루언서 언어 코드
+    :return: 규칙 블록 문자열이며 기본 언어 조합이면 빈 문자열
+    """
+    if fan_lang == DEFAULT_LANG and influencer_lang == DEFAULT_LANG:
+        return ""
+
+    fan_label = LANGUAGE_LABELS[fan_lang]
+    influencer_label = LANGUAGE_LABELS[influencer_lang]
+    rules = [
+        "    3) 출력 언어",
+        f"    - 메모 초안(summary)과 핵심 키워드(keywords)는 {influencer_label}로 작성합니다.",
+        f"    - 팬 카드 문구 후보(card_candidates)는 {fan_label}로 제시합니다.",
+        f"    - 인플루언서가 {fan_label}로 말하지 않았다면, 실제로 한 말의 뜻을 그대로",
+        f"      {fan_label}로 옮겨 적습니다. 뜻을 바꾸거나 인플루언서가 하지 않은 말을",
+        "      덧붙이지 않으며, 원문은 함께 적지 않고 옮긴 문장만 남깁니다.",
+    ]
+    return "\n" + "\n".join(rules) + "\n"
+
+
+def _build_system_prompt(fan_lang: str, influencer_lang: str) -> str:
+    """
+    출력 언어 지시를 덧붙인 시스템 프롬프트를 만든다.
+
+    사용자 프롬프트에만 언어를 적으면 온통 한국어인 지시문에 눌려 모델이 한국어로 답하는
+    일이 있어, 시스템 프롬프트에서도 한 번 못박는다.
+
+    :param fan_lang: 정규화된 팬 언어 코드
+    :param influencer_lang: 정규화된 인플루언서 언어 코드
+    :return: 기본 언어 조합이면 기존 시스템 프롬프트 그대로, 아니면 언어 지시를 덧붙인 문자열
+    """
+    if fan_lang == DEFAULT_LANG and influencer_lang == DEFAULT_LANG:
+        return SYSTEM_PROMPT
+
+    return SYSTEM_PROMPT + SYSTEM_PROMPT_LANGUAGE_SUFFIX.format(
+        influencer_label=LANGUAGE_LABELS[influencer_lang],
+        fan_label=LANGUAGE_LABELS[fan_lang],
+    )
 
 
 #추후 db호출 구조에 따라 수정
@@ -76,6 +200,38 @@ def _format_subtitles(subtitles: list[dict]) -> str:
         if text:
             lines.append(f"{role}: {text}")
     return "\n".join(lines) if lines else "(대화 내용 없음)"
+
+
+def _sanitize_card_candidates(
+    raw, max_length: int = CARD_CANDIDATE_MAX_LENGTH
+) -> list[str]:
+    """
+    모델이 준 팬 카드 문구 후보를 저장 가능한 형태로 정리한다.
+
+    프롬프트로 개수와 길이를 지시하지만 모델이 지키지 않을 수 있고, 팬에게 그대로 노출되는
+    값이라 문자열이 아닌 항목·빈 문장·중복을 걸러내고 개수와 길이를 강제한다.
+
+    :param raw: 모델이 돌려준 card_candidates 값
+    :param max_length: 문구 하나의 글자 수 상한이며 팬 언어에 따라 달라진다
+    :return: 정리된 문구 목록
+    """
+    if not isinstance(raw, list):
+        return []
+
+    candidates: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if not text or len(text) > max_length:
+            continue
+        if text in candidates:
+            continue
+        candidates.append(text)
+        if len(candidates) >= CARD_CANDIDATE_MAX_COUNT:
+            break
+
+    return candidates
 
 
 def _parse_response(content: str) -> dict | None:
@@ -305,7 +461,21 @@ async def _call_model(
 
 # 2. @traceable 데코레이터 적용 (함수의 입력/출력/실행 시간이 자동 추적됨)
 @traceable(name="Generate Summary Function")
-async def generate_summary(subtitles: list[dict], model: str = MODEL) -> dict | None:
+async def generate_summary(
+    subtitles: list[dict],
+    model: str = MODEL,
+    fan_lang: str | None = None,
+    influencer_lang: str | None = None,
+) -> dict | None:
+    """
+    자막을 모델에 넘겨 메모 초안과 팬 카드 문구 후보를 받아 온다.
+
+    :param subtitles: 통화의 자막 목록
+    :param model: 호출할 모델 이름
+    :param fan_lang: 팬 카드 문구를 적을 언어 코드이며 없으면 기본 언어로 본다
+    :param influencer_lang: 메모 초안을 적을 언어 코드이며 없으면 기본 언어로 본다
+    :return: 모델 응답을 파싱한 dict이며 실패하면 None
+    """
     if not subtitles:
         logger.info("자막 없음 — 요약 생략")
         return None
@@ -314,24 +484,36 @@ async def generate_summary(subtitles: list[dict], model: str = MODEL) -> dict | 
         logger.error("GMS_API_KEY가 설정되지 않음")
         return None
 
+    fan_lang = _normalize_lang(fan_lang)
+    influencer_lang = _normalize_lang(influencer_lang)
+
     subtitle_text = _format_subtitles(subtitles)
-    user_prompt = USER_PROMPT_TEMPLATE.format(subtitles=subtitle_text)
+    user_prompt = USER_PROMPT_TEMPLATE.format(
+        subtitles=subtitle_text,
+        card_limit=_card_candidate_max_length(fan_lang),
+        language_rules=_build_language_rules(fan_lang, influencer_lang),
+    )
 
     try:
         content = await _call_model(
             model=model,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=_build_system_prompt(fan_lang, influencer_lang),
             user_prompt=user_prompt,
             temperature=0.3,
-            max_tokens=500,
+            # 요약과 함께 팬 카드 문구 후보까지 받으므로 응답이 잘리지 않게 여유를 둔다.
+            max_tokens=800,
         )
         result = _parse_response(content)
 
         if result:
             logger.info(
-                "요약 생성 완료 model=%s keywords=%s summary=%s",
+                "요약 생성 완료 model=%s fan_lang=%s influencer_lang=%s "
+                "keywords=%s card_candidates=%s summary=%s",
                 model,
+                fan_lang,
+                influencer_lang,
                 result.get("keywords"),
+                result.get("card_candidates"),
                 result.get("summary", "")[:50],
             )
 
@@ -342,35 +524,135 @@ async def generate_summary(subtitles: list[dict], model: str = MODEL) -> dict | 
         return None
 
 
+# 생성 실패 시 재시도 횟수. 명세의 "최대 3회 자동 재시도"에 해당한다.
+MAX_SUMMARY_ATTEMPTS = 3
+# 재시도 사이 대기 시간(초). 모델 일시 오류가 곧바로 반복되지 않게 간격을 둔다.
+RETRY_DELAY_SECONDS = 2
+
+
 # 3. 전체 프로세스를 묶어줄 최상위 함수에도 @traceable을 적용할 수 있습니다.
 @traceable(name="Generate and Save Summary Pipeline")
 async def generate_and_save_summary(
     pool,                          # 추가 — DB 저장하려면 필요
     call_session_id: int,
     subtitles: list[dict],
+    fan_lang: str | None = None,
+    influencer_lang: str | None = None,
 ) -> None:
+    """
+    자막으로 요약을 만들어 저장한다.
+
+    메모 초안은 인플루언서 언어로, 팬 카드 문구는 팬 언어로 만든다. 팬 언어를 넘겨받지
+    못하면 통화 세션에 고정 저장된 값을 DB에서 읽어 채운다.
+
+    :param pool: DB 커넥션 풀
+    :param call_session_id: 요약 대상 통화 세션 식별자
+    :param subtitles: 통화의 자막 목록
+    :param fan_lang: 팬 언어 코드이며 없으면 DB에서 읽는다
+    :param influencer_lang: 인플루언서 언어 코드이며 없으면 기본 언어로 본다
+    """
     logger.info("요약 생성 시작 call_session_id=%s", call_session_id)
 
-    result = await generate_summary(subtitles)
+    if fan_lang is None:
+        fan_lang = await _load_fan_lang(pool, call_session_id)
+
+    # 백엔드가 "생성 중"과 "실패"를 구분할 수 있도록 생성 전에 상태를 먼저 남긴다.
+    await queries.start_call_summary(pool, call_session_id)
+
+    try:
+        result = await _generate_with_retry(
+            call_session_id, subtitles, fan_lang, influencer_lang
+        )
+    except Exception:
+        logger.exception("요약 생성 중 예외 call_session_id=%s", call_session_id)
+        await queries.fail_call_summary(pool, call_session_id, "GENERATION_ERROR")
+        return
+
     if result is None:
         logger.warning("요약 생성 실패 또는 내용 없음 call_session_id=%s", call_session_id)
+        await queries.fail_call_summary(pool, call_session_id, "GENERATION_FAILED")
         return
 
     summary = result.get("summary", "")
     keywords = result.get("keywords", [])
+    card_candidates = _sanitize_card_candidates(
+        result.get("card_candidates"),
+        _card_candidate_max_length(_normalize_lang(fan_lang)),
+    )
 
     logger.info(
-        "요약 결과 call_session_id=%s summary=%s keywords=%s",
+        "요약 결과 call_session_id=%s summary=%s keywords=%s card_candidates=%s",
         call_session_id,
         summary,
         keywords,
+        card_candidates,
     )
 
-    # 추가 — 실제 DB 저장
-    await queries.insert_call_summary(
+    await queries.complete_call_summary(
         pool=pool,
         call_session_id=call_session_id,
         summary=summary,
         keywords=keywords,
+        card_candidates=card_candidates,
     )
+    logger.info("요약 저장 완료 call_session_id=%s", call_session_id)
+
+
+async def _load_fan_lang(pool, call_session_id: int) -> str | None:
+    """
+    통화 세션에 고정 저장된 팬 언어를 DB에서 읽는다.
+
+    보통은 호출 측이 통화 중 쓰던 값을 그대로 넘겨주므로 이 경로를 타지 않는다. 언어를
+    알아내지 못해 요약이 통째로 실패하는 것보다는 기본 언어로라도 만드는 편이 나으므로,
+    조회가 실패하면 예외를 올리지 않고 None을 돌려준다.
+
+    :param pool: DB 커넥션 풀
+    :param call_session_id: 통화 세션 식별자
+    :return: 저장된 팬 언어 코드이며 읽지 못하면 None
+    """
+    try:
+        return await queries.get_call_session_fan_lang(pool, call_session_id)
+    except Exception:
+        logger.exception(
+            "팬 언어 조회 실패 — 기본 언어로 요약한다 call_session_id=%s", call_session_id
+        )
+        return None
+
+
+async def _generate_with_retry(
+    call_session_id: int,
+    subtitles: list[dict],
+    fan_lang: str | None = None,
+    influencer_lang: str | None = None,
+) -> dict | None:
+    """
+    요약 생성만 재시도한다. 중간 실패마다 DB를 FAILED로 바꾸지 않기 위해
+    모든 시도가 끝난 뒤에야 호출 측이 상태를 확정한다.
+
+    :param call_session_id: 통화 세션 식별자
+    :param subtitles: 통화의 자막 목록
+    :param fan_lang: 팬 카드 문구를 적을 언어 코드
+    :param influencer_lang: 메모 초안을 적을 언어 코드
+    :return: 요약 결과이며 모든 시도가 실패하면 None
+    """
+    for attempt in range(1, MAX_SUMMARY_ATTEMPTS + 1):
+        result = await generate_summary(
+            subtitles, fan_lang=fan_lang, influencer_lang=influencer_lang
+        )
+        if result is not None:
+            if attempt > 1:
+                logger.info(
+                    "요약 생성 재시도 성공 call_session_id=%s attempt=%s",
+                    call_session_id, attempt,
+                )
+            return result
+
+        if attempt < MAX_SUMMARY_ATTEMPTS:
+            logger.warning(
+                "요약 생성 실패 — 재시도 call_session_id=%s attempt=%s/%s",
+                call_session_id, attempt, MAX_SUMMARY_ATTEMPTS,
+            )
+            await asyncio.sleep(RETRY_DELAY_SECONDS)
+
+    return None
     logger.info("요약 저장 완료 call_session_id=%s", call_session_id)

@@ -107,6 +107,35 @@ SELECT
     SELECT 1 FROM users WHERE login_id = 'testmanager1'
 );
 
+-- 조직 없이 팬미팅을 직접 만들고 진행하는 1인 인플루언서 계정을 생성한다.
+-- SOLO_INFLUENCER 는 매니저와 달리 organization_id·manager_id 가 없는 팬미팅을 만들기 때문에
+-- 생성·발행·대기실 권한 경로가 매니저와 다르다. 이 계정이 없으면 그 경로를 로컬에서 확인할 수 없다.
+-- 비밀번호는 다른 테스트 계정과 같다.
+INSERT INTO users (
+    login_id,
+    password_hash,
+    email,
+    nickname,
+    role,
+    status,
+    preferred_language,
+    created_at,
+    updated_at
+)
+SELECT
+    'testsolo1',
+    '$2y$10$O.QlRVhtccpaGjg9ZrTlGegtkJ5t.5IXN/UbcNY/xhsghSA2C6pm2',
+    'testsolo1@melly.test',
+    '테스트솔로인플루언서',
+    'SOLO_INFLUENCER',
+    'ACTIVE',
+    'KOREAN',
+    NOW(),
+    NOW()
+    WHERE NOT EXISTS (
+    SELECT 1 FROM users WHERE login_id = 'testsolo1'
+);
+
 -- 대기열부터 LiveKit 연결까지 확인할 로컬 팬미팅을 생성한다.
 INSERT INTO fan_meetings (
     organization_id,

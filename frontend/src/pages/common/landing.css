@@ -1,0 +1,242 @@
+/* melly-landing/styles.css의 히어로 부분을 .melly-landing 아래로 스코프해 그대로 옮겼다.
+   헤더는 전역 AppHeader가 담당하므로 원본의 site-header 규칙만 제외했다. */
+
+.melly-landing {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-height: calc(100svh - var(--service-header-height));
+  place-items: center;
+  overflow: hidden;
+  background: #fff;
+}
+
+.melly-landing::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: min(82vw, calc(100svh - var(--service-header-height) - 72px), 760px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(244, 128, 112, 0.12) 0%,
+    rgba(248, 163, 150, 0.07) 34%,
+    rgba(250, 190, 180, 0.025) 52%,
+    rgba(255, 255, 255, 0) 68%
+  );
+  transform: translate(-50%, -50%);
+}
+
+.melly-landing img {
+  display: block;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.melly-landing .hero-copy {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  width: min(850px, 78vw);
+  padding: 20px 0 9vh;
+  text-align: center;
+}
+
+.melly-landing .wordmark {
+  width: clamp(200px, 20vw, 320px);
+  margin-bottom: clamp(20px, 2.8vh, 32px);
+  filter: drop-shadow(0 12px 18px rgba(226, 105, 88, 0.12));
+}
+
+.melly-landing h1 {
+  margin: 0;
+  color: #191a1f;
+  font-size: clamp(3.75rem, 6.4vw, 7rem);
+  font-weight: 850;
+  line-height: 0.94;
+  letter-spacing: -0.075em;
+}
+
+.melly-landing .hero-copy p {
+  margin: clamp(24px, 3.8vh, 38px) 0 0;
+  color: #686b74;
+  font-size: clamp(1rem, 1.35vw, 1.35rem);
+  font-weight: 620;
+  letter-spacing: -0.035em;
+}
+
+.melly-landing .float-object {
+  --float-delay: 0s;
+  --float-duration: 6s;
+  position: absolute;
+  z-index: 3;
+  max-width: none;
+  pointer-events: auto;
+  transform-origin: 50% 68%;
+  will-change: transform;
+  filter: saturate(0.9) brightness(1.04) drop-shadow(0 20px 26px rgba(78, 62, 145, 0.1));
+  animation: ml-float-y var(--float-duration) ease-in-out var(--float-delay) infinite alternate;
+}
+
+.melly-landing .ring-light {
+  top: 3%;
+  left: -3.5%;
+  width: clamp(148px, 17vw, 260px);
+  transform: rotate(-8deg);
+  --float-duration: 6.8s;
+}
+
+.melly-landing .album-cards {
+  top: 1%;
+  right: 2.5%;
+  width: clamp(116px, 13vw, 210px);
+  transform: rotate(9deg);
+  --float-delay: -2.1s;
+}
+
+.melly-landing .timer {
+  top: 25%;
+  right: -4.5%;
+  width: clamp(130px, 15vw, 240px);
+  transform: rotate(16deg);
+  --float-delay: -3.8s;
+  --float-duration: 7.4s;
+}
+
+.melly-landing .heart-lightstick {
+  bottom: -11%;
+  left: 4%;
+  width: clamp(160px, 19vw, 300px);
+  transform: rotate(-17deg);
+  --float-delay: -1.2s;
+  --float-duration: 7.8s;
+}
+
+.melly-landing .heart-bubble {
+  right: 15%;
+  bottom: 8%;
+  width: clamp(110px, 12vw, 190px);
+  transform: rotate(11deg);
+  --float-delay: -4.4s;
+}
+
+.melly-landing .jelly-duo {
+  right: -1.5%;
+  bottom: -8%;
+  width: clamp(225px, 25vw, 390px);
+  --float-delay: -2.8s;
+  --float-duration: 6.4s;
+}
+
+.melly-landing .particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.melly-landing .particle {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  opacity: var(--opacity);
+  background: var(--color);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color), transparent 45%);
+  animation: ml-particle-drift var(--duration) ease-in-out var(--delay) infinite alternate;
+}
+
+@keyframes ml-float-y {
+  from {
+    translate: 0 -7px;
+  }
+  to {
+    translate: 0 11px;
+  }
+}
+
+@keyframes ml-particle-drift {
+  from {
+    transform: translate3d(-5px, 7px, 0) scale(0.8);
+  }
+  to {
+    transform: translate3d(9px, -13px, 0) scale(1.15);
+  }
+}
+
+@media (max-width: 720px) {
+  .melly-landing .hero-copy {
+    width: 88vw;
+    padding-bottom: 10vh;
+  }
+
+  .melly-landing::before {
+    width: min(112vw, calc(100svh - var(--service-header-height) - 56px));
+  }
+
+  .melly-landing .wordmark {
+    width: 190px;
+    margin-bottom: 24px;
+  }
+
+  .melly-landing h1 {
+    font-size: clamp(2.65rem, 12vw, 4.4rem);
+    line-height: 1;
+  }
+
+  .melly-landing .hero-copy p {
+    width: 76vw;
+    margin-top: 24px;
+    font-size: 0.96rem;
+    line-height: 1.55;
+  }
+
+  .melly-landing .ring-light {
+    top: 4%;
+    left: -15%;
+    width: 150px;
+  }
+
+  .melly-landing .album-cards {
+    top: 3%;
+    right: -8%;
+    width: 115px;
+  }
+
+  .melly-landing .timer {
+    top: 29%;
+    right: -15%;
+    width: 130px;
+  }
+
+  .melly-landing .heart-lightstick {
+    bottom: -5%;
+    left: -14%;
+    width: 170px;
+  }
+
+  .melly-landing .heart-bubble {
+    right: 27%;
+    bottom: 7%;
+    width: 104px;
+  }
+
+  .melly-landing .jelly-duo {
+    right: -13%;
+    bottom: -3%;
+    width: 220px;
+  }
+}
+
+@media (max-width: 410px) {
+  .melly-landing .hero-copy {
+    padding-bottom: 13vh;
+  }
+}

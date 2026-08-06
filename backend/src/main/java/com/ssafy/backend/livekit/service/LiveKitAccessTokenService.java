@@ -13,6 +13,7 @@ import com.ssafy.backend.livekit.support.LiveKitRoomNames;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
+import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import io.livekit.server.AccessToken;
@@ -42,7 +43,7 @@ public class LiveKitAccessTokenService {
     private static final Duration ACCESS_TOKEN_TTL = Duration.ofMinutes(15);
     private static final String IDENTITY_ALGORITHM = "HmacSHA256";
     private static final int IDENTITY_HASH_LENGTH = 22;
-    private static final String INFLUENCER_LANGUAGE = "ko";
+    private static final String DEFAULT_LANGUAGE_CODE = "ko";
 
     private final LiveKitProperties properties;
     private final CallSessionRepository callSessionRepository;
@@ -237,7 +238,8 @@ public class LiveKitAccessTokenService {
             token.getAttributes().put("call_session_id", callSession.getId().toString());
             token.getAttributes().put("fan_lang", callSession.getFanLanguage());
         } else if (accessRole == ParticipantAccessRole.HOST) {
-            token.getAttributes().put("influencer_lang", INFLUENCER_LANGUAGE);
+            token.getAttributes().put(
+                    "influencer_lang", toLanguageCode(user.getPreferredLanguage()));
         }
         token.addGrants(
                 new RoomJoin(true),
@@ -246,6 +248,22 @@ public class LiveKitAccessTokenService {
                 new CanSubscribe(true)
         );
         return token;
+    }
+
+    /**
+     * 회원 선호 언어를 자막 AI Agent와 약속한 짧은 언어 코드로 변환한다.
+     *
+     * <p>Agent는 이 attribute만 보고 STT 언어와 번역 방향을 정하므로 실제 선호 언어를 담아야 한다.
+     * 선호 언어는 필수 값이지만 비어 있으면 통화 자체가 막히지 않도록 기존 기본값을 사용한다.
+     *
+     * @param preferredLanguage 회원의 선호 언어이며 값이 없으면 null
+     * @return 선호 언어의 짧은 언어 코드이며, 값이 없으면 기본 언어 코드
+     */
+    private String toLanguageCode(PreferredLanguage preferredLanguage) {
+        if (preferredLanguage == null) {
+            return DEFAULT_LANGUAGE_CODE;
+        }
+        return preferredLanguage.code();
     }
 
     /**

@@ -9,7 +9,10 @@ import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
+import com.ssafy.backend.recording.egress.RecordingEgressCoordinator;
+import com.ssafy.backend.recording.egress.RecordingEgressWebhookHandler;
 import livekit.LivekitModels;
+import livekit.LivekitEgress;
 import livekit.LivekitWebhook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +42,8 @@ class LiveKitWebhookServiceTest {
     private CallSessionRepository callSessionRepository;
     private MeetingOperationSettingRepository operationSettingRepository;
     private QueueRealtimeStore realtimeStore;
+    private RecordingEgressCoordinator recordingEgressCoordinator;
+    private RecordingEgressWebhookHandler recordingEgressWebhookHandler;
     private LiveKitWebhookService service;
     private CallSession callSession;
     private QueueEntry queueEntry;
@@ -49,8 +54,11 @@ class LiveKitWebhookServiceTest {
         callSessionRepository = mock(CallSessionRepository.class);
         operationSettingRepository = mock(MeetingOperationSettingRepository.class);
         realtimeStore = mock(QueueRealtimeStore.class);
+        recordingEgressCoordinator = mock(RecordingEgressCoordinator.class);
+        recordingEgressWebhookHandler = mock(RecordingEgressWebhookHandler.class);
         service = new LiveKitWebhookService(
-                callSessionRepository, operationSettingRepository, realtimeStore, CLOCK);
+                callSessionRepository, operationSettingRepository, realtimeStore,
+                recordingEgressCoordinator, recordingEgressWebhookHandler, CLOCK);
 
         callSession = mock(CallSession.class);
         queueEntry = mock(QueueEntry.class);
@@ -83,6 +91,7 @@ class LiveKitWebhookServiceTest {
         verify(queueEntry).startCall();
         verify(realtimeStore).updateStatus(
                 MEETING_ID, QUEUE_ENTRY_ID, QueueEntryStatus.IN_CALL);
+        verify(recordingEgressCoordinator).prepareStart(callSession, setting, STARTED_AT);
     }
 
     /** 팬만 접속한 경우 연결 상태만 기록하고 통화를 시작하지 않는지 검증한다. */
@@ -130,13 +139,33 @@ class LiveKitWebhookServiceTest {
         verify(realtimeStore, never()).markFanConnected(CALL_SESSION_ID);
     }
 
+    /** Egress webhook을 같은 서명·중복 방지 경로에서 전용 처리기로 전달하는지 검증한다. */
+    @Test
+    void delegatesEgressWebhook() {
+        when(realtimeStore.claimWebhookEvent("egress-event")).thenReturn(true);
+        LivekitWebhook.WebhookEvent event = LivekitWebhook.WebhookEvent.newBuilder()
+                .setEvent("egress_ended")
+                .setId("egress-event")
+                .setEgressInfo(LivekitEgress.EgressInfo.newBuilder()
+                        .setEgressId("EG_1")
+                        .setStatus(LivekitEgress.EgressStatus.EGRESS_COMPLETE))
+                .build();
+
+        service.handle(event);
+
+        verify(recordingEgressWebhookHandler).handle(event);
+    }
+
     /** 팬 퇴장 이벤트가 해당 통화 세션의 접속 표시를 제거하는지 검증한다. */
     @Test
     void clearsFanPresenceWhenFanLeavesRoom() {
+        MeetingOperationSetting setting = mock(MeetingOperationSetting.class);
         when(realtimeStore.claimWebhookEvent("fan-left-event")).thenReturn(true);
         when(callSession.getStatus()).thenReturn(CallSessionStatus.ACTIVE);
         when(callSessionRepository.findWebhookContextById(CALL_SESSION_ID))
                 .thenReturn(Optional.of(callSession));
+        when(operationSettingRepository.findById(MEETING_ID)).thenReturn(Optional.of(setting));
+        when(setting.getReconnectGraceSec()).thenReturn(90);
         LivekitWebhook.WebhookEvent event = LivekitWebhook.WebhookEvent.newBuilder()
                 .setEvent("participant_left")
                 .setId("fan-left-event")
@@ -150,9 +179,8 @@ class LiveKitWebhookServiceTest {
         service.handle(event);
 
         verify(realtimeStore).clearFanConnected(CALL_SESSION_ID);
-        verify(callSession).openReconnectWindow(STARTED_AT.plusSeconds(60));
+        verify(callSession).openReconnectWindow(STARTED_AT.plusSeconds(90));
         verify(realtimeStore).markDisconnectRole(CALL_SESSION_ID, "FAN");
-        verifyNoInteractions(operationSettingRepository);
     }
 
     /** 재접속 유예 중 양측이 다시 연결되면 기존 타이머를 유지하고 유예만 해제하는지 검증한다. */

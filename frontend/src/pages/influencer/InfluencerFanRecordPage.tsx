@@ -1,332 +1,584 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { ApiError } from '../../api/ApiError'
+import { getCallSummary } from '../../api/aiSummaries'
+import { getAuthSession } from '../../api/authSession'
+import { recallFanCallSession } from '../../api/callSessionLog'
 import {
-  CalendarBlank,
-  ChatCircleText,
-  ClockCounterClockwise,
-  NotePencil,
-} from '@phosphor-icons/react'
-import type { ChangeEvent } from 'react'
-import {
-  Avatar,
-  Breadcrumbs,
-  Button,
-  Card,
-  CardContent,
-  Tabs,
-  Textarea,
-} from '../../components'
-import { useParams, useSearchParams } from 'react-router-dom'
-import { useState } from 'react'
+  fetchFanMemos,
+  fetchMeetingDetail,
+  fetchParticipants,
+  type FanMeetingParticipant,
+  type FanMemo,
+} from '../../api/fanMeetingParticipants'
+import { createFanMemo, updateFanMemo } from '../../api/fanMemos'
+import { Button } from '../../components'
+import { useTranslation } from '../../i18n'
 
-type RecordTab = 'memo' | 'summary'
+/** 백엔드 팬 메모 계약의 상한이다. */
+const MEMO_MAX_LENGTH = 300
+const PARTICIPANT_LOOKUP_SIZE = 50
+/**
+ * 한 팬미팅 = 메모 1개이므로 메모 목록이 곧 이 팬과 함께한 팬미팅 목록이다.
+ * 최근 5건만 받는 기본값으로는 회차 목록이 잘리므로 넉넉히 요청한다.
+ */
+const MEMO_LOOKUP_SIZE = 50
 
-/* TODO: API 연동 후 아래 mock 데이터를 서버 응답 데이터로 교체 */
-const fan = {
-  id: 'fan-1',
-  name: '김유진',
-  nickname: '@yujin_light',
-  lastCallDate: '2026.07.26',
+/** 한 팬미팅 회차와 그 회차의 메모 하나를 묶은 값이다. */
+type NoteSession = {
+  meetingId: string
+  title: string
+  /** 목록 정렬과 날짜 표시에 쓰는 ISO 문자열이다. */
+  at: string
+  /** 메모가 아직 없으면 undefined이고, 저장 시 생성(POST)으로 분기한다. */
+  memoId?: string
+  memo: string
+  savedAt?: string
 }
 
-const memoRecords = [
-  {
-    id: 'memo-1',
-    date: '2026.07.26',
-    title: '좋아하는 콘텐츠 이야기',
-    preview: '카멜레온 콘텐츠를 특히 좋아한다고 이야기했다.',
-    content: [
-      '김유진 님은 카멜레온 콘텐츠를 특히 좋아한다고 이야기했다.',
-      '다음 통화에서는 최근에 본 영상과 가장 기억에 남은 장면을 함께 이야기해 보기.',
-    ],
-  },
-  {
-    id: 'memo-2',
-    date: '2026.06.14',
-    title: '다음 팬미팅에서 물어볼 것',
-    preview: '학교 생활과 새로 시작한 취미를 물어보기.',
-    content: ['학교 생활과 새로 시작한 취미에 관해 이야기 나누기.'],
-  },
-  {
-    id: 'memo-3',
-    date: '2026.04.03',
-    title: '첫 번째 팬미팅 메모',
-    preview: '좋아하는 노래 이야기를 하며 편안해졌다.',
-    content: ['처음에는 긴장했지만 좋아하는 노래 이야기를 하며 편안해졌다.'],
-  },
-] as const
+function dateParts(value?: string) {
+  if (!value) return undefined
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return undefined
 
-const summaryRecords = [
-  {
-    id: 'summary-1',
-    date: '2026.07.26',
-    title: 'MELLY DAY 팬미팅',
-    preview: '최근 근황과 좋아하는 영상에 관해 이야기했다.',
-    content: [
-      '김유진 님은 최근 학교에서 과학 동아리 활동을 시작했다고 말했다.',
-      '카멜레온 콘텐츠 중 색이 바뀌는 순간을 가장 좋아한다고 이야기했다.',
-      '다음 팬미팅에서도 서로의 최근 소식을 나누기로 하며 통화를 마쳤다.',
-    ],
-  },
-  {
-    id: 'summary-2',
-    date: '2026.06.14',
-    title: '여름밤 팬미팅',
-    preview: '새로운 취미와 여름 계획에 관해 이야기했다.',
-    content: [
-      '새로 시작한 취미와 여름방학 동안 해보고 싶은 활동에 관해 이야기했다.',
-    ],
-  },
-] as const
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return {
+    date: `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
+    time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  }
+}
 
-const tabItems = [
-  {
-    value: 'memo',
-    label: (
-      <span className="inline-flex items-center gap-2">
-        <NotePencil aria-hidden size={18} weight="bold" />
-        메모
-        <span className="rounded-full bg-[var(--color-surface-page)] px-2 py-0.5 text-xs">
-          {memoRecords.length}
-        </span>
-      </span>
-    ),
-  },
-  {
-    value: 'summary',
-    label: (
-      <span className="inline-flex items-center gap-2">
-        <ChatCircleText aria-hidden size={18} weight="bold" />
-        대화 요약
-        <span className="rounded-full bg-[var(--color-surface-page)] px-2 py-0.5 text-xs">
-          {summaryRecords.length}
-        </span>
-      </span>
-    ),
-  },
-] as const
+/** 규칙 문서가 정한 표기다. 2026.07.26 */
+function formatDate(value?: string) {
+  return dateParts(value)?.date ?? ''
+}
 
+/** 규칙 문서가 정한 표기다. 2026.07.26 21:12 */
+function formatDateTime(value?: string) {
+  const parts = dateParts(value)
+  return parts ? `${parts.date} ${parts.time}` : ''
+}
+
+function errorMessage(reason: unknown, fallback: string) {
+  return reason instanceof ApiError || reason instanceof TypeError
+    ? reason.message
+    : fallback
+}
+
+/**
+ * 팬 메모 화면이다. 팬미팅 한 회차에 메모 하나를 두고, 새로 만들지 않고 고쳐 쓴다.
+ *
+ * 회차 목록은 메모 목록에서 팬미팅 단위로 묶어 만들고, 현재 경로의 팬미팅은
+ * 메모가 없어도 항상 넣어 첫 메모를 쓸 수 있게 한다.
+ */
 export function InfluencerFanRecordPage() {
-  const { fanMeetingId } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tab = searchParams.get('tab')
-  const [selectedRecordId, setSelectedRecordId] = useState<string>(
-    memoRecords[0].id
+  const { t } = useTranslation()
+  const { fanMeetingId, fanId } = useParams<{ fanMeetingId: string; fanId: string }>()
+  const [searchParams] = useSearchParams()
+  const authToken = getAuthSession()?.accessToken
+  // 통화 화면에서 넘어온 경우에만 세션을 알 수 있다. 참가자 응답에는 통화 세션이 없다.
+  const callSessionId = searchParams.get('callSessionId')?.trim() || undefined
+
+  const [participant, setParticipant] = useState<FanMeetingParticipant>()
+  const [memos, setMemos] = useState<FanMemo[]>([])
+  const [currentMeeting, setCurrentMeeting] = useState<{ title: string; at?: string }>()
+  const [loading, setLoading] = useState(true)
+  const [pageError, setPageError] = useState<string>()
+
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string>()
+  const [sessionPicked, setSessionPicked] = useState(false)
+  const [editingMeetingId, setEditingMeetingId] = useState<string>()
+  const [draft, setDraft] = useState('')
+  const [savedMeetingId, setSavedMeetingId] = useState<string>()
+  const [saving, setSaving] = useState(false)
+  const [summaryLines, setSummaryLines] = useState<string[]>([])
+
+  const loadMemos = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!fanId || !authToken) return
+
+      try {
+        const response = await fetchFanMemos(fanId, authToken, signal, MEMO_LOOKUP_SIZE)
+        setMemos(response.content)
+        setPageError(undefined)
+      } catch (reason) {
+        if (signal?.aborted) return
+        setPageError(errorMessage(reason, t('influencerFanRecordPage.t18')))
+      }
+    },
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [authToken, fanId],
   )
-  const [memoText, setMemoText] = useState('')
-  
-  const activeTab: RecordTab = tab === 'summary' ? 'summary' : 'memo'
 
+  useEffect(() => {
+    if (!fanId) {
+      setPageError(t('influencerFanRecordPage.t19'))
+      setLoading(false)
+      return
+    }
+    if (!authToken) {
+      setPageError(t('influencerFanRecordPage.t20'))
+      setLoading(false)
+      return
+    }
 
-  const visibleRecords = activeTab === 'memo' ? memoRecords : summaryRecords
-  const selectedRecord =
-    visibleRecords.find((record) => record.id === selectedRecordId) ?? visibleRecords[0]
-  const isMemoTab = activeTab === 'memo'
+    const controller = new AbortController()
+    setLoading(true)
+    void loadMemos(controller.signal).finally(() => {
+      if (!controller.signal.aborted) setLoading(false)
+    })
 
-  const handleTabChange = (nextTab: string) => {
-    setSearchParams({ tab: nextTab })
+    return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, fanId, loadMemos])
+
+  useEffect(() => {
+    if (!fanMeetingId || !authToken) return
+
+    const controller = new AbortController()
+
+    // 현재 팬미팅은 메모가 없어도 목록에 있어야 하므로 제목과 일시를 따로 읽는다.
+    void fetchMeetingDetail(fanMeetingId, authToken, controller.signal)
+      .then((detail) => {
+        setCurrentMeeting({ title: detail.title, at: detail.scheduledStartAt })
+      })
+      .catch(() => {
+        // 회차 정보 조회 실패는 이미 저장된 메모 열람을 막지 않는다.
+      })
+
+    return () => controller.abort()
+  }, [authToken, fanMeetingId])
+
+  useEffect(() => {
+    if (!fanMeetingId || !fanId || !authToken) return
+
+    const controller = new AbortController()
+
+    // 경로의 fanId는 팬 회원 ID이므로 참가자 목록에서 일치하는 참가자를 찾는다.
+    void (async () => {
+      try {
+        let page = 0
+        while (!controller.signal.aborted) {
+          const response = await fetchParticipants(
+            fanMeetingId,
+            { page, size: PARTICIPANT_LOOKUP_SIZE },
+            authToken,
+            controller.signal,
+          )
+          const match = response.content.find((item) => item.fanId === fanId)
+          if (match) {
+            setParticipant(match)
+            return
+          }
+          if (!response.hasNext || page + 1 >= response.totalPages) return
+          page += 1
+        }
+      } catch {
+        // 팬 프로필 보조 정보 조회 실패는 메모 기능을 막지 않는다.
+      }
+    })()
+
+    return () => controller.abort()
+  }, [authToken, fanId, fanMeetingId])
+
+  const sessions = useMemo<NoteSession[]>(() => {
+    const byMeeting = new Map<string, NoteSession>()
+
+    for (const memo of memos) {
+      // 회차당 메모는 하나이므로 최신순 응답의 첫 건만 그 회차의 메모로 삼는다.
+      if (byMeeting.has(memo.meetingId)) continue
+      byMeeting.set(memo.meetingId, {
+        meetingId: memo.meetingId,
+        title: memo.meetingTitle,
+        at: memo.createdAt,
+        memoId: memo.memoId,
+        memo: memo.content,
+        savedAt: memo.updatedAt || memo.createdAt,
+      })
+    }
+
+    if (fanMeetingId && currentMeeting) {
+      const existing = byMeeting.get(fanMeetingId)
+      byMeeting.set(fanMeetingId, {
+        meetingId: fanMeetingId,
+        title: currentMeeting.title,
+        at: currentMeeting.at ?? existing?.at ?? '',
+        memoId: existing?.memoId,
+        memo: existing?.memo ?? '',
+        savedAt: existing?.savedAt,
+      })
+    }
+
+    return [...byMeeting.values()].sort((left, right) => right.at.localeCompare(left.at))
+  }, [currentMeeting, fanMeetingId, memos])
+
+  useEffect(() => {
+    const first = sessions.at(0)
+    if (!first) {
+      setSelectedMeetingId(undefined)
+      return
+    }
+    // 회차 목록은 메모와 팬미팅 정보가 따로 도착해 두 번 채워진다. 사용자가 직접 고르기 전까지는
+    // 지금 열고 들어온 팬미팅을 우선 선택해, 먼저 도착한 지난 회차에 선택이 묶이지 않게 한다.
+    if (sessionPicked) {
+      if (!sessions.some((session) => session.meetingId === selectedMeetingId)) {
+        setSelectedMeetingId(first.meetingId)
+      }
+      return
+    }
+
+    const preferred =
+      sessions.find((session) => session.meetingId === fanMeetingId) ?? first
+    if (preferred.meetingId !== selectedMeetingId) {
+      setSelectedMeetingId(preferred.meetingId)
+    }
+  }, [fanMeetingId, selectedMeetingId, sessionPicked, sessions])
+
+  const selected = sessions.find((session) => session.meetingId === selectedMeetingId)
+  const selectedIsCurrent = Boolean(selected && selected.meetingId === fanMeetingId)
+
+  /**
+   * 요약 조회에 쓸 통화 세션이다.
+   *
+   * 통화 화면에서 넘어온 값(현재 회차)이 최우선이고, 그 외 회차는 대기열 폴링이 브라우저에
+   * 남긴 (팬미팅, 팬) → 세션 기록에서 찾는다. 이 기록 덕에 팬미팅이 끝난 뒤에도 지난 회차의
+   * AI 요약을 다시 열 수 있다. (통화를 지켜본 브라우저에만 기록이 남는다)
+   */
+  const summarySessionId = useMemo(() => {
+    if (!selected || !fanId) return undefined
+    if (selectedIsCurrent && callSessionId) return callSessionId
+    return recallFanCallSession(selected.meetingId, fanId)
+  }, [callSessionId, fanId, selected, selectedIsCurrent])
+
+  useEffect(() => {
+    if (!summarySessionId || !authToken) {
+      setSummaryLines([])
+      return
+    }
+
+    const controller = new AbortController()
+
+    void getCallSummary(summarySessionId, authToken, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return
+        setSummaryLines(
+          result.state === 'COMPLETED'
+            ? result.summary.summary
+                .split('\n')
+                .map((line) => line.trim())
+                .filter(Boolean)
+            : [],
+        )
+      })
+      .catch(() => {
+        // 요약이 아직 없거나 조회에 실패하면 줄을 비워 두고 안내 문구만 남긴다.
+        if (!controller.signal.aborted) setSummaryLines([])
+      })
+
+    return () => controller.abort()
+  }, [authToken, summarySessionId])
+
+  const editing = Boolean(selected && editingMeetingId === selected.meetingId)
+  const hasMemo = Boolean(selected?.memo.trim())
+  const canSave = draft.trim().length > 0
+  const justSaved = Boolean(selected && savedMeetingId === selected.meetingId)
+
+  function selectSession(meetingId: string) {
+    setSessionPicked(true)
+    setSelectedMeetingId(meetingId)
+    setEditingMeetingId(undefined)
+    setDraft('')
+    setSavedMeetingId(undefined)
   }
 
-  const handleRecordSelect = (recordId: string) => {
-    setSelectedRecordId(recordId)
+  function startEdit() {
+    if (!selected) return
+    setEditingMeetingId(selected.meetingId)
+    setDraft(selected.memo)
+    setSavedMeetingId(undefined)
   }
 
-  const handleMemoChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    setMemoText(event.target.value)
+  function cancelEdit() {
+    setEditingMeetingId(undefined)
+    setDraft('')
   }
 
-  const handleMemoSave = () => {
-    // TODO: 메모 저장 API 호출 및 저장 완료 상태 처리
-    const content = memoText.trim()
-    if(!content) { return }
+  function save() {
+    const content = draft.trim()
+    if (!selected || !content || !fanId || !authToken || saving) return
+
+    const target = selected.meetingId
+    const numericMeetingId = Number(target)
+    const request = selected.memoId
+      ? updateFanMemo(selected.memoId, { content }, authToken)
+      : createFanMemo(
+          fanId,
+          Number.isFinite(numericMeetingId)
+            ? { meetingId: numericMeetingId, content }
+            : { content },
+          authToken,
+        )
+
+    setSaving(true)
+    setPageError(undefined)
+
+    void request
+      .then(() => {
+        setEditingMeetingId(undefined)
+        setDraft('')
+        setSavedMeetingId(target)
+        return loadMemos()
+      })
+      .catch((reason: unknown) => {
+        setPageError(errorMessage(reason, t('influencerFanRecordPage.t21')))
+      })
+      .finally(() => setSaving(false))
   }
+
+  const fanName = participant?.nickname ?? t('influencerFanRecordPage.t32', { p0: fanId ?? '' }).trim()
+  const recentSessionDate = formatDate(sessions.at(0)?.at)
+  const memoMeta = hasMemo
+    ? justSaved
+      ? t('influencerFanRecordPage.t22')
+      : formatDateTime(selected?.savedAt)
+    : t('influencerFanRecordPage.t23')
+
+  const hint = pageError
+    ? pageError
+    : justSaved
+      ? t('influencerFanRecordPage.t24')
+      : editing
+        ? canSave
+          ? t('influencerFanRecordPage.t25')
+          : t('influencerFanRecordPage.t26')
+        : hasMemo
+          ? t('influencerFanRecordPage.t27')
+          : ''
+  const hintClassName = pageError
+    ? 'text-[var(--color-error)]'
+    : justSaved
+      ? 'text-[var(--color-success)]'
+      : 'text-[var(--color-text-muted)]'
 
   return (
-    <div className="grid gap-8 pb-8">
-      <header className="grid gap-7">
-        <Breadcrumbs
-          items={[
-            {
-              label: '나의 팬미팅',
-              to: '/influencer/my-fan-meetings',
-            },
-            {
-              label: '팬 리스트',
-              to: fanMeetingId ? `/fan-meetings/${fanMeetingId}/fans` : undefined,
-            },
-            {
-              label: fan.name,
-            },
-            {
-              label: '팬 기록',
-            },
-          ]}
-        />
-        <div className="grid gap-3">
-          <h1 className="text-4xl font-black leading-tight tracking-[-0.04em]">
-            팬 기록
-          </h1>
-          <p className="text-[var(--color-text-secondary)]">
-            팬과 나눈 기록을 확인하고 다음 대화를 준비하세요.
-          </p>
-        </div>
-      </header>
+    <div>
+      <Link
+        className="text-sm font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+        to={
+          fanMeetingId
+            ? `/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/fans`
+            : '/influencer/fan-meetings'
+        }
+      >
+        {t('influencerFanRecordPage.t1')}
+      </Link>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <Card>
-          <CardContent className="grid gap-6">
-            <Avatar
-              className="mx-auto size-28"
-              name={fan.name}
-              size="lg"
-            />
-            <div>
-              <p className="text-xs font-bold text-[var(--color-primary-coral)]">
-                팬 프로필
-              </p>
-              <p className="mt-3 text-2xl font-black">{fan.name}</p>
-              <p className="mt-1 text-[var(--color-text-secondary)]">{fan.nickname}</p>
-            </div>
-            <dl className="grid gap-5 border-t border-[var(--color-divider)] pt-6">
-              <div>
-                <dt className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-tertiary)]">
-                  <ClockCounterClockwise aria-hidden size={18} weight="bold" />
-                  최근 통화
-                </dt>
-                <dd className="mt-2 font-extrabold">{fan.lastCallDate}</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-6">
-          <Card className="overflow-hidden">
-            <Tabs
-              ariaLabel="팬 기록 종류"
-              className="px-6"
-              items={tabItems}
-              onValueChange={handleTabChange}
-              value={activeTab}
-            />
-
-            <div className="grid min-h-[460px] md:grid-cols-[320px_minmax(0,1fr)]">
-              <section
-                aria-label={isMemoTab ? '메모 기록 목록' : '대화 요약 기록 목록'}
-                className="border-b border-[var(--color-divider)] md:border-b-0 md:border-r"
-              >
-                <div className="flex items-start justify-between gap-4 p-5 sm:p-6">
-                  <div>
-                    <h2 className="font-extrabold">
-                      {isMemoTab ? '메모 기록' : '대화 요약 기록'}
-                    </h2>
-                    <p className="mt-2 text-sm text-[var(--color-text-tertiary)]">
-                      최신순
-                    </p>
-                  </div>
-                  <span className="text-sm font-semibold text-[var(--color-text-tertiary)]">
-                    {visibleRecords.length}개
-                  </span>
-                </div>
-                <div className="border-t border-[var(--color-divider)]">
-                  {visibleRecords.map((record) => {
-                    const selected = record.id === selectedRecordId
-
-                    return (
-                      <button
-                        aria-pressed={selected}
-                        className={[
-                          'relative grid w-full gap-2 border-b border-[var(--color-divider)] px-5 py-5 text-left transition-colors',
-                          selected
-                            ? 'bg-[var(--color-primary-coral-soft)]'
-                            : 'hover:bg-[var(--color-surface-page)]',
-                        ].join(' ')}
-                        key={record.id}
-                        onClick={() => handleRecordSelect(record.id)}
-                        type="button"
-                      >
-                        {selected ? (
-                          <span
-                            aria-hidden
-                            className="absolute inset-y-0 left-0 w-[3px] bg-[var(--color-primary-coral)]"
-                          />
-                        ) : null}
-                        <span className="text-xs font-semibold text-[var(--color-text-tertiary)]">
-                          {record.date}
-                        </span>
-                        <span className="font-extrabold">{record.title}</span>
-                        <span className="line-clamp-2 text-sm leading-6 text-[var(--color-text-secondary)]">
-                          {record.preview}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </section>
-
-              <article className="p-5 sm:p-7">
-                <div className="flex flex-wrap items-start justify-between gap-5">
-                  <div>
-                    <p className="text-xs font-bold text-[var(--color-primary-coral)]">
-                      {isMemoTab ? '직접 작성한 메모' : '읽기 전용'}
-                    </p>
-                    <h2 className="mt-3 text-2xl font-black">
-                      {selectedRecord.title}
-                    </h2>
-                  </div>
-                  <time
-                    className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-tertiary)]"
-                    dateTime="2026-07-26"
-                  >
-                    <CalendarBlank aria-hidden size={18} weight="bold" />
-                    {selectedRecord.date}
-                  </time>
-                </div>
-                <div className="mt-7 grid gap-4 border-t border-[var(--color-divider)] pt-7">
-                  {selectedRecord.content.map((paragraph) => (
-                    <p
-                      className="leading-7 text-[var(--color-text-secondary)]"
-                      key={paragraph}
-                    >
-                      {paragraph}
-                    </p>
-                  ))}
-                </div>
-              </article>
-            </div>
-          </Card>
-
-          {isMemoTab ? (
-            <Card>
-              <CardContent className="grid gap-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-extrabold">새 메모 작성</h2>
-                    <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                      다음 팬미팅에서 기억할 내용을 남겨주세요.
-                    </p>
-                  </div>
-                  <span className="text-sm text-[var(--color-text-tertiary)]">
-                    {memoText.length}/300
-                  </span>
-                </div>
-                <Textarea
-                  label="메모 내용"
-                  value = {memoText}
-                  maxLength={300}
-                  onChange={handleMemoChange}
-                  placeholder="팬과 나눈 대화나 다음 통화에서 참고할 내용을 입력하세요."
-                  rows={5}
-                />
-                <Button
-                  className="justify-self-end"
-                  disabled={memoText.trim().length === 0}
-                  onClick={handleMemoSave}
-                >
-                  메모 저장
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
+      <div className="mt-4 flex items-center gap-4">
+        {participant?.profileImageUrl ? (
+          <img
+            alt={t('influencerFanRecordPage.t33', { p0: fanName })}
+            className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+            src={participant.profileImageUrl}
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)]"
+          />
+        )}
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-black tracking-[-0.035em]">{fanName}</h1>
+          {loading ? null : (
+            <p className="mt-[5px] text-[15px] font-medium text-[var(--color-text-muted)]">
+              {t('influencerFanRecordPage.t2')} {sessions.length}{t('influencerFanRecordPage.t3')} {recentSessionDate}
+            </p>
+          )}
         </div>
       </div>
+
+      {loading ? null : sessions.length === 0 ? (
+        pageError ? (
+          <p
+            aria-live="polite"
+            className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px] text-sm font-semibold text-[var(--color-error)]"
+          >
+            {pageError}
+          </p>
+        ) : (
+          <div
+            className="mt-[26px] grid place-items-center border-t border-[var(--color-divider)] px-6 py-[88px] text-center"
+            role="status"
+          >
+            <strong className="text-[19px] font-extrabold tracking-[-0.03em]">
+              {t('influencerFanRecordPage.t4')}
+            </strong>
+            <span className="mt-[9px] max-w-[420px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
+              {t('influencerFanRecordPage.t5')}
+            </span>
+          </div>
+        )
+      ) : (
+        <div className="mt-[26px] grid items-start gap-7 border-t border-[var(--color-divider)] pt-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-11">
+          <nav aria-label={t('influencerFanRecordPage.t6')} className="min-w-0">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-[15px] font-extrabold">{t('influencerFanRecordPage.t7')}</h2>
+              <span className="text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
+                {sessions.length}{t('influencerFanRecordPage.t8')}
+              </span>
+            </div>
+            <p className="mt-[7px] text-sm font-medium leading-[1.55] text-[var(--color-text-muted)]">
+              {t('influencerFanRecordPage.t9')}
+            </p>
+
+            <div className="mt-[14px]">
+              {sessions.map((session) => {
+                const current = session.meetingId === selectedMeetingId
+                const sessionHasMemo = Boolean(session.memo.trim())
+
+                return (
+                  <button
+                    aria-current={current ? 'true' : undefined}
+                    className={[
+                      'mb-1.5 block w-full rounded-lg border px-[15px] py-[14px] text-left hover:border-[var(--color-text-muted)]',
+                      current
+                        ? 'border-[var(--color-primary-coral)] bg-[var(--color-surface-subtle)]'
+                        : 'border-[var(--color-divider)] bg-[var(--color-surface-panel)]',
+                    ].join(' ')}
+                    key={session.meetingId}
+                    onClick={() => selectSession(session.meetingId)}
+                    type="button"
+                  >
+                    <span className="flex items-center justify-between gap-2.5">
+                      <span className="text-[13px] font-semibold tabular-nums text-[var(--color-text-muted)]">
+                        {formatDate(session.at)}
+                      </span>
+                      <span
+                        className={[
+                          'whitespace-nowrap text-[13px] font-extrabold',
+                          sessionHasMemo
+                            ? 'text-[var(--color-success)]'
+                            : 'text-[var(--color-text-muted)]',
+                        ].join(' ')}
+                      >
+                        {sessionHasMemo ? t('influencerFanRecordPage.t28') : t('influencerFanRecordPage.t29')}
+                      </span>
+                    </span>
+                    <span
+                      className={[
+                        'mt-[7px] block text-base leading-[1.4] tracking-[-0.02em]',
+                        current ? 'font-extrabold' : 'font-bold',
+                      ].join(' ')}
+                    >
+                      {session.title}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </nav>
+
+          <article className="min-w-0">
+            <p className="text-[13px] font-semibold tabular-nums text-[var(--color-text-muted)]">
+              {formatDate(selected?.at)}
+            </p>
+            <h2 className="mt-2 text-2xl font-extrabold tracking-[-0.034em]">
+              {selected?.title}
+            </h2>
+
+            <section
+              aria-labelledby="fn-sum"
+              className="mt-[22px] rounded-[10px] bg-[var(--color-surface-subtle)] px-5 py-[18px]"
+            >
+              <h3 className="text-sm font-extrabold" id="fn-sum">
+                {t('influencerFanRecordPage.t10')}
+              </h3>
+              <p className="mt-[7px] text-sm font-medium leading-[1.55] text-[var(--color-text-muted)]">
+                {t('influencerFanRecordPage.t11')}
+              </p>
+              {summaryLines.map((line) => (
+                <p
+                  className="mt-[11px] max-w-[60ch] text-base font-medium leading-[1.75] text-[var(--color-text-body)]"
+                  key={line}
+                >
+                  {line}
+                </p>
+              ))}
+            </section>
+
+            <section
+              aria-labelledby="fn-memo"
+              className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px]"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 className="text-[17px] font-extrabold tracking-[-0.028em]" id="fn-memo">
+                    {t('influencerFanRecordPage.t12')}
+                  </h3>
+                  <p className="mt-1.5 text-sm font-medium text-[var(--color-text-muted)]">
+                    {memoMeta}
+                  </p>
+                </div>
+                {editing ? null : (
+                  <Button
+                    className="hover:border-[var(--color-primary-coral)] hover:bg-[var(--color-surface-panel)] hover:text-[var(--color-primary-coral)]"
+                    onClick={startEdit}
+                    variant="secondary"
+                  >
+                    {hasMemo ? t('influencerFanRecordPage.t30') : t('influencerFanRecordPage.t31')}
+                  </Button>
+                )}
+              </div>
+
+              {editing ? (
+                <>
+                  <textarea
+                    aria-label={t('influencerFanRecordPage.t13')}
+                    className="mj-font-body mt-4 min-h-[132px] w-full max-w-[60ch] resize-y rounded-lg border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] p-[14px] text-base leading-[1.7] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary-coral)] focus:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
+                    maxLength={MEMO_MAX_LENGTH}
+                    onChange={(event) => setDraft(event.target.value)}
+                    placeholder={t('influencerFanRecordPage.t14')}
+                    value={draft}
+                  />
+                  <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                    <Button
+                      className="mj-font-emphasis"
+                      disabled={!canSave}
+                      loading={saving}
+                      onClick={save}
+                    >
+                      {t('influencerFanRecordPage.t15')}
+                    </Button>
+                    <Button
+                      className="hover:border-[var(--color-text-muted)]"
+                      onClick={cancelEdit}
+                      variant="secondary"
+                    >
+                      {t('influencerFanRecordPage.t16')}
+                    </Button>
+                    <span className="text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
+                      {t('influencerFanRecordPage.t34', { p0: draft.length })}
+                    </span>
+                  </div>
+                </>
+              ) : hasMemo ? (
+                <p className="mt-4 max-w-[60ch] whitespace-pre-line text-[17px] font-medium leading-[1.8] text-[var(--color-text-body)]">
+                  {selected?.memo}
+                </p>
+              ) : (
+                <p className="mt-4 max-w-[56ch] text-base font-medium leading-[1.7] text-[var(--color-text-muted)]">
+                  {t('influencerFanRecordPage.t17')}
+                </p>
+              )}
+
+              <p aria-live="polite" className={`mt-[14px] text-sm font-semibold ${hintClassName}`}>
+                {hint}
+              </p>
+            </section>
+          </article>
+        </div>
+      )}
     </div>
   )
 }

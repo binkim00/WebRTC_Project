@@ -14,6 +14,7 @@ import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.auth.service.SignupService;
+import com.ssafy.backend.auth.support.DeviceTokenService;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ class AuthControllerTest {
     private LoginService loginService;
     private LogoutService logoutService;
     private RefreshTokenService refreshTokenService;
+    private DeviceTokenService deviceTokenService;
     private MockMvc mockMvc;
 
     /** 서비스 mock과 전역 예외 처리가 적용된 standalone MockMvc를 구성한다. */
@@ -43,8 +45,10 @@ class AuthControllerTest {
         loginService = mock(LoginService.class);
         logoutService = mock(LogoutService.class);
         refreshTokenService = mock(RefreshTokenService.class);
+        deviceTokenService = mock(DeviceTokenService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new AuthController(signupService, loginService, logoutService, refreshTokenService))
+                        new AuthController(signupService, loginService, logoutService,
+                                refreshTokenService, deviceTokenService))
                 .setControllerAdvice(new AuthExceptionHandler())
                 .build();
     }
@@ -80,14 +84,14 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.nickname").value("melly"));
     }
 
-    /** 유효한 Refresh Token 요청이 회전된 토큰 응답을 반환하는지 검증한다. */
+    /** 명세 경로 /api/v1/auth/reissue 로 보낸 유효한 Refresh Token 요청이 회전된 토큰 응답을 반환하는지 검증한다. */
     @Test
     void returnsRotatedTokensForValidRefreshToken() throws Exception {
         when(refreshTokenService.refresh(any())).thenReturn(new LoginResponse(
                 "new-access", "new-refresh", 3600, 1L, UserRole.FAN, "melly"
         ));
 
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/reissue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken":"current-refresh"}
@@ -159,7 +163,7 @@ class AuthControllerTest {
                 .andExpect(status().isTooManyRequests());
 
         when(refreshTokenService.refresh(any())).thenThrow(new InvalidRefreshTokenException());
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        mockMvc.perform(post("/api/v1/auth/reissue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken":"invalid-refresh"}

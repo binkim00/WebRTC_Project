@@ -27,4 +27,16 @@ class LiveKitTokenControllerConditionTest {
                         assertThat(context).doesNotHaveBean(LiveKitTokenController.class)
                 );
     }
+
+    /** 운영 프로필에서는 활성화 설정이 있어도 테스트 토큰 컨트롤러를 등록하지 않는지 확인한다. */
+    @Test
+    void doesNotRegisterControllerInProductionProfile() {
+        new ApplicationContextRunner()
+                .withInitializer(context -> context.getEnvironment().setActiveProfiles("prod"))
+                .withUserConfiguration(LiveKitTokenController.class)
+                .withPropertyValues("livekit.test-token-enabled=true")
+                .run(context ->
+                        assertThat(context).doesNotHaveBean(LiveKitTokenController.class)
+                );
+    }
 }

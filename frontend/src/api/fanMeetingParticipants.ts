@@ -1,6 +1,15 @@
+import { rememberFanCallSession } from './callSessionLog'
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
-export type QueueStatus = 'WAITING' | 'CALLED' | 'IN_CALL' | 'COMPLETED' | 'NO_SHOW'
+export type QueueStatus =
+  | 'WAITING'
+  | 'CALLED'
+  | 'IN_CALL'
+  | 'COMPLETED'
+  | 'NO_SHOW'
+  | 'SKIPPED'
+  | 'REMOVED'
 
 export type MeetingDetail = {
   meetingId: string
@@ -14,6 +23,10 @@ export type MeetingDetail = {
   }
   application?: {
     capacity?: number
+  }
+  operation?: {
+    /** 대기열(대기실) 오픈 일시. 준비실에서 대기열 폴링 시작 여부를 판단할 때 사용한다. */
+    queueOpenAt?: string
   }
 }
 
@@ -55,10 +68,29 @@ export type MeetingQueue = {
     callSessionId: string
     participantId: string
     nickname: string
-    startedAt?: string
-    endsAt?: string
+    startedAt: string | null
+    endsAt: string | null
   }
   entries: QueueEntry[]
+}
+
+export type QueueCallResponse = {
+  queueEntryId: string
+  status: 'CALLED'
+  calledAt: string
+  callAttemptCount: number
+  callSessionId: string
+  notificationSent: boolean
+}
+
+export type QueueNoShowResponse = {
+  queueEntryId: string
+  participantId: string
+  position: number
+  status: 'NO_SHOW'
+  callAttemptCount: number
+  calledAt: string
+  noShowAt: string
 }
 
 export type FanMemo = {
@@ -97,7 +129,7 @@ function unwrapData(value: unknown): unknown {
 function readString(value: unknown, fieldName: string): string {
   if (typeof value === 'string' && value.trim()) return value
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('fanMeetingParticipants.t1', { p0: fieldName }))
 }
 
 function readOptionalString(value: unknown): string | undefined {
@@ -118,13 +150,15 @@ function isQueueStatus(value: unknown): value is QueueStatus {
     value === 'CALLED' ||
     value === 'IN_CALL' ||
     value === 'COMPLETED' ||
-    value === 'NO_SHOW'
+    value === 'NO_SHOW' ||
+    value === 'SKIPPED' ||
+    value === 'REMOVED'
   )
 }
 
 function parseParticipant(value: unknown): FanMeetingParticipant {
   const record = asRecord(value)
-  if (!record) throw new TypeError('참가자 응답 형식이 올바르지 않습니다.')
+  if (!record) throw new TypeError(translate('fanMeetingParticipants.t2'))
 
   return {
     participantId: readString(record.participantId, 'participantId'),
@@ -159,7 +193,7 @@ function parsePage<T>(
       ? record.content
       : null
 
-  if (!rawContent) throw new TypeError('목록 응답 형식이 올바르지 않습니다.')
+  if (!rawContent) throw new TypeError(translate('fanMeetingParticipants.t3'))
 
   const content = rawContent.map(parseItem)
   const size = record ? readNumber(record.size, defaultSize) : defaultSize
@@ -189,12 +223,14 @@ export async function fetchMeetingDetail(
       signal,
     }),
   )
-  const record = asRecord(data)
-  const influencer = asRecord(record?.influencer)
+  const root = asRecord(data)
+  const record = asRecord(root?.meeting) ?? root
+  const influencer = asRecord(root?.influencer) ?? asRecord(record?.influencer)
   const application = asRecord(record?.application)
+  const operation = asRecord(record?.operation)
 
   if (!record || !influencer) {
-    throw new TypeError('팬미팅 상세 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetingParticipants.t4'))
   }
 
   return {
@@ -204,7 +240,10 @@ export async function fetchMeetingDetail(
     scheduledStartAt: readOptionalString(record.scheduledStartAt),
     influencer: {
       influencerId: readString(influencer.influencerId, 'influencerId'),
-      influencerName: readString(influencer.influencerName, 'influencerName'),
+      influencerName: readString(
+        influencer.influencerName ?? influencer.name,
+        'influencerName',
+      ),
       profileImageUrl: readOptionalString(influencer.profileImageUrl),
     },
     application: application
@@ -213,6 +252,11 @@ export async function fetchMeetingDetail(
             typeof application.capacity === 'number' && Number.isFinite(application.capacity)
               ? application.capacity
               : undefined,
+        }
+      : undefined,
+    operation: operation
+      ? {
+          queueOpenAt: readOptionalString(operation.queueOpenAt),
         }
       : undefined,
   }
@@ -255,7 +299,7 @@ export async function fetchParticipantDetail(
 function parseQueueEntry(value: unknown): QueueEntry {
   const record = asRecord(value)
   if (!record || !isQueueStatus(record.status)) {
-    throw new TypeError('대기열 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetingParticipants.t5'))
   }
 
   return {
@@ -284,28 +328,102 @@ export async function fetchMeetingQueue(
   )
   const record = asRecord(data)
   if (!record || !Array.isArray(record.entries)) {
-    throw new TypeError('운영 대기열 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetingParticipants.t6'))
   }
 
   const currentCall = asRecord(record.currentCall)
 
-  return {
+  const queue: MeetingQueue = {
     currentCall: currentCall
       ? {
           callSessionId: readString(currentCall.callSessionId, 'callSessionId'),
           participantId: readString(currentCall.participantId, 'participantId'),
           nickname: readString(currentCall.nickname, 'nickname'),
-          startedAt: readOptionalString(currentCall.startedAt),
-          endsAt: readOptionalString(currentCall.endsAt),
+          startedAt: readOptionalString(currentCall.startedAt) ?? null,
+          endsAt: readOptionalString(currentCall.endsAt) ?? null,
         }
       : undefined,
     entries: record.entries.map(parseQueueEntry),
+  }
+
+  // 진행 중인 통화의 (팬미팅, 팬) → 세션 대응을 남긴다. 백엔드에 지난 세션 조회 API가
+  // 없어, 팬미팅이 끝난 뒤 팬 기록 화면이 AI 요약을 찾을 유일한 단서가 이 기록이다.
+  // 대기열을 보는 모든 화면(통화 사이드패널·준비실·운영 콘솔)이 이 함수로 폴링하므로
+  // 여기 한 곳에서 기록하면 통화마다 빠짐없이 남는다.
+  if (queue.currentCall) {
+    const inCallFanId = queue.entries.find(
+      (entry) => entry.participantId === queue.currentCall?.participantId,
+    )?.fanId
+    if (inCallFanId) {
+      rememberFanCallSession(meetingId, inCallFanId, queue.currentCall.callSessionId)
+    }
+  }
+
+  return queue
+}
+
+export async function callQueueEntry(
+  queueEntryId: string,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<QueueCallResponse> {
+  const data = unwrapData(
+    await apiRequest<unknown>(
+      `/api/v1/queue-entries/${encodeURIComponent(queueEntryId)}/call`,
+      { method: 'POST', authToken, signal },
+    ),
+  )
+  const record = asRecord(data)
+
+  if (
+    !record ||
+    record.status !== 'CALLED' ||
+    typeof record.notificationSent !== 'boolean'
+  ) {
+    throw new TypeError(translate('fanMeetingParticipants.t7'))
+  }
+
+  return {
+    queueEntryId: readString(record.queueEntryId, 'queueEntryId'),
+    status: 'CALLED',
+    calledAt: readString(record.calledAt, 'calledAt'),
+    callAttemptCount: readNumber(record.callAttemptCount),
+    callSessionId: readString(record.callSessionId, 'callSessionId'),
+    notificationSent: record.notificationSent,
+  }
+}
+
+export async function markQueueEntryNoShow(
+  queueEntryId: string,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<QueueNoShowResponse> {
+  const data = unwrapData(
+    await apiRequest<unknown>(
+      `/api/v1/queue-entries/${encodeURIComponent(queueEntryId)}/no-show`,
+      { method: 'POST', authToken, signal },
+    ),
+  )
+  const record = asRecord(data)
+
+  if (!record || record.status !== 'NO_SHOW') {
+    throw new TypeError(translate('fanMeetingParticipants.t8'))
+  }
+
+  return {
+    queueEntryId: readString(record.queueEntryId, 'queueEntryId'),
+    participantId: readString(record.participantId, 'participantId'),
+    position: readNumber(record.position),
+    status: 'NO_SHOW',
+    callAttemptCount: readNumber(record.callAttemptCount),
+    calledAt: readString(record.calledAt, 'calledAt'),
+    noShowAt: readString(record.noShowAt, 'noShowAt'),
   }
 }
 
 function parseMemo(value: unknown): FanMemo {
   const record = asRecord(value)
-  if (!record) throw new TypeError('팬 메모 응답 형식이 올바르지 않습니다.')
+  if (!record) throw new TypeError(translate('fanMeetingParticipants.t9'))
 
   return {
     memoId: readString(record.memoId, 'memoId'),
@@ -321,11 +439,63 @@ export async function fetchFanMemos(
   fanId: string,
   authToken: string,
   signal?: AbortSignal,
+  /** 최근 메모만 필요한 화면은 기본값을 쓰고, 회차 목록이 필요한 화면은 크게 요청한다. */
+  size = 5,
 ): Promise<FanMemoPage> {
   const data = await apiRequest<unknown>(
-    `/api/v1/influencers/me/fans/${encodeURIComponent(fanId)}/memos?page=0&size=5`,
+    `/api/v1/influencers/me/fans/${encodeURIComponent(fanId)}/memos?page=0&size=${size}`,
     { authToken, signal },
   )
 
-  return parsePage(data, parseMemo, 5)
+  return parsePage(data, parseMemo, size)
+}
+
+/** 내가 개최한 팬미팅에 참가한 팬 한 명의 참여 집계다. 중복 참가는 한 건으로 합쳐진다. */
+export type ParticipantFanSummary = {
+  fanId: string
+  nickname: string
+  profileImageUrl?: string
+  /** 참가한 팬미팅 회차 수 */
+  participatedMeetingCount: number
+  firstParticipatedAt: string
+  lastParticipatedAt: string
+}
+
+export type ParticipantFanPage = {
+  content: ParticipantFanSummary[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+  hasNext: boolean
+}
+
+function parseParticipantFan(value: unknown): ParticipantFanSummary {
+  const record = asRecord(value)
+  if (!record) throw new TypeError(translate('fanMeetingParticipants.t10'))
+
+  return {
+    fanId: readString(record.fanId, 'fanId'),
+    nickname: readString(record.nickname, 'nickname'),
+    profileImageUrl: readOptionalString(record.profileImageUrl),
+    participatedMeetingCount: readNumber(record.participatedMeetingCount),
+    firstParticipatedAt: readString(record.firstParticipatedAt, 'firstParticipatedAt'),
+    lastParticipatedAt: readString(record.lastParticipatedAt, 'lastParticipatedAt'),
+  }
+}
+
+/** 내가 개최한 팬미팅에 참가한 팬을 중복 없이 최근 참여일 순으로 조회한다. */
+export async function fetchMyParticipantFans(
+  query: { page?: number; size?: number },
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<ParticipantFanPage> {
+  const page = query.page ?? 0
+  const size = query.size ?? 20
+  const data = await apiRequest<unknown>(
+    `/api/v1/influencers/me/participant-fans?page=${page}&size=${size}`,
+    { authToken, signal },
+  )
+
+  return parsePage(data, parseParticipantFan, size)
 }

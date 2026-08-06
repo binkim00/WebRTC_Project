@@ -5,10 +5,15 @@
   --service-page-padding-inline: 40px;
   --service-header-height: 76px;
 
-  /* Typography */
+  /* Typography: the only supported weight scale */
+  --font-weight-body: 500;
+  --font-weight-supporting: 600;
+  --font-weight-label: 700;
+  --font-weight-emphasis: 800;
+  --font-weight-title: 900;
   --service-page-title-size: 36px;
   --service-page-title-line-height: 1.2;
-  --service-page-title-weight: 900;
+  --service-page-title-weight: var(--font-weight-title);
 
   /* Controls */
   --control-height: 44px;
@@ -17,7 +22,7 @@
   --input-padding-inline: 14px;
 
   /* Radius */
-  --radius-control: 10px;
+  --radius-control: 8px;
   --radius-panel: 12px;
 
   /* Spacing */
@@ -27,45 +32,89 @@
   --space-control-gap: 10px;
   --space-field-gap: 8px;
 
-  /* Neutral colors */
-  --color-surface-page: #f7f8fa;
+  /* 1. Light surfaces */
   --color-surface-panel: #ffffff;
+  --color-surface-page: var(--color-surface-panel);
+  /* L0 배경 3단의 가운데 값이다. 본문 안에서 옅게 구분되는 정보 면에 쓴다. */
+  --color-surface-subtle: #f7f8fa;
+  --color-surface-muted: #e9eaee;
+
+  /* 2. Brand coral */
+  --color-primary-coral: #c93634;
+  --color-primary-coral-hover: #b32f2d;
+  --color-primary-coral-active: var(--color-primary-coral-hover);
+  --color-primary-coral-highlight: #e8615c;
+  --color-primary-coral-on-dark: #f0847f;
+  --color-primary-coral-soft: color-mix(
+    in srgb,
+    var(--color-primary-coral) 8%,
+    var(--color-surface-panel)
+  );
+  --color-primary-coral-soft-border: color-mix(
+    in srgb,
+    var(--color-primary-coral) 28%,
+    var(--color-surface-panel)
+  );
+
+  /* 3. Text */
   --color-text-primary: #17181d;
-  --color-text-secondary: #666973;
-  --color-text-tertiary: #858891;
-  --color-border-panel: #dedfe4;
-  --color-border-control: #d8d9df;
-  --color-divider: #e7e8ec;
+  --color-text-body: #42444c;
+  --color-text-muted: #666973;
+  --color-text-on-dark: var(--color-surface-panel);
+  /* Compatibility aliases while screen styles migrate to the final names. */
+  --color-text-secondary: var(--color-text-muted);
+  --color-text-tertiary: var(--color-text-muted);
 
-  /* Primary action and active state */
-  --color-primary-coral: #d4403d;
-  --color-primary-coral-hover: #c93634;
-  --color-primary-coral-active: #b83230;
-  --color-primary-coral-soft: #fff5f4;
-  --color-primary-coral-soft-border: #f3c8c6;
-
-  /* Status */
+  /* 4. Status on light surfaces */
   --color-success: #15803d;
-  --color-success-soft: #f0fdf4;
-  --color-success-border: #bbf7d0;
-  --color-warning: #c2410c;
-  --color-warning-soft: #fff7ed;
-  --color-warning-border: #fed7aa;
+  --color-warning: #9a3412;
   --color-error: #b42318;
-  --color-error-hover: #9e2117;
-  --color-error-active: #861c14;
-  --color-error-soft: #fef3f2;
-  --color-error-border: #fecdca;
+  --color-success-soft: color-mix(in srgb, var(--color-success) 8%, var(--color-surface-panel));
+  --color-warning-soft: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface-panel));
+  --color-error-soft: color-mix(in srgb, var(--color-error) 8%, var(--color-surface-panel));
+  --color-success-border: color-mix(in srgb, var(--color-success) 28%, var(--color-surface-panel));
+  --color-warning-border: color-mix(in srgb, var(--color-warning) 28%, var(--color-surface-panel));
+  --color-error-border: color-mix(in srgb, var(--color-error) 28%, var(--color-surface-panel));
+  --color-error-hover: color-mix(in srgb, var(--color-error) 88%, #000000);
+  --color-error-active: color-mix(in srgb, var(--color-error) 76%, #000000);
+
+  /* 5. Status on dark surfaces */
+  --color-success-on-dark: #7ee2a8;
+  --color-warning-on-dark: #fdba74;
+  --color-error-on-dark: #fca5a5;
+
+  /* 6. Dark surfaces */
+  --color-surface-dark: #0f1115;
+  --color-surface-dark-media: #14161b;
+  --color-surface-dark-panel: #1c1e24;
+
+  /* 7. Borders */
+  --color-divider: #e7e8ec;
+  --color-border-control: #d8d9df;
+  --color-border-row: #f0f1f4;
+  --color-border-panel: var(--color-divider);
+
+  /* Control states */
+  --color-control-disabled-bg: var(--color-surface-page);
+  --color-control-disabled-border: var(--color-border-control);
+  --color-control-disabled-text: var(--color-text-muted);
 
   /* Keyboard focus */
   --color-focus-indigo: #5753d9;
   --color-focus-ring: rgb(87 83 217 / 30%);
-  --focus-ring-width: 3px;
+  --focus-ring-width: 2px;
   --focus-ring-offset: 3px;
+
+  /* Transparency */
+  --color-scrim: rgb(15 17 21 / 48%);
+  --backdrop-blur: 0px;
 
   /* Elevation */
   --shadow-panel: none;
-  --shadow-media: 0 18px 52px rgb(35 38 47 / 8%);
-  --shadow-modal: 0 24px 64px rgb(35 38 47 / 16%);
-  --shadow-final-cta: 0 12px 28px rgb(212 64 61 / 20%);
+  --shadow-media: 0 18px 52px rgb(15 17 21 / 8%);
+  --shadow-modal: 0 24px 64px rgb(15 17 21 / 16%);
+  --shadow-final-cta: 0 12px 28px rgb(201 54 52 / 20%);
+
+  /* System layers */
+  --z-skip-link: 100;
 }

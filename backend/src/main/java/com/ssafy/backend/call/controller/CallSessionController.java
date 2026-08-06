@@ -47,7 +47,7 @@ public class CallSessionController {
     }
 
     /**
-     * 매니저 또는 인플루언서가 활성 통화를 즉시 종료한다.
+     * 매니저 또는 인플루언서가 진행 중이거나 연결을 기다리는 통화를 즉시 종료한다.
      *
      * @param callSessionId 종료할 통화 세션 식별자
      * @param request 강제 종료 사유
@@ -62,5 +62,20 @@ public class CallSessionController {
     ) {
         return ApiResponse.success(
                 callSessionService.forceEnd(callSessionId, request.reason(), principal));
+    }
+
+    /**
+     * 통화 중인 팬이 자신의 통화를 정상 종료한다.
+     *
+     * @param callSessionId 종료할 통화 세션 식별자
+     * @param principal JWT 인증 사용자 정보
+     * @return 공통 성공 형식으로 감싼 종료 결과
+     */
+    @PostMapping("/{callSessionId}/end")
+    public ApiResponse<CallSessionEndResponse> end(
+            @PathVariable Long callSessionId,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(callSessionService.endByFan(callSessionId, principal));
     }
 }

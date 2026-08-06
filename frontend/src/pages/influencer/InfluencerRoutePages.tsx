@@ -1,26 +1,27 @@
-import { useParams, useSearchParams } from 'react-router-dom'
-import { VideoCallRoom } from '../../components'
-import { InvalidRouteState, ScreenPage } from '../../components/routing/ScreenPage'
+import { useParams } from 'react-router-dom'
+import { VideoCallRoom } from '../../components/call/VideoCallRoom'
+import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { InfluencerCallSidePanel } from './InfluencerCallSidePanel'
+import { useTranslation } from '../../i18n'
 
 export function InfluencerMeetingCallPage() {
+  const { t } = useTranslation()
   const { fanMeetingId, callSessionId } = useParams()
-  const [searchParams] = useSearchParams()
-  const isDesignPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
 
   if (!fanMeetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 fanMeetingId 값이 없습니다. 이전 화면에서 올바른 팬미팅을 선택해 주세요."
-        title="필수 URL 파라미터가 없습니다"
+        message={t('influencerRoutePages.t1')}
+        title={t('influencerRoutePages.t2')}
       />
     )
   }
 
-  if (!callSessionId?.trim() && !isDesignPreview) {
+  if (!callSessionId?.trim()) {
     return (
       <InvalidRouteState
-        message="실제 영상통화 입장에는 callSessionId가 필요합니다. 준비실에서 현재 통화 세션으로 입장해 주세요."
-        title="통화 세션 ID가 없습니다"
+        message={t('influencerRoutePages.t3')}
+        title={t('influencerRoutePages.t4')}
       />
     )
   }
@@ -28,31 +29,18 @@ export function InfluencerMeetingCallPage() {
   return (
     <VideoCallRoom
       callSessionId={callSessionId}
-      endTo="/influencer/mypage/fan-meetings"
+      // 통화가 끝나면 다음 팬을 호출·입장할 대기실로 복귀한다.
+      // (이전에는 소속 인플루언서를 마이페이지로 보내 대기열도, 다음 팬 입장 수단도 없는 곳에 떨어졌고,
+      //  1인 운영자의 대기열 오픈·호출도 지금은 운영 콘솔이 아니라 대기실에 있다.)
+      endTo={`/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/ready`}
       meetingId={fanMeetingId}
-      participantLabel="팬 영상"
+      participantLabel={t('influencerRoutePages.t5')}
       screenId="ID-003"
+      sidePanel={<InfluencerCallSidePanel meetingId={fanMeetingId} />}
       forceEndOnLeave
-    />
-  )
-}
-
-export function InfluencerMeetingHistoryPage() {
-  return (
-    <ScreenPage
-      description="인플루언서가 진행한 팬미팅 이력을 확인하는 화면입니다."
-      screenId="ID-005"
-      title="나의 팬미팅 이력"
-    />
-  )
-}
-
-export function InfluencerProfilePage() {
-  return (
-    <ScreenPage
-      description="인플루언서 마이페이지의 프로필 화면입니다."
-      screenId="ID-006"
-      title="인플루언서 마이페이지"
+      // 팬미팅 LiveKit Room은 팬미팅당 하나이므로, 팬이 교체될 때 방을 나가지 않고 머문다.
+      // (이전에는 통화 세션이 끝날 때마다 방을 나가고 화면을 이탈해 차례마다 튕겨 나갔다.)
+      hostStaysConnected
     />
   )
 }

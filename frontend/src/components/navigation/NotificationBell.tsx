@@ -1,0 +1,314 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import moldEmptyImage from '../../assets/jelly-mold-empty.png'
+import { getAuthSession } from '../../api/authSession'
+import {
+  getNotifications,
+  markNotificationAsRead,
+  type NotificationResponse,
+  type NotificationType,
+} from '../../api/notifications'
+import { cn } from '../ui/cn'
+import {
+  localizeNotificationMessage,
+  localizeNotificationTitle,
+  translate,
+  useTranslation,
+} from '../../i18n'
+
+const PANEL_SIZE = 5
+
+/** 알림 종류별 태그·강조색·이동 목적지다. 제품에 실제로 존재하는 사건만 다룬다. */
+const typeContent = (): Record<
+  NotificationType,
+  {
+    tag: string
+    tone: 'coral' | 'warning' | 'muted'
+    action: string
+    to: (meetingId: number | null) => string
+  }
+> => ({
+  APPLICATION_RESULT: {
+    tag: translate('notificationBell.t9'),
+    tone: 'coral',
+    action: translate('notificationBell.t10'),
+    to: (meetingId) =>
+      meetingId === null ? '/notifications' : `/fan/events/${meetingId}/application-result`,
+  },
+  ENTER_NOW: {
+    tag: translate('notificationBell.t11'),
+    tone: 'coral',
+    action: translate('notificationBell.t12'),
+    to: (meetingId) =>
+      meetingId === null ? '/notifications' : `/fan/fan-meetings/${meetingId}/waiting`,
+  },
+  QUEUE_ORDER_ASSIGNED: {
+    tag: translate('notificationBell.t13'),
+    tone: 'muted',
+    action: translate('notificationBell.t14'),
+    to: (meetingId) =>
+      meetingId === null ? '/notifications' : `/fan/fan-meetings/${meetingId}/waiting`,
+  },
+  QUEUE_CHANGE_RESULT: {
+    tag: translate('notificationBell.t15'),
+    tone: 'muted',
+    action: translate('notificationBell.t16'),
+    to: (meetingId) =>
+      meetingId === null ? '/notifications' : `/fan/fan-meetings/${meetingId}/waiting`,
+  },
+  MEETING_CHANGED: {
+    tag: translate('notificationBell.t17'),
+    tone: 'warning',
+    action: translate('notificationBell.t18'),
+    to: (meetingId) => (meetingId === null ? '/notifications' : `/fan/events/${meetingId}`),
+  },
+  MEETING_CANCELED: {
+    tag: translate('notificationBell.t19'),
+    tone: 'warning',
+    action: translate('notificationBell.t20'),
+    to: (meetingId) => (meetingId === null ? '/notifications' : `/fan/events/${meetingId}`),
+  },
+  MEETING_PUBLISHED: {
+    tag: translate('notificationBell.t26'),
+    tone: 'coral',
+    action: translate('notificationBell.t27'),
+    to: (meetingId) => (meetingId === null ? '/notifications' : `/fan/events/${meetingId}`),
+  },
+})
+
+const toneClass = {
+  coral: 'text-[var(--color-primary-coral)]',
+  warning: 'text-[var(--color-warning)]',
+  muted: 'text-[var(--color-text-muted)]',
+} as const
+
+/** 방금 · N분 전 · N시간 전 · 어제 · 07.24 순으로 짧게 표기한다. */
+function formatWhen(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+
+  const diffMs = Date.now() - date.getTime()
+  const minutes = Math.floor(diffMs / 60_000)
+  if (minutes < 1) return translate('notificationBell.t21')
+  if (minutes < 60) return translate('notificationBell.t22', { p0: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return translate('notificationBell.t23', { p0: hours })
+  if (hours < 48) return translate('notificationBell.t24')
+  return `${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * 전역 헤더의 알림 벨과 드롭다운 패널이다. (Fan Notifications.dc.html)
+ *
+ * 결과 발표·팬미팅 시작 같은 사건을 화면 이동 없이 확인하는 진입점이며,
+ * 전체 목록은 기존 /notifications 화면이 담당한다.
+ */
+export function NotificationBell() {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState<NotificationResponse[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const token = getAuthSession()?.accessToken
+    if (!token) return
+
+    try {
+      const [page, unreadPage] = await Promise.all([
+        getNotifications({ page: 0, size: PANEL_SIZE }, token, signal),
+        // 읽지 않은 수는 목록 페이지 크기와 무관하게 전체 집계가 필요하다.
+        getNotifications({ unreadOnly: true, page: 0, size: 1 }, token, signal),
+      ])
+      setItems(page.content)
+      setUnreadCount(unreadPage.totalElements)
+    } catch {
+      // 알림은 보조 정보라 실패해도 헤더와 화면 이동을 막지 않는다.
+    }
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void load(controller.signal)
+    return () => controller.abort()
+  }, [load])
+
+  useEffect(() => {
+    if (!open) return
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) {
+        setOpen(false)
+      }
+    }
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+
+  function toggle() {
+    setOpen((current) => {
+      // 패널을 열 때마다 최신 알림으로 갱신한다.
+      if (!current) void load()
+      return !current
+    })
+  }
+
+  async function markRead(notificationId: number) {
+    const token = getAuthSession()?.accessToken
+    if (!token) return
+    try {
+      await markNotificationAsRead(notificationId, token)
+    } catch {
+      // 읽음 처리 실패는 이동을 막지 않으며 다음 조회에서 다시 반영된다.
+    }
+  }
+
+  function openNotification(notification: NotificationResponse) {
+    setOpen(false)
+    if (!notification.readAt) {
+      setUnreadCount((count) => Math.max(0, count - 1))
+      void markRead(notification.notificationId)
+    }
+    navigate(typeContent()[notification.type].to(notification.meetingId))
+  }
+
+  async function readAll() {
+    const unreadItems = items.filter((item) => !item.readAt)
+    setItems((current) =>
+      current.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })),
+    )
+    setUnreadCount(0)
+    await Promise.all(unreadItems.map((item) => markRead(item.notificationId)))
+    void load()
+  }
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        aria-expanded={open}
+        aria-label={unreadCount > 0 ? t('notificationBell.t25', { p0: unreadCount }) : t('notificationBell.t8')}
+        className={cn(
+          'flex min-h-11 items-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] border px-3 transition-colors',
+          open
+            ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)]'
+            : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] hover:border-[var(--color-text-muted)]',
+        )}
+        onClick={toggle}
+        type="button"
+      >
+        <span className="text-[15px] font-bold text-[var(--color-text-primary)]">{t('notificationBell.t1')}</span>
+        {unreadCount > 0 ? (
+          <span className="grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[var(--color-primary-coral)] px-1.5 text-xs font-extrabold text-white tabular-nums">
+            {unreadCount}
+          </span>
+        ) : null}
+      </button>
+
+      {open ? (
+        <section
+          aria-label={t('notificationBell.t2')}
+          className="absolute right-0 top-[calc(100%+10px)] z-30 max-h-[460px] w-[400px] max-w-[calc(100vw-2rem)] overflow-auto rounded-xl border border-[var(--color-divider)] bg-[var(--color-surface-panel)] shadow-[var(--shadow-modal)]"
+        >
+          <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-[18px] py-4">
+            <h2 className="text-[17px] font-extrabold tracking-[-0.028em]">{t('notificationBell.t3')}</h2>
+            {unreadCount > 0 ? (
+              <button
+                className="mj-font-label min-h-9 whitespace-nowrap px-2.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-primary-coral)]"
+                onClick={() => void readAll()}
+                type="button"
+              >
+                {t('notificationBell.t4')}
+              </button>
+            ) : null}
+          </div>
+
+          {items.length === 0 ? (
+            <div className="grid place-items-center px-6 py-14 text-center" role="status">
+              <img alt="" className="size-[72px] object-contain opacity-55" src={moldEmptyImage} />
+              <strong className="mt-3.5 text-base font-extrabold">{t('notificationBell.t5')}</strong>
+              <span className="mt-[7px] text-[15px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
+                {t('notificationBell.t6')}
+              </span>
+            </div>
+          ) : (
+            <>
+              <ul className="m-0 list-none p-0">
+                {items.map((notification) => {
+                  const content = typeContent()[notification.type]
+                  const unread = !notification.readAt
+
+                  return (
+                    <li key={notification.notificationId}>
+                      <button
+                        className={cn(
+                          'grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3.5 border-b border-[var(--color-border-row)] px-[18px] py-4 text-left hover:bg-[var(--color-surface-subtle)]',
+                          unread && 'bg-[var(--color-primary-coral-soft)]',
+                        )}
+                        onClick={() => openNotification(notification)}
+                        type="button"
+                      >
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-2">
+                            {unread ? (
+                              <span
+                                aria-hidden="true"
+                                className="size-[7px] flex-none rounded-full bg-[var(--color-primary-coral)]"
+                              />
+                            ) : null}
+                            <span className={cn('text-[13px] font-extrabold', toneClass[content.tone])}>
+                              {content.tag}
+                            </span>
+                          </span>
+                          <strong
+                            className={cn(
+                              'mt-[7px] block text-base leading-[1.45] tracking-[-0.022em]',
+                              unread ? 'font-extrabold' : 'font-semibold',
+                            )}
+                          >
+                            {localizeNotificationTitle(notification.type, notification.title)}
+                          </strong>
+                          <span className="mt-[5px] block text-[15px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
+                            {localizeNotificationMessage(
+  notification.type,
+  notification.message,
+  notification.messageKey,
+  notification.messageArgs,
+)}
+                          </span>
+                          <span className="mt-2 block text-sm font-bold text-[var(--color-primary-coral)]">
+                            {content.action}
+                          </span>
+                        </span>
+                        <time className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-[var(--color-text-muted)]">
+                          {formatWhen(notification.createdAt)}
+                        </time>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+              <div className="px-[18px] py-3.5">
+                <Link
+                  className="mj-font-label flex min-h-[46px] items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[15px] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+                  onClick={() => setOpen(false)}
+                  to="/notifications"
+                >
+                  {t('notificationBell.t7')}
+                </Link>
+              </div>
+            </>
+          )}
+        </section>
+      ) : null}
+    </div>
+  )
+}

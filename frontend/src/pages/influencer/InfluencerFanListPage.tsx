@@ -1,16 +1,7 @@
-import {
-  Camera,
-  CheckCircle,
-  MagnifyingGlass,
-  Microphone,
-  NotePencil,
-  WarningCircle,
-  WifiHigh,
-} from '@phosphor-icons/react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
-import { getAuthSession } from '../../api/auth'
+import { getAuthSession, type LoginRole } from '../../api/auth'
 import {
   fetchFanMemos,
   fetchMeetingDetail,
@@ -24,20 +15,19 @@ import {
   type QueueEntry,
   type QueueStatus,
 } from '../../api/fanMeetingParticipants'
+import { isQueueNotInitialized } from '../../api/queue'
 import {
   AlertBanner,
-  Badge,
   Button,
-  Card,
   Pagination,
   Select,
   Spinner,
   TextField,
 } from '../../components'
+import { translate, type TranslationKey, useTranslation } from '../../i18n'
 
 type ParticipantView = FanMeetingParticipant & {
   queueEntry?: QueueEntry
-  hasMemo?: boolean
 }
 
 const PAGE_SIZE = 6
@@ -151,57 +141,90 @@ const previewMemo: FanMemo = {
 
 const previewMemoFanIds = new Set(['fan-07', 'fan-08', 'fan-10', 'fan-12'])
 
+/**
+ * 필터 선택 항목이다. 문장 대신 **사전 키**를 들고 있다.
+ *
+ * `as const`를 유지해야 value가 리터럴 타입으로 좁혀지므로, 배열 자체는 모듈 로드 시점에 만들고
+ * 라벨만 렌더할 때 옮긴다(모듈 로드 시점에 번역하면 처음 언어로 굳는다).
+ */
 const statusOptions = [
-  { label: '전체 상태', value: 'ALL' },
-  { label: '대기', value: 'WAITING' },
-  { label: '호출', value: 'CALLED' },
-  { label: '통화 중', value: 'IN_CALL' },
-  { label: '완료', value: 'COMPLETED' },
-  { label: '노쇼', value: 'NO_SHOW' },
-] as const
+  { labelKey: 'influencerFanListPage.filter.allStatus', value: 'ALL' },
+  { labelKey: 'influencerFanListPage.filter.waiting', value: 'WAITING' },
+  { labelKey: 'influencerFanListPage.filter.called', value: 'CALLED' },
+  { labelKey: 'influencerFanListPage.filter.inCall', value: 'IN_CALL' },
+  { labelKey: 'influencerFanListPage.filter.completed', value: 'COMPLETED' },
+  { labelKey: 'influencerFanListPage.filter.noShow', value: 'NO_SHOW' },
+] as const satisfies readonly { labelKey: TranslationKey; value: string }[]
 
 const memoOptions = [
-  { label: '전체', value: 'ALL' },
-  { label: '메모 있음', value: 'HAS_MEMO' },
-  { label: '메모 없음', value: 'NO_MEMO' },
-] as const
+  { labelKey: 'influencerFanListPage.filter.allMemo', value: 'ALL' },
+  { labelKey: 'influencerFanListPage.filter.hasMemo', value: 'HAS_MEMO' },
+  { labelKey: 'influencerFanListPage.filter.noMemo', value: 'NO_MEMO' },
+] as const satisfies readonly { labelKey: TranslationKey; value: string }[]
 
 function queueStatusLabel(status?: QueueStatus) {
   switch (status) {
     case 'WAITING':
-      return '대기'
+      return translate('influencerFanListPage.t63')
     case 'CALLED':
-      return '호출'
+      return translate('influencerFanListPage.t64')
     case 'IN_CALL':
-      return '통화 중'
+      return translate('influencerFanListPage.t65')
     case 'COMPLETED':
-      return '완료'
+      return translate('influencerFanListPage.t66')
     case 'NO_SHOW':
-      return '노쇼'
+      return translate('influencerFanListPage.t67')
     default:
-      return '확인 전'
+      return translate('influencerFanListPage.t68')
   }
 }
 
-function queueStatusVariant(status?: QueueStatus) {
+function queueStatusClass(status?: QueueStatus) {
   switch (status) {
     case 'COMPLETED':
-      return 'success' as const
+      return 'text-[var(--color-text-secondary)]'
     case 'CALLED':
-      return 'warning' as const
+      return 'text-[var(--color-primary-coral)]'
     case 'IN_CALL':
-      return 'primary' as const
+      return 'text-[var(--color-success)]'
     case 'NO_SHOW':
-      return 'danger' as const
+      return 'text-[var(--color-error)]'
     default:
-      return 'neutral' as const
+      return 'text-[var(--color-text-secondary)]'
   }
+}
+
+function meetingStatusContent(status?: string) {
+  const labels: Record<string, { label: string; className: string }> = {
+    DRAFT: { label: translate('influencerFanListPage.t69'), className: 'text-[var(--color-text-secondary)]' },
+    PUBLISHED: { label: translate('influencerFanListPage.t70'), className: 'text-[var(--color-text-secondary)]' },
+    APPLICATION_OPEN: { label: translate('influencerFanListPage.t71'), className: 'text-[var(--color-primary-coral)]' },
+    APPLICATION_CLOSED: { label: translate('influencerFanListPage.t72'), className: 'text-[var(--color-warning)]' },
+    READY: { label: translate('influencerFanListPage.t73'), className: 'text-[var(--color-warning)]' },
+    LIVE: { label: translate('influencerFanListPage.t74'), className: 'text-[var(--color-success)]' },
+    IN_PROGRESS: { label: translate('influencerFanListPage.t75'), className: 'text-[var(--color-success)]' },
+    ENDED: { label: translate('influencerFanListPage.t76'), className: 'text-[var(--color-text-secondary)]' },
+    CANCELED: { label: translate('influencerFanListPage.t77'), className: 'text-[var(--color-error)]' },
+  }
+  return status && labels[status]
+    ? labels[status]
+    : { label: translate('influencerFanListPage.t78'), className: 'text-[var(--color-text-secondary)]' }
+}
+
+function equipmentContent(participant: FanMeetingParticipant) {
+  if (participant.cameraOk === true && participant.microphoneOk === true) {
+    return { label: translate('influencerFanListPage.t79'), className: 'text-[var(--color-success)]' }
+  }
+  if (participant.cameraOk === false || participant.microphoneOk === false) {
+    return { label: translate('influencerFanListPage.t80'), className: 'text-[var(--color-warning)]' }
+  }
+  return { label: translate('influencerFanListPage.t81'), className: 'text-[var(--color-text-secondary)]' }
 }
 
 function formatEnteredAt(value?: string) {
-  if (!value) return '미접속'
+  if (!value) return translate('influencerFanListPage.t82')
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '확인 불가'
+  if (Number.isNaN(date.getTime())) return translate('influencerFanListPage.t83')
 
   return new Intl.DateTimeFormat('ko-KR', {
     hour: '2-digit',
@@ -212,15 +235,65 @@ function formatEnteredAt(value?: string) {
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiError || error instanceof TypeError) return error.message
-  return '팬 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
+  return translate('influencerFanListPage.t84')
 }
 
-export function InfluencerFanListPage() {
+/** 팬 메모 API는 팬 1명 단위라 목록의 메모 유무는 팬마다 한 번씩 확인해야 한다. */
+const MEMO_PRESENCE_CONCURRENCY = 6
+
+/**
+ * 여러 팬의 메모 유무를 확인한다.
+ *
+ * 참가자 응답에 메모 유무가 없어 팬 수만큼 요청이 필요하므로, 한 번에 몰아 보내지 않고
+ * 묶음으로 나눠 보내고 유무 판단에 필요한 1건만 받는다. 개별 실패는 '확인 전'으로 남긴다.
+ */
+async function loadMemoPresence(
+  fanIds: readonly string[],
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<Record<string, boolean>> {
+  const presence: Record<string, boolean> = {}
+
+  for (let start = 0; start < fanIds.length; start += MEMO_PRESENCE_CONCURRENCY) {
+    if (signal?.aborted) break
+
+    const batch = fanIds.slice(start, start + MEMO_PRESENCE_CONCURRENCY)
+    const results = await Promise.all(
+      batch.map(async (fanId) => {
+        try {
+          const response = await fetchFanMemos(fanId, authToken, signal, 1)
+          return [fanId, response.content.length > 0] as const
+        } catch {
+          return undefined
+        }
+      }),
+    )
+
+    for (const result of results) {
+      if (result) presence[result[0]] = result[1]
+    }
+  }
+
+  return presence
+}
+
+export type InfluencerFanListPageProps = {
+  /** 공통 참가자 화면에서 전달하는 실제 조회자 역할이다. 미지정 시 로그인 세션을 사용한다. */
+  viewerRole?: LoginRole
+}
+
+export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps = {}) {
+  const { t } = useTranslation()
   const { fanMeetingId } = useParams<{ fanMeetingId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const isPreview = import.meta.env.DEV && searchParams.get('preview') === '1'
-  const authToken = getAuthSession()?.accessToken
+  const authSession = getAuthSession()
+  const authToken = authSession?.accessToken
+  const effectiveRole = viewerRole ?? authSession?.role
+  // 팬 메모 API는 인플루언서 본인 범위이므로 매니저 화면에서는 호출하거나 링크하지 않는다.
+  const canUseFanRecords =
+    isPreview || effectiveRole === 'INFLUENCER' || effectiveRole === 'SOLO_INFLUENCER'
 
   const [meeting, setMeeting] = useState<MeetingDetail>()
   const [participants, setParticipants] = useState<FanMeetingParticipant[]>([])
@@ -232,43 +305,48 @@ export function InfluencerFanListPage() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [memoFilter, setMemoFilter] = useState('ALL')
   const [page, setPage] = useState(1)
-  const [totalElements, setTotalElements] = useState(0)
-  const [totalPages, setTotalPages] = useState(1)
+  const [participantTotal, setParticipantTotal] = useState(0)
+  /** fanId → 메모 유무. 확인하지 못한 팬은 키가 없다. 팬 단위 캐시라 페이지를 넘어도 유지한다. */
+  const [memoPresence, setMemoPresence] = useState<Record<string, boolean>>({})
+  const [memoScanning, setMemoScanning] = useState(false)
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [loadError, setLoadError] = useState<string>()
 
   useEffect(() => {
     if (!fanMeetingId) {
-      setLoadError('팬미팅 식별자가 없습니다.')
+      setLoadError(t('influencerFanListPage.t32'))
       setLoading(false)
       return
     }
 
     if (isPreview) {
       const normalizedKeyword = keyword.trim().toLowerCase()
-      const filtered = previewParticipants.filter((participant) => {
-        const matchesKeyword =
-          !normalizedKeyword || participant.nickname.toLowerCase().includes(normalizedKeyword)
-        const matchesMemo =
-          memoFilter === 'ALL' ||
-          (memoFilter === 'HAS_MEMO' && previewMemoFanIds.has(participant.fanId)) ||
-          (memoFilter === 'NO_MEMO' && !previewMemoFanIds.has(participant.fanId))
-        return matchesKeyword && matchesMemo
-      })
+      const filtered = previewParticipants.filter(
+        (participant) =>
+          !normalizedKeyword || participant.nickname.toLowerCase().includes(normalizedKeyword),
+      )
 
       setMeeting(previewMeeting)
       setParticipants(filtered)
       setQueue(previewQueue)
-      setTotalElements(32)
-      setTotalPages(2)
+      setParticipantTotal(32)
+      // 프리뷰는 목업이므로 메모 유무를 조회하지 않고 그대로 채운다.
+      setMemoPresence(
+        Object.fromEntries(
+          previewParticipants.map((participant) => [
+            participant.fanId,
+            previewMemoFanIds.has(participant.fanId),
+          ]),
+        ),
+      )
       setLoadError(undefined)
       setLoading(false)
       return
     }
 
     if (!authToken) {
-      setLoadError('로그인 정보가 없습니다. 로그인 후 다시 시도해 주세요.')
+      setLoadError(t('influencerFanListPage.t33'))
       setLoading(false)
       return
     }
@@ -277,23 +355,72 @@ export function InfluencerFanListPage() {
     setLoading(true)
     setLoadError(undefined)
 
-    void Promise.all([
-      fetchMeetingDetail(fanMeetingId, authToken, controller.signal),
-      fetchParticipants(
-        fanMeetingId,
-        { keyword, page: page - 1, size: PAGE_SIZE },
-        authToken,
-        controller.signal,
-      ),
-      fetchMeetingQueue(fanMeetingId, authToken, controller.signal),
-    ])
-      .then(([meetingResponse, participantResponse, queueResponse]) => {
-        setMeeting(meetingResponse)
-        setParticipants(participantResponse.content)
-        setQueue(queueResponse)
-        setTotalElements(participantResponse.totalElements)
-        setTotalPages(participantResponse.totalPages)
-      })
+    void (async () => {
+      const [
+        meetingResponse,
+        firstParticipantPage,
+        participantCountPage,
+        queueResponse,
+      ] = await Promise.all([
+          fetchMeetingDetail(fanMeetingId, authToken, controller.signal),
+          fetchParticipants(
+            fanMeetingId,
+            { keyword, page: 0, size: 100 },
+            authToken,
+            controller.signal,
+          ),
+          fetchParticipants(
+            fanMeetingId,
+            { page: 0, size: 1 },
+            authToken,
+            controller.signal,
+          ),
+          // 대기열은 상태 필터를 보정하는 보조 정보일 뿐이다. 대기열을 아직 열지 않았거나
+          // 팬미팅이 종료되면 백엔드가 409 QUEUE_NOT_INITIALIZED를 반환하는데, 이때
+          // Promise.all이 함께 깨져 팬 목록 전체가 "불러오지 못했습니다"로 실패했다.
+          // 빈 대기열로 대체하면 참가자 API가 주는 queueStatus로 그대로 표시할 수 있다.
+          fetchMeetingQueue(fanMeetingId, authToken, controller.signal).catch(
+            (reason: unknown) => {
+              if (isQueueNotInitialized(reason)) return { entries: [] } as MeetingQueue
+              throw reason
+            },
+          ),
+        ])
+      const allParticipants = [...firstParticipantPage.content]
+
+      // 대기열 상태는 참가자 API의 서버 필터가 아니므로 전체 페이지를 합친 뒤 정확히 필터링한다.
+      for (let nextPage = 1; nextPage < firstParticipantPage.totalPages; nextPage += 1) {
+        const response = await fetchParticipants(
+          fanMeetingId,
+          { keyword, page: nextPage, size: 100 },
+          authToken,
+          controller.signal,
+        )
+        allParticipants.push(...response.content)
+      }
+
+      // 상태·메모 필터와 페이지 나누기는 렌더에서 계산한다. 여기서 자르면 메모 필터가
+      // 걸린 뒤의 전체 건수를 알 수 없어 페이지 수가 어긋난다.
+      return {
+        meetingResponse,
+        queueResponse,
+        participantTotal: participantCountPage.totalElements,
+        allParticipants,
+      }
+    })()
+      .then(
+        ({
+          meetingResponse,
+          queueResponse,
+          participantTotal: nextParticipantTotal,
+          allParticipants,
+        }) => {
+          setMeeting(meetingResponse)
+          setParticipants(allParticipants)
+          setQueue(queueResponse)
+          setParticipantTotal(nextParticipantTotal)
+        },
+      )
       .catch((error: unknown) => {
         if (!controller.signal.aborted) setLoadError(errorMessage(error))
       })
@@ -302,7 +429,9 @@ export function InfluencerFanListPage() {
       })
 
     return () => controller.abort()
-  }, [authToken, fanMeetingId, isPreview, keyword, memoFilter, page])
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, fanMeetingId, isPreview, keyword])
 
   const participantViews = useMemo<ParticipantView[]>(() => {
     const queueByParticipant = new Map(
@@ -313,29 +442,80 @@ export function InfluencerFanListPage() {
       .map((participant) => ({
         ...participant,
         queueEntry: queueByParticipant.get(participant.participantId),
-        hasMemo: isPreview ? previewMemoFanIds.has(participant.fanId) : undefined,
       }))
       .filter((participant) => {
         if (statusFilter === 'ALL') return true
         return (participant.queueEntry?.status ?? participant.queueStatus) === statusFilter
       })
-  }, [isPreview, participants, queue.entries, statusFilter])
+  }, [participants, queue.entries, statusFilter])
+
+  const memoFilteredViews = useMemo(() => {
+    if (memoFilter === 'ALL') return participantViews
+    const wanted = memoFilter === 'HAS_MEMO'
+    // 아직 확인하지 못한 팬은 어느 쪽으로도 단정하지 않고 목록에서 제외한다.
+    return participantViews.filter((participant) => memoPresence[participant.fanId] === wanted)
+  }, [memoFilter, memoPresence, participantViews])
+
+  const totalPages = Math.max(1, Math.ceil(memoFilteredViews.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const visibleViews = memoFilteredViews.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  )
+
+  /**
+   * 메모 유무를 확인할 팬 목록이다.
+   *
+   * 평소에는 표에 보이는 페이지만 확인하고, 메모 필터를 걸 때만 전체를 확인한다.
+   * 두 경우 모두 memoPresence에 의존하지 않아야 조회 → 목록 변화 → 재조회로 돌지 않는다.
+   */
+  const memoScanScope = useMemo(() => {
+    if (!canUseFanRecords || isPreview) return []
+    if (memoFilter !== 'ALL') return participantViews
+    const pageStart = (Math.min(page, Math.max(1, Math.ceil(participantViews.length / PAGE_SIZE))) - 1) * PAGE_SIZE
+    return participantViews.slice(pageStart, pageStart + PAGE_SIZE)
+  }, [canUseFanRecords, isPreview, memoFilter, page, participantViews])
+
+  const pendingMemoScan = memoScanScope
+    .map((participant) => participant.fanId)
+    .filter((id) => memoPresence[id] === undefined)
+    .join(',')
 
   useEffect(() => {
-    if (!participantViews.length) {
-      setSelectedParticipant(undefined)
-      setSelectedMemos([])
-      return
-    }
+    if (!pendingMemoScan || !authToken) return
 
-    const currentStillVisible = participantViews.some(
-      (participant) => participant.participantId === selectedParticipant?.participantId,
-    )
-    if (!currentStillVisible) setSelectedParticipant(participantViews[0])
-  }, [participantViews, selectedParticipant?.participantId])
+    const controller = new AbortController()
+    setMemoScanning(true)
+
+    void loadMemoPresence(pendingMemoScan.split(','), authToken, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) {
+          setMemoPresence((current) => ({ ...current, ...result }))
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setMemoScanning(false)
+      })
+
+    return () => controller.abort()
+  }, [authToken, pendingMemoScan])
 
   const selectedParticipantId = selectedParticipant?.participantId
   const selectedFanId = selectedParticipant?.fanId
+
+  useEffect(() => {
+    // 목록을 클릭해 직접 고른 선택만 유지한다. 검색·필터·페이지 이동으로 그 팬이
+    // 화면에서 사라지면 선택을 지우되, 아무도 안 고른 팬을 대신 골라 요약을 띄우지 않는다.
+    if (!selectedParticipantId) return
+
+    const stillVisible = visibleViews.some(
+      (participant) => participant.participantId === selectedParticipantId,
+    )
+    if (!stillVisible) {
+      setSelectedParticipant(undefined)
+      setSelectedMemos([])
+    }
+  }, [selectedParticipantId, visibleViews])
 
   useEffect(() => {
     if (!fanMeetingId || !selectedParticipantId || !selectedFanId) return
@@ -360,16 +540,34 @@ export function InfluencerFanListPage() {
         authToken,
         controller.signal,
       ),
-      fetchFanMemos(selectedFanId, authToken, controller.signal),
+      canUseFanRecords
+        ? fetchFanMemos(selectedFanId, authToken, controller.signal)
+        : Promise.resolve({ content: [] as FanMemo[] }),
     ])
       .then(([participantDetail, memoResponse]) => {
-        setSelectedParticipant((current) => ({
-          ...current,
-          ...participantDetail,
-          cameraOk: participantDetail.cameraOk ?? current?.cameraOk,
-          microphoneOk: participantDetail.microphoneOk ?? current?.microphoneOk,
-        }))
+        // 응답이 도착했을 땐 이미 다른 팬을 선택했을 수 있다. abort된 요청의 응답으로
+        // 지금 선택을 덮어쓰면 선택 유지 effect와 서로 되돌리며 무한 루프가 된다.
+        if (controller.signal.aborted) return
+
+        setSelectedParticipant((current) =>
+          current?.participantId === selectedParticipantId
+            ? {
+                ...current,
+                // 상세 조회는 보강 정보만 준다. participantId·fanId 같은 신원 필드는
+                // 지금 선택(current)의 것을 유지해 응답이 뒤바뀌어도 선택이 흔들리지 않게 한다.
+                cameraOk: participantDetail.cameraOk ?? current.cameraOk,
+                microphoneOk: participantDetail.microphoneOk ?? current.microphoneOk,
+              }
+            : current,
+        )
         setSelectedMemos(memoResponse.content)
+        // 이미 받아 온 메모로 유무를 확정해 같은 팬을 다시 조회하지 않는다.
+        if (canUseFanRecords) {
+          setMemoPresence((current) => ({
+            ...current,
+            [selectedFanId]: memoResponse.content.length > 0,
+          }))
+        }
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) setLoadError(errorMessage(error))
@@ -381,6 +579,7 @@ export function InfluencerFanListPage() {
     return () => controller.abort()
   }, [
     authToken,
+    canUseFanRecords,
     fanMeetingId,
     isPreview,
     selectedFanId,
@@ -394,8 +593,6 @@ export function InfluencerFanListPage() {
   const selectedQueueStatus =
     selectedQueueEntry?.status ?? selectedParticipant?.queueStatus
   const recentMemo = selectedMemos[0]
-  const completedDeviceCheck =
-    selectedParticipant?.cameraOk === true && selectedParticipant.microphoneOk === true
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -403,379 +600,386 @@ export function InfluencerFanListPage() {
     setKeyword(keywordInput)
   }
 
+  /**
+   * 팬 기록 화면 경로를 만든다.
+   *
+   * 통화 요약 조회에는 callSessionId가 필요한데 참가자 응답에는 없다.
+   * 지금 통화 중인 팬을 여는 경우에만 현재 세션을 쿼리로 넘겨 요약 탭이 동작하게 한다.
+   */
+  function recordsPath(participant: { participantId: string; fanId: string }) {
+    const callSessionId = participant.participantId === queue.currentCall?.participantId
+      ? queue.currentCall?.callSessionId
+      : undefined
+    const callSessionQuery = callSessionId
+      ? `&callSessionId=${encodeURIComponent(callSessionId)}`
+      : ''
+    return `/influencer/fan-meetings/${encodeURIComponent(fanMeetingId ?? '')}/fans/${encodeURIComponent(participant.fanId)}/records?tab=memo${callSessionQuery}`
+  }
+
   function openMemo() {
-    if (!fanMeetingId || !selectedParticipant) return
-    navigate(
-      `/influencer/fan-meetings/${fanMeetingId}/fans/${selectedParticipant.fanId}/records?tab=memo`,
-    )
+    if (!canUseFanRecords || !fanMeetingId || !selectedParticipant) return
+    navigate(recordsPath(selectedParticipant))
+  }
+
+  const roleLabel = effectiveRole === 'MANAGER' ? t('influencerFanListPage.t34') : t('influencerFanListPage.t35')
+  const currentMeetingStatus = meetingStatusContent(meeting?.status)
+  const equipmentWarning =
+    selectedParticipant?.cameraOk === false || selectedParticipant?.microphoneOk === false
+
+  function resetFilters() {
+    setKeywordInput('')
+    setKeyword('')
+    setStatusFilter('ALL')
+    setMemoFilter('ALL')
+    setPage(1)
   }
 
   return (
     <div>
       <header className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <p className="text-sm font-extrabold text-[var(--color-primary-coral)]">
-            {meeting?.title ?? '팬미팅'}
+          <p className="text-sm font-bold text-[var(--color-text-secondary)]">
+            {meeting?.title ?? t('influencerFanListPage.t36')}
           </p>
-          <h1 className="mt-2 text-[clamp(2.25rem,4vw,2.65rem)] font-black tracking-[-0.055em]">
-            팬 리스트
+          <h1 className="mt-2 text-2xl font-black tracking-[-0.035em]">
+            {t('influencerFanListPage.t1')}
           </h1>
-          <p className="mt-2 text-base text-[var(--color-text-secondary)]">
-            참가자의 진행 상태와 입장 준비 정보를 한눈에 확인하세요.
+          <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
+            {t('influencerFanListPage.t2')}
           </p>
         </div>
-        <Button
-          onClick={() => navigate('/influencer/mypage/profile')}
-          size="sm"
-          variant="secondary"
-        >
-          인플루언서 보기
-        </Button>
+        <p className="whitespace-nowrap text-sm font-bold text-[var(--color-text-secondary)]">
+          {roleLabel}
+        </p>
       </header>
 
       {loadError ? (
-        <AlertBanner className="mt-6" title="팬 리스트를 불러오지 못했습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('influencerFanListPage.t3')} variant="error">
           {loadError}
         </AlertBanner>
       ) : null}
 
-      <Card className="mt-7 grid overflow-hidden md:grid-cols-4">
+      <section
+        aria-label={t('influencerFanListPage.t4')}
+        className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] lg:grid-cols-4"
+      >
         {[
-          ['팬미팅명', meeting?.title ?? '불러오는 중'],
-          ['인플루언서', meeting?.influencer.influencerName ?? '불러오는 중'],
-          ['진행 상태', meeting?.status === 'IN_PROGRESS' ? '● 진행 중' : meeting?.status ?? '확인 중'],
-          ['전체 참가자', `${meeting?.application?.capacity ?? totalElements ?? 0}명`],
+          [t('influencerFanListPage.t37'), meeting?.title ?? t('influencerFanListPage.t38')],
+          [t('influencerFanListPage.t39'), meeting?.influencer.influencerName ?? t('influencerFanListPage.t40')],
+          [t('influencerFanListPage.t41'), currentMeetingStatus.label],
+          [t('influencerFanListPage.t42'), t('influencerFanListPage.t85', { p0: participantTotal })],
         ].map(([label, value], index) => (
           <dl
             className={[
-              'px-6 py-5',
-              index ? 'border-t border-[var(--color-divider)] md:border-l md:border-t-0' : '',
+              'min-w-0 py-4',
+              index % 2 ? 'border-l border-[var(--color-divider)] pl-5' : 'pr-5',
+              index >= 2 ? 'border-t border-[var(--color-divider)] lg:border-t-0' : '',
+              index ? 'lg:border-l lg:border-[var(--color-divider)] lg:px-5' : '',
+              index === 3 ? 'lg:pr-0' : '',
             ].join(' ')}
             key={label}
           >
-            <dt className="text-xs font-bold text-[var(--color-text-tertiary)]">{label}</dt>
+            <dt className="text-xs font-bold text-[var(--color-text-secondary)]">{label}</dt>
             <dd
               className={[
-                'mt-2 text-lg font-extrabold',
-                label === '진행 상태' ? 'text-[var(--color-primary-coral)]' : '',
+                'mt-2 truncate text-base font-extrabold',
+                // 세 번째 항목이 진행 상태다. 라벨 문자열로 비교하면 번역된 화면에서 색이 사라진다.
+                index === 2 ? currentMeetingStatus.className : '',
               ].join(' ')}
             >
               {value}
             </dd>
           </dl>
         ))}
-      </Card>
+      </section>
 
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Card className="min-w-0 overflow-hidden">
+      <div className="mt-7 grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
+        <div className="min-w-0">
           <form
-            className="grid gap-4 border-b border-[var(--color-divider)] p-5 lg:grid-cols-[minmax(280px,1fr)_190px_190px_92px]"
+            className="grid grid-cols-2 items-end gap-3 md:grid-cols-[minmax(0,1fr)_140px_140px_auto]"
             onSubmit={handleSearch}
             role="search"
           >
             <TextField
-              endAdornment={
-                <span className="px-3 text-[var(--color-text-tertiary)]">
-                  <MagnifyingGlass aria-hidden size={20} />
-                </span>
-              }
-              label="팬 검색"
+              containerClassName="col-span-2 md:col-span-1"
+              label={t('influencerFanListPage.t5')}
               onChange={(event) => setKeywordInput(event.currentTarget.value)}
-              placeholder="팬 이름 또는 닉네임"
+              placeholder={t('influencerFanListPage.t6')}
               value={keywordInput}
             />
             <Select
-              label="상태"
+              label={t('influencerFanListPage.t7')}
               onChange={(event) => {
                 setPage(1)
                 setStatusFilter(event.currentTarget.value)
               }}
-              options={statusOptions}
+              options={statusOptions.map((option) => ({
+                label: t(option.labelKey),
+                value: option.value,
+              }))}
               value={statusFilter}
             />
             <Select
-              disabled={!isPreview}
-              helperText={!isPreview ? '현재 API 필터 미지원' : undefined}
-              label="메모"
+              disabled={!canUseFanRecords}
+              label={t('influencerFanListPage.t8')}
               onChange={(event) => {
                 setPage(1)
                 setMemoFilter(event.currentTarget.value)
               }}
-              options={memoOptions}
+              options={memoOptions.map((option) => ({
+                label: t(option.labelKey),
+                value: option.value,
+              }))}
               value={memoFilter}
             />
-            <Button className="self-start lg:mt-[27px]" type="submit">
-              검색
+            <Button className="whitespace-nowrap" type="submit">
+              {t('influencerFanListPage.t9')}
             </Button>
           </form>
 
-          <div className="flex flex-wrap items-end justify-between gap-4 px-5 pb-4 pt-6">
+          {/*
+            * 비활성 사유는 필드 안(helperText)에 두면 그 칸만 높아져 bottom 정렬이 밀리므로
+            * 폼 아래 한 줄로 뺀다.
+            */}
+          {!canUseFanRecords ? (
+            <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
+              {t('influencerFanListPage.t10')}
+            </p>
+          ) : null}
+
+          <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="text-xl font-extrabold">참가자 목록</h2>
+              <h2 className="text-lg font-extrabold tracking-[-0.028em]">{t('influencerFanListPage.t11')}</h2>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                팬미팅 참가자 {totalElements}명 중 현재 페이지입니다.
+                {t('influencerFanListPage.t12')} {participantTotal}{t('influencerFanListPage.t13')}
               </p>
             </div>
-            <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
-              {participantViews.length}명 표시
+            <p className="whitespace-nowrap text-sm font-extrabold">
+              {visibleViews.length}{t('influencerFanListPage.t14')}
             </p>
           </div>
 
           {loading ? (
             <div className="flex min-h-80 items-center justify-center">
-              <Spinner label="팬 목록을 불러오는 중" />
+              <Spinner label={t('influencerFanListPage.t15')} />
             </div>
-          ) : participantViews.length ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-[900px] w-full text-left text-sm">
-                <caption className="sr-only">팬미팅 참가자 목록</caption>
-                <thead className="bg-[var(--color-surface-page)] text-xs text-[var(--color-text-secondary)]">
-                  <tr>
-                    <th className="px-5 py-4 font-bold" scope="col">순번</th>
-                    <th className="px-5 py-4 font-bold" scope="col">팬</th>
-                    <th className="px-5 py-4 font-bold" scope="col">상태</th>
-                    <th className="px-5 py-4 font-bold" scope="col">장비 점검</th>
-                    <th className="px-5 py-4 font-bold" scope="col">메모</th>
-                    <th className="px-5 py-4 font-bold" scope="col">최근 접속</th>
-                    <th className="px-5 py-4 font-bold" scope="col">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {participantViews.map((participant) => {
-                    const queueStatus =
-                      participant.queueEntry?.status ?? participant.queueStatus
-                    const selected =
-                      participant.participantId === selectedParticipant?.participantId
-                    const deviceIssue =
-                      participant.cameraOk === false || participant.microphoneOk === false
+          ) : memoFilter !== 'ALL' && memoScanning ? (
+            // 메모 유무를 팬마다 확인하는 중이다. 절반만 확인된 목록을 결과로 보여 주지 않는다.
+            <div className="flex min-h-80 items-center justify-center">
+              <Spinner label={t('influencerFanListPage.t16')} />
+            </div>
+          ) : visibleViews.length ? (
+            <div className="mt-4" role="table" aria-label={t('influencerFanListPage.t17')}>
+              <div
+                className="hidden grid-cols-[52px_minmax(0,1fr)_84px_96px_66px_74px] gap-3 border-b border-[var(--color-border-control)] pb-3 md:grid"
+                role="row"
+              >
+                {[t('influencerFanListPage.t43'), t('influencerFanListPage.t44'), t('influencerFanListPage.t45'), t('influencerFanListPage.t46'), t('influencerFanListPage.t47'), t('influencerFanListPage.t48')].map((label, columnIndex) => (
+                  <span
+                    // 마지막 열(최근 접속)만 우측 정렬한다. 라벨 문자열로 비교하면 번역된 화면에서 정렬이 풀린다.
+                    className={`text-xs font-bold text-[var(--color-text-secondary)] ${columnIndex === 5 ? 'text-right' : ''}`}
+                    key={label}
+                    role="columnheader"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+              {visibleViews.map((participant) => {
+                const queueStatus = participant.queueEntry?.status ?? participant.queueStatus
+                const selected = participant.participantId === selectedParticipant?.participantId
+                const equipment = equipmentContent(participant)
+                const hasMemo = memoPresence[participant.fanId]
+                const memoLabel = !canUseFanRecords
+                  ? t('influencerFanListPage.t49')
+                  : hasMemo === true
+                    ? t('influencerFanListPage.t50')
+                    : hasMemo === false
+                      ? t('influencerFanListPage.t51')
+                      : t('influencerFanListPage.t52')
 
-                    return (
-                      <tr
-                        className={[
-                          'border-t border-[var(--color-divider)] transition-colors',
-                          selected
-                            ? 'bg-[var(--color-primary-coral-soft)] shadow-[inset_3px_0_var(--color-primary-coral)]'
-                            : 'hover:bg-[var(--color-surface-page)]',
-                        ].join(' ')}
-                        key={participant.participantId}
-                      >
-                        <td className="px-5 py-4 font-extrabold">
-                          {String(participant.callOrder).padStart(2, '0')}
-                        </td>
-                        <td className="px-5 py-4">
-                          <p className="font-extrabold">{participant.nickname}</p>
-                          <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-                            @{participant.fanId}
-                          </p>
-                        </td>
-                        <td className="px-5 py-4">
-                          <Badge variant={queueStatusVariant(queueStatus)}>
-                            {queueStatusLabel(queueStatus)}
-                          </Badge>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span
-                            className={[
-                              'inline-flex items-center gap-1.5 font-bold',
-                              deviceIssue
-                                ? 'text-[var(--color-warning)]'
-                                : participant.cameraOk === true &&
-                                    participant.microphoneOk === true
-                                  ? 'text-[var(--color-success)]'
-                                  : 'text-[var(--color-text-tertiary)]',
-                            ].join(' ')}
-                          >
-                            {deviceIssue ? (
-                              <WarningCircle aria-hidden size={17} weight="fill" />
-                            ) : (
-                              <CheckCircle aria-hidden size={17} weight="fill" />
-                            )}
-                            {deviceIssue
-                              ? '문제 있음'
-                              : participant.cameraOk === true &&
-                                  participant.microphoneOk === true
-                                ? '완료'
-                                : '확인 전'}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 font-semibold">
-                          {participant.hasMemo === true
-                            ? '있음'
-                            : participant.hasMemo === false
-                              ? '없음'
-                              : '선택 후 확인'}
-                        </td>
-                        <td className="px-5 py-4 text-[var(--color-text-secondary)]">
-                          {formatEnteredAt(participant.queueEntry?.enteredAt)}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <button
-                              className="font-bold hover:text-[var(--color-primary-coral)] hover:underline"
-                              onClick={() => setSelectedParticipant(participant)}
-                              type="button"
-                            >
-                              상세 보기
-                            </button>
-                            <button
-                              className="font-bold hover:text-[var(--color-primary-coral)] hover:underline"
-                              onClick={() => {
-                                setSelectedParticipant(participant)
-                                navigate(
-                                  `/influencer/fan-meetings/${fanMeetingId}/fans/${participant.fanId}/records?tab=memo`,
-                                )
-                              }}
-                              type="button"
-                            >
-                              메모 보기
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                return (
+                  <button
+                    aria-current={selected ? 'true' : undefined}
+                    aria-label={`${participant.nickname} ${selected ? t('influencerFanListPage.t53') : t('influencerFanListPage.t54')}`}
+                    className={`relative grid w-full grid-cols-2 items-center gap-2 border-b border-[var(--color-border-row)] px-2 py-3 text-left hover:bg-[var(--color-surface-subtle)] md:grid-cols-[52px_minmax(0,1fr)_84px_96px_66px_74px] md:gap-3 ${selected ? 'bg-[var(--color-surface-subtle)]' : ''}`}
+                    key={participant.participantId}
+                    onClick={() => {
+                      // 같은 행을 다시 누르면 선택을 해제해, 목록을 훑어보는 중 우연히 열린
+                      // 요약 패널을 계속 닫아 두는 방법이 없던 문제를 없앤다.
+                      if (selected) {
+                        setSelectedParticipant(undefined)
+                        setSelectedMemos([])
+                        return
+                      }
+                      setSelectedParticipant(participant)
+                    }}
+                    role="row"
+                    type="button"
+                  >
+                    {/* 배경 음영만으로는 선택 여부가 거의 보이지 않아, 앱 전역의 "선택 항목 = 코랄 좌측 바" 관례를 따른다. */}
+                    {selected ? (
+                      <span
+                        aria-hidden
+                        className="absolute inset-y-0 left-0 w-[3px] bg-[var(--color-primary-coral)]"
+                      />
+                    ) : null}
+                    <span className="text-sm font-extrabold tabular-nums text-[var(--color-text-secondary)]" role="cell">
+                      {String(participant.callOrder).padStart(2, '0')}
+                    </span>
+                    <span className="min-w-0" role="cell">
+                      <span className={`block truncate text-base ${selected ? 'font-extrabold' : 'font-semibold'}`}>
+                        {participant.nickname}
+                      </span>
+                      <span className="mt-1 block truncate text-sm font-medium text-[var(--color-text-secondary)]">
+                        @{participant.fanId}
+                      </span>
+                    </span>
+                    <span className={`whitespace-nowrap text-sm font-extrabold ${queueStatusClass(queueStatus)}`} role="cell">
+                      {queueStatusLabel(queueStatus)}
+                    </span>
+                    <span className={`whitespace-nowrap text-sm font-bold ${equipment.className}`} role="cell">
+                      {equipment.label}
+                    </span>
+                    <span className="whitespace-nowrap text-sm font-bold text-[var(--color-text-secondary)]" role="cell">
+                      {memoLabel}
+                    </span>
+                    <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-[var(--color-text-secondary)]" role="cell">
+                      {formatEnteredAt(participant.queueEntry?.enteredAt)}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           ) : (
-            <div className="grid min-h-72 place-items-center px-5 text-center">
+            <div className="mt-4 grid min-h-72 place-items-center border-t border-[var(--color-border-control)] px-5 text-center" role="status">
               <div>
-                <p className="text-lg font-extrabold">조건에 맞는 팬이 없습니다.</p>
-                <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-                  검색어나 상태 필터를 변경해 보세요.
-                </p>
+                <strong className="text-lg font-extrabold tracking-[-0.03em]">{t('influencerFanListPage.t18')}</strong>
+                <span className="mt-2 block text-sm font-medium text-[var(--color-text-secondary)]">
+                  {t('influencerFanListPage.t19')}
+                </span>
+                <Button className="mt-4" onClick={resetFilters} variant="outline">{t('influencerFanListPage.t20')}</Button>
               </div>
             </div>
           )}
 
-          <div className="border-t border-[var(--color-divider)] px-5 py-5">
-            <Pagination
-              currentPage={page}
-              onPageChange={setPage}
-              totalPages={totalPages}
-            />
-          </div>
-        </Card>
+          {visibleViews.length ? (
+            <div className="mt-6">
+              <Pagination
+                currentPage={safePage}
+                onPageChange={setPage}
+                totalPages={totalPages}
+              />
+            </div>
+          ) : null}
+        </div>
 
-        <Card className="overflow-hidden xl:sticky xl:top-[calc(var(--service-header-height)+24px)]">
-          <div className="p-6">
-            <p className="text-sm font-extrabold text-[var(--color-primary-coral)]">
-              선택한 팬 요약
-            </p>
-            {selectedParticipant ? (
-              <>
-                <div className="mt-4 flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-2xl font-black tracking-[-0.035em]">
+        <aside
+          aria-label={t('influencerFanListPage.t21')}
+          className="min-w-0 rounded-[var(--radius-control)] border border-[var(--color-divider)] p-5"
+        >
+          {selectedParticipant ? (
+            <>
+                <p className="text-xs font-bold text-[var(--color-text-secondary)]">{t('influencerFanListPage.t22')}</p>
+                <div className="mt-2 flex items-baseline justify-between gap-4">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-xl font-black tracking-[-0.032em]">
                       {selectedParticipant.nickname}
                     </h2>
-                    <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                      @{selectedParticipant.fanId} · {selectedParticipant.callOrder}번째
+                    <p className="mt-1 text-sm font-medium text-[var(--color-text-secondary)]">
+                      @{selectedParticipant.fanId} · {selectedParticipant.callOrder}{t('influencerFanListPage.t23')}
                     </p>
                   </div>
-                  <Badge variant={queueStatusVariant(selectedQueueStatus)}>
+                  <span className={`whitespace-nowrap text-sm font-extrabold ${queueStatusClass(selectedQueueStatus)}`}>
                     {queueStatusLabel(selectedQueueStatus)}
-                  </Badge>
+                  </span>
                 </div>
 
-                <section className="mt-6 border-t border-[var(--color-divider)] pt-5">
-                  <h3 className="flex items-center gap-2 font-extrabold">
-                    <NotePencil
-                      aria-hidden
-                      className="text-[var(--color-primary-coral)]"
-                      size={20}
-                    />
-                    최근 메모
-                  </h3>
-                  {detailLoading ? (
-                    <div className="mt-4">
-                      <Spinner label="팬 메모를 불러오는 중" />
+                <section className="mt-5 border-t border-[var(--color-divider)] pt-4">
+                  <h3 className="text-sm font-extrabold">{t('influencerFanListPage.t24')}</h3>
+                  {!canUseFanRecords ? (
+                    <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
+                      {t('influencerFanListPage.t25')}
+                    </p>
+                  ) : detailLoading ? (
+                    <div className="mt-3">
+                      <Spinner label={t('influencerFanListPage.t26')} />
                     </div>
                   ) : recentMemo ? (
                     <>
-                      <p className="mt-4 text-sm leading-7 text-[var(--color-text-secondary)]">
+                      <p className="mt-3 text-sm font-medium leading-7 text-[var(--color-text-body)]">
                         {recentMemo.content}
                       </p>
-                      <Button
-                        className="mt-4 w-full"
-                        leadingIcon={<NotePencil aria-hidden size={18} />}
-                        onClick={openMemo}
-                        variant="secondary"
-                      >
-                        메모 보기
-                      </Button>
+                      <button className="mt-3 min-h-11 font-bold hover:text-[var(--color-primary-coral)]" onClick={openMemo} type="button">
+                        {t('influencerFanListPage.t27')}
+                      </button>
                     </>
                   ) : (
-                    <p className="mt-4 text-sm text-[var(--color-text-secondary)]">
-                      작성된 이전 메모가 없습니다.
-                    </p>
+                    <>
+                      <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
+                        {t('influencerFanListPage.t28')}
+                      </p>
+                      <button className="mt-2 min-h-11 font-extrabold text-[var(--color-primary-coral)]" onClick={openMemo} type="button">
+                        {t('influencerFanListPage.t29')}
+                      </button>
+                    </>
                   )}
                 </section>
 
-                <section className="mt-6 border-t border-[var(--color-divider)] pt-5">
-                  <h3 className="flex items-center gap-2 font-extrabold">
-                    <CheckCircle
-                      aria-hidden
-                      className="text-[var(--color-primary-coral)]"
-                      size={20}
-                    />
-                    장비 점검 상태
-                  </h3>
-                  <dl className="mt-4 grid gap-3">
+                <section className="mt-5 border-t border-[var(--color-divider)] pt-4">
+                  <h3 className="text-sm font-extrabold">{t('influencerFanListPage.t30')}</h3>
+                  <dl className="mt-3 grid gap-3">
                     {[
+                      // 대기열 접속만 상태 문구가 다르므로(접속/미접속) 라벨이 아니라 kind로 구분한다.
+                      // 라벨 문자열 비교는 번역된 화면에서 항상 어긋난다.
                       {
-                        label: '카메라',
-                        icon: <Camera aria-hidden size={19} />,
+                        kind: 'device' as const,
+                        label: t('influencerFanListPage.t55'),
                         ok: selectedParticipant.cameraOk,
-                        goodLabel: '완료',
                       },
                       {
-                        label: '마이크',
-                        icon: <Microphone aria-hidden size={19} />,
+                        kind: 'device' as const,
+                        label: t('influencerFanListPage.t56'),
                         ok: selectedParticipant.microphoneOk,
-                        goodLabel: '완료',
                       },
                       {
-                        label: '대기열 접속',
-                        icon: <WifiHigh aria-hidden size={19} />,
+                        kind: 'queueEntry' as const,
+                        label: t('influencerFanListPage.t57'),
                         ok: Boolean(selectedQueueEntry?.enteredAt),
-                        goodLabel: '접속',
                       },
                     ].map((item) => (
                       <div className="flex items-center justify-between gap-4" key={item.label}>
-                        <dt className="flex items-center gap-3 text-sm font-semibold text-[var(--color-text-secondary)]">
-                          <span className="inline-flex size-9 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-surface-page)]">
-                            {item.icon}
-                          </span>
+                        <dt className="text-sm font-semibold text-[var(--color-text-body)]">
                           {item.label}
                         </dt>
                         <dd
                           className={[
                             'text-sm font-extrabold',
-                            item.ok
+                            item.ok === true
                               ? 'text-[var(--color-success)]'
-                              : 'text-[var(--color-warning)]',
+                              : item.ok === false
+                                ? 'text-[var(--color-warning)]'
+                                : 'text-[var(--color-text-tertiary)]',
                           ].join(' ')}
                         >
-                          {item.ok ? item.goodLabel : '확인 필요'}
+                          {item.ok === true
+                            ? item.kind === 'queueEntry' ? t('influencerFanListPage.t58') : t('influencerFanListPage.t59')
+                            : item.ok === false
+                              ? item.kind === 'queueEntry' ? t('influencerFanListPage.t60') : t('influencerFanListPage.t61')
+                              : t('influencerFanListPage.t62')}
                         </dd>
                       </div>
                     ))}
                   </dl>
-                  <p className="mt-4 text-xs leading-5 text-[var(--color-text-tertiary)]">
-                    {completedDeviceCheck
-                      ? '카메라와 마이크 점검이 완료되었습니다.'
-                      : '장비 이상은 입장을 차단하지 않으며 운영자가 상태를 확인합니다.'}
-                  </p>
+                  {equipmentWarning ? (
+                    <p className="mt-4 rounded-[var(--radius-control)] bg-[var(--color-warning-soft)] px-3 py-2 text-sm font-semibold leading-6 text-[var(--color-warning)]" role="status">
+                      {t('influencerFanListPage.t31')}
+                    </p>
+                  ) : null}
                 </section>
-              </>
-            ) : (
-              <p className="mt-4 text-sm text-[var(--color-text-secondary)]">
-                목록에서 팬을 선택해 주세요.
-              </p>
-            )}
-          </div>
-        </Card>
+            </>
+          ) : null}
+        </aside>
       </div>
     </div>
   )

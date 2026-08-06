@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { IconButton } from '../ui/Button'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 export type DialogProps = {
   open: boolean
@@ -27,9 +28,12 @@ export function Dialog({
   description,
   children,
   footer,
-  closeLabel = '팝업 닫기',
+  closeLabel,
   className,
 }: DialogProps) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const closeLabelResolved = closeLabel ?? t('dialog.t1')
   const dialogRef = useRef<HTMLDialogElement>(null)
   const titleId = useId()
   const descriptionId = useId()
@@ -63,8 +67,7 @@ export function Dialog({
       aria-describedby={description ? descriptionId : undefined}
       aria-labelledby={titleId}
       className={cn(
-        'm-auto w-[min(32rem,calc(100vw-2rem))] rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-0 text-[var(--color-text-primary)] shadow-[var(--shadow-modal)]',
-        'backdrop:bg-[rgb(23_24_29/48%)]',
+        'mj-dialog m-auto w-[min(32rem,calc(100vw-2rem))] rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] bg-[var(--color-surface-panel)] p-0 text-[var(--color-text-primary)] shadow-[var(--shadow-modal)]',
         className,
       )}
       onCancel={handleCancel}
@@ -74,7 +77,10 @@ export function Dialog({
     >
       <div className="flex items-start justify-between gap-4 border-b border-[var(--color-divider)] p-5 sm:p-6">
         <div>
-          <h2 className="text-xl font-bold text-[var(--color-text-primary)]" id={titleId}>
+          <h2
+            className="mj-font-emphasis text-xl text-[var(--color-text-primary)]"
+            id={titleId}
+          >
             {title}
           </h2>
           {description ? (
@@ -84,7 +90,7 @@ export function Dialog({
           ) : null}
         </div>
         <IconButton
-          aria-label={closeLabel}
+          aria-label={closeLabelResolved}
           icon="×"
           onClick={() => onOpenChange(false)}
           size="sm"

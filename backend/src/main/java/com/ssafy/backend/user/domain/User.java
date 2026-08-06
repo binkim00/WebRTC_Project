@@ -11,10 +11,25 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "users")
 public class User extends BaseTimeEntity {
+
+    private static final String WITHDRAWN_PREFIX = "withdrawn_";
+    private static final String WITHDRAWN_EMAIL_DOMAIN = "@withdrawn.invalid";
+    private static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
+    private static final String WITHDRAWN_PASSWORD = "WITHDRAWN";
+
+    /**
+     * 소셜 로그인만 사용하는 계정의 비밀번호 자리표시자다.
+     *
+     * <p>{@code password_hash}가 NOT NULL이라 값을 비울 수 없다. BCrypt 형식이 아닌 문자열을 넣어
+     * 어떤 비밀번호로도 매칭되지 않게 만든다. 컬럼을 nullable로 바꾸면 기존 로그인·탈퇴 흐름을
+     * 모두 다시 검토해야 하므로 {@link #WITHDRAWN_PASSWORD}와 같은 방식을 따른다.
+     */
+    private static final String SOCIAL_ONLY_PASSWORD = "SOCIAL_ONLY";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -48,6 +63,9 @@ public class User extends BaseTimeEntity {
     @Column(name = "profile_image_url", length = 2048)
     private String profileImageUrl;
 
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
@@ -70,6 +88,8 @@ public class User extends BaseTimeEntity {
         // 가입 요청이 상태와 프로필 이미지를 조작하지 못하도록 서버 기본값을 강제한다.
         this.status = UserStatus.ACTIVE;
         this.profileImageUrl = null;
+        // 메일함 소유를 확인하기 전에는 미인증 상태로 시작한다.
+        this.emailVerifiedAt = null;
         this.lastLoginAt = null;
         this.withdrawnAt = null;
     }
@@ -81,12 +101,114 @@ public class User extends BaseTimeEntity {
     }
 
     /**
+     * 소셜 로그인만 사용하는 신규 회원을 생성한다.
+     *
+     * <p>비밀번호를 받지 않고 매칭되지 않는 자리표시자를 넣는다. 이 계정은 아이디·비밀번호 로그인으로
+     * 들어올 수 없고 연결된 소셜 계정으로만 인증한다.
+     *
+     * @param loginId 공급자 식별자로 만든 합성 로그인 ID
+     * @param email 공급자에게 받았거나 사용자가 입력한 이메일
+     * @param nickname 사용자가 정한 표시 이름
+     * @param role 부여할 역할
+     * @param preferredLanguage 선호 언어
+     * @return 비밀번호로 로그인할 수 없는 ACTIVE 회원
+     */
+    public static User createSocialOnly(String loginId, String email, String nickname,
+                                        UserRole role, PreferredLanguage preferredLanguage) {
+        return new User(loginId, email, SOCIAL_ONLY_PASSWORD, nickname, role, preferredLanguage);
+    }
+
+    /**
+     * 비밀번호 없이 소셜 로그인만으로 인증하는 계정인지 반환한다.
+     *
+     * <p>본인 확인에 비밀번호를 요구하는 흐름(회원탈퇴)에서 이 계정을 예외 처리하는 데 쓴다.
+     * 비밀번호를 설정할 방법이 없는 계정에 비밀번호를 요구하면 탈퇴 자체가 불가능해진다.
+     *
+     * @return 소셜 전용 계정이면 {@code true}
+     */
+    public boolean isSocialOnly() {
+        return SOCIAL_ONLY_PASSWORD.equals(this.password);
+    }
+
+    /**
      * 인증에 성공한 가장 최근 시각을 갱신한다.
      *
      * @param loginAt 마지막 로그인 시각
      */
     public void updateLastLoginAt(LocalDateTime loginAt) {
         this.lastLoginAt = loginAt;
+    }
+
+    /**
+     * 이메일 소유 확인이 끝난 시각을 기록한다.
+     *
+     * @param verifiedAt 인증에 성공한 시각
+     * @throws IllegalStateException 이미 인증이 완료된 경우
+     */
+    public void verifyEmail(LocalDateTime verifiedAt) {
+        if (this.emailVerifiedAt != null) {
+            throw new IllegalStateException("이미 인증이 완료된 이메일입니다.");
+        }
+        this.emailVerifiedAt = Objects.requireNonNull(verifiedAt);
+    }
+
+    /** 현재 이메일에 대한 소유 확인이 완료되었는지 반환한다. */
+    public boolean isEmailVerified() {
+        return this.emailVerifiedAt != null;
+    }
+
+    /**
+     * 전달된 값만 회원의 수정 가능한 프로필 정보에 반영한다.
+     *
+     * <p>이메일을 다른 주소로 바꾸면 확인이 끝난 메일함이 달라지므로 인증 상태를 함께 초기화한다.
+     *
+     * @param nickname 변경할 닉네임, 변경하지 않으면 {@code null}
+     * @param email 변경할 이메일, 변경하지 않으면 {@code null}
+     * @param profileImageUrl 변경할 프로필 이미지 URL, 변경하지 않으면 {@code null}
+     * @param preferredLanguage 변경할 선호 언어, 변경하지 않으면 {@code null}
+     */
+    public void updateProfile(String nickname, String email, String profileImageUrl,
+                              PreferredLanguage preferredLanguage) {
+        if (nickname != null) {
+            this.nickname = nickname;
+        }
+        if (email != null) {
+            if (!email.equals(this.email)) {
+                this.emailVerifiedAt = null;
+            }
+            this.email = email;
+        }
+        if (profileImageUrl != null) {
+            this.profileImageUrl = profileImageUrl;
+        }
+        if (preferredLanguage != null) {
+            this.preferredLanguage = preferredLanguage;
+        }
+    }
+
+    /**
+     * 계정을 탈퇴 상태로 전환하고 개인정보를 비식별화한다.
+     * 연관 이력을 보존해야 하므로 행을 삭제하지 않고 식별 가능한 값만 지운다.
+     *
+     * @param withdrawnAt 탈퇴 처리 시각
+     */
+    public void withdraw(LocalDateTime withdrawnAt) {
+        if (this.status == UserStatus.WITHDRAWN) {
+            throw new IllegalStateException("이미 탈퇴한 계정입니다.");
+        }
+        this.status = UserStatus.WITHDRAWN;
+        this.withdrawnAt = withdrawnAt;
+        // loginId·email에 UNIQUE 제약이 있어 임의 문자열을 쓰면 재탈퇴나 동시 처리에서 충돌한다.
+        // 식별자 기반의 결정적 값으로 바꿔 충돌을 원천 차단한다.
+        this.loginId = WITHDRAWN_PREFIX + this.id;
+        // .invalid는 RFC 2606 예약 TLD라 실제 메일이 발송될 수 없다.
+        this.email = WITHDRAWN_PREFIX + this.id + WITHDRAWN_EMAIL_DOMAIN;
+        this.nickname = WITHDRAWN_NICKNAME;
+        // BCrypt 형식이 아니므로 어떤 비밀번호로도 매칭되지 않는다.
+        this.password = WITHDRAWN_PASSWORD;
+        this.profileImageUrl = null;
+        // 실제 메일함과 연결이 끊긴 주소로 바뀌므로 인증 상태도 함께 지운다.
+        this.emailVerifiedAt = null;
     }
 
     /** 데이터베이스가 생성한 사용자 식별자를 반환한다. */
@@ -107,6 +229,8 @@ public class User extends BaseTimeEntity {
     public UserStatus getStatus() { return status; }
     /** nullable 프로필 이미지 URL을 반환한다. */
     public String getProfileImageUrl() { return profileImageUrl; }
+    /** 이메일 인증 완료 시각을 반환하며, 미인증 계정은 null이다. */
+    public LocalDateTime getEmailVerifiedAt() { return emailVerifiedAt; }
     /** 마지막 로그인 시각을 반환하며, 로그인 전에는 null이다. */
     public LocalDateTime getLastLoginAt() { return lastLoginAt; }
     /** 탈퇴 시각을 반환하며, 탈퇴하지 않은 계정은 null이다. */

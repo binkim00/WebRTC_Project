@@ -104,6 +104,90 @@ class QueueInitializationServiceTest {
         verify(fixture.meetingRepository, never()).findByIdForUpdate(1L);
     }
 
+    /** 추첨 직후 배정 순번대로 DB 대기열과 Redis 실시간 상태를 만드는지 검증한다. */
+    @SuppressWarnings("unchecked")
+    @Test
+    void initializesQueueAfterDraw() {
+        TestFixture fixture = new TestFixture();
+        FanMeeting meeting = mock(FanMeeting.class);
+        Participant first = mock(Participant.class);
+        Participant second = mock(Participant.class);
+        when(meeting.getId()).thenReturn(1L);
+        when(first.getAssignedOrder()).thenReturn(1);
+        when(second.getAssignedOrder()).thenReturn(2);
+        when(fixture.queueEntryRepository.existsByMeeting_Id(1L)).thenReturn(false);
+        when(fixture.realtimeStore.isInitialized(1L)).thenReturn(false);
+        when(fixture.participantRepository.findByMeeting_IdOrderByAssignedOrderAsc(1L))
+                .thenReturn(List.of(first, second));
+        when(fixture.queueEntryRepository.saveAllAndFlush(anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(fixture.realtimeStore.initialize(org.mockito.ArgumentMatchers.eq(1L), anyList()))
+                .thenReturn(2L);
+
+        QueueInitializationResponse response = fixture.service.initializeAfterDraw(meeting);
+
+        ArgumentCaptor<List<QueueEntry>> entriesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(fixture.queueEntryRepository).saveAllAndFlush(entriesCaptor.capture());
+        assertThat(entriesCaptor.getValue()).extracting(QueueEntry::getQueuePosition)
+                .containsExactly(1, 2);
+        verify(fixture.realtimeStore).initialize(1L, entriesCaptor.getValue());
+        assertThat(response.initializedCount()).isEqualTo(2);
+    }
+
+    /** 추첨 직후 이미 DB 대기열이 있으면 기존 데이터를 건드리지 않고 거부하는지 검증한다. */
+    @Test
+    void rejectsInitializationAfterDrawWhenDatabaseQueueExists() {
+        TestFixture fixture = new TestFixture();
+        FanMeeting meeting = mock(FanMeeting.class);
+        when(meeting.getId()).thenReturn(1L);
+        when(fixture.queueEntryRepository.existsByMeeting_Id(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> fixture.service.initializeAfterDraw(meeting))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.QUEUE_ALREADY_INITIALIZED));
+
+        verify(fixture.queueEntryRepository, never()).saveAllAndFlush(anyList());
+        verify(fixture.realtimeStore, never()).initialize(
+                org.mockito.ArgumentMatchers.anyLong(), anyList());
+    }
+
+    /** 추첨 직후 Redis 대기열이 이미 초기화돼 있으면 거부하는지 검증한다. */
+    @Test
+    void rejectsInitializationAfterDrawWhenRealtimeQueueExists() {
+        TestFixture fixture = new TestFixture();
+        FanMeeting meeting = mock(FanMeeting.class);
+        when(meeting.getId()).thenReturn(1L);
+        when(fixture.queueEntryRepository.existsByMeeting_Id(1L)).thenReturn(false);
+        when(fixture.realtimeStore.isInitialized(1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> fixture.service.initializeAfterDraw(meeting))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.QUEUE_ALREADY_INITIALIZED));
+
+        verify(fixture.queueEntryRepository, never()).saveAllAndFlush(anyList());
+    }
+
+    /** 추첨 결과 참가자가 없으면 대기열을 만들지 않고 거부하는지 검증한다. */
+    @Test
+    void rejectsInitializationAfterDrawWithoutParticipants() {
+        TestFixture fixture = new TestFixture();
+        FanMeeting meeting = mock(FanMeeting.class);
+        when(meeting.getId()).thenReturn(1L);
+        when(fixture.queueEntryRepository.existsByMeeting_Id(1L)).thenReturn(false);
+        when(fixture.realtimeStore.isInitialized(1L)).thenReturn(false);
+        when(fixture.participantRepository.findByMeeting_IdOrderByAssignedOrderAsc(1L))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> fixture.service.initializeAfterDraw(meeting))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.NO_PARTICIPANTS));
+
+        verify(fixture.queueEntryRepository, never()).saveAllAndFlush(anyList());
+    }
+
     /** 테스트마다 초기화 서비스와 협력 객체를 동일한 구성으로 제공한다. */
     private static class TestFixture {
         private final CurrentUserService currentUserService = mock(CurrentUserService.class);

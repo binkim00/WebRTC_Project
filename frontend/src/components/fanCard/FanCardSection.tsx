@@ -1,0 +1,946 @@
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
+
+import {
+  getFanCardCandidates,
+  saveFanCard,
+  type FanCardCandidates,
+} from '../../api/fanCards'
+import {
+  getCapturedPhotos,
+  getFanCardDraft,
+  saveFanCardDraft,
+} from '../../api/capturedPhotos'
+import { AlertBanner, Button, Card, CardContent } from '..'
+import {
+  DEFAULT_PHOTO_ADJUSTMENT,
+  drawFanCard,
+  fanCardSizeOf,
+  minPhotoScale,
+  type CardDecoration,
+  type FanCardFont,
+  type FanCardLayout,
+  type PhotoAdjustment,
+  type PhotoSlotRect,
+} from './fanCardCanvas'
+import { FanCardQuotePicker } from './FanCardQuotePicker'
+import { FanCardLayoutPicker } from './FanCardLayoutPicker'
+import { photoCountOf } from './fanCardLayoutOptions'
+import { FanCardFontPicker } from './FanCardFontPicker'
+import { FanCardStickerPanel } from './FanCardStickerPanel'
+import { useTranslation } from '../../i18n'
+
+/** AI 추천 문구가 생성 중일 때 다시 조회하는 간격이다. */
+const SUGGESTION_POLL_INTERVAL_MS = 3_000
+
+/** 새로 얹는 스티커의 한 변 길이다. 카드 폭의 6분의 1쯤이라 한눈에 보인다. */
+const NEW_STICKER_SIZE = 180
+
+/** 새로 얹는 글자의 크기다. */
+const NEW_TEXT_SIZE = 72
+
+/** 꾸미던 상태를 자동 저장하기 전에 기다리는 시간이다. */
+const DRAFT_SAVE_DELAY_MS = 600
+
+/** 내려받기용 임시 주소를 정리하기까지 기다리는 시간이다. */
+const OBJECT_URL_RELEASE_DELAY_MS = 1_000
+
+/**
+ * 고른 요소를 감싸는 점선 색을 디자인 토큰에서 읽어 온다.
+ *
+ * <p>캔버스에는 CSS 변수를 그대로 넣을 수 없어 값을 꺼내 쓴다. 이렇게 해 두면 토큰만
+ * 바꿔도 미리보기 표시 색이 화면 강조색과 함께 움직인다.
+ *
+ * @returns 캔버스에 쓸 색 문자열
+ */
+function resolveSelectionColor(): string {
+  if (typeof globalThis.getComputedStyle !== 'function') return '#c93634'
+  const token = globalThis
+    .getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-primary-coral')
+    .trim()
+  return token || '#c93634'
+}
+
+/**
+ * 화면에서 누른 지점을 카드 안의 좌표로 바꾼다.
+ *
+ * <p>미리보기 캔버스는 화면 폭에 맞춰 줄여 그리므로, 저장본과 같은 자리에 얹으려면
+ * 표시 크기와 실제 카드 크기의 비율을 곱해야 한다.
+ *
+ * @param canvas 대상 캔버스
+ * @param clientX 화면 기준 가로 좌표
+ * @param clientY 화면 기준 세로 좌표
+ * @returns 카드 좌표계의 지점
+ */
+function toCardPoint(
+  canvas: HTMLCanvasElement,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
+  const rect = canvas.getBoundingClientRect()
+  return {
+    x: ((clientX - rect.left) / rect.width) * canvas.width,
+    y: ((clientY - rect.top) / rect.height) * canvas.height,
+  }
+}
+
+/**
+ * 누른 지점에 있는 꾸미기 요소를 찾는다.
+ *
+ * <p>위에 쌓인 것을 먼저 집도록 뒤에서부터 살핀다. 글자는 세로보다 가로로 넓으므로
+ * 글자 수만큼 판정 폭을 넓혀 준다.
+ *
+ * @param decorations 카드에 얹힌 요소 목록
+ * @param point 카드 좌표계의 지점
+ * @returns 집힌 요소이며 없으면 undefined
+ */
+function findDecorationAt(
+  decorations: readonly CardDecoration[],
+  point: { x: number; y: number },
+): CardDecoration | undefined {
+  for (let index = decorations.length - 1; index >= 0; index -= 1) {
+    const decoration = decorations[index]
+    if (!decoration) continue
+
+    const halfHeight = decoration.size / 2
+    const halfWidth = decoration.kind === 'TEXT'
+      ? Math.max(halfHeight, (decoration.content.length * decoration.size * 0.6) / 2)
+      : halfHeight
+
+    if (
+      Math.abs(point.x - decoration.x) <= halfWidth
+      && Math.abs(point.y - decoration.y) <= halfHeight
+    ) {
+      return decoration
+    }
+  }
+  return undefined
+}
+
+/**
+ * 값을 -limit ~ limit 사이로 붙잡아 둔다.
+ *
+ * @param value 붙잡을 값
+ * @param limit 0 이상의 한계값
+ * @returns 한계 안으로 들어온 값
+ */
+function clamp(value: number, limit: number): number {
+  return Math.min(Math.max(value, -limit), limit)
+}
+
+type FanCardSectionProps = {
+  /** 카드를 만들 통화 세션 식별자 */
+  callSessionId: string
+  /** 카드에 넣을 팬미팅 제목 */
+  meetingTitle: string
+  /** 카드에 넣을 인플루언서 표시 이름 */
+  influencerName: string
+  /** 카드에 넣을 팬 닉네임 */
+  fanNickname: string
+  /** 카드에 넣을 날짜 문구 */
+  dateLabel: string
+  /** API 호출에 사용할 액세스 토큰 */
+  authToken: string
+}
+
+/**
+ * 팬이 통화에서 남긴 사진과 인상 깊었던 문구로 기념 카드를 만드는 섹션이다.
+ *
+ * AI 추천 문구는 통화가 끝난 뒤 생성되므로 준비되지 않았을 수 있다. 그래서 추천을 기다리는
+ * 동안에도 자막에서 직접 고를 수 있게 두 목록을 함께 보여 준다.
+ *
+ * <p>문구 고르기는 선택 사항이다. 추천이 늦거나 마음에 드는 말이 없어도 사진과 꾸미기만으로
+ * 카드를 완성해 내려받을 수 있다. 다만 서버가 보관하는 것은 문구뿐이라, 문구를 고른 경우에만
+ * 저장 버튼을 열어 준다.
+ */
+export function FanCardSection({
+  callSessionId,
+  meetingTitle,
+  influencerName,
+  fanNickname,
+  dateLabel,
+  authToken,
+}: FanCardSectionProps) {
+  const { t } = useTranslation()
+  const [candidates, setCandidates] = useState<FanCardCandidates>()
+  const [selectedText, setSelectedText] = useState<string>()
+  const [savedText, setSavedText] = useState<string>()
+  const [loadError, setLoadError] = useState<string>()
+  const [saveError, setSaveError] = useState<string>()
+  const [saving, setSaving] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [photoBlobs, setPhotoBlobs] = useState<readonly Blob[]>([])
+  const [photoUrls, setPhotoUrls] = useState<readonly string[]>([])
+  /**
+   * 카드에 넣기로 한 사진만 풀어 둔다.
+   *
+   * <p>PNG를 ImageBitmap 으로 풀면 장당 4MB 가까이 차지해, 찍은 것을 모두 풀면 휴대폰에서
+   * 버겁다. 고른 것만 남기고 빠진 것은 곧바로 닫아 최대 네 장만 메모리에 둔다.
+   */
+  const bitmapCacheRef = useRef(new Map<number, ImageBitmap>())
+  const [layout, setLayout] = useState<FanCardLayout>()
+  const [selectedPhotoIndexes, setSelectedPhotoIndexes] = useState<readonly number[]>([])
+  const [fontKey, setFontKey] = useState<FanCardFont>('DEFAULT')
+  const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
+  const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
+  const decorationCounterRef = useRef(0)
+  /**
+   * 지금 끌고 있는 대상이다.
+   *
+   * <p>꾸미기 요소와 사진은 끄는 방식이 다르다. 요소는 카드 좌표로 중심을 옮기지만, 사진은
+   * 칸 안에서 보이는 부분을 비율로 밀기 때문에 집은 시점의 값을 기준으로 누적해야 한다.
+   */
+  const draggingRef = useRef<
+    | { kind: 'DECORATION'; id: string; offsetX: number; offsetY: number }
+    | {
+        kind: 'PHOTO'
+        index: number
+        slot: PhotoSlotRect
+        startX: number
+        startY: number
+        base: PhotoAdjustment
+      }
+  >(undefined)
+  /** 보관해 둔 상태를 다 불러왔는지. 불러오기 전에 저장하면 초기값이 덮어쓴다. */
+  const draftLoadedRef = useRef(false)
+  /** 사진별 배치다. 손대지 않은 사진은 목록에 없고 기본 배치로 그려진다. */
+  const [photoAdjustments, setPhotoAdjustments] = useState<readonly PhotoAdjustment[]>([])
+  /** 방금 그린 카드에서 사진이 놓인 자리다. 어느 칸을 눌렀는지 판단하는 데 쓴다. */
+  const [photoSlots, setPhotoSlots] = useState<readonly PhotoSlotRect[]>([])
+  /** 칸에 들어간 사진의 원본 크기이며 줄일 수 있는 한계를 구하는 데 쓴다. */
+  const [photoSizes, setPhotoSizes] = useState<readonly { width: number; height: number }[]>([])
+  /** 지금 고른 사진 칸이며 없으면 아무 칸도 고르지 않은 상태다. */
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>()
+
+  const selectedDecoration = decorations.find(
+    (decoration) => decoration.id === selectedDecorationId,
+  )
+
+  /**
+   * 카드에 담을 것이 하나라도 있는지.
+   *
+   * <p>문구 고르기는 선택 사항이라 사진만으로도 카드를 완성할 수 있다. 다만 문구도 사진도
+   * 없으면 빈 도안만 남으므로 그때는 미리보기와 내려받기를 열지 않는다.
+   */
+  const canCompose = Boolean(selectedText) || selectedPhotoIndexes.length > 0
+
+  /**
+   * 고른 사진을 줄일 수 있는 한계다.
+   *
+   * <p>사진 전체가 칸 안에 들어오는 지점까지만 허용한다. 그보다 작게 두면 칸 안에서 사진이
+   * 떠다니기만 하고 얻는 것이 없다.
+   */
+  const selectedPhotoScaleRange = (() => {
+    if (selectedPhotoIndex === undefined) return { min: 1 }
+    const slot = photoSlots.find((candidate) => candidate.index === selectedPhotoIndex)
+    const size = photoSizes[selectedPhotoIndex]
+    if (!slot || !size) return { min: 1 }
+    return { min: minPhotoScale(slot.width, slot.height, size.width, size.height) }
+  })()
+
+  /**
+   * 사진 한 장의 배치를 바꾼다.
+   *
+   * <p>목록은 사진 순번과 나란히 두고, 아직 손대지 않은 앞자리는 기본 배치로 메운다. 배열을
+   * 성기게 두면 저장·복원에서 구멍이 생긴다.
+   *
+   * @param index 사진 순번
+   * @param patch 바꿀 값만 담은 배치
+   */
+  const updatePhotoAdjustment = useCallback(
+    (index: number, patch: Partial<PhotoAdjustment>) => {
+      setPhotoAdjustments((current) => {
+        const next = [...current]
+        while (next.length <= index) next.push({ ...DEFAULT_PHOTO_ADJUSTMENT })
+        next[index] = { ...(next[index] ?? DEFAULT_PHOTO_ADJUSTMENT), ...patch }
+        return next
+      })
+    },
+    [],
+  )
+
+  /**
+   * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
+   *
+   * @param kind 스티커인지 글자인지
+   * @param content 스티커 코드 또는 글자
+   */
+  const addDecoration = useCallback(
+    (kind: CardDecoration['kind'], content: string) => {
+      const size = fanCardSizeOf(layout)
+      decorationCounterRef.current += 1
+      const created: CardDecoration = {
+        id: `decoration-${decorationCounterRef.current}`,
+        kind,
+        content,
+        x: size.width / 2,
+        y: size.height / 2,
+        size: kind === 'STICKER' ? NEW_STICKER_SIZE : NEW_TEXT_SIZE,
+        rotation: 0,
+      }
+      setDecorations((current) => [...current, created])
+      setSelectedDecorationId(created.id)
+    },
+    [layout],
+  )
+
+  /**
+   * 선택한 요소의 값을 바꾼다.
+   *
+   * @param patch 바꿀 속성만 담은 값
+   */
+  const updateSelectedDecoration = useCallback(
+    (patch: Partial<Pick<CardDecoration, 'x' | 'y' | 'size' | 'rotation'>>) => {
+      if (!selectedDecorationId) return
+      setDecorations((current) =>
+        current.map((decoration) =>
+          decoration.id === selectedDecorationId ? { ...decoration, ...patch } : decoration,
+        ),
+      )
+    },
+    [selectedDecorationId],
+  )
+
+  /** 선택한 요소를 카드에서 뗀다. */
+  const removeSelectedDecoration = useCallback(() => {
+    if (!selectedDecorationId) return
+    setDecorations((current) =>
+      current.filter((decoration) => decoration.id !== selectedDecorationId),
+    )
+    setSelectedDecorationId(undefined)
+  }, [selectedDecorationId])
+
+  /**
+   * 카드를 눌렀을 때 그 자리의 요소를 집는다. 빈 곳을 누르면 선택을 푼다.
+   *
+   * @param event 포인터 누름 이벤트
+   */
+  const handleCanvasPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+      const canvas = event.currentTarget
+      const point = toCardPoint(canvas, event.clientX, event.clientY)
+      const hit = findDecorationAt(decorations, point)
+
+      setSelectedDecorationId(hit?.id)
+      if (hit) {
+        // 꾸미기 요소가 사진 위에 얹혀 있으므로 요소를 먼저 집는다.
+        setSelectedPhotoIndex(undefined)
+        // 집은 지점과 요소 중심의 차이를 기억해야 끌 때 요소가 튀지 않는다.
+        draggingRef.current = {
+          kind: 'DECORATION',
+          id: hit.id,
+          offsetX: point.x - hit.x,
+          offsetY: point.y - hit.y,
+        }
+        canvas.setPointerCapture(event.pointerId)
+        return
+      }
+
+      const slot = photoSlots.find(
+        (candidate) =>
+          point.x >= candidate.x
+          && point.x <= candidate.x + candidate.width
+          && point.y >= candidate.y
+          && point.y <= candidate.y + candidate.height,
+      )
+      setSelectedPhotoIndex(slot?.index)
+      if (!slot) return
+
+      draggingRef.current = {
+        kind: 'PHOTO',
+        index: slot.index,
+        slot,
+        startX: point.x,
+        startY: point.y,
+        base: photoAdjustments[slot.index] ?? DEFAULT_PHOTO_ADJUSTMENT,
+      }
+      canvas.setPointerCapture(event.pointerId)
+    },
+    [decorations, photoAdjustments, photoSlots],
+  )
+
+  /**
+   * 집은 요소를 끌어 옮긴다.
+   *
+   * @param event 포인터 이동 이벤트
+   */
+  const handleCanvasPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>) => {
+      const dragging = draggingRef.current
+      if (!dragging) return
+
+      const canvas = event.currentTarget
+      const point = toCardPoint(canvas, event.clientX, event.clientY)
+
+      if (dragging.kind === 'PHOTO') {
+        const size = photoSizes[dragging.index]
+        if (!size) return
+
+        const { slot, base } = dragging
+        // 사진이 칸보다 큰 만큼만 밀 수 있다. 더 밀면 칸 안에 빈 곳이 생겨 도안이 비친다.
+        const cover = Math.max(slot.width / size.width, slot.height / size.height)
+        const drawWidth = size.width * cover * base.scale
+        const drawHeight = size.height * cover * base.scale
+        const limitX = Math.abs(drawWidth - slot.width) / 2 / slot.width
+        const limitY = Math.abs(drawHeight - slot.height) / 2 / slot.height
+
+        const offsetX = clamp(base.offsetX + (point.x - dragging.startX) / slot.width, limitX)
+        const offsetY = clamp(base.offsetY + (point.y - dragging.startY) / slot.height, limitY)
+        updatePhotoAdjustment(dragging.index, { offsetX, offsetY })
+        return
+      }
+
+      // 카드 밖으로 완전히 나가 다시 집지 못하는 일이 없게 안쪽으로 붙잡아 둔다.
+      const x = Math.min(Math.max(point.x - dragging.offsetX, 0), canvas.width)
+      const y = Math.min(Math.max(point.y - dragging.offsetY, 0), canvas.height)
+
+      setDecorations((current) =>
+        current.map((decoration) =>
+          decoration.id === dragging.id ? { ...decoration, x, y } : decoration,
+        ),
+      )
+    },
+    [photoSizes, updatePhotoAdjustment],
+  )
+
+  /** 끌기를 마친다. */
+  const handleCanvasPointerUp = useCallback(() => {
+    draggingRef.current = undefined
+  }, [])
+
+  // 통화 화면에서 셔터로 남긴 사진을 불러온다. 서버에 올리지 않으므로 이 브라우저에만 있다.
+  useEffect(() => {
+    let active = true
+    const createdUrls: string[] = []
+    const cache = bitmapCacheRef.current
+
+    // 사진과 꾸미던 상태를 함께 불러온다. 따로 부르면 어느 쪽이 늦게 오느냐에 따라
+    // 기본값이 복원한 상태를 덮어써 팬이 꾸며 둔 것이 사라진다.
+    Promise.all([getCapturedPhotos(callSessionId), getFanCardDraft(callSessionId)])
+      .then(([stored, draft]) => {
+        if (!active) return
+
+        if (stored && stored.photos.length > 0) {
+          // 여기서는 풀지 않고 원본만 들고 있는다. 팔레트 미리보기는 objectURL 로 충분하고,
+          // 실제로 푸는 것은 카드에 넣기로 한 사진뿐이다.
+          for (const photo of stored.photos) createdUrls.push(URL.createObjectURL(photo))
+          setPhotoBlobs(stored.photos)
+          setPhotoUrls(createdUrls)
+        }
+
+        if (draft) {
+          setLayout(draft.layout)
+          setFontKey(draft.fontKey)
+          setSelectedPhotoIndexes(draft.selectedPhotoIndexes)
+          setDecorations(draft.decorations)
+          setPhotoAdjustments(draft.photoAdjustments ?? [])
+          // 이어 붙일 식별자가 겹치지 않게 이미 쓴 번호 뒤에서 시작한다.
+          decorationCounterRef.current = draft.decorations.length
+        } else if (stored && stored.photos.length > 0) {
+          // 사진이 있으면 프레임 카드를 기본으로 보여 준다.
+          setLayout('INSTA')
+          setSelectedPhotoIndexes([0])
+        }
+
+        draftLoadedRef.current = true
+      })
+      .catch(() => {
+        // 사진을 못 읽어도 문구 카드는 만들 수 있으므로 조용히 넘어간다.
+        draftLoadedRef.current = true
+      })
+
+    return () => {
+      active = false
+      for (const url of createdUrls) URL.revokeObjectURL(url)
+      for (const bitmap of cache.values()) bitmap.close()
+      cache.clear()
+    }
+  }, [callSessionId])
+
+  // 꾸미던 상태를 자동으로 보관한다. 끌어 옮기는 동안 값이 계속 바뀌므로 잠시 멈췄을 때만
+  // 저장해 쓰기 횟수를 줄인다. 복원이 끝나기 전에는 저장하지 않는다. 초기값이 저장해 둔
+  // 것을 덮어쓰기 때문이다.
+  useEffect(() => {
+    if (!draftLoadedRef.current) return
+
+    const timer = window.setTimeout(() => {
+      void saveFanCardDraft({
+        callSessionId,
+        layout,
+        fontKey,
+        selectedPhotoIndexes: [...selectedPhotoIndexes],
+        decorations: [...decorations],
+        photoAdjustments: [...photoAdjustments],
+        savedAt: new Date().toISOString(),
+      }).catch(() => undefined)
+    }, DRAFT_SAVE_DELAY_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [callSessionId, decorations, fontKey, layout, photoAdjustments, selectedPhotoIndexes])
+
+  useEffect(() => {
+    const abortController = new AbortController()
+    setLoadError(undefined)
+
+    getFanCardCandidates(callSessionId, authToken, abortController.signal)
+      .then((loaded) => {
+        if (abortController.signal.aborted) return
+        setCandidates(loaded)
+        // 이미 저장한 카드가 있으면 그 문구를 그대로 보여 준다.
+        if (loaded.savedCard) {
+          setSavedText(loaded.savedCard.text)
+          setSelectedText((current) => current ?? loaded.savedCard?.text)
+        }
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : t('fanCardSection.t1'),
+        )
+      })
+
+    return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, callSessionId, reloadKey])
+
+  useEffect(() => {
+    // AI 추천은 통화 종료 후 생성되므로 준비될 때까지만 다시 조회한다.
+    if (candidates?.suggestionStatus !== 'GENERATING') return
+
+    const timer = window.setTimeout(
+      () => setReloadKey((key) => key + 1),
+      SUGGESTION_POLL_INTERVAL_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [candidates])
+
+  /**
+   * 카드에 넣기로 한 사진만 그릴 수 있는 형태로 푼다.
+   *
+   * <p>고른 것만 풀고 빠진 것은 곧바로 닫아, 찍은 장수가 늘어도 메모리가 함께 늘지 않게
+   * 한다. 이미 푼 사진은 다시 풀지 않는다.
+   *
+   * @returns 고른 순서대로 정렬한 사진
+   */
+  const resolveSelectedPhotos = useCallback(async (): Promise<ImageBitmap[]> => {
+    const cache = bitmapCacheRef.current
+
+    for (const [index, bitmap] of [...cache]) {
+      if (!selectedPhotoIndexes.includes(index)) {
+        bitmap.close()
+        cache.delete(index)
+      }
+    }
+
+    const photos: ImageBitmap[] = []
+    for (const index of selectedPhotoIndexes) {
+      const cached = cache.get(index)
+      if (cached) {
+        photos.push(cached)
+        continue
+      }
+
+      const blob = photoBlobs[index]
+      if (!blob) continue
+      const bitmap = await createImageBitmap(blob)
+      cache.set(index, bitmap)
+      photos.push(bitmap)
+    }
+    return photos
+  }, [photoBlobs, selectedPhotoIndexes])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !canCompose) return
+
+    let active = true
+
+    void resolveSelectedPhotos()
+      .then((photos) => {
+        if (!active) return undefined
+        setPhotoSizes(photos.map((photo) => ({ width: photo.width, height: photo.height })))
+        return drawFanCard(canvas, {
+          text: selectedText ?? '',
+          meetingTitle,
+          influencerName,
+          fanNickname,
+          dateLabel,
+          layout,
+          photos,
+          fontKey,
+          decorations,
+          photoAdjustments,
+        })
+      })
+      .then((slots) => {
+        if (!active) return
+        // 칸 위치는 레이아웃이 정하므로 그린 쪽이 알려 준 값을 그대로 쓴다.
+        setPhotoSlots(slots ?? [])
+
+        // 고른 사진 칸도 점선으로 알려 준다. 저장본에는 남지 않는다.
+        const selectedSlot = slots?.find((slot) => slot.index === selectedPhotoIndex)
+        if (selectedSlot) {
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.save()
+            ctx.setLineDash([14, 10])
+            ctx.lineWidth = 4
+            ctx.strokeStyle = resolveSelectionColor()
+            ctx.strokeRect(
+              selectedSlot.x + 2,
+              selectedSlot.y + 2,
+              selectedSlot.width - 4,
+              selectedSlot.height - 4,
+            )
+            ctx.restore()
+          }
+        }
+      })
+      .then(() => {
+        // 고른 요소를 알아볼 수 있게 점선을 두른다. 이 표시는 미리보기에만 그리고
+        // 내려받을 때는 따로 그린 캔버스를 쓰므로 저장본에는 남지 않는다.
+        if (!active || !selectedDecoration) return
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+
+        const half = selectedDecoration.size / 2
+        const halfWidth = selectedDecoration.kind === 'TEXT'
+          ? Math.max(half, (selectedDecoration.content.length * selectedDecoration.size * 0.6) / 2)
+          : half
+
+        ctx.save()
+        ctx.translate(selectedDecoration.x, selectedDecoration.y)
+        ctx.rotate(selectedDecoration.rotation)
+        ctx.setLineDash([14, 10])
+        ctx.lineWidth = 4
+        ctx.strokeStyle = resolveSelectionColor()
+        ctx.strokeRect(-halfWidth - 8, -half - 8, halfWidth * 2 + 16, half * 2 + 16)
+        ctx.restore()
+      })
+      .catch(() => {
+        if (active) setSaveError(t('fanCardSection.t2'))
+      })
+
+    return () => {
+      active = false
+    }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 미리보기 재그리기를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    canCompose,
+    dateLabel,
+    decorations,
+    fanNickname,
+    fontKey,
+    influencerName,
+    layout,
+    meetingTitle,
+    photoAdjustments,
+    resolveSelectedPhotos,
+    selectedDecoration,
+    selectedPhotoIndex,
+    selectedText,
+  ])
+
+  /**
+   * 카드 모양을 바꾸고 고른 사진 수를 새 모양에 맞춘다.
+   *
+   * @param nextLayout 새로 고른 레이아웃이며 undefined면 문구 전용이다
+   */
+  const changeLayout = useCallback(
+    (nextLayout: FanCardLayout | undefined) => {
+      // 네컷 스트립은 카드 크기가 달라서, 얹어 둔 스티커를 같은 비율 자리로 옮겨 준다.
+      const before = fanCardSizeOf(layout)
+      const after = fanCardSizeOf(nextLayout)
+      if (before.width !== after.width || before.height !== after.height) {
+        setDecorations((current) =>
+          current.map((decoration) => ({
+            ...decoration,
+            x: (decoration.x / before.width) * after.width,
+            y: (decoration.y / before.height) * after.height,
+          })),
+        )
+      }
+
+      setLayout(nextLayout)
+      const need = photoCountOf(nextLayout)
+
+      setSelectedPhotoIndexes((current) => {
+        if (need === 0) return []
+        const trimmed = current.slice(0, need)
+        if (trimmed.length > 0) return trimmed
+        // 아직 고른 사진이 없으면 앞에서부터 필요한 만큼 자동으로 채워 준다.
+        return photoBlobs.slice(0, need).map((_, index) => index)
+      })
+    },
+    [layout, photoBlobs],
+  )
+
+  /**
+   * 사진 한 장을 카드에 넣거나 뺀다.
+   *
+   * <p>한 장만 쓰는 레이아웃은 곧바로 교체하고, 네컷은 고른 순서대로 칸을 채운다.
+   *
+   * @param index 사진 목록에서의 위치
+   */
+  const togglePhoto = useCallback(
+    (index: number) => {
+      const need = photoCountOf(layout)
+      if (need === 0) return
+
+      // 사진을 빼거나 더하면 칸 순번이 밀려 남아 있던 배치가 엉뚱한 사진에 붙는다.
+      setPhotoAdjustments([])
+      setSelectedPhotoIndex(undefined)
+      setSelectedPhotoIndexes((current) => {
+        if (need === 1) return [index]
+        if (current.includes(index)) return current.filter((item) => item !== index)
+        if (current.length >= need) return current
+        return [...current, index]
+      })
+    },
+    [layout],
+  )
+
+  /**
+   * 고른 문구를 서버에 저장한다.
+   *
+   * <p>서버가 보관하는 것은 문구뿐이고 빈 문구는 받지 않으므로, 문구를 고르지 않았으면
+   * 저장 자체를 시도하지 않는다. 사진과 꾸미기는 내려받은 이미지에만 담긴다.
+   */
+  const handleSave = useCallback(async () => {
+    if (!selectedText) return
+
+    setSaving(true)
+    setSaveError(undefined)
+    try {
+      const saved = await saveFanCard(callSessionId, selectedText, authToken)
+      setSavedText(saved.text)
+    } catch (error: unknown) {
+      setSaveError(
+        error instanceof Error ? error.message : t('fanCardSection.t3'),
+      )
+    } finally {
+      setSaving(false)
+    }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, callSessionId, selectedText])
+
+  /**
+   * 카드를 PNG로 내려받는다.
+   *
+   * <p>미리보기 캔버스에는 고른 요소를 알리는 점선이 그려져 있으므로, 저장할 때는 화면에
+   * 없는 캔버스에 같은 내용을 다시 그려 점선이 파일에 남지 않게 한다.
+   */
+  async function handleDownload() {
+    if (!canCompose) return
+
+    const canvas = document.createElement('canvas')
+
+    try {
+      const photos = await resolveSelectedPhotos()
+      await drawFanCard(canvas, {
+        photoAdjustments,
+        text: selectedText ?? '',
+        meetingTitle,
+        influencerName,
+        fanNickname,
+        dateLabel,
+        layout,
+        photos,
+        fontKey,
+        decorations,
+      })
+    } catch {
+      setSaveError(t('fanCardSection.t4'))
+      return
+    }
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        setSaveError(t('fanCardSection.t5'))
+        return
+      }
+
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      // 여러 모양으로 내려받아도 파일이 덮이지 않게 레이아웃을 파일명에 남긴다.
+      anchor.download = `melly-card-${callSessionId}${layout ? `-${layout.toLowerCase()}` : ''}.png`
+      anchor.rel = 'noopener'
+      document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+      // 누르자마자 주소를 없애면 내려받기가 시작되기 전에 끊기는 브라우저가 있다.
+      // 잠시 뒤에 정리해 저장이 중간에 실패하지 않게 한다.
+      window.setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_RELEASE_DELAY_MS)
+    }, 'image/png')
+  }
+
+
+  return (
+    <section className="mt-8">
+      {/*
+        Card는 이 프로젝트에서 위쪽 구분선만 그리는 요소이고 여백은 CardContent가 담당한다.
+        Card에 직접 p-6을 주면 다른 화면의 카드와 여백 규칙이 어긋나므로 관례대로 둘을 겹쳐 쓴다.
+      */}
+      <Card>
+        <CardContent>
+          <header>
+            <h2 className="text-xl font-extrabold tracking-[-0.03em] text-[var(--color-text-primary)]">
+               {t('fanCardSection.t6')} </h2>
+            <p className="mt-2 text-[15px] font-medium leading-[1.7] text-[var(--color-text-muted)]">
+              {photoBlobs.length > 0
+                ? t('fanCardSection.t7')
+                : t('fanCardSection.t8')}
+            </p>
+          </header>
+
+          <FanCardQuotePicker
+            candidates={candidates}
+            loadError={loadError}
+            onRetry={() => setReloadKey((key) => key + 1)}
+            onSelect={setSelectedText}
+            selectedText={selectedText}
+          />
+
+          {/* 문구는 선택 사항이라 사진만 있어도 배치를 고를 수 있어야 한다. */}
+          {photoBlobs.length > 0 ? (
+            <FanCardLayoutPicker
+              layout={layout}
+              onLayoutChange={changeLayout}
+              onTogglePhoto={togglePhoto}
+              photoUrls={photoUrls}
+              selectedPhotoIndexes={selectedPhotoIndexes}
+            />
+          ) : null}
+
+          {canCompose ? (
+            <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
+              <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
+
+              <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
+                 {t('fanCardSection.t9')} </h3>
+              <canvas
+                aria-label={
+                  selectedText
+                    ? t('fanCardSection.t10', { p0: selectedText })
+                    : t('fanCardSection.t17')
+                }
+                // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
+                className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
+                  decorations.length > 0 || photoSlots.length > 0 ? 'cursor-grab' : ''
+                }`}
+                onPointerCancel={handleCanvasPointerUp}
+                onPointerDown={handleCanvasPointerDown}
+                onPointerMove={handleCanvasPointerMove}
+                onPointerUp={handleCanvasPointerUp}
+                ref={canvasRef}
+                role="img"
+              />
+
+              {photoSlots.length > 0 ? (
+                <div className="mt-5 rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] p-4">
+                  <h4 className="text-[13px] font-extrabold text-[var(--color-text-primary)]">
+                    {t('fanCardSection.t19')}
+                  </h4>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                    {selectedPhotoIndex === undefined
+                      ? t('fanCardSection.t20')
+                      : t('fanCardSection.t23', { p0: selectedPhotoIndex + 1 })}
+                  </p>
+
+                  {selectedPhotoIndex !== undefined ? (
+                    <div className="mt-3 flex items-center gap-3">
+                      <label
+                        className="text-xs font-bold text-[var(--color-text-secondary)]"
+                        htmlFor="fan-card-photo-scale"
+                      >
+                        {t('fanCardSection.t21')}
+                      </label>
+                      <input
+                        className="h-1.5 flex-1 cursor-pointer accent-[var(--color-primary-coral)]"
+                        id="fan-card-photo-scale"
+                        max={3}
+                        min={selectedPhotoScaleRange.min}
+                        onChange={(event) =>
+                          updatePhotoAdjustment(selectedPhotoIndex, {
+                            scale: Number(event.target.value),
+                          })
+                        }
+                        step={0.01}
+                        type="range"
+                        value={
+                          photoAdjustments[selectedPhotoIndex]?.scale
+                          ?? DEFAULT_PHOTO_ADJUSTMENT.scale
+                        }
+                      />
+                      <button
+                        className="mj-font-label whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface-panel)]"
+                        onClick={() =>
+                          updatePhotoAdjustment(selectedPhotoIndex, DEFAULT_PHOTO_ADJUSTMENT)
+                        }
+                        type="button"
+                      >
+                        {t('fanCardSection.t22')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <FanCardStickerPanel
+                decorationCount={decorations.length}
+                onAddSticker={(code) => addDecoration('STICKER', code)}
+                onAddText={(text) => addDecoration('TEXT', text)}
+                onRemoveSelected={removeSelectedDecoration}
+                onUpdateSelected={updateSelectedDecoration}
+                selectedDecoration={selectedDecoration}
+              />
+
+              {saveError ? (
+                <AlertBanner className="mt-4" title={t('fanCardSection.t11')} variant="error">
+                  {saveError}
+                </AlertBanner>
+              ) : null}
+
+              {/* 저장 완료도 오류와 같은 배너 체계로 알린다. 초록 문장 한 줄만 두면 눈에 띄지 않는다. */}
+              {/* 문구를 고르지 않으면 둘 다 undefined 라 저장한 적이 없어도 같다고 나온다. */}
+              {selectedText && savedText === selectedText ? (
+                <AlertBanner className="mt-4" title={t('fanCardSection.t12')} variant="success">
+                   {t('fanCardSection.t13')} </AlertBanner>
+              ) : null}
+
+              <div className={`mt-6 grid gap-3 ${selectedText ? 'sm:grid-cols-2' : ''}`}>
+                {/* 문구 저장 API는 문구가 있어야 하므로, 문구 없이 만든 카드는 내려받기만 제공한다. */}
+                {selectedText ? (
+                  <Button loading={saving} onClick={() => void handleSave()} size="lg">
+                    {savedText ? t('fanCardSection.t14') : t('fanCardSection.t15')}
+                  </Button>
+                ) : null}
+                <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
+                   {t('fanCardSection.t16')} </Button>
+              </div>
+
+              {selectedText ? null : (
+                <p className="mt-3 text-xs text-[var(--color-text-secondary)]">
+                  {t('fanCardSection.t18')}
+                </p>
+              )}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+    </section>
+  )
+}

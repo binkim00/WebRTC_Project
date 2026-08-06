@@ -1,6 +1,9 @@
 package com.ssafy.backend.call.service;
 
 import com.ssafy.backend.call.repository.CallSessionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -11,9 +14,13 @@ import java.time.LocalDateTime;
 @Component
 public class CallSessionExpirationScheduler {
 
+    private static final Logger log =
+            LoggerFactory.getLogger(CallSessionExpirationScheduler.class);
+
     private final CallSessionRepository callSessionRepository;
     private final CallSessionExpirationService expirationService;
     private final Clock clock;
+    private final long connectTimeoutSec;
 
     /**
      * 만료 후보 저장소와 개별 종료 처리 서비스를 주입받는다.
@@ -21,15 +28,18 @@ public class CallSessionExpirationScheduler {
      * @param callSessionRepository 통화 세션 저장소
      * @param expirationService 잠금 기반 만료 종료 서비스
      * @param clock 서버 기준 시각 제공자
+     * @param connectTimeoutSec 호출 후 연결을 기다리는 최대 시간(초)
      */
     public CallSessionExpirationScheduler(
             CallSessionRepository callSessionRepository,
             CallSessionExpirationService expirationService,
-            Clock clock
+            Clock clock,
+            @Value("${app.call.connect-timeout-sec:60}") long connectTimeoutSec
     ) {
         this.callSessionRepository = callSessionRepository;
         this.expirationService = expirationService;
         this.clock = clock;
+        this.connectTimeoutSec = connectTimeoutSec;
     }
 
     /** 통화 제한 시간 또는 재접속 유예가 지난 활성 세션을 순차적으로 종료한다. */
@@ -38,6 +48,25 @@ public class CallSessionExpirationScheduler {
         for (Long callSessionId : callSessionRepository.findExpiredActiveIds(
                 LocalDateTime.now(clock))) {
             expirationService.endIfExpired(callSessionId);
+        }
+    }
+
+    /**
+     * 호출 후 정해진 시간까지 연결되지 않은 대기 세션을 노쇼로 마감해 호출 자리를 비운다.
+     *
+     * <p>한 건이 실패해도 나머지 건을 계속 처리하고, 다음 주기에 같은 건을 다시 시도한다.
+     */
+    @Scheduled(fixedDelayString = "${app.call.connect-timeout-check-delay-ms:1000}")
+    public void failTimedOutConnectingCalls() {
+        LocalDateTime threshold = LocalDateTime.now(clock).minusSeconds(connectTimeoutSec);
+        for (Long callSessionId : callSessionRepository.findTimedOutConnectingIds(threshold)) {
+            try {
+                expirationService.failIfConnectTimedOut(callSessionId);
+            } catch (RuntimeException exception) {
+                // 대기열 상태가 어긋난 한 건이 남은 건의 정리를 막지 않도록 기록만 남긴다.
+                log.warn("연결 대기 통화 마감에 실패했습니다. 다음 주기에 다시 시도합니다. callSessionId={}",
+                        callSessionId, exception);
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 import type { Key, ReactNode } from 'react'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 export type SortDirection = 'asc' | 'desc'
 
@@ -36,11 +37,14 @@ export function DataTable<T>({
   rows,
   rowKey,
   caption,
-  emptyMessage = '표시할 데이터가 없습니다.',
+  emptyMessage,
   sort,
   onSort,
   className,
 }: DataTableProps<T>) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const emptyMessageResolved = emptyMessage ?? t('dataTable.t1')
   function changeSort(columnId: string) {
     const nextDirection: SortDirection =
       sort?.columnId === columnId && sort.direction === 'asc' ? 'desc' : 'asc'
@@ -48,10 +52,15 @@ export function DataTable<T>({
   }
 
   return (
-    <div className={cn('overflow-x-auto rounded-xl border border-slate-200', className)}>
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
+    <div
+      className={cn(
+        'overflow-x-auto rounded-[var(--radius-panel)] border border-[var(--color-border-panel)]',
+        className,
+      )}
+    >
+      <table className="min-w-full border-collapse text-sm">
         {caption ? <caption className="sr-only">{caption}</caption> : null}
-        <thead className="bg-slate-50">
+        <thead className="bg-[var(--color-surface-page)]">
           <tr>
             {columns.map((column) => {
               const alignment = column.align ?? 'left'
@@ -62,7 +71,7 @@ export function DataTable<T>({
                     sorted ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined
                   }
                   className={cn(
-                    'px-4 py-3 font-semibold text-slate-700',
+                    'mj-font-label border-b border-[var(--color-divider)] px-4 py-3 text-[var(--color-text-body)]',
                     alignClasses[alignment],
                   )}
                   key={column.id}
@@ -70,7 +79,7 @@ export function DataTable<T>({
                 >
                   {column.sortable && onSort ? (
                     <button
-                      className="inline-flex items-center gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                      className="inline-flex min-h-11 items-center gap-1 rounded-[var(--radius-control)] focus-visible:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
                       onClick={() => changeSort(column.id)}
                       type="button"
                     >
@@ -87,14 +96,17 @@ export function DataTable<T>({
             })}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100 bg-white">
+        <tbody className="bg-[var(--color-surface-panel)]">
           {rows.length > 0 ? (
             rows.map((row, rowIndex) => (
-              <tr className="hover:bg-slate-50" key={rowKey(row, rowIndex)}>
+              <tr
+                className="border-b border-[var(--color-border-row)] transition-colors last:border-b-0 hover:bg-[var(--color-surface-page)] motion-reduce:transition-none"
+                key={rowKey(row, rowIndex)}
+              >
                 {columns.map((column) => (
                   <td
                     className={cn(
-                      'whitespace-nowrap px-4 py-3 text-slate-700',
+                      'mj-font-body whitespace-nowrap px-4 py-3 text-[var(--color-text-body)]',
                       alignClasses[column.align ?? 'left'],
                     )}
                     key={column.id}
@@ -106,8 +118,11 @@ export function DataTable<T>({
             ))
           ) : (
             <tr>
-              <td className="px-4 py-10 text-center text-slate-500" colSpan={columns.length}>
-                {emptyMessage}
+              <td
+                className="mj-font-body px-4 py-10 text-center text-[var(--color-text-muted)]"
+                colSpan={columns.length}
+              >
+                {emptyMessageResolved}
               </td>
             </tr>
           )}

@@ -1,9 +1,11 @@
 package com.ssafy.backend.queue.domain;
 
+import com.ssafy.backend.common.converter.StringMapJsonConverter;
 import com.ssafy.backend.common.entity.BaseTimeEntity;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.participant.domain.Participant;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -20,6 +22,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 팬미팅 참가자의 현재 대기 순서와 상태를 저장하는 엔티티다.
@@ -29,7 +32,6 @@ import java.time.LocalDateTime;
 @Table(name = "queue_entries")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class QueueEntry extends BaseTimeEntity {
-    private static final int MAX_RECALL_COUNT = 1;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -63,6 +65,19 @@ public class QueueEntry extends BaseTimeEntity {
     @Column(name = "no_show_at")
     private LocalDateTime noShowAt;
 
+    @Column(name = "last_change_reason", length = 300)
+    private String lastChangeReason;
+
+    @Column(name = "last_change_key", length = 80)
+    private String lastChangeKey;
+
+    @Convert(converter = StringMapJsonConverter.class)
+    @Column(name = "last_change_args", columnDefinition = "TEXT")
+    private Map<String, String> lastChangeArguments;
+
+    @Column(name = "last_changed_at")
+    private LocalDateTime lastChangedAt;
+
     /** 참가자 배정 순번을 사용하는 초기 대기열 항목을 생성한다. */
     public static QueueEntry create(FanMeeting meeting, Participant participant) {
         QueueEntry entry = new QueueEntry();
@@ -88,10 +103,15 @@ public class QueueEntry extends BaseTimeEntity {
         this.calledAt = calledAt;
     }
 
-    /** 호출 중인 참가자의 재호출 횟수와 호출 시각을 갱신한다. */
-    public void recall(LocalDateTime calledAt) {
+    /**
+     * 호출 중인 참가자의 재호출 횟수와 호출 시각을 팬미팅별 허용 횟수 안에서 갱신한다.
+     *
+     * @param calledAt 재호출 시각
+     * @param maxRecallCount 팬미팅에 설정된 최대 재호출 횟수
+     */
+    public void recall(LocalDateTime calledAt, int maxRecallCount) {
         requireStatus(QueueEntryStatus.CALLED);
-        if (recallCount >= MAX_RECALL_COUNT) {
+        if (maxRecallCount < 0 || recallCount >= maxRecallCount) {
             throw new IllegalStateException("재호출 가능 횟수를 초과했습니다.");
         }
         this.recallCount++;
@@ -134,12 +154,45 @@ public class QueueEntry extends BaseTimeEntity {
         this.status = QueueEntryStatus.DONE;
     }
 
+    /** 팬미팅 종료 또는 운영자 조치로 미완료 대기열 항목을 제거 상태로 전환한다. */
+    public void remove() {
+        if (status == QueueEntryStatus.REMOVED
+                || status == QueueEntryStatus.DONE
+                || status == QueueEntryStatus.NO_SHOW) {
+            return;
+        }
+        this.status = QueueEntryStatus.REMOVED;
+    }
+
     /** 대기 전 또는 대기 중인 참가자의 순서를 변경한다. */
     public void changePosition(int newPosition) {
         if (status != QueueEntryStatus.NOT_ENTERED && status != QueueEntryStatus.WAITING) {
             throw new IllegalStateException("순서를 변경할 수 없는 대기열 상태입니다.");
         }
         this.queuePosition = newPosition;
+    }
+
+    /**
+     * 운영자 순서 조정으로 순번이 바뀐 사유와 반영 시각을 기록한다.
+     *
+     * <p>대기 화면은 순번만 보고는 왜 바뀌었는지 알 수 없으므로 최근 1건의 안내 문구를 보관하며,
+     * 다음 조정이 일어나면 덮어쓴다. 상태 전이가 아니므로 현재 상태를 검증하지 않는다.
+     *
+     * <p>안내 문구는 기록 시점 팬의 계정 선호 언어로 굳으므로, 대기 화면이 자기 화면 언어로 다시
+     * 만들 수 있도록 사전 키와 자리표시자 값도 함께 남긴다.
+     *
+     * @param reason 팬에게 안내할 변경 사유 문구
+     * @param changeKey 안내 문구에 대응하는 프론트 사전 키
+     * @param changeArguments 안내 문구 자리표시자 이름별 값이며 비어 있을 수 있다
+     * @param changedAt 순번 변경이 반영된 시각
+     */
+    public void recordPositionChange(String reason, String changeKey,
+                                     Map<String, String> changeArguments,
+                                     LocalDateTime changedAt) {
+        this.lastChangeReason = reason;
+        this.lastChangeKey = changeKey;
+        this.lastChangeArguments = changeArguments;
+        this.lastChangedAt = changedAt;
     }
 
     /** 예상한 현재 상태가 아니면 상태 전이를 거부한다. */

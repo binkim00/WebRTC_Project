@@ -29,7 +29,7 @@ class CallSessionControllerTest {
         LocalDateTime now = LocalDateTime.of(2026, 7, 28, 11, 0);
         CallSessionStatusResponse expected = new CallSessionStatusResponse(
                 100L, CallSessionStatus.ACTIVE, now.minusSeconds(10), now.plusSeconds(50),
-                null, now, 50L, null, null);
+                null, now, 50L, null, null, "ko", "ko");
         when(service.getStatus(100L, principal)).thenReturn(expected);
 
         ApiResponse<CallSessionStatusResponse> response =

@@ -56,6 +56,24 @@ public class LiveKitRoomParticipantService {
     }
 
     /**
+     * 팬미팅 종료 후 공유 LiveKit Room과 남아 있는 참가자 연결을 제거한다.
+     * 존재하지 않는 Room은 이미 정리된 것으로 처리한다.
+     *
+     * @param roomId 삭제할 공유 LiveKit Room 식별자
+     * @throws BusinessException LiveKit Room 삭제 요청이 실패한 경우
+     */
+    public void deleteRoom(String roomId) {
+        try {
+            Response<Void> response = roomServiceClient.deleteRoom(roomId).execute();
+            if (!response.isSuccessful() && response.code() != 404) {
+                throw new BusinessException(ErrorCode.LIVEKIT_OPERATION_FAILED);
+            }
+        } catch (IOException exception) {
+            throw new BusinessException(ErrorCode.LIVEKIT_OPERATION_FAILED);
+        }
+    }
+
+    /**
      * LiveKit Room에서 identity가 일치하는 참가자를 제거한다.
      *
      * @param roomId 공유 LiveKit Room 식별자

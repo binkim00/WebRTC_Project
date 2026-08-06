@@ -10,13 +10,16 @@ import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
+import com.ssafy.backend.recording.egress.RecordingEgressCoordinator;
+import com.ssafy.backend.recording.egress.RecordingEgressWebhookHandler;
 import livekit.LivekitWebhook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -26,18 +29,24 @@ import java.util.Map;
 @Service
 public class LiveKitWebhookService {
 
+    private static final Logger log = LoggerFactory.getLogger(LiveKitWebhookService.class);
+
     private static final String PARTICIPANT_JOINED = "participant_joined";
     private static final String PARTICIPANT_LEFT = "participant_left";
     private static final String PARTICIPANT_CONNECTION_ABORTED = "participant_connection_aborted";
+    private static final String EGRESS_STARTED = "egress_started";
+    private static final String EGRESS_UPDATED = "egress_updated";
+    private static final String EGRESS_ENDED = "egress_ended";
     private static final String ROLE_ATTRIBUTE = "role";
     private static final String CALL_SESSION_ID_ATTRIBUTE = "call_session_id";
     private static final String FAN_ROLE = "FAN";
     private static final String HOST_ROLE = "INFLUENCER";
-    private static final Duration RECONNECT_GRACE_PERIOD = Duration.ofSeconds(60);
 
     private final CallSessionRepository callSessionRepository;
     private final MeetingOperationSettingRepository operationSettingRepository;
     private final QueueRealtimeStore realtimeStore;
+    private final RecordingEgressCoordinator recordingEgressCoordinator;
+    private final RecordingEgressWebhookHandler recordingEgressWebhookHandler;
     private final Clock clock;
 
     /**
@@ -52,11 +61,15 @@ public class LiveKitWebhookService {
             CallSessionRepository callSessionRepository,
             MeetingOperationSettingRepository operationSettingRepository,
             QueueRealtimeStore realtimeStore,
+            RecordingEgressCoordinator recordingEgressCoordinator,
+            RecordingEgressWebhookHandler recordingEgressWebhookHandler,
             Clock clock
     ) {
         this.callSessionRepository = callSessionRepository;
         this.operationSettingRepository = operationSettingRepository;
         this.realtimeStore = realtimeStore;
+        this.recordingEgressCoordinator = recordingEgressCoordinator;
+        this.recordingEgressWebhookHandler = recordingEgressWebhookHandler;
         this.clock = clock;
     }
 
@@ -73,20 +86,50 @@ public class LiveKitWebhookService {
             throw new BusinessException(ErrorCode.INVALID_LIVEKIT_WEBHOOK);
         }
         if (!realtimeStore.claimWebhookEvent(eventId)) {
+            log.debug("이미 처리한 LiveKit webhook을 건너뜁니다. eventId={} event={}",
+                    eventId, event.getEvent());
             return;
         }
 
         try {
             if (PARTICIPANT_JOINED.equals(event.getEvent())) {
+                logParticipantEvent(event);
                 handleParticipantJoined(event);
             } else if (PARTICIPANT_LEFT.equals(event.getEvent())
                     || PARTICIPANT_CONNECTION_ABORTED.equals(event.getEvent())) {
+                logParticipantEvent(event);
                 handleParticipantDisconnected(event);
+            } else if (EGRESS_STARTED.equals(event.getEvent())
+                    || EGRESS_UPDATED.equals(event.getEvent())
+                    || EGRESS_ENDED.equals(event.getEvent())) {
+                recordingEgressWebhookHandler.handle(event);
             }
         } catch (RuntimeException exception) {
             realtimeStore.releaseWebhookEvent(eventId);
             throw exception;
         }
+    }
+
+    /**
+     * 통화 연결 실패를 추적할 수 있도록 참가자 이벤트의 식별 정보를 남긴다.
+     *
+     * <p>이벤트 도착 순서와 토큰 attribute 유무는 통화가 시작되지 않는 원인을 가르는데, 기록이
+     * 없으면 사후에 확인할 방법이 없어 입장·퇴장 이벤트에 한해 남긴다. {@code role}이 비어 있으면
+     * LiveKit이 attribute를 함께 보내지 않은 경우다.
+     *
+     * @param event 처리 직전의 참가자 입장 또는 퇴장 webhook 이벤트
+     */
+    private void logParticipantEvent(LivekitWebhook.WebhookEvent event) {
+        Map<String, String> attributes = event.hasParticipant()
+                ? event.getParticipant().getAttributesMap()
+                : Map.of();
+        log.info("LiveKit 참가자 이벤트 event={} eventId={} room={} identity={} role={} callSessionId={}",
+                event.getEvent(),
+                event.getId(),
+                event.hasRoom() ? event.getRoom().getName() : null,
+                event.hasParticipant() ? event.getParticipant().getIdentity() : null,
+                attributes.get(ROLE_ATTRIBUTE),
+                attributes.get(CALL_SESSION_ID_ATTRIBUTE));
     }
 
     /**
@@ -197,10 +240,11 @@ public class LiveKitWebhookService {
         callSession.activate(startedAt, setting.getCallDurationSec());
         queueEntry.startCall();
         realtimeStore.updateStatus(meetingId, queueEntry.getId(), QueueEntryStatus.IN_CALL);
+        recordingEgressCoordinator.prepareStart(callSession, setting, startedAt);
     }
 
     /**
-     * 활성 통화의 연결 종료 역할과 60초 재접속 허용 시각을 기록한다.
+     * 활성 통화의 연결 종료 역할과 팬미팅별 재접속 허용 시각을 기록한다.
      *
      * @param callSession 연결이 끊긴 활성 통화 세션
      * @param role 연결이 끊긴 참가자 역할
@@ -209,8 +253,11 @@ public class LiveKitWebhookService {
         if (callSession.getStatus() != CallSessionStatus.ACTIVE) {
             return;
         }
-        callSession.openReconnectWindow(
-                LocalDateTime.now(clock).plus(RECONNECT_GRACE_PERIOD));
+        Long meetingId = callSession.getQueueEntry().getMeeting().getId();
+        MeetingOperationSetting setting = operationSettingRepository.findById(meetingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_SETTING_NOT_FOUND));
+        callSession.openReconnectWindow(LocalDateTime.now(clock)
+                .plusSeconds(setting.getReconnectGraceSec()));
         realtimeStore.markDisconnectRole(callSession.getId(), role);
     }
 

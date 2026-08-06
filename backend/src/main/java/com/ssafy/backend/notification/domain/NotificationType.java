@@ -9,5 +9,6 @@ public enum NotificationType {
     QUEUE_CHANGE_RESULT,
     ENTER_NOW,
     MEETING_CHANGED,
-    MEETING_CANCELED
+    MEETING_CANCELED,
+    MEETING_PUBLISHED
 }

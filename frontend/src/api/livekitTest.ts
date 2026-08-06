@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
 export type LiveKitTestTokenResponse = {
   liveKitUrl: string
@@ -13,7 +14,7 @@ export async function issueLiveKitTestToken(
 ): Promise<LiveKitTestTokenResponse> {
   const normalizedIdentity = identity.trim()
   if (!normalizedIdentity) {
-    throw new TypeError('참가자 ID를 입력해 주세요.')
+    throw new TypeError(translate('livekitTest.t1'))
   }
 
   const response = await apiRequest<unknown>('/api/v1/livekit/test-token', {
@@ -25,7 +26,7 @@ export async function issueLiveKitTestToken(
   })
 
   if (typeof response !== 'object' || response === null) {
-    throw new TypeError('LiveKit 테스트 토큰 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('livekitTest.t2'))
   }
 
   const data = response as Record<string, unknown>
@@ -35,7 +36,7 @@ export async function issueLiveKitTestToken(
     typeof data.roomName !== 'string' ||
     typeof data.identity !== 'string'
   ) {
-    throw new TypeError('LiveKit 테스트 토큰 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('livekitTest.t3'))
   }
 
   return {

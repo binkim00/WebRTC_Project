@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 import { getAuthSession } from './auth'
+import { translate } from '../i18n'
 
 export type CallSessionRequestOptions = {
   authToken?: string
@@ -23,6 +24,15 @@ export type CallSessionStatusResponse = {
   remainingSec: number
   reconnectAllowedUntil: string | null
   endReason: string | null
+  /**
+   * 이 통화의 팬 자막 언어 코드(ko·en·ja·zh·vi)다.
+   *
+   * 통화 시작 시점의 값으로 서버에 고정 저장되어 있다. 통화 화면은 이 값과
+   * `influencerLanguage`를 비교해 실시간 자막의 초기 표시 여부를 정한다.
+   */
+  fanLanguage: string | null
+  /** 이 통화의 인플루언서 자막 언어 코드다. 서버가 확인할 수 없으면 null이다. */
+  influencerLanguage: string | null
 }
 
 export type ForceEndCallSessionRequest = {
@@ -34,6 +44,13 @@ export type ForceEndCallSessionResponse = {
   status: 'ENDED'
   endedAt: string
   endReason: 'FORCED'
+}
+
+export type CallSessionEndResponse = {
+  callSessionId: number
+  status: 'ENDED'
+  endedAt: string
+  endReason: 'NORMAL'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -52,7 +69,7 @@ function requireCallSessionId(callSessionId: string): string {
   const normalizedId = callSessionId.trim()
 
   if (!normalizedId) {
-    throw new TypeError('callSessionId는 비어 있을 수 없습니다.')
+    throw new TypeError(translate('callSessions.t1'))
   }
 
   return encodeURIComponent(normalizedId)
@@ -96,7 +113,10 @@ function isCallSessionStatusResponse(
     Number.isFinite(value.remainingSec) &&
     value.remainingSec >= 0 &&
     isOptionalString(value.reconnectAllowedUntil) &&
-    isOptionalString(value.endReason)
+    isOptionalString(value.endReason) &&
+    // 언어는 자막 표시 힌트이므로 값이 없어도 통화 상태 조회를 실패로 보지 않는다.
+    isOptionalString(value.fanLanguage) &&
+    isOptionalString(value.influencerLanguage)
   )
 }
 
@@ -113,6 +133,18 @@ function isForceEndCallSessionResponse(
     value.status === 'ENDED' &&
     isNonEmptyString(value.endedAt) &&
     value.endReason === 'FORCED'
+  )
+}
+
+function isCallSessionEndResponse(value: unknown): value is CallSessionEndResponse {
+  if (!isRecord(value)) return false
+
+  return (
+    typeof value.callSessionId === 'number' &&
+    Number.isFinite(value.callSessionId) &&
+    value.status === 'ENDED' &&
+    isNonEmptyString(value.endedAt) &&
+    value.endReason === 'NORMAL'
   )
 }
 
@@ -144,7 +176,7 @@ export async function issueLiveKitAccessToken(
 
   const data = unwrapApiResponse(response)
   if (!isLiveKitAccessTokenResponse(data)) {
-    throw new TypeError('LiveKit 입장 토큰 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('callSessions.t2'))
   }
 
   return data
@@ -166,10 +198,21 @@ export async function getCallSessionStatus(
 
   const data = unwrapApiResponse(response)
   if (!isCallSessionStatusResponse(data)) {
-    throw new TypeError('통화 상태 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('callSessions.t3'))
   }
 
   return data
+}
+
+/**
+ * 서버가 세션을 마감했는지 판단한다.
+ *
+ * status 문자열이 'ENDED'가 아니어도(예: 서버가 TIMEOUT 같은 별도 상태로 마감) `endedAt`이
+ * 채워져 있으면 끝난 세션으로 본다. 종료 감지가 문자열 하나에 묶여 있으면 서버가 상태 값을
+ * 다르게 마감했을 때 팬이 통화 방에서 나가지 못한다.
+ */
+export function isCallSessionEnded(status: CallSessionStatusResponse): boolean {
+  return status.status === 'ENDED' || status.endedAt !== null
 }
 
 export async function forceEndCallSession(
@@ -181,7 +224,10 @@ export async function forceEndCallSession(
   const reason = request.reason.trim()
 
   if (!reason) {
-    throw new TypeError('강제 종료 사유는 비어 있을 수 없습니다.')
+    throw new TypeError(translate('callSessions.t4'))
+  }
+  if (reason.length > 255) {
+    throw new TypeError(translate('callSessions.t5'))
   }
 
   const response = await apiRequest<unknown>(
@@ -196,7 +242,30 @@ export async function forceEndCallSession(
 
   const data = unwrapApiResponse(response)
   if (!isForceEndCallSessionResponse(data)) {
-    throw new TypeError('통화 강제 종료 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('callSessions.t6'))
+  }
+
+  return data
+}
+
+/** 팬이 통화 종료를 선택했을 때 서버 세션도 정상 종료 상태로 전환한다. */
+export async function endCallSessionByFan(
+  callSessionId: string,
+  options: CallSessionRequestOptions = {},
+): Promise<CallSessionEndResponse> {
+  const encodedId = requireCallSessionId(callSessionId)
+  const response = await apiRequest<unknown>(
+    `/api/v1/call-sessions/${encodedId}/end`,
+    {
+      method: 'POST',
+      authToken: getRequestAuthToken(options),
+      signal: options.signal,
+    },
+  )
+
+  const data = unwrapApiResponse(response)
+  if (!isCallSessionEndResponse(data)) {
+    throw new TypeError(translate('callSessions.t7'))
   }
 
   return data

@@ -7,12 +7,12 @@ translated_text는 항상 None.
 import asyncio
 import logging
 import os
+from collections.abc import Callable
+
 from google.oauth2 import service_account
 from google.cloud import speech_v1 as speech
-from datetime import datetime, timezone
 
-from google.cloud import speech_v1 as speech
-
+from db.timeutil import now_kst
 from stt.base import STTAdapter, FinalTranscript
 
 logger = logging.getLogger(__name__)
@@ -26,13 +26,14 @@ class GoogleSTTAdapter(STTAdapter):
             scopes=["https://www.googleapis.com/auth/cloud-platform"],
         )
         self._client = speech.SpeechAsyncClient(credentials=credentials)
-        self._closed = False #종료여부 플래그
+        self._stop = asyncio.Event()  # close() 시 set → 오디오 입력 종료 신호
 
     async def transcribe(
         self,
         audio_stream, #구독 중인 오디오
         language: str, #사용하는 언어
-        on_final: callable, #전체 문장이면 call
+        on_final: Callable, #전체 문장이면 call
+        on_interim: Callable | None = None,  # 한-한은 interim 미사용(무시). 인터페이스 호환용.
     ) -> None:
         """
         AudioStream → Google STT streaming API → concluded 시 on_final 콜백.
@@ -63,36 +64,56 @@ class GoogleSTTAdapter(STTAdapter):
             yield speech.StreamingRecognizeRequest(
                 streaming_config=streaming_config
             )
-            # 이후: 오디오 청크
-            async for audio_event in audio_stream:
-                if self._closed:
-                    break
-                #LiveKit 오디오 프레임에서 바이트 데이터를 꺼냄
-                frame = audio_event.frame
-                pcm_data = frame.data.tobytes()
-                #오디오 바이트를 Google STT 요청으로 감싸서 내보냄
-                yield speech.StreamingRecognizeRequest(
-                    audio_content=pcm_data
-                )
+            # 이후: 오디오 청크.
+            # close()가 self._stop을 set하면 다음 프레임을 기다리지 않고 즉시 입력을 끊는다.
+            # (그래야 Google이 남은 오디오로 '마지막 final'을 방출하고 스트림을 닫는다)
+            aiter = audio_stream.__aiter__()
+            stop_task = asyncio.ensure_future(self._stop.wait())
+            try:
+                while True:
+                    frame_task = asyncio.ensure_future(aiter.__anext__())
+                    done, _ = await asyncio.wait(
+                        {frame_task, stop_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if stop_task in done:
+                        frame_task.cancel()
+                        break
+                    try:
+                        audio_event = frame_task.result()
+                    except StopAsyncIteration:
+                        break
+                    #LiveKit 오디오 프레임 → Google STT 요청
+                    yield speech.StreamingRecognizeRequest(
+                        audio_content=audio_event.frame.data.tobytes()
+                    )
+            finally:
+                stop_task.cancel()
 
         try:
             responses = await self._client.streaming_recognize(
                 requests=request_generator()
             )
 
+            # 문장(발화)마다 증가하는 식별자. 한-한은 interim이 없어 final마다 새 문장이다.
+            # 프론트가 (speaker_role, segment_id)로 자막 줄을 구분하므로 final도 고유 id가 필요하다.
+            segment_seq = 0
+
+            # self._stop에 즉시 break하지 않는다 — 입력이 끊긴 뒤 Google이 내보내는
+            # '마지막 final'까지 모두 읽어 저장한다(마지막 문장 유실 방지).
             async for response in responses:
-                if self._closed:
-                    break
                 for result in response.results:
                     if result.is_final:
                         text = result.alternatives[0].transcript
                         if text.strip(): #.strip() 공백제거
+                            segment_seq += 1
                             transcript = FinalTranscript(
                                 text=text,
                                 language=language,
-                                spoken_at=datetime.now(timezone.utc),
+                                spoken_at=now_kst(),
                                 translated_text=None, # 한-한 미팅인 경우 번역 필요 없음
                                 translated_lang=None,
+                                segment_id=segment_seq,
                             )
                             await on_final(transcript)
 
@@ -102,7 +123,8 @@ class GoogleSTTAdapter(STTAdapter):
             logger.exception("Google STT 에러")
 
     async def close(self) -> None:
-        self._closed = True
+        # 오디오 입력만 끊는다. 응답(마지막 final) drain은 transcribe가 계속 처리한다.
+        self._stop.set()
 
     @staticmethod
     def _to_google_lang(lang: str) -> str:
@@ -112,5 +134,6 @@ class GoogleSTTAdapter(STTAdapter):
             "en": "en-US",
             "ja": "ja-JP",
             "zh": "zh-CN",
+            "vi": "vi-VN",
         }
         return mapping.get(lang, lang)

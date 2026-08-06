@@ -1,7 +1,11 @@
 services:
   mysql:
     image: 'mysql:8.4'
+    # 운영과 같은 시간대로 맞춘다. 이게 없으면 컨테이너가 UTC 라서
+    # data-local.sql 의 NOW() 가 애플리케이션 시각보다 9시간 이르게 들어간다.
+    command: --default-time-zone=+09:00
     environment:
+      - 'TZ=Asia/Seoul'
       - 'MYSQL_DATABASE=melly'
       - 'MYSQL_PASSWORD=secret'
       - 'MYSQL_ROOT_PASSWORD=verysecret'
@@ -11,5 +15,17 @@ services:
 
   redis:
     image: 'redis:7.4-alpine'
+    environment:
+      - 'TZ=Asia/Seoul'
     ports:
       - '6379:6379'
+
+  # 로컬에서 인증 메일을 외부로 보내지 않고 가로채 확인하는 SMTP 서버다.
+  # EMAIL_VERIFY_DELIVERY=smtp 로 두고 http://localhost:8025 에서 수신을 확인한다.
+  mailpit:
+    image: 'axllent/mailpit:latest'
+    environment:
+      - 'TZ=Asia/Seoul'
+    ports:
+      - '1025:1025'
+      - '8025:8025'

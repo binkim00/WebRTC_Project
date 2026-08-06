@@ -61,6 +61,29 @@ public class QueueInitializationService {
     }
 
     /**
+     * 추첨 트랜잭션 안에서 방금 확정된 참가자로 대기열을 초기화한다.
+     *
+     * <p>외부 HTTP로 노출하지 않는 내부 진입점이며 호출 시점에 이미 운영 권한 검증과
+     * 팬미팅 잠금이 끝나 있어야 한다. 호출자의 트랜잭션에 반드시 참여해 추첨과 대기열 생성이
+     * 함께 성공하거나 함께 취소되도록 한다. 이미 대기열이 있으면 기존 데이터를 삭제하거나
+     * 재동기화하지 않고 거부한다.
+     *
+     * @param meeting 대기열을 초기화할 팬미팅
+     * @return 생성된 대기열 항목 수
+     * @throws BusinessException 이미 초기화된 대기열이거나 초기화할 참가자가 없는 경우
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public QueueInitializationResponse initializeAfterDraw(FanMeeting meeting) {
+        Long meetingId = meeting.getId();
+        if (queueEntryRepository.existsByMeeting_Id(meetingId) || realtimeStore.isInitialized(meetingId)) {
+            throw new BusinessException(ErrorCode.QUEUE_ALREADY_INITIALIZED);
+        }
+        List<QueueEntry> entries = createEntries(meeting);
+        initializeRealtimeState(meetingId, entries);
+        return new QueueInitializationResponse(meetingId, entries.size());
+    }
+
+    /**
      * 확정 참가자의 최초 대기실 입장 시 DB 대기열과 Redis 실시간 상태를 준비한다.
      *
      * @param meetingId 팬미팅 식별자

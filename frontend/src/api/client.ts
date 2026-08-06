@@ -1,8 +1,16 @@
 import { ApiError } from './ApiError'
+import {
+  AUTH_EXPIRED_EVENT,
+  clearAuthSession,
+  getAuthSession,
+  isLoginResponse,
+  replaceAuthSession,
+  type LoginResponse,
+} from './authSession'
+import { translate } from '../i18n'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-const AUTH_SESSION_KEY = 'melly-auth-session'
-const AUTH_SAVED_AT_KEY = 'melly-auth-saved-at'
+export const DEFAULT_API_TIMEOUT_MS = 15_000
 
 type ErrorResponse = {
   code?: string
@@ -12,38 +20,88 @@ type ErrorResponse = {
 
 export type ApiRequestOptions = RequestInit & {
   authToken?: string
+  /** 0이면 자동 타임아웃을 끄고 호출자가 전달한 AbortSignal만 사용한다. */
+  timeoutMs?: number
 }
 
-function getStoredAccessToken(): string | undefined {
-  const storage = window.localStorage.getItem(AUTH_SESSION_KEY)
-    ? window.localStorage
-    : window.sessionStorage
-  const serialized = storage.getItem(AUTH_SESSION_KEY)
+let refreshPromise: Promise<LoginResponse | null> | null = null
 
-  if (!serialized) return undefined
+type RequestAbortContext = {
+  signal: AbortSignal
+  didTimeout: () => boolean
+  cleanup: () => void
+}
+
+function requestAbortContext(
+  externalSignal: AbortSignal | null | undefined,
+  timeoutMs: number,
+): RequestAbortContext {
+  const controller = new AbortController()
+  let timedOut = false
+
+  const abortFromCaller = () => controller.abort(externalSignal?.reason)
+  if (externalSignal?.aborted) abortFromCaller()
+  else externalSignal?.addEventListener('abort', abortFromCaller, { once: true })
+
+  // 폴링을 포함한 모든 API가 무기한 대기하지 않도록 공통 제한 시간을 둔다.
+  const timer = timeoutMs > 0
+    ? globalThis.setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, timeoutMs)
+    : undefined
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      if (timer !== undefined) globalThis.clearTimeout(timer)
+      externalSignal?.removeEventListener('abort', abortFromCaller)
+    },
+  }
+}
+
+function normalizedTimeout(timeoutMs: number | undefined): number {
+  if (timeoutMs === undefined) return DEFAULT_API_TIMEOUT_MS
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
+    throw new TypeError(translate('client.t1'))
+  }
+  return timeoutMs
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs = DEFAULT_API_TIMEOUT_MS,
+): Promise<Response> {
+  const abortContext = requestAbortContext(init.signal, normalizedTimeout(timeoutMs))
 
   try {
-    const session: unknown = JSON.parse(serialized)
-    if (typeof session !== 'object' || session === null) return undefined
-    const record = session as Record<string, unknown>
-    const accessToken = record.accessToken
-    const expiresIn = record.expiresIn
-    const savedAt = Number(storage.getItem(AUTH_SAVED_AT_KEY))
-    if (
-      typeof expiresIn !== 'number' ||
-      !Number.isFinite(savedAt) ||
-      Date.now() >= savedAt + expiresIn * 1000
-    ) {
-      window.localStorage.removeItem(AUTH_SESSION_KEY)
-      window.sessionStorage.removeItem(AUTH_SESSION_KEY)
-      window.localStorage.removeItem(AUTH_SAVED_AT_KEY)
-      window.sessionStorage.removeItem(AUTH_SAVED_AT_KEY)
-      return undefined
+    return await fetch(input, { ...init, signal: abortContext.signal })
+  } catch (error) {
+    if (abortContext.didTimeout()) {
+      throw new ApiError(0, 'REQUEST_TIMEOUT', translate('client.t2'))
     }
-    return typeof accessToken === 'string' && accessToken.trim() ? accessToken : undefined
-  } catch {
-    return undefined
+    throw error
+  } finally {
+    abortContext.cleanup()
   }
+}
+
+function requestHeaders(options: RequestInit, authToken?: string): Headers {
+  const headers = new Headers(options.headers)
+
+  if (authToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${authToken}`)
+  }
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json')
+
+  // 현재 문자열 본문 호출은 모두 JSON.stringify를 사용한다. FormData의 boundary는 브라우저에 맡긴다.
+  if (typeof options.body === 'string' && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+
+  return headers
 }
 
 async function readErrorResponse(response: Response): Promise<ErrorResponse> {
@@ -76,36 +134,104 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const { authToken, ...requestOptions } = options
-  const resolvedAuthToken = authToken ?? getStoredAccessToken()
+  return requestWithRefresh<T>(path, options, true)
+}
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...requestOptions,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(resolvedAuthToken ? { Authorization: `Bearer ${resolvedAuthToken}` } : {}),
-      ...requestOptions.headers,
+async function refreshStoredSession(): Promise<LoginResponse | null> {
+  if (refreshPromise) return refreshPromise
+
+  const session = getAuthSession()
+  if (!session) return null
+
+  refreshPromise = fetchWithTimeout(
+    `${API_URL}/api/v1/auth/reissue`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: session.refreshToken }),
     },
-  })
+  )
+    .then(async (response) => {
+      if (!response.ok) return null
+
+      const data: unknown = await response.json()
+      if (!isLoginResponse(data)) return null
+
+      replaceAuthSession(data)
+      return data
+    })
+    .catch(() => null)
+    .finally(() => {
+      refreshPromise = null
+    })
+
+  return refreshPromise
+}
+
+async function requestWithRefresh<T>(
+  path: string,
+  options: ApiRequestOptions,
+  allowRefresh: boolean,
+): Promise<T> {
+  const {
+    authToken,
+    timeoutMs,
+    signal,
+    ...requestOptions
+  } = options
+
+  const response = await fetchWithTimeout(
+    `${API_URL}${path}`,
+    {
+      ...requestOptions,
+      credentials: 'include',
+      headers: requestHeaders(requestOptions, authToken),
+      signal,
+    },
+    timeoutMs,
+  )
+
+  if (response.status === 401 && authToken && allowRefresh) {
+    const refreshedSession = await refreshStoredSession()
+
+    if (refreshedSession) {
+      return requestWithRefresh<T>(
+        path,
+        { ...options, authToken: refreshedSession.accessToken },
+        false,
+      )
+    }
+
+    clearAuthSession()
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+    }
+  }
 
   if (!response.ok) {
     const error = await readErrorResponse(response)
-    if (response.status === 401 && path !== '/api/v1/auth/login') {
-      window.localStorage.removeItem(AUTH_SESSION_KEY)
-      window.sessionStorage.removeItem(AUTH_SESSION_KEY)
-      window.localStorage.removeItem(AUTH_SAVED_AT_KEY)
-      window.sessionStorage.removeItem(AUTH_SAVED_AT_KEY)
-      window.location.replace('/login')
-    }
 
     throw new ApiError(
       response.status,
       error.code ?? `HTTP_${response.status}`,
-      error.detail ?? error.message ?? 'API 요청에 실패했습니다.',
+      error.detail ?? error.message ?? translate('client.t3'),
       error.detail,
     )
   }
 
-  return response.json() as Promise<T>
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const text = await response.text()
+  if (!text) {
+    return undefined as T
+  }
+
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return text as T
+  }
 }
