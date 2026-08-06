@@ -179,6 +179,11 @@ public enum ErrorCode {
     SOCIAL_LAST_LOGIN_METHOD(HttpStatus.CONFLICT,
             "이 연결을 해제하면 로그인할 방법이 없어져요. 다른 소셜 계정을 먼저 연결해 주세요."),
 
+    // 종료·취소된 팬미팅 진입 차단
+    // 종료(ENDED)와 취소(CANCELED)를 한 코드로 묶는다. 팬 화면에서 두 상태의 다음 동선이
+    // "녹화 다시보기·기념 카드"로 같으므로, 프론트가 코드 하나만 보고 안내를 바꿀 수 있게 한다.
+    FAN_MEETING_CLOSED(HttpStatus.CONFLICT, "종료되었거나 취소된 팬미팅입니다."),
+
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 
     private final HttpStatus status;

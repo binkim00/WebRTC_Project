@@ -35,6 +35,7 @@ import {
   SUBTITLE_DATA_TOPIC,
   appendSubtitleLine,
   parseSubtitlePayload,
+  shouldStartWithCaption,
   type SubtitleLine,
 } from './subtitleChannel'
 import type { MediaAction, VideoCallRoomProps } from './types'
@@ -167,7 +168,19 @@ export function ConnectedCallRoom({
   const microphoneTracks = useTracks([Track.Source.Microphone])
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant()
   const [endDialogOpen, setEndDialogOpen] = useState(false)
-  const [captionEnabled, setCaptionEnabled] = useState(true)
+  /**
+   * 이번 통화에서 자막을 켠 상태로 시작할지다. 양쪽 언어가 같으면 꺼진 상태로 시작한다.
+   *
+   * 언어는 통화 상태 응답에서 읽는다. LiveKit 토큰 attributes에는 자기 쪽 언어만 담겨 있어
+   * 상대 언어를 알 수 없고, 상대 참가자 attributes를 기다리면 상대가 입장할 때까지 판단을
+   * 미뤄야 해서 자막이 잠깐 보이다 사라진다. 상태 응답은 통화 화면을 그리기 전에 이미
+   * 받아 두므로(VideoCallRoom) 첫 렌더부터 올바른 값으로 시작할 수 있다.
+   */
+  const captionDefaultEnabled = shouldStartWithCaption(
+    sessionStatus.fanLanguage,
+    sessionStatus.influencerLanguage,
+  )
+  const [captionEnabled, setCaptionEnabled] = useState(captionDefaultEnabled)
   const [mediaAction, setMediaAction] = useState<MediaAction>()
   const [mediaError, setMediaError] = useState<string>()
   const [departurePending, setDeparturePending] = useState(false)
@@ -296,6 +309,23 @@ export function ConnectedCallRoom({
       // 힌트 전달 실패는 통화 종료 흐름을 막지 않는다.
     }
   }, [callSessionId, localParticipant])
+
+  // 자막 초기값을 이미 적용한 통화 세션이다. 세션당 한 번만 적용해 사용자의 토글을 덮지 않는다.
+  const captionDefaultAppliedForRef = useRef<number>(undefined)
+
+  useEffect(() => {
+    // 호스트는 팬미팅 내내 같은 화면에 머물러 팬만 교체되므로, 새 통화의 언어 조합으로
+    // 자막 초기값을 다시 잡아야 한다. 기준은 **상태 응답이 말하는 세션**이다.
+    // 활성 세션 ID를 기준으로 삼으면, 상태 폴링이 아직 이전 세션을 가리키는 순간에
+    // 이전 통화의 언어로 잘못 판단할 수 있다.
+    //
+    // 같은 세션에서는 다시 실행되지 않으므로 사용자가 켠 자막은 통화가 끝날 때까지 유지된다.
+    const statusSessionId = sessionStatus.callSessionId
+    if (captionDefaultAppliedForRef.current === statusSessionId) return
+
+    captionDefaultAppliedForRef.current = statusSessionId
+    setCaptionEnabled(captionDefaultEnabled)
+  }, [captionDefaultEnabled, sessionStatus.callSessionId])
 
   useEffect(() => {
     // 팬이 교체되면 이전 팬의 대사를 비운다.

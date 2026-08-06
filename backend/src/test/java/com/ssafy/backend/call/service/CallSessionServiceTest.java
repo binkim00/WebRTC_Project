@@ -14,6 +14,7 @@ import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.queue.domain.QueueEntry;
+import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -89,6 +90,62 @@ class CallSessionServiceTest {
         assertThat(response.serverNow()).isEqualTo(serverNow);
         assertThat(response.remainingSec()).isEqualTo(45);
         assertThat(response.status()).isEqualTo(CallSessionStatus.ACTIVE);
+    }
+
+    /** 통화 화면이 자막 초기 표시를 판단할 수 있도록 양쪽 통화 언어를 함께 반환하는지 검증한다. */
+    @Test
+    void returnsBothCallLanguages() {
+        User fan = user(11L, UserRole.FAN);
+        User influencer = user(20L, UserRole.INFLUENCER);
+        Participant participant = mock(Participant.class);
+        QueueEntry queueEntry = mock(QueueEntry.class);
+        FanMeeting meeting = mock(FanMeeting.class);
+        CallSession callSession = mock(CallSession.class);
+        when(currentUserService.requireActiveUser(new AuthenticatedUser(11L, UserRole.FAN)))
+                .thenReturn(fan);
+        when(callSessionRepository.findAccessContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(callSession.getQueueEntry()).thenReturn(queueEntry);
+        when(callSession.getFanLanguage()).thenReturn("ko");
+        when(queueEntry.getParticipant()).thenReturn(participant);
+        when(queueEntry.getMeeting()).thenReturn(meeting);
+        when(participant.getFan()).thenReturn(fan);
+        when(meeting.getInfluencer()).thenReturn(influencer);
+        when(influencer.getPreferredLanguage()).thenReturn(PreferredLanguage.JAPANESE);
+
+        CallSessionStatusResponse response = service.getStatus(
+                CALL_SESSION_ID, new AuthenticatedUser(11L, UserRole.FAN));
+
+        assertThat(response.fanLanguage()).isEqualTo("ko");
+        assertThat(response.influencerLanguage()).isEqualTo("ja");
+    }
+
+    /** 인플루언서 선호 언어가 비어 있어도 상태 조회를 실패시키지 않는지 검증한다. */
+    @Test
+    void returnsNullInfluencerLanguageWhenPreferredLanguageMissing() {
+        User fan = user(11L, UserRole.FAN);
+        User influencer = user(20L, UserRole.INFLUENCER);
+        Participant participant = mock(Participant.class);
+        QueueEntry queueEntry = mock(QueueEntry.class);
+        FanMeeting meeting = mock(FanMeeting.class);
+        CallSession callSession = mock(CallSession.class);
+        when(currentUserService.requireActiveUser(new AuthenticatedUser(11L, UserRole.FAN)))
+                .thenReturn(fan);
+        when(callSessionRepository.findAccessContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(callSession.getQueueEntry()).thenReturn(queueEntry);
+        when(callSession.getFanLanguage()).thenReturn("en");
+        when(queueEntry.getParticipant()).thenReturn(participant);
+        when(queueEntry.getMeeting()).thenReturn(meeting);
+        when(participant.getFan()).thenReturn(fan);
+        when(meeting.getInfluencer()).thenReturn(influencer);
+        when(influencer.getPreferredLanguage()).thenReturn(null);
+
+        CallSessionStatusResponse response = service.getStatus(
+                CALL_SESSION_ID, new AuthenticatedUser(11L, UserRole.FAN));
+
+        assertThat(response.fanLanguage()).isEqualTo("en");
+        assertThat(response.influencerLanguage()).isNull();
     }
 
     /** 매니저 강제 종료 시 팬만 퇴장시키고 DB·Redis 대기열 상태를 완료로 맞추는지 검증한다. */

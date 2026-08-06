@@ -10,6 +10,7 @@ import com.ssafy.backend.notification.domain.NotificationType;
 import com.ssafy.backend.notification.dto.NotificationReadResponse;
 import com.ssafy.backend.notification.dto.NotificationResponse;
 import com.ssafy.backend.notification.repository.NotificationRepository;
+import com.ssafy.backend.notification.support.NotificationContent;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -145,8 +147,12 @@ class NotificationServiceTest {
                 recipient,
                 null,
                 NotificationType.APPLICATION_RESULT,
-                "응모 결과 안내",
-                "응모 결과가 발표되었습니다."
+                new NotificationContent(
+                        "응모 결과 안내",
+                        "응모 결과가 발표되었습니다.",
+                        "notification.applicationResult.selected",
+                        Map.of("meetingTitle", "테스트 팬미팅")
+                )
         );
         ReflectionTestUtils.setField(notification, "id", id);
         ReflectionTestUtils.setField(

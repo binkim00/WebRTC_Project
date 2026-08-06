@@ -116,6 +116,8 @@ public class QueueQueryService {
                 callSessionId,
                 callSessionId != null,
                 entry.getLastChangeReason(),
+                entry.getLastChangeKey(),
+                entry.getLastChangeArguments(),
                 entry.getLastChangedAt()
         );
     }
@@ -146,6 +148,8 @@ public class QueueQueryService {
                 null,
                 false,
                 entry.getLastChangeReason(),
+                entry.getLastChangeKey(),
+                entry.getLastChangeArguments(),
                 entry.getLastChangedAt()
         );
     }

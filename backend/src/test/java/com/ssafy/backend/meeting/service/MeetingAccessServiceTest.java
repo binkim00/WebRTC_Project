@@ -3,6 +3,7 @@ package com.ssafy.backend.meeting.service;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.meeting.domain.FanMeeting;
+import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
 import com.ssafy.backend.user.domain.User;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -82,6 +84,53 @@ class MeetingAccessServiceTest {
         assertThatThrownBy(() -> service.requireInfluencer(1L, other))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ACCESS_DENIED));
+    }
+
+    /** 종료된 팬미팅의 대기실 입장·장비 점검이 전용 오류로 막히는지 검증한다. */
+    @Test
+    void rejectsEndedMeetingAsJoinable() {
+        FanMeetingRepository meetingRepository = mock(FanMeetingRepository.class);
+        OrganizationMemberRepository memberRepository = mock(OrganizationMemberRepository.class);
+        MeetingAccessService service = new MeetingAccessService(meetingRepository, memberRepository);
+        FanMeeting meeting = mock(FanMeeting.class);
+        when(meeting.getStatus()).thenReturn(FanMeetingStatus.ENDED);
+        when(meetingRepository.findById(1L)).thenReturn(Optional.of(meeting));
+
+        assertThatThrownBy(() -> service.requireJoinableMeeting(1L))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.FAN_MEETING_CLOSED));
+    }
+
+    /** 취소된 팬미팅도 종료와 같은 오류로 막히는지 검증한다. */
+    @Test
+    void rejectsCanceledMeetingAsJoinable() {
+        FanMeetingRepository meetingRepository = mock(FanMeetingRepository.class);
+        OrganizationMemberRepository memberRepository = mock(OrganizationMemberRepository.class);
+        MeetingAccessService service = new MeetingAccessService(meetingRepository, memberRepository);
+        FanMeeting meeting = mock(FanMeeting.class);
+        when(meeting.getStatus()).thenReturn(FanMeetingStatus.CANCELED);
+
+        assertThatThrownBy(() -> service.requireJoinable(meeting))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.FAN_MEETING_CLOSED));
+    }
+
+    /** 준비 완료·진행 중 팬미팅은 그대로 통과하는지 검증한다. */
+    @Test
+    void allowsReadyAndLiveMeetingAsJoinable() {
+        FanMeetingRepository meetingRepository = mock(FanMeetingRepository.class);
+        OrganizationMemberRepository memberRepository = mock(OrganizationMemberRepository.class);
+        MeetingAccessService service = new MeetingAccessService(meetingRepository, memberRepository);
+        FanMeeting ready = mock(FanMeeting.class);
+        FanMeeting live = mock(FanMeeting.class);
+        when(ready.getStatus()).thenReturn(FanMeetingStatus.READY);
+        when(live.getStatus()).thenReturn(FanMeetingStatus.LIVE);
+        when(meetingRepository.findById(1L)).thenReturn(Optional.of(ready));
+
+        assertThat(service.requireJoinableMeeting(1L)).isSameAs(ready);
+        assertThatCode(() -> service.requireJoinable(live)).doesNotThrowAnyException();
     }
 
     /** 팬미팅 인플루언서가 매니저 전용 상태 변경 권한을 얻지 못하는지 검증한다. */

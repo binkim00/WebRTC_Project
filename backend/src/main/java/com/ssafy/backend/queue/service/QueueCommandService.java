@@ -93,11 +93,15 @@ public class QueueCommandService {
      * @param meetingId 팬미팅 식별자
      * @param principal JWT 인증 사용자 정보
      * @return 대기열 최초 입장 결과
-     * @throws BusinessException 대기실 오픈 전이거나 참가자 또는 상태 검증에 실패한 경우
+     * @throws BusinessException 팬미팅이 종료·취소되었거나 대기실 오픈 전이거나
+     *                          참가자 또는 상태 검증에 실패한 경우
      */
     @Transactional
     public QueueEnterResponse enter(Long meetingId, AuthenticatedUser principal) {
         User user = currentUserService.requireActiveUser(principal);
+        // 종료·취소 확인은 대기열 초기화보다 먼저 한다. 팬미팅 종료가 지운 Redis 대기열을
+        // 뒤늦은 입장 요청이 다시 만들어 내는 것을 막아야 하기 때문이다.
+        meetingAccessService.requireJoinableMeeting(meetingId);
         initializationService.ensureInitializedForParticipant(meetingId, user.getId());
         LocalDateTime now = LocalDateTime.now(clock);
         MeetingOperationSetting setting = operationSettingRepository.findById(meetingId)

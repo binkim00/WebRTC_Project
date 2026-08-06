@@ -1,9 +1,12 @@
 package com.ssafy.backend.notification.domain;
 
+import com.ssafy.backend.common.converter.StringMapJsonConverter;
 import com.ssafy.backend.common.entity.BaseCreatedTimeEntity;
 import com.ssafy.backend.meeting.domain.FanMeeting;
+import com.ssafy.backend.notification.support.NotificationContent;
 import com.ssafy.backend.user.domain.User;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -19,6 +22,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -53,27 +57,39 @@ public class Notification extends BaseCreatedTimeEntity {
     @Column(name = "message", nullable = false, columnDefinition = "TEXT")
     private String message;
 
+    @Column(name = "message_key", length = 80)
+    private String messageKey;
+
+    @Convert(converter = StringMapJsonConverter.class)
+    @Column(name = "message_args", columnDefinition = "TEXT")
+    private Map<String, String> messageArguments;
+
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
     /**
      * 사용자에게 전달할 팬미팅 알림을 생성한다.
      *
+     * <p>제목·본문은 만든 시점 수신자의 선호 언어로 고정되므로, 화면이 자기 언어로 다시 만들 수
+     * 있도록 사전 키와 자리표시자 값도 함께 보관한다.
+     *
      * @param user 알림 수신 사용자
      * @param meeting 관련 팬미팅
      * @param type 알림 유형
-     * @param title 알림 제목
-     * @param message 알림 본문
+     * @param content 수신자 언어로 만든 문구와 번역 재료
      * @return 읽지 않은 상태로 생성된 알림
      */
     public static Notification create(User user, FanMeeting meeting, NotificationType type,
-                                      String title, String message) {
+                                      NotificationContent content) {
+        Objects.requireNonNull(content);
         Notification notification = new Notification();
         notification.user = Objects.requireNonNull(user);
         notification.meeting = meeting;
         notification.type = Objects.requireNonNull(type);
-        notification.title = Objects.requireNonNull(title);
-        notification.message = Objects.requireNonNull(message);
+        notification.title = Objects.requireNonNull(content.title());
+        notification.message = Objects.requireNonNull(content.message());
+        notification.messageKey = content.messageKey();
+        notification.messageArguments = content.messageArguments();
         return notification;
     }
 

@@ -16,6 +16,7 @@ import com.ssafy.backend.queue.dto.QueuePositionChangeResponse;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
 import com.ssafy.backend.queue.redis.QueueReorderResult;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
+import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -440,6 +442,84 @@ class QueuePositionServiceTest {
         assertThat(captor.getValue()).hasSize(3);
     }
 
+    /** 팬마다 자기 계정 선호 언어로 순번 변경 안내를 만드는지 검증한다. */
+    @Test
+    void buildsChangeMessageInEachFanPreferredLanguage() {
+        QueueEntry first = waitingEntry(11L, 1, PreferredLanguage.ENGLISH);
+        QueueEntry second = waitingEntry(12L, 2, PreferredLanguage.KOREAN);
+        givenQueue(List.of(first, second));
+        givenReorderSucceeds();
+
+        service.changePosition(12L, new QueuePositionChangeRequest(1, null), PRINCIPAL);
+
+        assertThat(second.getLastChangeReason())
+                .isEqualTo("대기 순번이 2번에서 1번으로 변경되었습니다.");
+        assertThat(first.getLastChangeReason()).isEqualTo(
+                "Another participant's reordering changed your queue position from 1 to 2.");
+        assertThat(capturedNotifications()).extracting(Notification::getTitle)
+                .containsExactly("Queue position changed", "대기 순번 변경");
+    }
+
+    /** 사전이 없는 언어를 고른 팬에게는 한국어 대신 영어로 안내하는지 검증한다. */
+    @Test
+    void fallsBackToEnglishForFanLanguageWithoutDictionary() {
+        QueueEntry first = waitingEntry(11L, 1, PreferredLanguage.JAPANESE);
+        QueueEntry second = waitingEntry(12L, 2, PreferredLanguage.VIETNAMESE);
+        givenQueue(List.of(first, second));
+        givenReorderSucceeds();
+
+        service.changePosition(
+                12L, new QueuePositionChangeRequest(1, "장비 점검이 늦어졌습니다."), PRINCIPAL);
+
+        assertThat(first.getLastChangeReason()).isEqualTo(
+                "Another participant's reordering changed your queue position from 1 to 2."
+                        + " Reason: 장비 점검이 늦어졌습니다.");
+        assertThat(second.getLastChangeReason()).isEqualTo(
+                "Your queue position changed from 2 to 1. Reason: 장비 점검이 늦어졌습니다.");
+    }
+
+    /** 대기 화면이 자기 화면 언어로 다시 만들 수 있도록 사전 키와 자리표시자 값을 남기는지 검증한다. */
+    @Test
+    void recordsDictionaryKeyAndArgumentsForScreenTranslation() {
+        QueueEntry first = waitingEntry(11L, 1, PreferredLanguage.KOREAN);
+        QueueEntry second = waitingEntry(12L, 2, PreferredLanguage.KOREAN);
+        givenQueue(List.of(first, second));
+        givenReorderSucceeds();
+
+        service.changePosition(
+                12L, new QueuePositionChangeRequest(1, " 장비 점검 "), PRINCIPAL);
+
+        assertThat(second.getLastChangeKey())
+                .isEqualTo("notification.queueChange.movedWithReason");
+        assertThat(second.getLastChangeArguments()).containsOnly(
+                entry("previousPosition", "2"),
+                entry("newPosition", "1"),
+                entry("reason", "장비 점검"));
+        assertThat(first.getLastChangeKey())
+                .isEqualTo("notification.queueChange.shiftedWithReason");
+        assertThat(capturedNotifications()).extracting(Notification::getMessageKey)
+                .containsExactly(
+                        "notification.queueChange.shiftedWithReason",
+                        "notification.queueChange.movedWithReason");
+    }
+
+    /** 사유를 입력하지 않으면 사유 없는 문구를 고르고 자리표시자에도 넣지 않는지 검증한다. */
+    @Test
+    void omitsReasonArgumentWhenManagerLeftItBlank() {
+        QueueEntry first = waitingEntry(11L, 1, PreferredLanguage.KOREAN);
+        QueueEntry second = waitingEntry(12L, 2, PreferredLanguage.KOREAN);
+        givenQueue(List.of(first, second));
+        givenReorderSucceeds();
+
+        service.changePosition(12L, new QueuePositionChangeRequest(1, "   "), PRINCIPAL);
+
+        assertThat(second.getLastChangeKey()).isEqualTo("notification.queueChange.moved");
+        assertThat(second.getLastChangeArguments()).containsOnlyKeys(
+                "previousPosition", "newPosition");
+        assertThat(second.getLastChangeReason())
+                .isEqualTo("대기 순번이 2번에서 1번으로 변경되었습니다.");
+    }
+
     /** 순번이 그대로면 사유를 남기지 않고 알림도 만들지 않는지 검증한다. */
     @Test
     void skipsReasonAndNotificationWhenNoPositionChanged() {
@@ -489,14 +569,40 @@ class QueuePositionServiceTest {
     }
 
     /**
-     * 대기 상태의 대기열 항목을 만든다.
+     * 저장 요청된 알림을 순번 오름차순 그대로 확인한다.
+     *
+     * @return 저장소에 전달된 알림 목록
+     */
+    private List<Notification> capturedNotifications() {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<Notification>> captor = ArgumentCaptor.forClass(Iterable.class);
+        verify(notificationRepository).saveAll(captor.capture());
+        List<Notification> notifications = new ArrayList<>();
+        captor.getValue().forEach(notifications::add);
+        return notifications;
+    }
+
+    /**
+     * 선호 언어를 지정하지 않은 팬의 대기 상태 대기열 항목을 만든다.
      *
      * @param entryId 대기열 항목 식별자
      * @param position 현재 대기 순번
      * @return 대기 상태 대기열 항목
      */
     private QueueEntry waitingEntry(long entryId, int position) {
-        return entryWithStatus(entryId, position, QueueEntryStatus.WAITING);
+        return entryWithStatus(entryId, position, QueueEntryStatus.WAITING, null);
+    }
+
+    /**
+     * 지정한 선호 언어를 가진 팬의 대기 상태 대기열 항목을 만든다.
+     *
+     * @param entryId 대기열 항목 식별자
+     * @param position 현재 대기 순번
+     * @param language 팬의 계정 선호 언어
+     * @return 대기 상태 대기열 항목
+     */
+    private QueueEntry waitingEntry(long entryId, int position, PreferredLanguage language) {
+        return entryWithStatus(entryId, position, QueueEntryStatus.WAITING, language);
     }
 
     /**
@@ -508,11 +614,29 @@ class QueuePositionServiceTest {
      * @return 조건에 맞는 대기열 항목
      */
     private QueueEntry entryWithStatus(long entryId, int position, QueueEntryStatus status) {
+        return entryWithStatus(entryId, position, status, null);
+    }
+
+    /**
+     * 지정한 상태·순번과 팬 선호 언어를 가진 대기열 항목을 만든다.
+     *
+     * @param entryId 대기열 항목 식별자
+     * @param position 현재 대기 순번
+     * @param status 대기열 상태
+     * @param language 팬의 계정 선호 언어이며 {@code null}이면 지정하지 않은 것으로 둔다
+     * @return 조건에 맞는 대기열 항목
+     */
+    private QueueEntry entryWithStatus(long entryId, int position, QueueEntryStatus status,
+                                       PreferredLanguage language) {
         FanMeeting meeting = mock(FanMeeting.class);
         when(meeting.getId()).thenReturn(MEETING_ID);
         Participant participant = mock(Participant.class);
         when(participant.getAssignedOrder()).thenReturn(position);
-        when(participant.getFan()).thenReturn(mock(User.class));
+        User fan = mock(User.class);
+        if (language != null) {
+            when(fan.getPreferredLanguage()).thenReturn(language);
+        }
+        when(participant.getFan()).thenReturn(fan);
         QueueEntry queueEntry = QueueEntry.create(meeting, participant);
         ReflectionTestUtils.setField(queueEntry, "id", entryId);
         ReflectionTestUtils.setField(queueEntry, "status", status);

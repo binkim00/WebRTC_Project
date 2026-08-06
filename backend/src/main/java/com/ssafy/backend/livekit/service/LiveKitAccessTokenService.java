@@ -257,20 +257,13 @@ public class LiveKitAccessTokenService {
      * 선호 언어는 필수 값이지만 비어 있으면 통화 자체가 막히지 않도록 기존 기본값을 사용한다.
      *
      * @param preferredLanguage 회원의 선호 언어이며 값이 없으면 null
-     * @return KOREAN은 ko, ENGLISH는 en, JAPANESE는 ja, CHINESE는 zh, VIETNAMESE는 vi,
-     *         값이 없으면 기본 언어 코드
+     * @return 선호 언어의 짧은 언어 코드이며, 값이 없으면 기본 언어 코드
      */
     private String toLanguageCode(PreferredLanguage preferredLanguage) {
         if (preferredLanguage == null) {
             return DEFAULT_LANGUAGE_CODE;
         }
-        return switch (preferredLanguage) {
-            case KOREAN -> "ko";
-            case ENGLISH -> "en";
-            case JAPANESE -> "ja";
-            case CHINESE -> "zh";
-            case VIETNAMESE -> "vi";
-        };
+        return preferredLanguage.code();
     }
 
     /**

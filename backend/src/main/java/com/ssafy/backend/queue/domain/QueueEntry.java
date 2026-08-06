@@ -1,9 +1,11 @@
 package com.ssafy.backend.queue.domain;
 
+import com.ssafy.backend.common.converter.StringMapJsonConverter;
 import com.ssafy.backend.common.entity.BaseTimeEntity;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.participant.domain.Participant;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -20,6 +22,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 팬미팅 참가자의 현재 대기 순서와 상태를 저장하는 엔티티다.
@@ -64,6 +67,13 @@ public class QueueEntry extends BaseTimeEntity {
 
     @Column(name = "last_change_reason", length = 300)
     private String lastChangeReason;
+
+    @Column(name = "last_change_key", length = 80)
+    private String lastChangeKey;
+
+    @Convert(converter = StringMapJsonConverter.class)
+    @Column(name = "last_change_args", columnDefinition = "TEXT")
+    private Map<String, String> lastChangeArguments;
 
     @Column(name = "last_changed_at")
     private LocalDateTime lastChangedAt;
@@ -168,11 +178,20 @@ public class QueueEntry extends BaseTimeEntity {
      * <p>대기 화면은 순번만 보고는 왜 바뀌었는지 알 수 없으므로 최근 1건의 안내 문구를 보관하며,
      * 다음 조정이 일어나면 덮어쓴다. 상태 전이가 아니므로 현재 상태를 검증하지 않는다.
      *
+     * <p>안내 문구는 기록 시점 팬의 계정 선호 언어로 굳으므로, 대기 화면이 자기 화면 언어로 다시
+     * 만들 수 있도록 사전 키와 자리표시자 값도 함께 남긴다.
+     *
      * @param reason 팬에게 안내할 변경 사유 문구
+     * @param changeKey 안내 문구에 대응하는 프론트 사전 키
+     * @param changeArguments 안내 문구 자리표시자 이름별 값이며 비어 있을 수 있다
      * @param changedAt 순번 변경이 반영된 시각
      */
-    public void recordPositionChange(String reason, LocalDateTime changedAt) {
+    public void recordPositionChange(String reason, String changeKey,
+                                     Map<String, String> changeArguments,
+                                     LocalDateTime changedAt) {
         this.lastChangeReason = reason;
+        this.lastChangeKey = changeKey;
+        this.lastChangeArguments = changeArguments;
         this.lastChangedAt = changedAt;
     }
 

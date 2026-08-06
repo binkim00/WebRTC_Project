@@ -8,6 +8,7 @@ import {
 } from '../../api/applications'
 import {
   fetchPublicFanMeetingDetail,
+  isClosedFanMeetingStatus,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import { JellyCelebration } from '../../components/celebration/JellyCelebration'
@@ -209,6 +210,9 @@ export function FanApplicationResultPage() {
   if (resultPublished && application.applicationStatus === 'SELECTED') {
     // 장비 점검을 마쳐야 하는 실질 기한은 대기실 개방 시각이다. 미설정이면 팬미팅 시작 시각으로 안내한다.
     const deviceCheckDeadline = operation?.queueOpenAt ?? application.scheduledStartAt
+    // 이 화면은 팬미팅이 끝난 뒤에도 계속 열 수 있다. 끝난 팬미팅에서는 장비 점검이
+    // 서버에서 막히므로 안내와 버튼을 기록 동선으로 바꾼다.
+    const meetingClosed = isClosedFanMeetingStatus(detail?.meeting.status)
 
     return (
       <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
@@ -236,7 +240,9 @@ export function FanApplicationResultPage() {
             당첨됐어요
           </h1>
           <p className="jc-heading-intro mt-[18px] max-w-[46ch] text-xl font-medium leading-[1.6] text-[var(--color-text-body)]">
-            {application.meetingTitle}에 초대되었습니다. 팬미팅 전에 장비 점검을 마쳐 주세요.
+            {meetingClosed
+              ? `${application.meetingTitle}은 이미 끝났습니다. 녹화 다시보기와 기념 카드로 그날을 남겨 보세요.`
+              : `${application.meetingTitle}에 초대되었습니다. 팬미팅 전에 장비 점검을 마쳐 주세요.`}
           </p>
 
           <div className="mt-11 grid items-start gap-10 border-t border-[var(--color-divider)] pt-8 lg:grid-cols-[1fr_460px] lg:gap-[72px]">
@@ -268,19 +274,26 @@ export function FanApplicationResultPage() {
                 </div>
               </div>
               <p className="mt-7 max-w-[56ch] border-t border-[var(--color-divider)] pt-5 text-base font-medium leading-[1.75] text-[var(--color-text-muted)]">
-                기한까지 장비 점검을 완료하지 않으면 참여가 취소될 수 있습니다. 팬미팅 당일에는
-                시작 {operation?.earlyStartMinutes ?? 10}분 전부터 대기실에 입장할 수 있어요.
+                {meetingClosed
+                  ? '끝난 팬미팅이라 장비 점검과 대기실 입장은 더 이상 이용할 수 없습니다. 녹화는 팬미팅 후 5일 동안 보관됩니다.'
+                  : `기한까지 장비 점검을 완료하지 않으면 참여가 취소될 수 있습니다. 팬미팅 당일에는 시작 ${operation?.earlyStartMinutes ?? 10}분 전부터 대기실에 입장할 수 있어요.`}
               </p>
             </section>
             <section aria-label="다음 단계">
               <Link
                 className="mj-font-emphasis flex min-h-[58px] w-full items-center justify-center rounded-[10px] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-[17px] text-white shadow-[var(--shadow-final-cta)] transition-[background-color,transform] duration-150 hover:-translate-y-px hover:bg-[var(--color-primary-coral-hover)] active:translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
-                to={`/fan-meetings/${application.meetingId}/device-check`}
+                to={
+                  meetingClosed
+                    ? `/fan/fan-meetings/${application.meetingId}/complete`
+                    : `/fan-meetings/${application.meetingId}/device-check`
+                }
               >
-                장비 점검하기
+                {meetingClosed ? '기록 보기' : '장비 점검하기'}
               </Link>
               <p className="mt-5 text-[15px] font-medium leading-[1.7] text-[var(--color-text-muted)]">
-                응모 내역과 결과는 마이페이지에서 다시 확인할 수 있습니다.
+                {meetingClosed
+                  ? '녹화 다시보기와 기념 카드는 마이페이지 내 팬미팅에서도 열 수 있습니다.'
+                  : '응모 내역과 결과는 마이페이지에서 다시 확인할 수 있습니다.'}
               </p>
             </section>
           </div>

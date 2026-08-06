@@ -84,8 +84,8 @@ const FONT_FAMILY_BY_KEY: Record<FanCardFont, string | undefined> = {
 
 /** 카드에 담을 정보다. */
 export type FanCardArtwork = {
-  /** 팬이 고른 문구 */
-  text: string
+  /** 팬이 고른 문구다. 문구 고르기는 선택 사항이라 없을 수 있다. */
+  text?: string
   /** 팬미팅 제목 */
   meetingTitle: string
   /** 인플루언서 표시 이름 */
@@ -202,6 +202,19 @@ function fitQuote(
 }
 
 /**
+ * 카드에 실제로 그릴 문구를 정리해 돌려준다.
+ *
+ * <p>문구 고르기는 선택 사항이라 없을 수 있다. 공백만 있는 값도 빈 문구로 보아, 따옴표만
+ * 덩그러니 남거나 빈 줄이 자리를 차지하는 일을 막는다.
+ *
+ * @param artwork 카드에 담을 정보
+ * @returns 그릴 문구이며 고르지 않았으면 빈 문자열
+ */
+function cardQuoteText(artwork: FanCardArtwork): string {
+  return artwork.text?.trim() ?? ''
+}
+
+/**
  * 페이지가 실제로 쓰는 폰트를 읽어 카드에도 같은 글꼴을 적용한다.
  *
  * @returns Canvas font 속성에 넣을 폰트 패밀리
@@ -248,7 +261,8 @@ async function resolveCardFontFamily(fontKey: FanCardFont | undefined): Promise<
  * 폰트 준비를 기다린 뒤 그린다.
  *
  * <p>사진을 넘기지 않았거나 레이아웃을 고르지 않았으면 문구 전용 카드를 그린다. 셔터를
- * 누르지 않았거나 촬영에 실패한 팬도 카드를 받을 수 있어야 하기 때문이다.
+ * 누르지 않았거나 촬영에 실패한 팬도 카드를 받을 수 있어야 하기 때문이다. 반대로 문구도
+ * 선택 사항이라, 문구가 없으면 그 자리만 비우고 사진과 꾸미기로 카드를 완성한다.
  *
  * @param canvas 그릴 대상 캔버스
  * @param artwork 카드에 담을 정보
@@ -325,21 +339,24 @@ function drawQuoteOnlyCard(
   ctx.font = `600 34px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), CARD_WIDTH / 2, 168)
 
-  // 문구 — 카드의 주인공이라 남은 공간을 최대한 쓴다.
-  const quote = fitQuote(ctx, artwork.text, fontFamily, contentWidth)
-  const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
-  const quoteBlockHeight = quote.lines.length * lineHeight
-  let quoteY = (CARD_HEIGHT - quoteBlockHeight) / 2 + quote.fontSize * 0.34
+  // 문구 — 카드의 주인공이라 남은 공간을 최대한 쓴다. 고르지 않았으면 통째로 비운다.
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(ctx, quoteText, fontFamily, contentWidth)
+    const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
+    const quoteBlockHeight = quote.lines.length * lineHeight
+    let quoteY = (CARD_HEIGHT - quoteBlockHeight) / 2 + quote.fontSize * 0.34
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.26)'
-  ctx.font = `700 132px ${fontFamily}`
-  ctx.fillText('“', CARD_WIDTH / 2, quoteY - quote.fontSize * 0.9)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.26)'
+    ctx.font = `700 132px ${fontFamily}`
+    ctx.fillText('“', CARD_WIDTH / 2, quoteY - quote.fontSize * 0.9)
 
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  for (const line of quote.lines) {
-    ctx.fillText(line, CARD_WIDTH / 2, quoteY)
-    quoteY += lineHeight
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    for (const line of quote.lines) {
+      ctx.fillText(line, CARD_WIDTH / 2, quoteY)
+      quoteY += lineHeight
+    }
   }
 
   // 하단 정보
@@ -921,23 +938,27 @@ function drawInstaCard(
     ctx, frameX + frameWidth - inset - actionIconSize, actionIconY, actionIconSize,
   )
 
-  // 캡션 — 계정명에 이어 문구를 쓰는 게시물 형식이다.
+  // 캡션 — 계정명에 이어 문구를 쓰는 게시물 형식이다. 문구가 없으면 캡션 줄만 비운다.
   const captionTop = actionTop + actionHeight
   const captionHeight = 118
   const captionWidth = frameWidth - inset * 2
-  const quote = fitQuote(
-    ctx, artwork.text, fontFamily, captionWidth, 78, [30, 27, 24, 22, 20],
-  )
+  const quoteText = cardQuoteText(artwork)
 
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = ink
-  ctx.font = `500 ${quote.fontSize}px ${fontFamily}`
-  let captionY = captionTop + 34
-  const captionLineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
-  for (const line of quote.lines) {
-    ctx.fillText(line, frameX + inset, captionY)
-    captionY += captionLineHeight
+
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, captionWidth, 78, [30, 27, 24, 22, 20],
+    )
+    ctx.fillStyle = ink
+    ctx.font = `500 ${quote.fontSize}px ${fontFamily}`
+    let captionY = captionTop + 34
+    const captionLineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
+    for (const line of quote.lines) {
+      ctx.fillText(line, frameX + inset, captionY)
+      captionY += captionLineHeight
+    }
   }
 
   ctx.fillStyle = 'rgba(31, 20, 48, 0.45)'
@@ -1021,27 +1042,31 @@ function drawPolaroidCard(
     )
   }
 
-  // 아래 여백 — 문구를 손글씨처럼 기울여 사인 느낌을 준다.
+  // 아래 여백 — 문구를 손글씨처럼 기울여 사인 느낌을 준다. 문구가 없으면 여백으로 남긴다.
   const captionTop = frameY + photoInset + photoSize
   const captionWidth = photoSize
-  const quote = fitQuote(
-    ctx, artwork.text, fontFamily, captionWidth, 130, [46, 40, 35, 30, 26],
-  )
+  const quoteText = cardQuoteText(artwork)
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.save()
-  ctx.translate(CARD_WIDTH / 2, captionTop + 74)
-  ctx.rotate(-0.022)
-  ctx.fillStyle = '#2a1547'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  let quoteY = 0
-  const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
-  for (const line of quote.lines) {
-    ctx.fillText(line, 0, quoteY)
-    quoteY += lineHeight
+
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, captionWidth, 130, [46, 40, 35, 30, 26],
+    )
+    ctx.save()
+    ctx.translate(CARD_WIDTH / 2, captionTop + 74)
+    ctx.rotate(-0.022)
+    ctx.fillStyle = '#2a1547'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    let quoteY = 0
+    const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
+    for (const line of quote.lines) {
+      ctx.fillText(line, 0, quoteY)
+      quoteY += lineHeight
+    }
+    ctx.restore()
   }
-  ctx.restore()
 
   ctx.fillStyle = 'rgba(42, 21, 71, 0.9)'
   ctx.font = `700 34px ${fontFamily}`
@@ -1115,14 +1140,17 @@ function drawFourCutCard(
     }
   }
 
-  // 문구
+  // 문구 — 고르지 않았으면 사진 아래를 비워 팬이 꾸밀 자리로 남긴다.
   const gridBottom = gridY + slotSize * 2 + gap
-  const quote = fitQuote(
-    ctx, `“${artwork.text}”`, fontFamily, CARD_WIDTH - 200, 110, [40, 35, 31, 27, 24],
-  )
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  drawQuoteLines(ctx, quote.lines, quote.fontSize, gridBottom + 62)
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 110, [40, 35, 31, 27, 24],
+    )
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, gridBottom + 62)
+  }
 
   // 하단 정보
   ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
@@ -1202,12 +1230,16 @@ function drawFourCutVerticalCard(
   ctx.font = `600 24px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), centerX, 58)
 
-  const quote = fitQuote(
-    ctx, `“${artwork.text}”`, fontFamily, contentWidth, 96, [30, 27, 24, 21, 19],
-  )
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  drawQuoteLines(ctx, quote.lines, quote.fontSize, 104, centerX)
+  // 문구를 고르지 않았으면 스트립 위를 비운다. 칸 위치는 그대로라 사진 배치는 달라지지 않는다.
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [30, 27, 24, 21, 19],
+    )
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, 104, centerX)
+  }
 
   // 세로 스트립 — 칸이 카드 폭을 꽉 채워 좌우에 빈 공간이 없다.
   const gap = 10
@@ -1277,12 +1309,16 @@ function drawFourCutHorizontalCard(
   ctx.font = `600 24px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), centerX, 56)
 
-  const quote = fitQuote(
-    ctx, `“${artwork.text}”`, fontFamily, contentWidth, 96, [34, 30, 27, 24, 21],
-  )
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  drawQuoteLines(ctx, quote.lines, quote.fontSize, 102, centerX)
+  // 문구를 고르지 않았으면 스트립 위를 비운다. 칸 위치는 그대로라 사진 배치는 달라지지 않는다.
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [34, 30, 27, 24, 21],
+    )
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, 102, centerX)
+  }
 
   // 가로 스트립 — 칸이 카드 폭을 꽉 채워 좌우에 빈 공간이 없다.
   const gap = 12

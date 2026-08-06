@@ -134,10 +134,14 @@ type FanCardSectionProps = {
 }
 
 /**
- * 팬이 통화에서 인상 깊었던 문구를 골라 기념 카드로 만드는 섹션이다.
+ * 팬이 통화에서 남긴 사진과 인상 깊었던 문구로 기념 카드를 만드는 섹션이다.
  *
  * AI 추천 문구는 통화가 끝난 뒤 생성되므로 준비되지 않았을 수 있다. 그래서 추천을 기다리는
  * 동안에도 자막에서 직접 고를 수 있게 두 목록을 함께 보여 준다.
+ *
+ * <p>문구 고르기는 선택 사항이다. 추천이 늦거나 마음에 드는 말이 없어도 사진과 꾸미기만으로
+ * 카드를 완성해 내려받을 수 있다. 다만 서버가 보관하는 것은 문구뿐이라, 문구를 고른 경우에만
+ * 저장 버튼을 열어 준다.
  */
 export function FanCardSection({
   callSessionId,
@@ -177,6 +181,14 @@ export function FanCardSection({
   const selectedDecoration = decorations.find(
     (decoration) => decoration.id === selectedDecorationId,
   )
+
+  /**
+   * 카드에 담을 것이 하나라도 있는지.
+   *
+   * <p>문구 고르기는 선택 사항이라 사진만으로도 카드를 완성할 수 있다. 다만 문구도 사진도
+   * 없으면 빈 도안만 남으므로 그때는 미리보기와 내려받기를 열지 않는다.
+   */
+  const canCompose = Boolean(selectedText) || selectedPhotoIndexes.length > 0
 
   /**
    * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
@@ -422,7 +434,7 @@ export function FanCardSection({
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !selectedText) return
+    if (!canvas || !canCompose) return
 
     let active = true
 
@@ -470,6 +482,7 @@ export function FanCardSection({
       active = false
     }
   }, [
+    canCompose,
     dateLabel,
     decorations,
     fanNickname,
@@ -538,6 +551,12 @@ export function FanCardSection({
     [layout],
   )
 
+  /**
+   * 고른 문구를 서버에 저장한다.
+   *
+   * <p>서버가 보관하는 것은 문구뿐이고 빈 문구는 받지 않으므로, 문구를 고르지 않았으면
+   * 저장 자체를 시도하지 않는다. 사진과 꾸미기는 내려받은 이미지에만 담긴다.
+   */
   const handleSave = useCallback(async () => {
     if (!selectedText) return
 
@@ -562,7 +581,7 @@ export function FanCardSection({
    * 없는 캔버스에 같은 내용을 다시 그려 점선이 파일에 남지 않게 한다.
    */
   async function handleDownload() {
-    if (!selectedText) return
+    if (!canCompose) return
 
     const canvas = document.createElement('canvas')
 
@@ -615,7 +634,7 @@ export function FanCardSection({
           </h2>
           <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
             {photoBlobs.length > 0
-              ? '통화에서 인상 깊었던 한마디와 남긴 사진으로 카드를 만들 수 있어요.'
+              ? '통화에서 남긴 사진으로 카드를 만들 수 있어요. 인상 깊었던 한마디는 원하면 함께 넣으세요.'
               : '통화에서 인상 깊었던 한마디를 골라 카드로 간직할 수 있어요.'}
           </p>
         </header>
@@ -628,7 +647,7 @@ export function FanCardSection({
           selectedText={selectedText}
         />
 
-        {selectedText && photoBlobs.length > 0 ? (
+        {photoBlobs.length > 0 ? (
           <FanCardLayoutPicker
             layout={layout}
             onLayoutChange={changeLayout}
@@ -638,7 +657,7 @@ export function FanCardSection({
           />
         ) : null}
 
-        {selectedText ? (
+        {canCompose ? (
           <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
             <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
 
@@ -646,7 +665,9 @@ export function FanCardSection({
               카드 미리보기
             </h3>
             <canvas
-              aria-label={`기념 카드 미리보기: ${selectedText}`}
+              aria-label={
+                selectedText ? `기념 카드 미리보기: ${selectedText}` : '기념 카드 미리보기'
+              }
               // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
               className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] ${
                 decorations.length > 0 ? 'cursor-grab' : ''
@@ -674,20 +695,29 @@ export function FanCardSection({
               </AlertBanner>
             ) : null}
 
-            {savedText === selectedText ? (
+            {savedText !== undefined && savedText === selectedText ? (
               <p className="mt-4 text-sm text-[var(--color-success)]">
                 카드를 저장했습니다. 이미지로도 내려받을 수 있어요.
               </p>
             ) : null}
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <Button loading={saving} onClick={() => void handleSave()} size="lg">
-                {savedText ? '이 문구로 다시 저장' : '카드 저장하기'}
-              </Button>
+            <div className={`mt-4 grid gap-3 ${selectedText ? 'sm:grid-cols-2' : ''}`}>
+              {selectedText ? (
+                <Button loading={saving} onClick={() => void handleSave()} size="lg">
+                  {savedText ? '이 문구로 다시 저장' : '카드 저장하기'}
+                </Button>
+              ) : null}
               <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
                 이미지 내려받기
               </Button>
             </div>
+
+            {selectedText ? null : (
+              <p className="mt-3 text-xs text-[var(--color-text-secondary)]">
+                문구 없이도 카드를 내려받을 수 있어요. 문구를 고르면 계정에도 저장해 두고
+                나중에 다시 볼 수 있습니다.
+              </p>
+            )}
           </div>
         ) : null}
       </Card>

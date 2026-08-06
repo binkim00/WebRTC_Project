@@ -42,6 +42,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class QueueCommandServiceTest {
@@ -84,6 +85,40 @@ class QueueCommandServiceTest {
                                 .isEqualTo(ErrorCode.WAITING_ROOM_NOT_OPEN));
 
         verify(initializationService).ensureInitializedForParticipant(1L, 10L);
+    }
+
+    /**
+     * 종료된 팬미팅의 대기실 입장을 차단하고, 지워진 대기열을 다시 만들지 않는지 검증한다.
+     */
+    @Test
+    void rejectsEntryForClosedMeeting() {
+        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        MeetingAccessService accessService = mock(MeetingAccessService.class);
+        MeetingOperationSettingRepository settingRepository =
+                mock(MeetingOperationSettingRepository.class);
+        QueueEntryRepository entryRepository = mock(QueueEntryRepository.class);
+        CallSessionRepository callSessionRepository = mock(CallSessionRepository.class);
+        QueueRealtimeStore realtimeStore = mock(QueueRealtimeStore.class);
+        QueueQueryService queryService = mock(QueueQueryService.class);
+        QueueInitializationService initializationService = mock(QueueInitializationService.class);
+        LiveKitAgentDispatchService agentDispatchService = mock(LiveKitAgentDispatchService.class);
+        QueueCommandService service = new QueueCommandService(
+                currentUserService, accessService, settingRepository, entryRepository,
+                callSessionRepository, realtimeStore, queryService, initializationService,
+                agentDispatchService, CLOCK);
+        User fan = mock(User.class);
+        when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(fan);
+        when(fan.getId()).thenReturn(10L);
+        when(accessService.requireJoinableMeeting(1L))
+                .thenThrow(new BusinessException(ErrorCode.FAN_MEETING_CLOSED));
+
+        assertThatThrownBy(() -> service.enter(1L, PRINCIPAL))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.FAN_MEETING_CLOSED));
+
+        verifyNoInteractions(initializationService);
+        verifyNoInteractions(realtimeStore);
     }
 
     /**

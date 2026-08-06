@@ -26,6 +26,9 @@ import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.notification.domain.Notification;
 import com.ssafy.backend.notification.domain.NotificationType;
 import com.ssafy.backend.notification.repository.NotificationRepository;
+import com.ssafy.backend.notification.support.NotificationContent;
+import com.ssafy.backend.notification.support.NotificationLanguage;
+import com.ssafy.backend.notification.support.NotificationMessage;
 import com.ssafy.backend.organization.domain.OrganizationMemberStatus;
 import com.ssafy.backend.organization.domain.OrganizationMemberType;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
@@ -46,6 +49,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** 팬미팅 수정·게시·취소·시작·종료 명령을 처리한다. */
@@ -357,10 +361,28 @@ public class FanMeetingManagementService {
                 .stream()
                 .map(Application::getFan)
                 .map(fan -> Notification.create(fan, meeting, NotificationType.MEETING_CANCELED,
-                        "팬미팅 취소 안내", meeting.getTitle() + " 팬미팅이 취소되었습니다."))
+                        canceledContent(meeting, fan)))
                 .toList();
         notificationRepository.saveAll(notifications);
         return response(meeting);
+    }
+
+    /**
+     * 팬미팅 취소 알림 문구를 받는 팬의 선호 언어로 만든다.
+     *
+     * <p>응모자마다 선호 언어가 다르므로 문구를 한 번만 만들어 돌려쓰지 않고 팬마다 만든다.
+     *
+     * @param meeting 취소된 팬미팅
+     * @param fan 알림을 받을 응모자
+     * @return 취소 알림 제목·본문과 번역 재료
+     */
+    private NotificationContent canceledContent(FanMeeting meeting, User fan) {
+        return NotificationContent.of(
+                NotificationMessage.MEETING_CANCELED_TITLE,
+                NotificationMessage.MEETING_CANCELED,
+                NotificationLanguage.from(fan.getPreferredLanguage()),
+                Map.of("meetingTitle", meeting.getTitle())
+        );
     }
 
     /** 설정된 조기 시작 허용 시각부터 준비 완료 팬미팅을 시작한다. */

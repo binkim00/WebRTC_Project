@@ -30,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -185,6 +186,67 @@ class DeviceCheckServiceTest {
         AuthenticatedUser otherPrincipal = new AuthenticatedUser(21L, UserRole.INFLUENCER);
         when(currentUserService.requireActiveUser(otherPrincipal)).thenReturn(otherInfluencer);
         when(participantRepository.findByMeeting_IdAndFan_Id(1L, 21L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.saveDeviceCheck(
+                1L, new DeviceCheckRequest(true, true, true, true), otherPrincipal))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.DEVICE_CHECK_NOT_ALLOWED);
+    }
+
+    /** 종료된 팬미팅에서는 참가 팬의 점검 저장도 거부되는지 검증한다. */
+    @Test
+    void rejectsClosedMeetingForParticipantFan() {
+        when(currentUserService.requireActiveUser(FAN_PRINCIPAL)).thenReturn(fan);
+        when(participantRepository.findByMeeting_IdAndFan_Id(1L, 30L))
+                .thenReturn(Optional.of(participant(meeting, fan)));
+        doThrow(new BusinessException(ErrorCode.FAN_MEETING_CLOSED))
+                .when(meetingAccessService).requireJoinable(meeting);
+
+        assertThatThrownBy(() -> service.saveDeviceCheck(
+                1L, new DeviceCheckRequest(true, true, true, true), FAN_PRINCIPAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FAN_MEETING_CLOSED);
+        verifyNoInteractions(deviceCheckRepository);
+    }
+
+    /** 종료된 팬미팅에서는 배정 인플루언서의 점검 저장도 거부되는지 검증한다. */
+    @Test
+    void rejectsClosedMeetingForAssignedInfluencer() {
+        when(currentUserService.requireActiveUser(INFLUENCER_PRINCIPAL)).thenReturn(influencer);
+        doThrow(new BusinessException(ErrorCode.FAN_MEETING_CLOSED))
+                .when(meetingAccessService).requireJoinable(meeting);
+
+        assertThatThrownBy(() -> service.saveDeviceCheck(
+                1L, new DeviceCheckRequest(true, true, true, true), INFLUENCER_PRINCIPAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FAN_MEETING_CLOSED);
+        verifyNoInteractions(deviceCheckRepository);
+    }
+
+    /** 진행 중인 팬미팅은 종료 검증을 통과해 그대로 저장되는지 검증한다. */
+    @Test
+    void checksMeetingClosedStateBeforeSaving() {
+        when(currentUserService.requireActiveUser(FAN_PRINCIPAL)).thenReturn(fan);
+        when(participantRepository.findByMeeting_IdAndFan_Id(1L, 30L))
+                .thenReturn(Optional.of(participant(meeting, fan)));
+
+        service.saveDeviceCheck(1L, new DeviceCheckRequest(true, true, true, true), FAN_PRINCIPAL);
+
+        verify(meetingAccessService).requireJoinable(meeting);
+    }
+
+    /** 무관한 사용자에게는 종료 여부 대신 기존 권한 오류만 알리는지 검증한다. */
+    @Test
+    void keepsPermissionErrorBeforeClosedCheck() {
+        User otherFan = user(31L, "other", UserRole.FAN);
+        AuthenticatedUser otherPrincipal = new AuthenticatedUser(31L, UserRole.FAN);
+        when(currentUserService.requireActiveUser(otherPrincipal)).thenReturn(otherFan);
+        when(participantRepository.findByMeeting_IdAndFan_Id(1L, 31L)).thenReturn(Optional.empty());
+        doThrow(new BusinessException(ErrorCode.FAN_MEETING_CLOSED))
+                .when(meetingAccessService).requireJoinable(meeting);
 
         assertThatThrownBy(() -> service.saveDeviceCheck(
                 1L, new DeviceCheckRequest(true, true, true, true), otherPrincipal))

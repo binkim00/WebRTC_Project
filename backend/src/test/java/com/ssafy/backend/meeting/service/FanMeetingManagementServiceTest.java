@@ -29,6 +29,7 @@ import com.ssafy.backend.participant.repository.ParticipantRepository;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.redis.QueueRealtimeStore;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
+import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import com.ssafy.backend.user.repository.UserRepository;
@@ -46,6 +47,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -406,6 +408,54 @@ class FanMeetingManagementServiceTest {
         assertThat(captor.getValue().get(0).getType())
                 .isEqualTo(NotificationType.MEETING_CANCELED);
         assertThat(captor.getValue().get(0).getUser()).isSameAs(fan);
+    }
+
+    /** 취소 알림을 응모자마다 자기 계정 선호 언어로 만드는지 검증한다. */
+    @SuppressWarnings("unchecked")
+    @Test
+    void notifiesCancellationInEachApplicantLanguage() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = publishedMeeting(solo);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        User koreanFan = user(20L, UserRole.FAN);
+        when(koreanFan.getPreferredLanguage()).thenReturn(PreferredLanguage.KOREAN);
+        User japaneseFan = user(21L, UserRole.FAN);
+        when(japaneseFan.getPreferredLanguage()).thenReturn(PreferredLanguage.JAPANESE);
+        // when(...) 안에서 새 목을 만들면 Mockito가 미완성 스텁으로 보므로 미리 만들어 둔다.
+        List<Application> applications =
+                List.of(applicationOf(koreanFan), applicationOf(japaneseFan));
+        stubMeetingWithSettings(meeting);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+        when(applicationRepository.findAllByMeeting_IdAndStatusNot(1L, ApplicationStatus.WITHDRAWN))
+                .thenReturn(applications);
+
+        service.cancel(1L, principal);
+
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).extracting(Notification::getTitle)
+                .containsExactly("팬미팅 취소 안내", "Fan meeting canceled");
+        assertThat(captor.getValue()).extracting(Notification::getMessage)
+                .containsExactly(
+                        meeting.getTitle() + " 팬미팅이 취소되었습니다.",
+                        "The " + meeting.getTitle() + " fan meeting has been canceled."
+                );
+        assertThat(captor.getValue()).extracting(Notification::getMessageKey)
+                .containsOnly("notification.meetingCanceled.body");
+        assertThat(captor.getValue().get(0).getMessageArguments())
+                .containsOnly(entry("meetingTitle", meeting.getTitle()));
+    }
+
+    /**
+     * 지정한 팬이 제출한 응모 대역을 만든다.
+     *
+     * @param fan 응모한 팬
+     * @return 팬만 조회할 수 있는 응모 대역
+     */
+    private Application applicationOf(User fan) {
+        Application application = mock(Application.class);
+        when(application.getFan()).thenReturn(fan);
+        return application;
     }
 
     /** 응모가 마감된 팬미팅도 진행 전이면 취소할 수 있는지 검증한다. */

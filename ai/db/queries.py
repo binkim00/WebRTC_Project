@@ -49,6 +49,26 @@ async def get_subtitles_by_call(pool, call_session_id: int) -> list[dict]:
             )
             return await cur.fetchall()
         
+# 통화 세션에 고정 저장된 팬 언어 조회
+# 백엔드가 팬 호출 시 call_sessions.fan_lang에 짧은 코드(ko/en/ja/zh/vi)로 굳혀 저장한다.
+# (테이블명은 복수형 call_sessions다 — backend CallSession의 @Table 참고)
+# 같은 값이 팬 토큰 attributes로도 오므로 보통은 Agent가 이미 들고 있고, 이 조회는
+# 그 값을 넘겨받지 못했을 때의 폴백이다.
+async def get_call_session_fan_lang(pool, call_session_id: int) -> str | None:
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT fan_lang
+                FROM call_sessions
+                WHERE call_session_id = %s
+                """,
+                (call_session_id,),
+            )
+            row = await cur.fetchone()
+            return row[0] if row else None
+
+
 # 요약 생성 시작 표시
 # 백엔드가 "생성 중"과 "실패"를 구분하려면 성공 후가 아니라 시작 시점에 행이 있어야 한다.
 async def start_call_summary(pool, call_session_id: int) -> None:

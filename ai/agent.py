@@ -345,11 +345,20 @@ async def my_agent(ctx: JobContext) -> None:
         # 3) 프로세서 정리 (httpx.AsyncClient close)
         await call.processor.close()
 
-        task = asyncio.create_task(_trigger_summary(call.call_session_id))
+        # 이 통화에서 실제로 쓰던 언어를 그대로 넘긴다. 메모 초안은 인플루언서 언어로,
+        # 팬 카드 문구는 팬 언어로 나와야 하는데 요약 시점에는 팬이 이미 나가서
+        # attributes를 다시 읽을 수 없다.
+        task = asyncio.create_task(
+            _trigger_summary(
+                call.call_session_id, call.fan_lang, call.assumed_influencer_lang
+            )
+        )
         pending_summaries[task] = call.call_session_id
         task.add_done_callback(pending_summaries.pop)
 
-    async def _trigger_summary(call_session_id: int) -> None:
+    async def _trigger_summary(
+        call_session_id: int, fan_lang: str, influencer_lang: str
+    ) -> None:
         try:
             subtitles = await queries.get_subtitles_by_call(pool, call_session_id)
             if not subtitles:
@@ -358,7 +367,9 @@ async def my_agent(ctx: JobContext) -> None:
                 logger.warning("자막 없음 — 요약 스킵 call_session_id=%s", call_session_id)
                 await queries.fail_call_summary(pool, call_session_id, "NO_SUBTITLE")
                 return
-            await generate_and_save_summary(pool, call_session_id, subtitles)
+            await generate_and_save_summary(
+                pool, call_session_id, subtitles, fan_lang, influencer_lang
+            )
         except asyncio.CancelledError:
             raise
         except Exception:

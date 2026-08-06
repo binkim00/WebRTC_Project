@@ -192,6 +192,36 @@ class DeviceCheckApiIntegrationTest {
         assertThat(deviceCheckRepository.findAll()).isEmpty();
     }
 
+    /** 종료된 팬미팅의 점검 요청이 거부되고 기록도 남지 않는지 검증한다. */
+    @Test
+    void rejectsEndedMeeting() throws Exception {
+        FanMeeting ended = entityManager.find(FanMeeting.class, meeting.getId());
+        ReflectionTestUtils.setField(ended, "status", FanMeetingStatus.ENDED);
+        entityManager.flush();
+
+        mockMvc.perform(post(deviceChecksUrl()).with(as(participantFan)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(ALL_PASSED_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("FAN_MEETING_CLOSED"));
+
+        assertThat(deviceCheckRepository.findAll()).isEmpty();
+    }
+
+    /** 취소된 팬미팅의 점검 요청도 같은 오류로 거부되는지 검증한다. */
+    @Test
+    void rejectsCanceledMeeting() throws Exception {
+        FanMeeting canceled = entityManager.find(FanMeeting.class, meeting.getId());
+        ReflectionTestUtils.setField(canceled, "status", FanMeetingStatus.CANCELED);
+        entityManager.flush();
+
+        mockMvc.perform(post(deviceChecksUrl()).with(as(participantFan)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(ALL_PASSED_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("FAN_MEETING_CLOSED"));
+
+        assertThat(deviceCheckRepository.findAll()).isEmpty();
+    }
+
     /** 존재하지 않는 팬미팅의 점검 요청이 거부되는지 검증한다. */
     @Test
     void rejectsMissingMeeting() throws Exception {

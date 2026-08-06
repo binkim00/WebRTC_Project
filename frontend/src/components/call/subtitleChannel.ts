@@ -11,6 +11,30 @@ import type { CaptionLine } from './CallStage'
  */
 export const SUBTITLE_DATA_TOPIC = 'subtitle'
 
+/**
+ * 실시간 자막을 켠 상태로 시작할 통화인지 판단한다.
+ *
+ * 자막의 목적은 서로 다른 언어를 잇는 것이다. 한국어 인플루언서와 한국어 팬처럼 양쪽 언어가
+ * 같으면 번역할 것이 없어 자막이 화면만 가리므로 꺼진 상태로 시작한다.
+ * (AI 워커도 같은 비교로 번역 여부를 정한다 — `ai/agent.py`의 need_translation)
+ *
+ * 어느 한쪽 언어라도 알 수 없으면 켠 상태로 둔다. 필요한 자막이 없는 것보다 필요 없는 자막이
+ * 보이는 편이 낫고, 사용자가 직접 끌 수 있다.
+ *
+ * @param fanLanguage 통화의 팬 언어 코드
+ * @param influencerLanguage 통화의 인플루언서 언어 코드
+ */
+export function shouldStartWithCaption(
+  fanLanguage: string | null | undefined,
+  influencerLanguage: string | null | undefined,
+): boolean {
+  const fan = fanLanguage?.trim().toLowerCase()
+  const influencer = influencerLanguage?.trim().toLowerCase()
+  if (!fan || !influencer) return true
+
+  return fan !== influencer
+}
+
 /** 자막 payload를 만든 화자의 역할이며 AI 워커가 이 두 값만 보낸다. */
 export type SubtitleSpeakerRole = 'INFLUENCER' | 'FAN'
 

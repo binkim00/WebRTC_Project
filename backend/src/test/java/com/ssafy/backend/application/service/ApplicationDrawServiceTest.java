@@ -27,6 +27,7 @@ import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
 import com.ssafy.backend.queue.dto.QueueInitializationResponse;
 import com.ssafy.backend.queue.service.QueueInitializationService;
+import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import com.ssafy.backend.user.domain.UserStatus;
@@ -46,6 +47,7 @@ import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
@@ -532,6 +534,61 @@ class ApplicationDrawServiceTest {
                 );
     }
 
+    /** 응모 결과 알림을 응모자마다 자기 계정 선호 언어로 만드는지 검증한다. */
+    @SuppressWarnings("unchecked")
+    @Test
+    void publishesResultNotificationsInEachApplicantLanguage() {
+        Application koreanSelected = submittedApplication(300L, activeFan(41L));
+        Application englishNotSelected = submittedApplication(
+                301L, fanPreferring(42L, PreferredLanguage.ENGLISH));
+        koreanSelected.select(now());
+        englishNotSelected.reject(now());
+        meeting.closeApplications();
+        stubEligibleApplications(List.of(koreanSelected, englishNotSelected));
+        when(notificationRepository.saveAll(anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        applicationDrawService.publishResults(MEETING_ID, principal);
+
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).extracting(Notification::getTitle)
+                .containsExactly("응모 결과 안내", "Application result");
+        assertThat(captor.getValue()).extracting(Notification::getMessage)
+                .containsExactly(
+                        meeting.getTitle() + " 팬미팅 응모에 당첨되었습니다.",
+                        "You were not selected for the " + meeting.getTitle() + " fan meeting."
+                );
+        assertThat(captor.getValue()).extracting(Notification::getMessageKey)
+                .containsExactly(
+                        "notification.applicationResult.selected",
+                        "notification.applicationResult.notSelected"
+                );
+        assertThat(captor.getValue().get(1).getMessageArguments())
+                .containsOnly(entry("meetingTitle", meeting.getTitle()));
+    }
+
+    /** 사전이 없는 언어를 고른 응모자에게는 한국어 대신 영어로 결과를 알리는지 검증한다. */
+    @SuppressWarnings("unchecked")
+    @Test
+    void fallsBackToEnglishForApplicantLanguageWithoutDictionary() {
+        Application selected = submittedApplication(
+                310L, fanPreferring(51L, PreferredLanguage.CHINESE));
+        selected.select(now());
+        meeting.closeApplications();
+        stubEligibleApplications(List.of(selected));
+        when(notificationRepository.saveAll(anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        applicationDrawService.publishResults(MEETING_ID, principal);
+
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).extracting(Notification::getMessage)
+                .containsExactly(
+                        "You have been selected for the " + meeting.getTitle() + " fan meeting.");
+    }
+
     /** 추첨과 결과 공개를 이어서 실행하면 팬미팅이 시작 대기 상태까지 전환되는지 검증한다. */
     @Test
     void movesMeetingToReadyAfterDrawAndPublish() {
@@ -737,6 +794,19 @@ class ApplicationDrawServiceTest {
      */
     private User activeFan(long id) {
         return fan(id, UserStatus.ACTIVE);
+    }
+
+    /**
+     * 지정한 계정 선호 언어를 가진 활성 팬 대역을 생성한다.
+     *
+     * @param id 팬 사용자 식별자
+     * @param language 팬의 계정 선호 언어
+     * @return 선호 언어가 지정된 활성 팬
+     */
+    private User fanPreferring(long id, PreferredLanguage language) {
+        User result = activeFan(id);
+        when(result.getPreferredLanguage()).thenReturn(language);
+        return result;
     }
 
     /**

@@ -18,6 +18,9 @@ import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.notification.domain.Notification;
 import com.ssafy.backend.notification.domain.NotificationType;
 import com.ssafy.backend.notification.repository.NotificationRepository;
+import com.ssafy.backend.notification.support.NotificationContent;
+import com.ssafy.backend.notification.support.NotificationLanguage;
+import com.ssafy.backend.notification.support.NotificationMessage;
 import com.ssafy.backend.participant.domain.Participant;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
 import com.ssafy.backend.queue.service.QueueInitializationService;
@@ -34,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 /**
@@ -47,9 +51,6 @@ public class ApplicationDrawService {
 
     /** 추첨 대상 집계에서 제외하는 응모 상태다. */
     private static final ApplicationStatus EXCLUDED_STATUS = ApplicationStatus.WITHDRAWN;
-
-    /** 응모 결과 알림의 제목이다. */
-    private static final String RESULT_NOTIFICATION_TITLE = "응모 결과 안내";
 
     private final CurrentUserService currentUserService;
     private final MeetingAccessService meetingAccessService;
@@ -206,7 +207,7 @@ public class ApplicationDrawService {
         List<Notification> notifications = decided.stream()
                 .map(application -> Notification.create(
                         application.getFan(), meeting, NotificationType.APPLICATION_RESULT,
-                        RESULT_NOTIFICATION_TITLE, resultMessage(meeting, application)
+                        resultContent(meeting, application)
                 ))
                 .toList();
         notificationRepository.saveAll(notifications);
@@ -385,15 +386,23 @@ public class ApplicationDrawService {
     }
 
     /**
-     * 응모 결과에 맞는 알림 본문을 만든다.
+     * 응모 결과에 맞는 알림 문구를 응모자의 선호 언어로 만든다.
+     *
+     * <p>같은 추첨이라도 응모자마다 선호 언어가 다르므로 문구를 응모 한 건마다 만든다.
      *
      * @param meeting 결과를 공개한 팬미팅
      * @param application 알림 대상 응모
-     * @return 당첨 여부에 따른 알림 본문
+     * @return 당첨 여부에 따른 알림 제목·본문과 번역 재료
      */
-    private String resultMessage(FanMeeting meeting, Application application) {
-        return application.getStatus() == ApplicationStatus.SELECTED
-                ? meeting.getTitle() + " 팬미팅 응모에 당첨되었습니다."
-                : meeting.getTitle() + " 팬미팅 응모에 당첨되지 않았습니다.";
+    private NotificationContent resultContent(FanMeeting meeting, Application application) {
+        NotificationMessage body = application.getStatus() == ApplicationStatus.SELECTED
+                ? NotificationMessage.APPLICATION_RESULT_SELECTED
+                : NotificationMessage.APPLICATION_RESULT_NOT_SELECTED;
+        return NotificationContent.of(
+                NotificationMessage.APPLICATION_RESULT_TITLE,
+                body,
+                NotificationLanguage.from(application.getFan().getPreferredLanguage()),
+                Map.of("meetingTitle", meeting.getTitle())
+        );
     }
 }

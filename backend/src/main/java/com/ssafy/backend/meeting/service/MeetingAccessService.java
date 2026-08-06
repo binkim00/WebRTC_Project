@@ -3,6 +3,7 @@ package com.ssafy.backend.meeting.service;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.meeting.domain.FanMeeting;
+import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.organization.domain.OrganizationMemberStatus;
 import com.ssafy.backend.organization.domain.OrganizationMemberType;
@@ -30,6 +31,37 @@ public class MeetingAccessService {
     public FanMeeting requireMeeting(Long meetingId) {
         return fanMeetingRepository.findById(meetingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAN_MEETING_NOT_FOUND));
+    }
+
+    /**
+     * 팬미팅을 조회하고 대기실 입장·장비 점검을 이어갈 수 있는 상태인지까지 검증한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @return 아직 종료·취소되지 않은 팬미팅
+     * @throws BusinessException 팬미팅이 없거나 이미 종료·취소된 경우
+     */
+    @Transactional(readOnly = true)
+    public FanMeeting requireJoinableMeeting(Long meetingId) {
+        FanMeeting meeting = requireMeeting(meetingId);
+        requireJoinable(meeting);
+        return meeting;
+    }
+
+    /**
+     * 팬미팅이 종료·취소된 뒤에도 남아 있는 진입 동선을 막는다.
+     *
+     * <p>ENDED와 CANCELED는 되돌릴 수 없는 최종 상태이며, 이 두 상태에서는 팬에게
+     * 녹화 다시보기와 기념 카드만 남겨야 한다. 그 앞 단계(READY 이전)는 아직 참가자가
+     * 없어 각 기능의 참가자 검증에서 걸리므로 여기서 따로 좁히지 않는다.
+     *
+     * @param meeting 검증할 팬미팅
+     * @throws BusinessException 이미 종료·취소된 팬미팅인 경우
+     */
+    public void requireJoinable(FanMeeting meeting) {
+        if (meeting.getStatus() == FanMeetingStatus.ENDED
+                || meeting.getStatus() == FanMeetingStatus.CANCELED) {
+            throw new BusinessException(ErrorCode.FAN_MEETING_CLOSED);
+        }
     }
 
     /** 사용자가 해당 팬미팅의 인플루언서·관리자·활성 조직 구성원인지 검증한다. */

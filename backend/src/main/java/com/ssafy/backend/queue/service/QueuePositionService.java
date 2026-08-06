@@ -8,6 +8,9 @@ import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.notification.domain.Notification;
 import com.ssafy.backend.notification.domain.NotificationType;
 import com.ssafy.backend.notification.repository.NotificationRepository;
+import com.ssafy.backend.notification.support.NotificationContent;
+import com.ssafy.backend.notification.support.NotificationLanguage;
+import com.ssafy.backend.notification.support.NotificationMessage;
 import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.dto.QueuePositionChangeRequest;
@@ -33,7 +36,6 @@ import java.util.Set;
 public class QueuePositionService {
     private static final Set<QueueEntryStatus> MOVABLE_STATUSES =
             Set.of(QueueEntryStatus.NOT_ENTERED, QueueEntryStatus.WAITING);
-    private static final String CHANGE_NOTIFICATION_TITLE = "대기 순번 변경";
 
     private final CurrentUserService currentUserService;
     private final MeetingAccessService meetingAccessService;
@@ -244,6 +246,9 @@ public class QueuePositionService {
      * <p>매니저가 직접 이동시킨 대상과 그 여파로 순번이 밀린 참가자의 안내 문구를 구분한다.
      * 순번이 그대로인 참가자는 알릴 내용이 없으므로 건너뛴다.
      *
+     * <p>문구는 받는 팬마다 그 팬의 계정 선호 언어로 만든다. 한 번의 순서 조정으로 여러 팬에게
+     * 알림이 나가고 팬마다 언어가 다를 수 있으므로 문구를 미리 한 번만 만들어 돌려쓰지 않는다.
+     *
      * @param movableEntries 이동 가능한 대기열 항목
      * @param previousPositions 대기열 항목 식별자별 이동 전 순번
      * @param newPositions 대기열 항목 식별자별 이동 후 순번
@@ -264,15 +269,20 @@ public class QueuePositionService {
             if (previousPosition == newPosition) {
                 continue;
             }
-            String message = changeMessage(
-                    entry.getId().equals(target.getId()), previousPosition, newPosition, reason);
-            entry.recordPositionChange(message, changedAt);
+            User fan = entry.getParticipant().getFan();
+            NotificationContent content = NotificationContent.of(
+                    NotificationMessage.QUEUE_CHANGE_TITLE,
+                    changeMessage(entry.getId().equals(target.getId()), reason),
+                    NotificationLanguage.from(fan.getPreferredLanguage()),
+                    changeArguments(previousPosition, newPosition, reason)
+            );
+            entry.recordPositionChange(content.message(), content.messageKey(),
+                    content.messageArguments(), changedAt);
             notifications.add(Notification.create(
-                    entry.getParticipant().getFan(),
+                    fan,
                     entry.getMeeting(),
                     NotificationType.QUEUE_CHANGE_RESULT,
-                    CHANGE_NOTIFICATION_TITLE,
-                    message
+                    content
             ));
         }
         if (!notifications.isEmpty()) {
@@ -281,25 +291,54 @@ public class QueuePositionService {
     }
 
     /**
-     * 순번 변경을 팬이 이해할 수 있는 안내 문구로 만든다.
+     * 이동 주체와 변경 사유 유무에 맞는 안내 문구를 고른다.
+     *
+     * <p>사유가 있을 때와 없을 때를 별도 문구로 나눈다. 한 문구에 사유 자리표시자만 남겨 두면
+     * 화면이 언어별로 "사유:" 같은 접두어를 직접 붙여야 해 번역이 어긋나기 쉽다.
      *
      * @param moved 매니저가 직접 이동시킨 대상인지 여부
-     * @param previousPosition 이동 전 순번
-     * @param newPosition 이동 후 순번
      * @param reason 매니저가 입력한 변경 사유이며 비어 있을 수 있다
      * @return 대기 화면과 알림에 함께 사용할 안내 문구
      */
-    private String changeMessage(boolean moved, int previousPosition, int newPosition,
-                                 String reason) {
-        StringBuilder message = new StringBuilder();
-        if (!moved) {
-            message.append("다른 참가자의 순서 조정으로 ");
+    private NotificationMessage changeMessage(boolean moved, String reason) {
+        if (moved) {
+            return hasReason(reason)
+                    ? NotificationMessage.QUEUE_CHANGE_MOVED_WITH_REASON
+                    : NotificationMessage.QUEUE_CHANGE_MOVED;
         }
-        message.append("대기 순번이 ").append(previousPosition).append("번에서 ")
-                .append(newPosition).append("번으로 변경되었습니다.");
-        if (reason != null && !reason.isBlank()) {
-            message.append(" 사유: ").append(reason.strip());
+        return hasReason(reason)
+                ? NotificationMessage.QUEUE_CHANGE_SHIFTED_WITH_REASON
+                : NotificationMessage.QUEUE_CHANGE_SHIFTED;
+    }
+
+    /**
+     * 안내 문구의 자리표시자에 채울 값을 모은다.
+     *
+     * <p>매니저가 입력한 사유는 번역할 수 없는 자유 입력이므로 값 그대로 넘긴다.
+     *
+     * @param previousPosition 이동 전 순번
+     * @param newPosition 이동 후 순번
+     * @param reason 매니저가 입력한 변경 사유이며 비어 있을 수 있다
+     * @return 자리표시자 이름별 값이며 사유가 비어 있으면 사유 항목을 넣지 않는다
+     */
+    private Map<String, String> changeArguments(int previousPosition, int newPosition,
+                                                String reason) {
+        Map<String, String> arguments = new LinkedHashMap<>();
+        arguments.put("previousPosition", String.valueOf(previousPosition));
+        arguments.put("newPosition", String.valueOf(newPosition));
+        if (hasReason(reason)) {
+            arguments.put("reason", reason.strip());
         }
-        return message.toString();
+        return arguments;
+    }
+
+    /**
+     * 팬에게 안내할 만한 변경 사유가 입력되었는지 확인한다.
+     *
+     * @param reason 매니저가 입력한 변경 사유이며 {@code null}일 수 있다
+     * @return 공백이 아닌 사유가 있으면 {@code true}
+     */
+    private boolean hasReason(String reason) {
+        return reason != null && !reason.isBlank();
     }
 }

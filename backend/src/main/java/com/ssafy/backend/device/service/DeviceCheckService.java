@@ -59,7 +59,8 @@ public class DeviceCheckService {
      * @param request 카메라·마이크·스피커·네트워크 점검 결과
      * @param principal JWT 인증 사용자 정보
      * @return 저장된 점검 결과와 경고 표시 여부
-     * @throws BusinessException 팬미팅이 없거나 점검 권한이 없거나 요청 값이 잘못된 경우
+     * @throws BusinessException 팬미팅이 없거나 이미 종료·취소되었거나 점검 권한이 없거나
+     *                          요청 값이 잘못된 경우
      */
     @Transactional
     public DeviceCheckResponse saveDeviceCheck(
@@ -71,6 +72,9 @@ public class DeviceCheckService {
         if (!canCheckDevice(meeting, user)) {
             throw new BusinessException(ErrorCode.DEVICE_CHECK_NOT_ALLOWED);
         }
+        // 종료·취소 확인은 권한 검증 뒤에 둔다. 무관한 사용자에게는 팬미팅 진행 상태 대신
+        // 기존과 같은 권한 오류만 알려 준다.
+        meetingAccessService.requireJoinable(meeting);
 
         DeviceCheck saved = deviceCheckRepository.save(DeviceCheck.record(
                 meeting,
