@@ -76,6 +76,44 @@ public class MeetingApplicationOpeningService {
     }
 
     /**
+     * 응모 마감 시각이 지났는데 아직 접수 중인 팬미팅 식별자를 조회한다.
+     *
+     * @return 응모 마감 상태로 전환해야 할 팬미팅 식별자 목록
+     */
+    public List<Long> findCloseTargetIds() {
+        return applicationSettingRepository.findApplicationCloseTargetIds(LocalDateTime.now(clock));
+    }
+
+    /**
+     * 팬미팅을 쓰기 잠금으로 다시 확인하고 마감 시각이 지난 경우에만 응모를 마감한다.
+     *
+     * <p>접수는 ApplicationService 가 시각으로도 막으므로 이 전환이 늦어도 마감 뒤 응모가 들어오지
+     * 않는다. 다만 상태가 접수 중으로 남아 있으면 화면에 "모집 중"으로 보이고, 매니저가 손으로
+     * 마감하기 전에는 추첨으로 넘어갈 수도 없다. 시작을 자동으로 열어 주는 것과 짝을 맞춘다.
+     *
+     * @param meetingId 전환 후보 팬미팅 식별자
+     * @return 응모 마감 상태로 전환했으면 true, 조건을 만족하지 않아 건너뛰었으면 false
+     */
+    @Transactional
+    public boolean closeIfDue(Long meetingId) {
+        FanMeeting meeting = fanMeetingRepository.findByIdForUpdate(meetingId).orElse(null);
+        if (meeting == null || meeting.getDeletedAt() != null
+                || meeting.getStatus() != FanMeetingStatus.APPLICATION_OPEN) {
+            return false;
+        }
+
+        MeetingApplicationSetting setting = applicationSettingRepository.findById(meetingId)
+                .orElse(null);
+        if (setting == null || setting.getApplicationCloseAt() == null
+                || LocalDateTime.now(clock).isBefore(setting.getApplicationCloseAt())) {
+            return false;
+        }
+
+        meeting.closeApplications();
+        return true;
+    }
+
+    /**
      * 응모 설정이 현재 시각 기준으로 응모를 받을 수 있는 기간인지 확인한다.
      *
      * @param setting 팬미팅 응모 설정이며 없으면 null

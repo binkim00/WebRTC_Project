@@ -134,6 +134,56 @@ class MeetingApplicationOpeningServiceTest {
         assertThat(service.openIfDue(1L)).isFalse();
     }
 
+    /** 마감 후보 조회가 현재 시각을 그대로 저장소 질의에 넘기는지 검증한다. */
+    @Test
+    void findsCloseTargetIdsWithCurrentTime() {
+        when(applicationSettingRepository.findApplicationCloseTargetIds(now()))
+                .thenReturn(List.of(3L, 4L));
+
+        assertThat(service.findCloseTargetIds()).containsExactly(3L, 4L);
+    }
+
+    /**
+     * 마감 시각이 지난 접수 중 팬미팅을 마감 상태로 넘기는지 검증한다.
+     *
+     * <p>접수는 응모 서비스가 시각으로도 막지만, 상태가 남아 있으면 화면에는 "모집 중"으로
+     * 계속 보인다. 시작을 자동으로 열어 주는 것과 짝을 맞춘다.
+     */
+    @Test
+    void closesApplicationsWhenPeriodEnded() {
+        FanMeeting meeting = publishedMeeting();
+        meeting.openApplications();
+        stubMeeting(meeting, applicationSetting(meeting, true, now().minusDays(2),
+                now().minusMinutes(1)));
+
+        assertThat(service.closeIfDue(1L)).isTrue();
+        assertThat(meeting.getStatus()).isEqualTo(FanMeetingStatus.APPLICATION_CLOSED);
+    }
+
+    /** 마감 시각 전에는 접수 상태를 유지하는지 검증한다. */
+    @Test
+    void keepsOpenBeforeCloseTime() {
+        FanMeeting meeting = publishedMeeting();
+        meeting.openApplications();
+        stubMeeting(meeting, applicationSetting(meeting, true, now().minusDays(1),
+                now().plusHours(1)));
+
+        assertThat(service.closeIfDue(1L)).isFalse();
+        assertThat(meeting.getStatus()).isEqualTo(FanMeetingStatus.APPLICATION_OPEN);
+    }
+
+    /** 이미 매니저가 손으로 마감한 팬미팅은 다시 마감하지 않는지 검증한다. */
+    @Test
+    void skipsMeetingAlreadyClosed() {
+        FanMeeting meeting = publishedMeeting();
+        meeting.openApplications();
+        meeting.closeApplications();
+        when(fanMeetingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(meeting));
+
+        assertThat(service.closeIfDue(1L)).isFalse();
+        assertThat(meeting.getStatus()).isEqualTo(FanMeetingStatus.APPLICATION_CLOSED);
+    }
+
     /** 잠금 조회와 응모 설정 조회가 주어진 값을 반환하도록 대역을 설정한다. */
     private void stubMeeting(FanMeeting meeting, MeetingApplicationSetting setting) {
         when(fanMeetingRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(meeting));

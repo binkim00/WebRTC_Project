@@ -42,4 +42,25 @@ public class MeetingApplicationOpeningScheduler {
             }
         }
     }
+
+    /**
+     * 응모 마감 시각이 지난 팬미팅을 찾아 응모 마감 상태로 바꾼다.
+     *
+     * <p>시작만 자동으로 열어 주면 마감된 팬미팅이 화면에 계속 "모집 중"으로 남는다. 접수는 시각
+     * 검증으로 이미 막히므로, 팬은 눌러 보고 나서야 마감을 알게 된다.
+     */
+    @Scheduled(fixedDelayString = "${app.meeting.application-open-check-delay-ms:60000}")
+    public void closeDueApplications() {
+        for (Long meetingId : openingService.findCloseTargetIds()) {
+            try {
+                if (openingService.closeIfDue(meetingId)) {
+                    log.info("팬미팅 응모를 마감했습니다. meetingId={}", meetingId);
+                }
+            } catch (RuntimeException exception) {
+                // 한 건의 실패가 남은 건을 막지 않도록 기록만 남기고 계속 진행한다.
+                log.warn("팬미팅 응모 마감에 실패했습니다. 다음 주기에 다시 시도합니다. meetingId={}",
+                        meetingId, exception);
+            }
+        }
+    }
 }

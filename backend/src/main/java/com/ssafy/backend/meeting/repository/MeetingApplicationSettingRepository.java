@@ -35,4 +35,24 @@ public interface MeetingApplicationSettingRepository extends JpaRepository<Meeti
               and setting.applicationCloseAt > :now
             """)
     List<Long> findApplicationOpenTargetIds(@Param("now") LocalDateTime now);
+
+    /**
+     * 응모 마감 시각이 지났는데 아직 접수 중인 팬미팅 식별자를 조회한다.
+     *
+     * <p>접수 자체는 서비스가 시각으로도 막지만 상태가 남아 있으면 화면에는 "모집 중"으로 계속
+     * 보인다. 팬이 눌러 보고 나서야 마감을 알게 되므로 상태도 함께 넘긴다.
+     *
+     * @param now 마감 여부를 판단할 서버 시각
+     * @return 응모 마감 상태로 전환해야 할 팬미팅 식별자 목록
+     */
+    @Query("""
+            select setting.meetingId
+            from MeetingApplicationSetting setting
+            where setting.meeting.status
+                  = com.ssafy.backend.meeting.domain.FanMeetingStatus.APPLICATION_OPEN
+              and setting.meeting.deletedAt is null
+              and setting.applicationCloseAt is not null
+              and setting.applicationCloseAt <= :now
+            """)
+    List<Long> findApplicationCloseTargetIds(@Param("now") LocalDateTime now);
 }
