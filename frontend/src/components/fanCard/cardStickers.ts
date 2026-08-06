@@ -2,12 +2,14 @@ import { translate } from '../../i18n'
 /**
  * 기념 카드에 붙일 수 있는 스티커 목록이다.
  *
- * <p>그림은 Noto Emoji(SIL Open Font License 1.1)의 SVG를 public/stickers에 두고 쓴다.
- * 라이선스 사본은 public/stickers/LICENSE.txt에 있다. 이모지 글자를 그리지 않고 SVG를
- * 쓰는 이유는, 이모지 글꼴이 기기마다 달라 같은 카드가 사람마다 다르게 저장되기 때문이다.
+ * <p>그림은 Microsoft Fluent Emoji(MIT)의 3D 렌더링 PNG를 public/stickers에 두고 쓴다.
+ * 라이선스 사본은 public/stickers/LICENSE.txt에 있다. 시스템 이모지 글자를 그리지 않는 이유는,
+ * 이모지 글꼴이 기기마다 달라 같은 카드가 사람마다 다르게 저장되기 때문이다. 평면 이모지 대신
+ * 입체 그림을 쓰는 이유는 카드에 얹었을 때 붙여 둔 스티커처럼 도드라지기 때문이다.
  *
- * <p>종류를 늘리려면 SVG 파일을 public/stickers에 추가하고 아래 목록에 코드와 이름만
- * 더하면 된다.
+ * <p>종류를 늘리려면 그림을 public/stickers에 코드포인트 이름으로 두고 아래 목록에 코드와 이름만
+ * 더하면 된다. 파일 이름을 코드포인트로 두는 이유는 팬이 꾸미던 초안에 코드가 저장돼 있어서,
+ * 이름 규칙이 바뀌면 예전 초안의 스티커가 사라지기 때문이다.
  */
 
 /** 스티커 하나의 정의다. code는 파일 이름이자 식별자다. */
@@ -131,7 +133,6 @@ export const CARD_STICKER_CATEGORIES = (): readonly CardStickerCategory[] => [
     stickers: [
       { code: '1f4ac', name: translate('cardStickers.t54') },
       { code: '1f4af', name: translate('cardStickers.t55') },
-      { code: '2757', name: translate('cardStickers.t56') },
       { code: '2753', name: translate('cardStickers.t57') },
       { code: '1f4e2', name: translate('cardStickers.t58') },
       { code: '1f3a4', name: translate('cardStickers.t59') },
@@ -403,10 +404,10 @@ export const CARD_STICKER_CATEGORIES = (): readonly CardStickerCategory[] => [
  * 스티커 그림 파일 주소를 만든다.
  *
  * @param code 스티커 코드
- * @returns public 아래의 SVG 경로
+ * @returns public 아래의 그림 경로
  */
 export function cardStickerUrl(code: string): string {
-  return `/stickers/${code}.svg`
+  return `/stickers/${code}.png`
 }
 
 /**
