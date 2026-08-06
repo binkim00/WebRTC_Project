@@ -12,6 +12,7 @@ import {
 import { fetchMeetingQueue, type MeetingQueue } from '../../api/fanMeetingParticipants'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
 import { isQueueNotInitialized } from '../../api/queue'
+import { consentToRecording } from '../../api/recordings'
 import { usePolling } from '../../hooks/usePolling'
 import { Badge } from '../data-display'
 import { AlertBanner } from '../feedback'
@@ -104,6 +105,23 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
           // 카운트다운은 서버가 보내는 남은 시간으로 계속 동작하므로 통화 자체는 막지 않는다.
           if (authSession?.role === 'FAN') {
             setRecordingPolicyError(t('videoCallRoom.t7'))
+          }
+        }
+
+        if (signal.aborted) return
+
+        // 서버 Egress 녹화는 팬의 동의 시각이 기록돼 있을 때만 시작된다
+        // (백엔드 RecordingEgressCoordinator.prepareStart). 통화가 ACTIVE로 바뀌는 순간
+        // 서버가 녹화를 걸기 때문에 입장 전인 이 시점에 기록해야 한다. 동의 자체는 응모 화면에서
+        // 필수 항목으로 이미 받았으므로 여기서 팬에게 다시 묻지 않고 서버에만 남긴다.
+        if (shouldRecord && authToken) {
+          try {
+            await consentToRecording(connectSessionId, authToken, signal)
+          } catch (error: unknown) {
+            if (error instanceof DOMException && error.name === 'AbortError') throw error
+            // 동의를 남기지 못하면 서버 녹화가 시작되지 않지만, 통화 자체는 막지 않는다.
+            setRecordingPolicyError(t('videoCallRoom.t7'))
+            console.warn('녹화 동의를 기록하지 못해 서버 녹화가 시작되지 않습니다.', error)
           }
         }
 
