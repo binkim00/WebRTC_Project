@@ -61,6 +61,11 @@ export function localizeNotificationTitle(type: NotificationType, title: string)
       return translate('serverText.notif.meetingChanged.title')
     case 'MEETING_CANCELED':
       return translate('serverText.notif.meetingCanceled.title')
+    case 'MEETING_PUBLISHED':
+      return translate('serverText.notif.meetingPublished.title')
+    default:
+      // 프론트가 모르는 새 유형은 대체 문구를 지어내지 않고 서버 원문을 그대로 둔다.
+      return title
   }
 }
 
@@ -100,6 +105,11 @@ export function localizeNotificationMessage(
       return translate('serverText.notif.meetingChanged.message')
     case 'MEETING_CANCELED':
       return translate('serverText.notif.meetingCanceled.message')
+    case 'MEETING_PUBLISHED':
+      return translate('serverText.notif.meetingPublished.message')
+    default:
+      // 프론트가 모르는 새 유형은 대체 문구를 지어내지 않고 서버 원문을 그대로 둔다.
+      return message
   }
 }
 

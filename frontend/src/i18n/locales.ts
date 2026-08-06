@@ -43,6 +43,14 @@ const ko = {
   'nav.notifications': '알림',
   'nav.admin.serviceNotices': '전체 공지 관리',
   'notificationsPage.markAllRead': '{count}개 모두 읽음',
+  'callStage.captureCountdownLabel': '같이 찍어요',
+  'callStage.captureCountdownAria': '사진 촬영까지 {p0}',
+  'notificationsPage.t24': '새 팬미팅',
+  'notificationsPage.unknownType': '알림',
+  'notificationBell.t26': '새 팬미팅',
+  'notificationBell.t27': '팬미팅 보기 →',
+  'notificationBell.unknownTag': '알림',
+  'notificationBell.unknownAction': '자세히 보기 →',
 
   'app.nav.serviceNotices': '공지사항',
   'app.nav.login': '로그인',
@@ -417,6 +425,8 @@ const ko = {
   'serverText.notif.meetingChanged.message': '변경된 일정과 안내를 확인해 주세요.',
   'serverText.notif.meetingCanceled.title': '팬미팅이 취소되었습니다',
   'serverText.notif.meetingCanceled.message': '자세한 내용은 팬미팅 상세에서 확인해 주세요.',
+  'serverText.notif.meetingPublished.title': '새 팬미팅이 열렸습니다',
+  'serverText.notif.meetingPublished.message': '새로 공개된 팬미팅을 확인해 보세요.',
   'serverText.queueNotice.approved':
     '순서 변경 요청이 승인되어 대기열 마지막 순서로 이동했습니다.',
   'serverText.queueNotice.rejected': '순서 변경 요청이 거절되어 기존 순서가 유지됩니다.',
@@ -3184,6 +3194,14 @@ const en: Partial<Record<TranslationKey, string>> = {
   'nav.notifications': 'Notifications',
   'nav.admin.serviceNotices': 'Service notices',
   'notificationsPage.markAllRead': 'Mark all {count} as read',
+  'callStage.captureCountdownLabel': 'Smile together!',
+  'callStage.captureCountdownAria': '{p0} until the photo',
+  'notificationsPage.t24': 'New fan meeting',
+  'notificationsPage.unknownType': 'Notification',
+  'notificationBell.t26': 'New fan meeting',
+  'notificationBell.t27': 'View fan meeting →',
+  'notificationBell.unknownTag': 'Notification',
+  'notificationBell.unknownAction': 'View details →',
 
   'app.nav.serviceNotices': 'Notices',
   'app.nav.login': 'Log in',
@@ -4805,6 +4823,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'serverText.notif.meetingChanged.message': 'Check the updated schedule and details.',
   'serverText.notif.meetingCanceled.title': 'Fan meeting canceled',
   'serverText.notif.meetingCanceled.message': 'See the fan meeting page for details.',
+  'serverText.notif.meetingPublished.title': 'A new fan meeting is open',
+  'serverText.notif.meetingPublished.message': 'Check out the newly announced fan meeting.',
   'serverText.queueNotice.approved':
     'Your reorder request was approved — you were moved to the end of the line.',
   'serverText.queueNotice.rejected':

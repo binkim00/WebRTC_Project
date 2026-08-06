@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import type { PageResponse } from '../../api/envelope'
@@ -38,6 +39,7 @@ const notificationTypeContent = (): Record<
   ENTER_NOW: { label: translate('notificationsPage.t21'), variant: 'success' },
   MEETING_CHANGED: { label: translate('notificationsPage.t22'), variant: 'warning' },
   MEETING_CANCELED: { label: translate('notificationsPage.t23'), variant: 'danger' },
+  MEETING_PUBLISHED: { label: translate('notificationsPage.t24'), variant: 'info' },
 })
 
 function getNotificationLink(
@@ -57,12 +59,13 @@ function getNotificationLink(
       return `/fan/fan-meetings/${meetingId}/waiting`
     case 'MEETING_CHANGED':
     case 'MEETING_CANCELED':
+    case 'MEETING_PUBLISHED':
       return `/fan/events/${meetingId}`
   }
 }
 
 function formatDateTime(iso: string): string {
-  const date = new Date(iso)
+  const date = parseServerDate(iso)
 
   if (Number.isNaN(date.getTime())) {
     return iso
@@ -290,7 +293,12 @@ export function NotificationsPage() {
             <ul className="divide-y divide-[var(--color-divider)]">
               {notifications.map((notification) => {
                 const isUnread = notification.readAt === null
-                const typeContent = notificationTypeContent()[notification.type]
+                // 백엔드가 프론트보다 먼저 새 알림 유형을 내보내도 목록이 죽지 않아야 한다.
+                const typeContent: { label: string; variant: BadgeVariant } =
+                  notificationTypeContent()[notification.type] ?? {
+                    label: translate('notificationsPage.unknownType'),
+                    variant: 'info',
+                  }
 
                 return (
                   <li key={notification.notificationId}>

@@ -33,6 +33,13 @@ import {
 } from './callControlChannel'
 import { EndCallDialog } from './EndCallDialog'
 import {
+  PHOTO_SHUTTER_COUNT_FROM,
+  PHOTO_SHUTTER_DATA_TOPIC,
+  PHOTO_SHUTTER_STEP_MS,
+  encodePhotoShutterSignal,
+  parsePhotoShutterSignal,
+} from './photoShutterChannel'
+import {
   REACTION_DATA_TOPIC,
   REACTION_EMOJIS,
   encodeReaction,
@@ -371,6 +378,100 @@ export function ConnectedCallRoom({
   })
   const photoCaptureVisible = authSession?.role === 'FAN' && isConnected
 
+  /** 화면에 띄우는 촬영 카운트다운 숫자다. 값이 없으면 카운트 중이 아니다. */
+  const [shutterCountdown, setShutterCountdown] = useState<number>()
+  /**
+   * 카운트 진행 중 여부다.
+   *
+   * 표시용 상태(`shutterCountdown`)로만 막으면 같은 렌더 안에서 두 번 눌린 경우를 놓친다.
+   * 판정은 즉시 반영되는 ref로 하고, 화면 표시만 상태로 둔다.
+   */
+  const shutterCountingRef = useRef(false)
+  /** 카운트다운 타이머들이며 통화가 바뀌거나 화면을 떠날 때 모두 끊는다. */
+  const shutterTimersRef = useRef<number[]>([])
+  // capture는 트랙이 바뀔 때마다 새로 만들어진다. 카운트다운 시작 함수를 고정하려고 ref로 읽는다.
+  const captureRef = useRef(capture)
+  captureRef.current = capture
+
+  /** 진행 중인 카운트다운을 즉시 멈추고 남은 타이머를 정리한다. */
+  const cancelShutterCountdown = useCallback(() => {
+    for (const timerId of shutterTimersRef.current) window.clearTimeout(timerId)
+    shutterTimersRef.current = []
+    shutterCountingRef.current = false
+    setShutterCountdown(undefined)
+  }, [])
+
+  /**
+   * 3·2·1 카운트다운을 띄우고, 다 세면 콜백을 실행한다.
+   *
+   * 숫자는 3부터 보여 주지만 한 칸이 1초보다 짧아 전체 대기는 2초 남짓이다
+   * (PHOTO_SHUTTER_STEP_MS). 이미 세는 중이면 아무것도 하지 않아 연타를 막는다.
+   *
+   * @param onZero 0이 되는 순간 실행할 동작이며, 카운트만 보여 주는 쪽에서는 넘기지 않는다.
+   */
+  const startShutterCountdown = useCallback((onZero?: () => void) => {
+    if (shutterCountingRef.current) return
+    shutterCountingRef.current = true
+    setShutterCountdown(PHOTO_SHUTTER_COUNT_FROM)
+
+    for (let step = 1; step <= PHOTO_SHUTTER_COUNT_FROM; step += 1) {
+      const nextCount = PHOTO_SHUTTER_COUNT_FROM - step
+      const timerId = window.setTimeout(() => {
+        if (nextCount > 0) {
+          setShutterCountdown(nextCount)
+          return
+        }
+        // 마지막 칸이다. 잠금을 풀고 화면에서 숫자를 지운 뒤에 찍는다.
+        shutterTimersRef.current = []
+        shutterCountingRef.current = false
+        setShutterCountdown(undefined)
+        onZero?.()
+      }, PHOTO_SHUTTER_STEP_MS * step)
+      shutterTimersRef.current.push(timerId)
+    }
+  }, [])
+
+  useEffect(() => cancelShutterCountdown, [cancelShutterCountdown])
+
+  /**
+   * 셔터를 누른다. 양쪽 화면에 카운트다운을 띄우고 0이 되는 순간 촬영한다.
+   *
+   * 카운트다운은 **내 화면에서 먼저** 시작한다. 상대에게 보내는 신호는 표시용 힌트일 뿐이라,
+   * 데이터 채널이 막혔거나 상대가 아직 입장하지 않았어도 내 촬영은 그대로 진행된다.
+   */
+  const handleShutterPress = useCallback(() => {
+    if (shutterCountingRef.current) return
+    startShutterCountdown(() => void captureRef.current())
+
+    if (!callSessionId) return
+    void localParticipant
+      .publishData(encodePhotoShutterSignal(callSessionId), {
+        reliable: true,
+        topic: PHOTO_SHUTTER_DATA_TOPIC,
+      })
+      .catch(() => undefined)
+  }, [callSessionId, localParticipant, startShutterCountdown])
+
+  /**
+   * 상대가 셔터를 눌렀다는 신호를 받는다.
+   *
+   * 받은 쪽은 함께 포즈를 잡도록 카운트만 띄운다. 저장은 셔터를 누른 팬 브라우저에서만
+   * 일어나므로, 이 신호로 상대의 저장소나 장치가 움직이는 경로는 없다.
+   */
+  const handlePhotoShutterMessage = useCallback(
+    (message: { payload: Uint8Array }) => {
+      const signal = parsePhotoShutterSignal(message.payload)
+      if (!signal) return
+      // 호스트는 팬미팅 내내 같은 방에 머물러 이전 통화의 신호가 뒤늦게 도착할 수 있다.
+      if (signal.callSessionId !== callSessionIdRef.current) return
+
+      startShutterCountdown()
+    },
+    [startShutterCountdown],
+  )
+
+  useDataChannel(PHOTO_SHUTTER_DATA_TOPIC, handlePhotoShutterMessage)
+
   const handleReactionMessage = useCallback(
     (message: { payload: Uint8Array }) => {
       const signal = parseReaction(message.payload)
@@ -443,7 +544,9 @@ export function ConnectedCallRoom({
     setLastRemoteName(undefined)
     // 게이지 분모도 통화마다 다시 잰다. 이전 통화의 최댓값을 물려받으면 비율이 어긋난다.
     timeRatioBaseRef.current = 0
-  }, [callSessionId])
+    // 팬이 교체되면 이전 통화의 촬영 카운트다운도 멈춘다.
+    cancelShutterCountdown()
+  }, [callSessionId, cancelShutterCountdown])
 
   // 통화가 끝나면 상대가 방을 떠나 이름을 알 수 없게 된다. 마무리 화면에서 "○○님과의 통화가
   // 끝났어요"를 보여 주려면 통화 중에 이름을 기억해 두어야 한다.
@@ -817,9 +920,11 @@ export function ConnectedCallRoom({
         localVideo={localVideo}
         mediaAction={mediaAction}
         microphoneEnabled={isMicrophoneEnabled}
+        captureCountdown={shutterCountdown}
         onCameraToggle={() => void toggleCamera()}
         onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
-        onCapture={photoCaptureVisible ? () => void capture() : undefined}
+        // 셔터는 바로 찍지 않고 양쪽에 3·2·1 카운트다운을 띄운 뒤 0에서 촬영한다.
+        onCapture={photoCaptureVisible ? handleShutterPress : undefined}
         onLeave={() => setEndDialogOpen(true)}
         onMicrophoneToggle={() => void toggleMicrophone()}
         onReactionSend={sendReaction}
@@ -839,8 +944,16 @@ export function ConnectedCallRoom({
             ? remaining.seconds / timeRatioBase
             : undefined
         }
-        // 종료 직전에는 타이머가 경고색으로 바뀌어 마무리를 준비하게 한다.
-        timeUrgent={remaining.counting && remaining.label <= '00:05'}
+        // 종료 임박 2단계 — 10초 이하 주황, 5초 이하 빨강+떨림으로 마무리를 준비하게 한다.
+        timeUrgency={
+          !remaining.counting
+            ? undefined
+            : remaining.seconds <= 5
+              ? 'critical'
+              : remaining.seconds <= 10
+                ? 'warning'
+                : undefined
+        }
         timeValue={remaining.label}
       />
 
