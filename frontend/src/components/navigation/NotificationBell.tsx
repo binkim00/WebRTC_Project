@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { parseServerDate } from '../../api/serverTime'
+import { usePolling } from '../../hooks/usePolling'
 import { Link, useNavigate } from 'react-router-dom'
 import moldEmptyImage from '../../assets/jelly-mold-empty.png'
 import { getAuthSession } from '../../api/authSession'
@@ -135,6 +136,27 @@ export function NotificationBell() {
     return () => controller.abort()
   }, [load])
 
+  // 새 알림이 도착한 것을 화면 이동 없이도 알 수 있게 천천히 주기 갱신한다.
+  // 탭이 보이지 않으면 쉬고, 화면에 복귀하면 즉시 따라잡는다.
+  usePolling(load, {
+    intervalMs: 60_000,
+    immediate: false,
+    pauseWhenHidden: true,
+    refreshOnFocus: true,
+  })
+
+  // 읽지 않은 수가 **늘어난** 순간에만 버튼을 딸랑 흔들고 배지를 튀긴다.
+  // 첫 로드나 읽음 처리로 줄어드는 경우에는 흔들지 않는다.
+  const [bellShakeKey, setBellShakeKey] = useState(0)
+  const previousUnreadRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    const previous = previousUnreadRef.current
+    if (previous !== undefined && unreadCount > previous) {
+      setBellShakeKey((key) => key + 1)
+    }
+    previousUnreadRef.current = unreadCount
+  }, [unreadCount])
+
   useEffect(() => {
     if (!open) return
 
@@ -207,9 +229,26 @@ export function NotificationBell() {
         onClick={toggle}
         type="button"
       >
-        <span className="text-[15px] font-bold text-[var(--color-text-primary)]">{t('notificationBell.t1')}</span>
+        {/* 새 알림이 도착하면 라벨이 딸랑 흔들리고 배지가 통 튀어 도착을 알린다. */}
+        <span
+          className={
+            bellShakeKey > 0
+              ? 'inline-block origin-top text-[15px] font-bold text-[var(--color-text-primary)] motion-safe:animate-[mj-bell-shake_700ms_ease-in-out]'
+              : 'text-[15px] font-bold text-[var(--color-text-primary)]'
+          }
+          key={`label-${bellShakeKey}`}
+        >
+          {t('notificationBell.t1')}
+        </span>
         {unreadCount > 0 ? (
-          <span className="grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[var(--color-primary-coral)] px-1.5 text-xs font-extrabold text-white tabular-nums">
+          <span
+            className={
+              bellShakeKey > 0
+                ? 'grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[var(--color-primary-coral)] px-1.5 text-xs font-extrabold text-white tabular-nums motion-safe:animate-[mj-badge-pop_500ms_cubic-bezier(0.16,1,0.3,1)]'
+                : 'grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[var(--color-primary-coral)] px-1.5 text-xs font-extrabold text-white tabular-nums'
+            }
+            key={`badge-${bellShakeKey}`}
+          >
             {unreadCount}
           </span>
         ) : null}

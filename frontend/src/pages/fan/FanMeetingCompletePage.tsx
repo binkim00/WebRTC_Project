@@ -477,27 +477,28 @@ export function FanMeetingCompletePage() {
           )}
         </div>
 
+        {/* 통화 직후 도착하는 감정적 화면이라, 제목 → 함께한 시간 → 녹화 순으로 차례로 자리 잡는다. */}
         <div className="flex flex-col px-5 pb-8 pt-[26px] sm:px-[26px] sm:pb-9 sm:pt-[30px] min-[1081px]:pb-11 min-[1081px]:pl-10 min-[1081px]:pr-11 min-[1081px]:pt-[46px]">
-          <p className="text-sm font-bold text-[var(--color-text-muted)]">
+          <p className="text-sm font-bold text-[var(--color-text-muted)] motion-safe:animate-[mj-settle-in_480ms_cubic-bezier(0.16,1,0.3,1)_both]">
             {callOrder !== null
               ? t('done.eyebrowWithOrder', { date: eyebrowDate, order: callOrder })
               : eyebrowDate}
           </p>
-          <h1 className="mt-3.5 text-[clamp(28px,2.9vw,38px)] font-black leading-[1.15] tracking-[-0.048em] [text-wrap:balance]">
+          <h1 className="mt-3.5 text-[clamp(28px,2.9vw,38px)] font-black leading-[1.15] tracking-[-0.048em] [text-wrap:balance] motion-safe:animate-[mj-settle-in_480ms_cubic-bezier(0.16,1,0.3,1)_90ms_both]">
             {headline}
           </h1>
-          <p className="mt-4 text-[17px] font-medium leading-[1.7] text-[var(--color-text-body)]">
+          <p className="mt-4 text-[17px] font-medium leading-[1.7] text-[var(--color-text-body)] motion-safe:animate-[mj-settle-in_480ms_cubic-bezier(0.16,1,0.3,1)_170ms_both]">
             {subline}
           </p>
 
-          <div className="mt-[30px] border-t border-[var(--color-divider)] pt-6">
+          <div className="mt-[30px] border-t border-[var(--color-divider)] pt-6 motion-safe:animate-[mj-settle-in_480ms_cubic-bezier(0.16,1,0.3,1)_280ms_both]">
             <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('done.sharedTime')}</p>
             <p className="mt-1.5 text-[40px] font-black leading-none tracking-[-0.045em] tabular-nums">
               {formatClock(durationSec)}
             </p>
           </div>
 
-          <div className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px]">
+          <div className="mt-[26px] border-t border-[var(--color-divider)] pt-[22px] motion-safe:animate-[mj-settle-in_480ms_cubic-bezier(0.16,1,0.3,1)_390ms_both]">
             <div className="flex items-baseline justify-between gap-4">
               <h2 className="text-[17px] font-extrabold tracking-[-0.03em]">{recTitle}</h2>
               {recMeta ? (

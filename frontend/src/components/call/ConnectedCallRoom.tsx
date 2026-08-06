@@ -368,6 +368,7 @@ export function ConnectedCallRoom({
     captureError,
     canCapture,
     capturing,
+    lastShot,
   } = useCallPhotoCapture({
     callSessionId,
     remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
@@ -929,6 +930,7 @@ export function ConnectedCallRoom({
         localVideo={localVideo}
         mediaAction={mediaAction}
         microphoneEnabled={isMicrophoneEnabled}
+        captureFlight={lastShot}
         onCameraToggle={() => void toggleCamera()}
         onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
         // 셔터는 바로 찍지 않고 양쪽에 3·2·1 카운트다운을 띄운 뒤 0에서 촬영한다.
