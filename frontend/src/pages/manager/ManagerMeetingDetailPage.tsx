@@ -1,4 +1,3 @@
-import { ArrowRight } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -546,25 +545,6 @@ export function ManagerMeetingDetailPage() {
         <p className="text-[var(--color-text-secondary)]">
           {detail.influencer.name} {t('managerMeetingDetailPage.t5')} {formatDateTime(detail.meeting.scheduledStartAt)}
         </p>
-        {/*
-          다른 관리 화면으로 가는 링크는 탭과 무관하므로 헤더에 두어 어느 탭에서도 바로 이동할 수 있게 한다.
-          다만 팬미팅 단계에서 쓸 일이 없는 링크는 숨겨 "지금 할 수 있는 일"만 보이게 한다.
-          - 참가 팬: 추첨이 확정되는 결과 발표(READY) 이후에만 참가자가 존재한다.
-          - 운영 모니터: 대기열·통화가 살아 있는 READY·LIVE에서만 볼 것이 있다.
-          - 공지 관리: 임시 저장 단계에는 공지를 받아볼 대상이 없다.
-          - 결과 통계: 종료된 팬미팅에서만 의미가 있어 팬미팅 목록의 종료 행에서 진입한다.
-        */}
-        <nav aria-label={t('managerMeetingDetailPage.t93')} className="mt-1 flex flex-wrap gap-2">
-          {status === 'READY' || status === 'LIVE' || status === 'ENDED' ? (
-            <QuickLink label={t('managerMeetingDetailPage.t94')} to={`/manager/fan-meetings/${encodedMeetingId}/fans`} />
-          ) : null}
-          {status !== 'DRAFT' ? (
-            <QuickLink label={t('managerMeetingDetailPage.t95')} to={`/manager/fan-meetings/${encodedMeetingId}/notices`} />
-          ) : null}
-          {!isSolo && (status === 'READY' || status === 'LIVE') ? (
-            <QuickLink label={t('managerMeetingDetailPage.t96')} to={`/manager/fan-meetings/${encodedMeetingId}/monitor`} />
-          ) : null}
-        </nav>
       </header>
 
       {error ? <AlertBanner title={t('managerMeetingDetailPage.t6')} variant="error">{error}</AlertBanner> : null}
@@ -574,6 +554,15 @@ export function ManagerMeetingDetailPage() {
         </AlertBanner>
       ) : null}
 
+      {/*
+        상세 탭과 다른 관리 화면(참가 팬·공지 관리·운영 모니터)을 같은 탭 바에 같은 모양으로
+        묶는다. 이전에는 앞의 둘이 헤더의 알약 버튼, 나머지가 탭이라 형태가 갈라져 있었다.
+        팬미팅 단계에서 쓸 일이 없는 항목은 숨겨 "지금 할 수 있는 일"만 보이게 한다:
+        - 참가 팬: 추첨이 확정되는 결과 발표(READY) 이후에만 참가자가 존재한다.
+        - 공지 관리: 임시 저장 단계에는 공지를 받아볼 대상이 없다.
+        - 운영 모니터: 대기열·통화가 살아 있는 READY·LIVE에서만 볼 것이 있다.
+        - 결과 통계: 종료된 팬미팅에서만 의미가 있어 팬미팅 목록의 종료 행에서 진입한다.
+      */}
       <nav className="flex flex-wrap gap-1 border-b border-[var(--color-divider)]" aria-label={t('managerMeetingDetailPage.t8')}>
         {TABS().map((item) => (
           <button
@@ -590,6 +579,15 @@ export function ManagerMeetingDetailPage() {
             {item.label}
           </button>
         ))}
+        {status === 'READY' || status === 'LIVE' || status === 'ENDED' ? (
+          <TabLink label={t('managerMeetingDetailPage.t94')} to={`/manager/fan-meetings/${encodedMeetingId}/fans`} />
+        ) : null}
+        {status !== 'DRAFT' ? (
+          <TabLink label={t('managerMeetingDetailPage.t95')} to={`/manager/fan-meetings/${encodedMeetingId}/notices`} />
+        ) : null}
+        {!isSolo && (status === 'READY' || status === 'LIVE') ? (
+          <TabLink label={t('managerMeetingDetailPage.t96')} to={`/manager/fan-meetings/${encodedMeetingId}/monitor`} />
+        ) : null}
       </nav>
 
       {tab === 'overview' ? (
@@ -909,15 +907,19 @@ function FlowStep({
   )
 }
 
-/** 상세 화면 헤더에서 다른 관리 화면으로 이동하는 링크 하나다. */
-function QuickLink({ label, to }: { label: string; to: string }) {
+/**
+ * 탭 바 안에서 다른 관리 화면으로 이동하는 링크 하나다.
+ *
+ * 상세 탭 버튼과 같은 크기·글꼴·색을 써서 한 줄에서 형태가 갈라지지 않게 한다.
+ * 목적지가 다른 화면이므로 선택 상태(aria-current)는 갖지 않는다.
+ */
+function TabLink({ label, to }: { label: string; to: string }) {
   return (
     <Link
-      className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--color-divider)] px-3.5 text-sm font-bold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+      className="inline-flex min-h-11 items-center whitespace-nowrap rounded-t-[var(--radius-control)] px-5 text-sm font-bold text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
       to={to}
     >
       {label}
-      <ArrowRight aria-hidden="true" size={14} />
     </Link>
   )
 }
