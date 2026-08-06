@@ -28,6 +28,16 @@ DEEPL_SESSION_URL = "https://api.deepl.com/v3/voice/realtime"
 # 이 시간(초) 동안 새 concluded가 안 오면 "문장 끝"으로 판단, 추후 테스트 후 수정하기
 SENTENCE_TIMEOUT = 1.5
 
+# 원문이 멎은 뒤 번역을 더 기다리는 시간(초)이다.
+#
+# DeepL 은 번역을 문장이 끝난 뒤에 보내므로 원문보다 늘 늦다. 침묵 타이머만으로 확정하면 번역이
+# 없는 문장이 그대로 확정되고, 늦게 온 번역은 다음 문장에 붙어 원문과 짝이 어긋난다. 실제 통화
+# 기록에서 원문 세 조각이 번역 없이 확정되고 세 번째에 앞 내용을 모두 담은 번역이 붙는 일이 있었다.
+TRANSLATION_GRACE = 4.0
+
+# 번역을 기다리는 동안 확인하는 간격(초)이다.
+TRANSLATION_POLL = 0.2
+
 # 우리 언어 코드 → DeepL Voice 언어 코드.
 # v3는 소문자 BCP-47을 쓰므로 대부분 그대로지만, 중국어만 간체/번체를 구분해야 한다.
 # 매핑에 없는 코드는 그대로 넘겨 DeepL이 판단하게 둔다.
@@ -274,9 +284,32 @@ class DeepLVoiceAdapter(STTAdapter):
                 logger.warning("부분 자막 전달 실패 — 다음 조각에서 다시 시도한다", exc_info=True)
 
         async def flush_sentence() -> None:
-            """타이머 만료 시 호출 — 버퍼에 모인 텍스트로 on_final 호출."""
+            """
+            타이머 만료 시 호출 — 버퍼에 모인 텍스트로 on_final 호출.
+
+            원문이 멎었어도 번역이 아직 오지 않았으면 TRANSLATION_GRACE 만큼 더 기다린다.
+            번역 없이 확정하면 화면이 번역문 대신 원문을 띄우고, 늦게 도착한 번역은 다음 문장에
+            붙어 원문과 뜻이 어긋난다. 기다리는 사이 번역이 오면 reset_timer 가 이 대기를 걷어내고
+            새 타이머로 확정한다.
+
+            끝까지 오지 않으면 원문만이라도 확정한다. 자막이 아예 없는 것보다 낫고, 통화 요약이
+            원문 기록을 쓰기 때문이다.
+            """
             nonlocal flush_timer
             await asyncio.sleep(SENTENCE_TIMEOUT)
+
+            waited = 0.0
+            while source_buffer and not target_buffer and waited < TRANSLATION_GRACE:
+                await asyncio.sleep(TRANSLATION_POLL)
+                waited += TRANSLATION_POLL
+
+            if source_buffer and not target_buffer:
+                logger.warning(
+                    "번역이 %.1f초 안에 오지 않아 원문만 확정한다: %s",
+                    TRANSLATION_GRACE,
+                    "".join(source_buffer).strip(),
+                )
+
             await emit_final()
             flush_timer = None
 
