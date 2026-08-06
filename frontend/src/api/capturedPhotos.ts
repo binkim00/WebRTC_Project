@@ -4,6 +4,7 @@ import type {
   CardDecoration,
   FanCardFont,
   FanCardLayout,
+  FanCardThemeKey,
   PhotoAdjustment,
 } from '../components/fanCard/fanCardCanvas'
 import { translate } from '../i18n'
@@ -32,6 +33,8 @@ export type FanCardDraft = {
   photoAdjustments?: PhotoAdjustment[]
   /** 문구 크기 배율이며 예전 초안에는 없다. */
   quoteScale?: number
+  /** 고른 카드 도안이며 예전 초안에는 없다. */
+  themeKey?: FanCardThemeKey
   /** 마지막으로 저장한 시각 (ISO) */
   savedAt: string
 }

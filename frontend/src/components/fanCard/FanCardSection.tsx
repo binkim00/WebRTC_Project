@@ -18,6 +18,7 @@ import {
 } from '../../api/capturedPhotos'
 import { AlertBanner, Button, Card, CardContent } from '..'
 import {
+  DEFAULT_FAN_CARD_THEME,
   DEFAULT_PHOTO_ADJUSTMENT,
   drawFanCard,
   fanCardSizeOf,
@@ -25,6 +26,7 @@ import {
   type CardDecoration,
   type FanCardFont,
   type FanCardLayout,
+  type FanCardThemeKey,
   type PhotoAdjustment,
   type PhotoSlotRect,
 } from './fanCardCanvas'
@@ -32,6 +34,7 @@ import { FanCardQuotePicker } from './FanCardQuotePicker'
 import { FanCardLayoutPicker } from './FanCardLayoutPicker'
 import { photoCountOf } from './fanCardLayoutOptions'
 import { FanCardFontPicker } from './FanCardFontPicker'
+import { FanCardThemePicker } from './FanCardThemePicker'
 import {
   FanCardStickerPanel,
   MAX_DECORATION_SIZE,
@@ -239,6 +242,8 @@ export function FanCardSection({
    * 보이거나 답답해진다. 자동 맞춤을 기준으로 팬이 조금씩 키우고 줄일 수 있게 한다.
    */
   const [quoteScale, setQuoteScale] = useState(1)
+  /** 고른 카드 도안이다. 칸 배치와 따로 골라 같은 배치를 여러 분위기로 뽑을 수 있다. */
+  const [themeKey, setThemeKey] = useState<FanCardThemeKey>(DEFAULT_FAN_CARD_THEME)
   const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
   const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
   const decorationCounterRef = useRef(0)
@@ -520,6 +525,7 @@ export function FanCardSection({
           setSelectedPhotoIndexes(draft.selectedPhotoIndexes)
           setPhotoAdjustments(draft.photoAdjustments ?? [])
           setQuoteScale(draft.quoteScale ?? 1)
+          setThemeKey(draft.themeKey ?? DEFAULT_FAN_CARD_THEME)
           setDecorations(draft.decorations)
           // 이어 붙일 식별자가 겹치지 않게 이미 쓴 번호 뒤에서 시작한다.
           decorationCounterRef.current = draft.decorations.length
@@ -558,6 +564,7 @@ export function FanCardSection({
         selectedPhotoIndexes: [...selectedPhotoIndexes],
         photoAdjustments: [...photoAdjustments],
         quoteScale,
+        themeKey,
         decorations: [...decorations],
         savedAt: new Date().toISOString(),
       }).catch(() => undefined)
@@ -572,6 +579,7 @@ export function FanCardSection({
     photoAdjustments,
     quoteScale,
     selectedPhotoIndexes,
+    themeKey,
   ])
 
   useEffect(() => {
@@ -670,6 +678,7 @@ export function FanCardSection({
           decorations,
           photoAdjustments,
           quoteScale,
+          themeKey,
         })
       })
       .then((slots) => {
@@ -780,6 +789,7 @@ export function FanCardSection({
     photoAdjustments,
     quoteScale,
     selectedPhotoIndex,
+    themeKey,
     dateLabel,
     decorations,
     fanNickname,
@@ -892,6 +902,7 @@ export function FanCardSection({
       await drawFanCard(canvas, {
         photoAdjustments,
         quoteScale,
+        themeKey,
         text: selectedText ?? '',
         meetingTitle,
         influencerName,
@@ -968,6 +979,8 @@ export function FanCardSection({
 
           {canCompose ? (
             <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
+              <FanCardThemePicker onChange={setThemeKey} themeKey={themeKey} />
+
               <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
 
               {selectedText ? (
