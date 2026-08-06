@@ -20,9 +20,10 @@ import {
   type CallSessionStatusResponse,
 } from '../../api/callSessions'
 import { getAuthSession } from '../../api/auth'
+import { useCallPhotoCapture } from '../../hooks/useCallPhotoCapture'
 import { useCallRecording } from '../../hooks/useCallRecording'
 import { AlertBanner } from '../feedback'
-import { CallStage } from './CallStage'
+import { CallStage, type FloatingReaction } from './CallStage'
 import { CallSummaryPanel } from './CallSummaryPanel'
 import {
   CALL_CONTROL_DATA_TOPIC,
@@ -30,6 +31,13 @@ import {
   parseCallEndedSignal,
 } from './callControlChannel'
 import { EndCallDialog } from './EndCallDialog'
+import {
+  REACTION_DATA_TOPIC,
+  REACTION_EMOJIS,
+  encodeReaction,
+  isReactionEmoji,
+  parseReaction,
+} from './reactionChannel'
 import {
   SUBTITLE_DATA_TOPIC,
   appendSubtitleLine,
@@ -150,6 +158,17 @@ export function ConnectedCallRoom({
 }: ConnectedCallRoomProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  /**
+   * 통화 화면을 떠날 때 완료 화면에 함께 넘기는 값이다.
+   *
+   * 통화가 끝나면 대기열 스냅샷의 callSessionId가 null로 바뀌어(CALLED·IN_CALL에서만 채워진다)
+   * 완료 화면이 세션을 다시 찾을 방법이 없다. 기념 카드는 통화 세션 단위라 이 값이 필요하므로
+   * 화면을 떠나는 시점에 함께 넘긴다.
+   */
+  const endNavigationState = useMemo(
+    () => (callSessionId ? { callSessionId } : undefined),
+    [callSessionId],
+  )
   const room = useRoomContext()
   const connectionState = useConnectionState()
   const participants = useParticipants()
@@ -272,6 +291,82 @@ export function ConnectedCallRoom({
   useDataChannel(CALL_CONTROL_DATA_TOPIC, handleCallControlMessage)
 
   /**
+   * 화면에 떠오르는 중인 리액션이다.
+   *
+   * 표시 전용이라 서버에 남기지 않는다. 애니메이션이 끝나는 시간에 맞춰 스스로 사라지게 해
+   * 목록이 무한정 자라지 않도록 한다.
+   */
+  const [floatingReactions, setFloatingReactions] = useState<readonly FloatingReaction[]>([])
+  /** 리액션마다 고유 id를 만든다. 같은 이모지를 연달아 눌러도 React key가 겹치지 않아야 한다. */
+  const reactionSeqRef = useRef(0)
+  /** 정리해야 할 타이머들이다. 통화 화면을 떠날 때 남은 타이머를 모두 끊는다. */
+  const reactionTimersRef = useRef<number[]>([])
+
+  const showReaction = useCallback((emoji: string) => {
+    const id = `reaction-${++reactionSeqRef.current}`
+    // 가로 위치를 흩뿌려 연속으로 눌렀을 때 한 줄에 겹쳐 보이지 않게 한다.
+    const leftPercent = 12 + Math.random() * 26
+    setFloatingReactions((current) => [...current, { id, emoji, leftPercent }])
+
+    // CSS 애니메이션(2200ms)이 끝난 뒤 목록에서 지운다.
+    const timerId = window.setTimeout(() => {
+      setFloatingReactions((current) => current.filter((item) => item.id !== id))
+      reactionTimersRef.current = reactionTimersRef.current.filter((value) => value !== timerId)
+    }, 2_400)
+    reactionTimersRef.current.push(timerId)
+  }, [])
+
+  useEffect(
+    () => () => {
+      for (const timerId of reactionTimersRef.current) window.clearTimeout(timerId)
+      reactionTimersRef.current = []
+    },
+    [],
+  )
+
+  // 기념 사진은 팬만 남긴다. 녹화 설정과 무관하게 쓸 수 있어야 하므로 recordingEnabled를 보지 않는다.
+  const {
+    capture,
+    photoCount,
+    maxPhotoCount,
+    captureError,
+    canCapture,
+    capturing,
+  } = useCallPhotoCapture({
+    callSessionId,
+    remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
+  })
+  const photoCaptureVisible = authSession?.role === 'FAN' && isConnected
+
+  const handleReactionMessage = useCallback(
+    (message: { payload: Uint8Array }) => {
+      const signal = parseReaction(message.payload)
+      if (!signal) return
+      showReaction(signal.emoji)
+    },
+    [showReaction],
+  )
+
+  useDataChannel(REACTION_DATA_TOPIC, handleReactionMessage)
+
+  /**
+   * 리액션을 보낸다.
+   *
+   * `publishData`는 보낸 사람에게 되돌아오지 않으므로 내 화면에도 직접 띄운다. 전송이 실패해도
+   * 내 화면에는 보이게 해서, 표현이 씹힌 것처럼 느껴지지 않게 한다.
+   */
+  const sendReaction = useCallback(
+    (emoji: string) => {
+      if (!isReactionEmoji(emoji)) return
+      showReaction(emoji)
+      void localParticipant
+        .publishData(encodeReaction(emoji), { reliable: true, topic: REACTION_DATA_TOPIC })
+        .catch(() => undefined)
+    },
+    [localParticipant, showReaction],
+  )
+
+  /**
    * 통화가 끝났음을 같은 방의 다른 참가자에게 알린다.
    *
    * 실패해도 무시한다. 이 알림은 상대의 폴링을 앞당기는 힌트일 뿐이고, 못 보내면 상대는
@@ -296,6 +391,8 @@ export function ConnectedCallRoom({
     setSubtitleLines([])
     // 마무리 화면에 쓰는 상대 이름도 함께 비운다. 이전 팬 이름이 새 통화에 남으면 안 된다.
     setLastRemoteName(undefined)
+    // 게이지 분모도 통화마다 다시 잰다. 이전 통화의 최댓값을 물려받으면 비율이 어긋난다.
+    timeRatioBaseRef.current = 0
   }, [callSessionId])
 
   // 통화가 끝나면 상대가 방을 떠나 이름을 알 수 없게 된다. 마무리 화면에서 "○○님과의 통화가
@@ -400,7 +497,7 @@ export function ConnectedCallRoom({
         setDeparturePending(true)
         return
       }
-      navigate(endTo)
+      navigate(endTo, { state: endNavigationState })
     },
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 콜백을 다시 만든다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -425,14 +522,14 @@ export function ConnectedCallRoom({
   const leaveRoom = useCallback(async () => {
     leavingRef.current = true
     await room.disconnect()
-    navigate(endTo)
+    navigate(endTo, { state: endNavigationState })
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endTo, navigate, room])
 
   async function handleRecordingRetry() {
     const uploaded = await retryUpload()
-    if (uploaded && departurePending) navigate(endTo)
+    if (uploaded && departurePending) navigate(endTo, { state: endNavigationState })
   }
 
   useEffect(() => {
@@ -464,8 +561,8 @@ export function ConnectedCallRoom({
     // IndexedDB에 보관한 세션 ID를 완료 화면에 전달해 그곳에서도 재시도할 수 있게 한다.
     navigate(endTo, {
       state: hasPendingRecording && pendingRecordingPersisted && callSessionId
-        ? { pendingRecordingSessionId: callSessionId }
-        : undefined,
+        ? { ...endNavigationState, pendingRecordingSessionId: callSessionId }
+        : endNavigationState,
     })
   }
 
@@ -494,7 +591,7 @@ export function ConnectedCallRoom({
     void stopAndUpload().then(async (recordingSaved) => {
       await room.disconnect()
       if (recordingSaved) {
-        navigate(endTo, { replace: true })
+        navigate(endTo, { replace: true, state: endNavigationState })
       } else {
         setDeparturePending(true)
       }
@@ -502,6 +599,8 @@ export function ConnectedCallRoom({
   }, [
     announceCallEnded,
     callSessionId,
+    // callSessionId에서만 파생되는 값이라 이 목록에 넣어도 효과가 더 자주 실행되지 않는다.
+    endNavigationState,
     endTo,
     hostStaysConnected,
     navigate,
@@ -526,6 +625,24 @@ export function ConnectedCallRoom({
   }, [connectionState, hostStaysConnected, onReconnectNeeded])
 
   /** 호스트가 방에 머문 채 다음 팬 배정을 기다리는 상태다. */
+  /**
+   * 남은 시간 게이지의 분모다. 지금까지 본 가장 큰 남은 시간을 100%로 잡는다.
+   *
+   * 팬미팅 운영 설정의 `callDurationSec`을 쓰면 가장 정확하지만, 그 값은 통화 진입 시 **별도
+   * 상세 조회**로 받아 오므로 그 요청이 실패하면 undefined로 남는다. 게이지는 보조 표현일 뿐인데
+   * 그 때문에 통째로 사라지면 안 되므로, 값을 못 받은 경우에는 카운트다운에서 관측한 최댓값을
+   * 분모로 쓴다. 서버가 준 남은 시간만으로도 비율을 만들 수 있다.
+   */
+  const timeRatioBaseRef = useRef(0)
+  if (remaining.counting) {
+    timeRatioBaseRef.current = Math.max(
+      timeRatioBaseRef.current,
+      remaining.seconds,
+      callDurationSec ?? 0,
+    )
+  }
+  const timeRatioBase = timeRatioBaseRef.current
+
   const waitingForNextFan = Boolean(hostStaysConnected) && sessionStatus.status === 'ENDED'
   /** 방금 끝난 통화의 길이다. 서버가 시각을 주지 않았으면 표시하지 않는다. */
   const finishedDurationLabel = formatCallDuration(sessionStatus.startedAt, sessionStatus.endedAt)
@@ -582,7 +699,11 @@ export function ConnectedCallRoom({
       }
     : undefined
 
-  const footNote = mediaError
+  // 방금 누른 조작의 결과(사진 저장 실패)를 다른 안내보다 먼저 알린다.
+  // 통화를 막는 오류가 아니므로 배너가 아니라 같은 자리의 보조 문구로 둔다.
+  const footNote = captureError
+    ? captureError
+    : mediaError
     ? t('connectedCallRoom.t39')
     : isReconnecting
       ? t('connectedCallRoom.t40')
@@ -629,22 +750,41 @@ export function ConnectedCallRoom({
         cameraEnabled={isCameraEnabled}
         captionEnabled={captionEnabled}
         captionLines={subtitleLines}
+        captureDisabled={!canCapture || capturing}
+        captureLabel={
+          capturing
+            ? t('connectedCallRoom.capturing')
+            : t('connectedCallRoom.captureCount', { p0: photoCount, p1: maxPhotoCount })
+        }
         connected={isConnected}
         connectionLabel={connectionLabel}
         deviceAlert={deviceAlert}
+        floatingReactions={floatingReactions}
         localVideo={localVideo}
         mediaAction={mediaAction}
         microphoneEnabled={isMicrophoneEnabled}
         onCameraToggle={() => void toggleCamera()}
         onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
+        onCapture={photoCaptureVisible ? () => void capture() : undefined}
         onLeave={() => setEndDialogOpen(true)}
         onMicrophoneToggle={() => void toggleMicrophone()}
+        onReactionSend={sendReaction}
         overlay={overlay}
         participantLabel={participantLabel}
+        reactionEmojis={REACTION_EMOJIS}
         remoteName={remoteName}
         remoteVideo={remoteVideo}
         // 통화 시작 전에는 아직 줄어들 남은 시간이 없으므로 설정된 통화 시간임을 밝힌다.
         timeLabel={remaining.counting ? t('connectedCallRoom.t42') : t('connectedCallRoom.t43')}
+        /*
+          남은 시간 게이지 — 카운트다운이 실제로 진행 중일 때만 그린다.
+          시작 전에는 줄어들 남은 시간이 없어 게이지가 항상 꽉 찬 채로 오해를 만든다.
+        */
+        timeRatio={
+          remaining.counting && timeRatioBase > 0
+            ? remaining.seconds / timeRatioBase
+            : undefined
+        }
         // 종료 직전에는 타이머가 경고색으로 바뀌어 마무리를 준비하게 한다.
         timeUrgent={remaining.counting && remaining.label <= '00:05'}
         timeValue={remaining.label}

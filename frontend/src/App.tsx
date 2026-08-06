@@ -8,6 +8,7 @@ import {
   type LoginResponse,
   type LoginRole,
 } from './api/auth'
+import { purgeExpiredFanCardData } from './api/capturedPhotos'
 import { AppHeader } from './components'
 import {
   canRoleAccessPath,
@@ -35,6 +36,10 @@ function pageTitleForPath(pathname: string): string {
   if (pathname.startsWith('/manager/fan-meetings')) return translate('app.t17')
   if (pathname.startsWith('/influencer/fan-meetings')) return translate('app.t18')
   if (pathname.startsWith('/fan/events')) return translate('app.t19')
+  // 기념 카드는 팬 마이페이지보다 먼저 확인한다. 아래 `/fan/` 규칙에 먼저 걸리면 안 된다.
+  if (/^\/fan\/fan-meetings\/[^/]+\/cards\//.test(pathname)) {
+    return translate('app.title.fanCard')
+  }
   if (pathname.startsWith('/fan/')) return translate('app.t20')
   if (pathname.startsWith('/notifications')) return translate('app.t21')
   if (pathname.startsWith('/service-notices')) return translate('app.t22')
@@ -167,6 +172,12 @@ function App() {
   const headerNavigationProps = roleHeaderRole
     ? ({ role: roleHeaderRole } as const)
     : ({ items: navigationItems } as const)
+
+  useEffect(() => {
+    // 통화 사진은 브라우저에만 두므로 정해진 시각에 저절로 지워지지 않는다. 앱에 들어올
+    // 때 한 번 훑어, 보관 기간이 지난 사진과 꾸미던 내용이 기기에 오래 남지 않게 한다.
+    void purgeExpiredFanCardData(Date.now()).catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     const handleAuthExpired = () => {

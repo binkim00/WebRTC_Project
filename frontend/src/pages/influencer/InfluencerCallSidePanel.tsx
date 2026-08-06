@@ -10,6 +10,7 @@ import {
   type FanMemo,
   type MeetingQueue,
 } from '../../api/fanMeetingParticipants'
+import { getApplicants, type ApplicantAnswerResponse } from '../../api/applications'
 import { changeQueuePosition } from '../../api/queueManagement'
 import { AlertBanner, Button, Dialog } from '../../components'
 import { useTranslation } from '../../i18n'
@@ -96,6 +97,43 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
       })
     return () => controller.abort()
   }, [currentFanId])
+
+  /**
+   * 지금 통화 중인 팬이 응모할 때 쓴 답변을 읽는다.
+   *
+   * 통화가 2분 남짓이라 무슨 말을 할지 정하는 데 시간을 쓰면 그대로 침묵이 된다. 팬이 응모 폼에
+   * 이미 적어 둔 답변("좋아하는 곡", "하고 싶은 말")을 통화 화면에 띄우면 그 시간을 대화로 채울 수
+   * 있다. 서버에 이미 있는 데이터라 새 API 없이 응모자 목록에서 이 팬만 골라 쓴다.
+   *
+   * 응모를 받지 않는 팬미팅(CSV 명단)에서는 응모 자체가 없으므로 결과가 비고, 이 블록은 숨는다.
+   */
+  const [answers, setAnswers] = useState<readonly ApplicantAnswerResponse[]>([])
+  const [answersOpen, setAnswersOpen] = useState(false)
+
+  useEffect(() => {
+    if (!currentFanId) {
+      setAnswers([])
+      return
+    }
+    const token = getAuthSession()?.accessToken
+    if (!token) return
+
+    const controller = new AbortController()
+    // 확정 참가자 수만큼만 조회하면 되므로 한 페이지로 충분하다.
+    void getApplicants(meetingId, { size: 100 }, token, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return
+        const matched = response.content.find(
+          (applicant) => String(applicant.fanId) === String(currentFanId),
+        )
+        setAnswers(matched?.answers ?? [])
+      })
+      .catch(() => {
+        // 보조 정보이므로 조회 실패로 통화를 방해하지 않는다.
+        if (!controller.signal.aborted) setAnswers([])
+      })
+    return () => controller.abort()
+  }, [currentFanId, meetingId])
 
   /** 운영 조치 후에는 다음 팬을 호출할 대기실로 복귀한다. */
   function returnToReady() {
@@ -215,6 +253,40 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
           </button>
         ) : null}
       </section>
+
+      {/*
+        응모 답변 — 팬이 응모할 때 직접 쓴 문장이다. 2분 통화의 첫 화두로 쓰라고 통화 화면에 둔다.
+        접힌 상태에서는 첫 답변만 보여 주고, 필요하면 펼쳐 전체를 읽는다.
+      */}
+      {answers.length ? (
+        <section className="mt-5 border-t border-white/10 pt-4">
+          <h3 className="text-sm font-extrabold text-white/90">
+            {t('influencerCallSidePanel.answersTitle')}
+          </h3>
+          <dl className="mt-2.5 grid gap-3">
+            {(answersOpen ? answers : answers.slice(0, 1)).map((answer) => (
+              <div key={answer.questionId}>
+                <dt className="text-[13px] font-bold text-white/60">{answer.questionText}</dt>
+                <dd className="mt-1 text-[15px] font-medium leading-[1.7] text-white/85">
+                  {answer.answerText || t('influencerCallSidePanel.answersEmpty')}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {answers.length > 1 ? (
+            <button
+              aria-expanded={answersOpen}
+              className="mt-2 min-h-9 text-sm font-extrabold text-[var(--color-primary-coral-on-dark)]"
+              onClick={() => setAnswersOpen((open) => !open)}
+              type="button"
+            >
+              {answersOpen
+                ? t('influencerCallSidePanel.answersCollapse')
+                : t('influencerCallSidePanel.answersExpand')}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="mt-5 border-t border-white/10 pt-4">
         <p className="text-[13px] font-bold text-white/65">{t('influencerCallSidePanel.t6')}</p>

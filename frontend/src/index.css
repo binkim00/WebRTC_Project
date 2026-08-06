@@ -1,6 +1,36 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
 
+/*
+  기념 카드에서 팬이 고르는 글꼴이다. 서비스 본문에는 쓰지 않으므로 카드를 만들 때만
+  내려받히도록 @font-face로 선언만 해 둔다(브라우저는 실제로 쓰일 때 받는다).
+  셋 다 SIL Open Font License 1.1이며 사본은 public/fonts/OFL.txt에 있다.
+  굵기 파일은 Regular 하나뿐이라 모든 굵기를 이 파일로 받게 둔다.
+*/
+@font-face {
+  font-family: "Jua";
+  src: url("/fonts/Jua-Regular.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gaegu";
+  src: url("/fonts/Gaegu-Regular.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Do Hyeon";
+  src: url("/fonts/DoHyeon-Regular.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   font-family:
     Pretendard,
@@ -246,6 +276,31 @@ textarea {
 
   50% {
     transform: translateX(-2px);
+  }
+}
+
+/*
+ * 통화 중 리액션 이모지가 떠오르며 사라지는 움직임이다.
+ * 좌우로 살짝 흔들어 여러 개를 연속으로 눌러도 한 줄로 겹쳐 보이지 않게 한다.
+ */
+@keyframes mj-reaction-float {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+
+  15% {
+    opacity: 1;
+    transform: translateY(-16px) scale(1.1);
+  }
+
+  55% {
+    transform: translateY(-104px) translateX(10px) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-190px) translateX(-6px) scale(0.9);
   }
 }
 

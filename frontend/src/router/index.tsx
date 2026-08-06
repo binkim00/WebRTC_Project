@@ -77,6 +77,11 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        // 기념 카드 만들기 전용 화면. 주소에 통화 세션을 담아 새로고침해도 그대로 열린다.
+        path: 'fan/fan-meetings/:fanMeetingId/cards/:callSessionId',
+        lazy: lazyPage(() => import('../pages/fan/FanCardPage'), 'FanCardPage'),
+      },
+      {
         path: 'fan/fan-meetings/:fanMeetingId/waiting',
         lazy: lazyPage(
           () => import('../pages/fan/FanMeetingWaitingPage'),
