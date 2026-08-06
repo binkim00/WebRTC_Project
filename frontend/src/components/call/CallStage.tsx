@@ -386,7 +386,9 @@ export function CallStage({
       {reactionEmojis?.length && onReactionSend ? (
         <div
           aria-label={t('callStage.reactionGroup')}
-          className="absolute bottom-[70px] left-[18px] z-10 flex items-center gap-1 rounded-lg bg-[rgb(15_17_21/78%)] px-2 py-1.5"
+          // 버튼이 늘어 좁은 화면에서는 한 줄에 담기지 않는다. 접히게 두고 폭을 제한해
+          // 자막(중앙 하단)과 내 화면 PIP(우측)를 덮지 않게 한다.
+          className="absolute bottom-[70px] left-[18px] z-10 flex max-w-[min(62%,320px)] flex-wrap items-center gap-1 rounded-lg bg-[rgb(15_17_21/78%)] px-2 py-1.5"
           role="group"
         >
           {reactionEmojis.map((emoji) => (
