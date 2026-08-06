@@ -406,6 +406,19 @@ async def my_agent(ctx: JobContext) -> None:
                 target_lang=current_call.fan_lang,
             )
 
+        # 확정 전 부분 자막(번역 지연 감소용). DeepL만 호출하고 Google은 무시한다.
+        async def on_interim(text: str, translated_text: str | None, segment_id: int) -> None:
+            if current_call is None:
+                return
+            await current_call.processor.push_interim(
+                speaker_role="INFLUENCER",
+                segment_id=segment_id,
+                text=text,
+                original_lang=current_call.assumed_influencer_lang,
+                translated_text=translated_text,
+                translated_lang=current_call.fan_lang,
+            )
+
         # STT 원문 언어는 어댑터를 만들 때 고정한 값을 그대로 쓴다.
         # 최신 influencer_lang을 쓰면, 어댑터가 이미 그 언어를 번역 대상으로 잡고 있을 때
         # 원문과 번역 대상이 같아진 요청을 DeepL에 보내 자막이 통째로 실패할 수 있다.
@@ -417,8 +430,9 @@ async def my_agent(ctx: JobContext) -> None:
             await current_call.influencer_adapter.transcribe(
                 audio_stream=audio_stream,
                 language=assumed_lang,
-                # 문장이 확정되면 on_final을 처리하라는 뜻
+                # 문장이 확정되면 on_final을, 확정 전엔 on_interim을 처리하라는 뜻
                 on_final=on_final,
+                on_interim=on_interim,
             )
         except asyncio.CancelledError:
             raise
@@ -513,12 +527,25 @@ async def my_agent(ctx: JobContext) -> None:
                             target_lang=current_call.assumed_influencer_lang,
                         )
 
+                # 확정 전 부분 자막(번역 지연 감소용). DeepL만 호출하고 Google은 무시한다.
+                async def on_interim(text: str, translated_text: str | None, segment_id: int) -> None:
+                    if current_call and current_call.fan_identity == participant.identity:
+                        await current_call.processor.push_interim(
+                            speaker_role="FAN",
+                            segment_id=segment_id,
+                            text=text,
+                            original_lang=current_call.fan_lang,
+                            translated_text=translated_text,
+                            translated_lang=current_call.assumed_influencer_lang,
+                        )
+
                 # 예외를 잡지 않으면 task가 조용히 죽어 자막이 멈춘 이유를 알 수 없다.
                 try:
                     await current_call.fan_adapter.transcribe(
                         audio_stream=audio_stream,
                         language=current_call.fan_lang,
                         on_final=on_final,
+                        on_interim=on_interim,
                     )
                 except asyncio.CancelledError:
                     raise
