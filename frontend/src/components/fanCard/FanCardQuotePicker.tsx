@@ -31,16 +31,18 @@ export function FanCardQuotePicker({
   onRetry,
 }: FanCardQuotePickerProps) {
   const { t, locale } = useTranslation()
-  /**
-   * 인플루언서 발화를 번역문 먼저 보여 줄지.
-   *
-   * <p>화면 언어가 한국어가 아닌 팬에게 한국어 원문만 보이면 무엇을 고르는지 알 수 없다.
-   * 그래서 읽을 수 있는 번역문을 앞세우고, 인플루언서가 실제로 한 말인 원문은 아래에 남긴다.
-   */
-  const preferTranslation = locale !== 'ko'
   const aiSuggestions = candidates?.aiSuggestions ?? []
   const quotes = candidates?.influencerQuotes ?? []
   const hasAnyCandidate = aiSuggestions.length > 0 || quotes.length > 0
+
+  // 화면 언어가 한국어가 아니면 팬 언어로 번역된 문장을 카드 문구로 쓴다.
+  // 원문(주로 한국어)을 그대로 고르게 하면 영어 사용자 카드에 읽지 못하는 문장이 박힌다.
+  const cardTextOf = (quote: { text: string; translatedText: string | null }) =>
+    locale !== 'ko' && quote.translatedText ? quote.translatedText : quote.text
+  const subTextOf = (quote: { text: string; translatedText: string | null }) => {
+    if (!quote.translatedText) return undefined
+    return locale !== 'ko' ? quote.text : quote.translatedText
+  }
 
   return (
     <>
@@ -104,22 +106,19 @@ export function FanCardQuotePicker({
           </h3>
           <ul className="mt-3 grid max-h-72 gap-2 overflow-y-auto">
             {quotes.map((quote) => {
-              const translated = quote.translatedText?.trim() || undefined
-              // 앞세운 문장이 곧 카드에 들어갈 문구다. 팬이 읽고 고른 문장과 카드에 남는
-              // 문장이 달라지지 않게 한다.
-              const primary = preferTranslation && translated ? translated : quote.text
-              const secondary = preferTranslation && translated ? quote.text : translated
+              const cardText = cardTextOf(quote)
+              const subText = subTextOf(quote)
               // 화면 언어를 바꿔 앞뒤가 뒤집혀도 이미 고른 문구는 고른 상태로 보이게 한다.
-              const selected = selectedText === primary
-                || (secondary !== undefined && selectedText === secondary)
+              const selected = selectedText === cardText
+                || (subText !== undefined && selectedText === subText)
 
               return (
                 <li key={quote.subtitleId}>
                   <CandidateButton
-                    onSelect={() => onSelect(selected ? undefined : primary)}
+                    onSelect={() => onSelect(selected ? undefined : cardText)}
                     selected={selected}
-                    subText={secondary}
-                    text={primary}
+                    subText={subText}
+                    text={cardText}
                   />
                 </li>
               )

@@ -1,3 +1,4 @@
+import { rememberFanCallSession } from './callSessionLog'
 import { apiRequest } from './client'
 import { translate } from '../i18n'
 
@@ -332,7 +333,7 @@ export async function fetchMeetingQueue(
 
   const currentCall = asRecord(record.currentCall)
 
-  return {
+  const queue: MeetingQueue = {
     currentCall: currentCall
       ? {
           callSessionId: readString(currentCall.callSessionId, 'callSessionId'),
@@ -344,6 +345,21 @@ export async function fetchMeetingQueue(
       : undefined,
     entries: record.entries.map(parseQueueEntry),
   }
+
+  // 진행 중인 통화의 (팬미팅, 팬) → 세션 대응을 남긴다. 백엔드에 지난 세션 조회 API가
+  // 없어, 팬미팅이 끝난 뒤 팬 기록 화면이 AI 요약을 찾을 유일한 단서가 이 기록이다.
+  // 대기열을 보는 모든 화면(통화 사이드패널·준비실·운영 콘솔)이 이 함수로 폴링하므로
+  // 여기 한 곳에서 기록하면 통화마다 빠짐없이 남는다.
+  if (queue.currentCall) {
+    const inCallFanId = queue.entries.find(
+      (entry) => entry.participantId === queue.currentCall?.participantId,
+    )?.fanId
+    if (inCallFanId) {
+      rememberFanCallSession(meetingId, inCallFanId, queue.currentCall.callSessionId)
+    }
+  }
+
+  return queue
 }
 
 export async function callQueueEntry(

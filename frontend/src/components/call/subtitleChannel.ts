@@ -155,20 +155,19 @@ export function isOwnSubtitle(
   return viewerRole === 'INFLUENCER' || viewerRole === 'SOLO_INFLUENCER'
 }
 
-/** 한 자막에서 화면에 뿌릴 원문과 번역문이다. */
+/** 한 자막에서 화면에 뿌릴 문장이다. */
 export type SubtitleTexts = {
-  /** 화자가 실제로 말한 원문이며 항상 표시한다. */
+  /** 화면에 표시할 문장이다. 번역문이 있으면 번역문, 없으면 원문이다. */
   text: string
-  /** 번역문이 따로 있을 때만 채워지는 보조 줄이다. */
-  translatedText?: string
 }
 
 /**
  * 상대 발화에서 화면에 뿌릴 문장을 고른다.
  *
- * **원문은 항상 표시하고**, 번역문은 있을 때만 아래에 덧붙인다. 이전에는 번역문이 원문을
- * 대체해, 번역이 어긋났을 때 사용자가 원문을 확인할 방법이 없었다.
- * 번역문이 원문과 같으면(같은 언어) 같은 문장을 두 줄로 반복하지 않는다.
+ * **번역문이 있으면 번역문만 표시한다.** 워커는 화자의 말을 상대(시청자)의 언어로 번역해
+ * 보내므로, 번역문이 곧 시청자가 읽을 수 있는 문장이다. 이전에는 원문을 항상 함께 띄웠는데,
+ * 언어가 다른 팬과 인플루언서의 통화에서는 시청자가 읽지 못하는 상대 언어 원문이 화면을
+ * 차지했다. 번역문이 없거나 원문과 같으면(같은 언어) 원문만 표시한다.
  *
  * 내 발화는 화면에 띄우지 않으므로(appendSubtitleLine에서 걸러진다) 여기서 다루지 않는다.
  */
@@ -177,7 +176,7 @@ export function pickSubtitleTexts(payload: SubtitlePayload): SubtitleTexts {
 
   const translated = payload.translatedText?.trim()
   if (!translated || translated === text) return { text }
-  return { text, translatedText: translated }
+  return { text: translated }
 }
 
 export type SubtitleSpeakerNames = {

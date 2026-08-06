@@ -387,6 +387,51 @@ const ko = {
   'wait.change.duplicate': '이미 접수된 순서 변경 요청이 있습니다.',
   'wait.change.failed': '순서 변경 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
 
+  'signup.nicknameEnglishHint':
+    '닉네임은 팬미팅 이름과 함께 해외 팬에게도 그대로 보여요. 영어 이름 사용을 권장해요.',
+
+  // 종료된 팬미팅 차단 안내
+  'deviceCheckPage.ended.title': '이미 종료된 팬미팅입니다',
+  'deviceCheckPage.ended.message':
+    '종료된 팬미팅에는 입장할 수 없습니다. 녹화 영상과 기념 카드는 나의 팬미팅 > 다녀온 팬미팅에서 확인할 수 있어요.',
+  'wait.ended.title': '이미 종료된 팬미팅입니다',
+  'wait.ended.desc': '대기열 입장이 마감되었습니다. 녹화 영상과 기념 카드는 완료 화면에서 확인할 수 있어요.',
+  'wait.ended.cta': '완료 화면으로 이동',
+
+  // 서버가 한국어로 저장해 내려주는 알림·안내 문구의 화면 언어 대체 문구
+  'serverText.notif.applicationResult.title': '응모 결과가 발표되었습니다',
+  'serverText.notif.applicationResult.message': '팬미팅 응모 결과를 확인해 주세요.',
+  'serverText.notif.queueOrderAssigned.title': '대기 순번이 배정되었습니다',
+  'serverText.notif.queueOrderAssigned.message': '대기실에서 내 순번을 확인해 주세요.',
+  'serverText.notif.queueOrderAssigned.messageWithPosition': '내 대기 순번은 {position}번입니다.',
+  'serverText.notif.queueChangeResult.title': '순서 변경 요청이 처리되었습니다',
+  'serverText.notif.queueChangeResult.approved':
+    '순서 변경 요청이 승인되어 대기열 순서가 조정되었습니다.',
+  'serverText.notif.queueChangeResult.rejected':
+    '순서 변경 요청이 거절되어 기존 순서가 유지됩니다.',
+  'serverText.notif.queueChangeResult.message':
+    '순서 변경 요청 처리 결과를 대기실에서 확인해 주세요.',
+  'serverText.notif.enterNow.title': '지금 입장해 주세요',
+  'serverText.notif.enterNow.message': '내 차례가 되었어요. 제한 시간 안에 통화에 입장해 주세요.',
+  'serverText.notif.meetingChanged.title': '팬미팅 정보가 변경되었습니다',
+  'serverText.notif.meetingChanged.message': '변경된 일정과 안내를 확인해 주세요.',
+  'serverText.notif.meetingCanceled.title': '팬미팅이 취소되었습니다',
+  'serverText.notif.meetingCanceled.message': '자세한 내용은 팬미팅 상세에서 확인해 주세요.',
+  'serverText.queueNotice.approved':
+    '순서 변경 요청이 승인되어 대기열 마지막 순서로 이동했습니다.',
+  'serverText.queueNotice.rejected': '순서 변경 요청이 거절되어 기존 순서가 유지됩니다.',
+  'serverText.queueNotice.adjusted': '운영자가 대기 순번을 조정했습니다.',
+
+  // 서버가 알림과 함께 내려주는 사전 키다. 백엔드 NotificationMessage 의 키·문장 틀과
+  // 자리표시자 이름이 같아야 하며, 한쪽만 고치면 문장이 어긋난다.
+  'notification.applicationResult.selected': '{meetingTitle} 팬미팅 응모에 당첨되었습니다.',
+  'notification.applicationResult.notSelected': '{meetingTitle} 팬미팅 응모에 당첨되지 않았습니다.',
+  'notification.meetingCanceled.body': '{meetingTitle} 팬미팅이 취소되었습니다.',
+  'notification.queueChange.moved': '대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다.',
+  'notification.queueChange.movedWithReason': '대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다. 사유: {reason}',
+  'notification.queueChange.shifted': '다른 참가자의 순서 조정으로 대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다.',
+  'notification.queueChange.shiftedWithReason': '다른 참가자의 순서 조정으로 대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다. 사유: {reason}',
+
   // 공지·메모·유의사항
   'wait.notices': '운영 공지',
   'wait.noticeCount': '{count}건',
@@ -4699,6 +4744,55 @@ const en: Partial<Record<TranslationKey, string>> = {
   'wait.change.tooLong': 'Keep the reason within {max} characters.',
   'wait.change.duplicate': 'You already have a pending reorder request.',
   'wait.change.failed': 'Could not send the reorder request. Please try again shortly.',
+
+  'signup.nicknameEnglishHint':
+    'Your name is shown to fans worldwide alongside fan meeting titles. We recommend an English name.',
+
+  'deviceCheckPage.ended.title': 'This fan meeting has ended',
+  'deviceCheckPage.ended.message':
+    'You can no longer enter this fan meeting. Find its recording and photo card under My fan meetings > Past fan meetings.',
+  'wait.ended.title': 'This fan meeting has ended',
+  'wait.ended.desc':
+    'The queue is closed. You can still view the recording and photo card on the completion page.',
+  'wait.ended.cta': 'Go to the completion page',
+
+  'serverText.notif.applicationResult.title': 'Application results are out',
+  'serverText.notif.applicationResult.message': 'Check the results of your fan meeting application.',
+  'serverText.notif.queueOrderAssigned.title': 'Your queue number is assigned',
+  'serverText.notif.queueOrderAssigned.message': 'Check your place in line in the waiting room.',
+  'serverText.notif.queueOrderAssigned.messageWithPosition': 'Your place in line is No. {position}.',
+  'serverText.notif.queueChangeResult.title': 'Your reorder request was processed',
+  'serverText.notif.queueChangeResult.approved':
+    'Your reorder request was approved and your place in line was adjusted.',
+  'serverText.notif.queueChangeResult.rejected':
+    'Your reorder request was declined, so your current place in line stays the same.',
+  'serverText.notif.queueChangeResult.message':
+    'See the result of your reorder request in the waiting room.',
+  'serverText.notif.enterNow.title': 'Enter now',
+  'serverText.notif.enterNow.message': "It's your turn. Join the call within the time limit.",
+  'serverText.notif.meetingChanged.title': 'Fan meeting details changed',
+  'serverText.notif.meetingChanged.message': 'Check the updated schedule and details.',
+  'serverText.notif.meetingCanceled.title': 'Fan meeting canceled',
+  'serverText.notif.meetingCanceled.message': 'See the fan meeting page for details.',
+  'serverText.queueNotice.approved':
+    'Your reorder request was approved — you were moved to the end of the line.',
+  'serverText.queueNotice.rejected':
+    'Your reorder request was declined, so your current place in line stays the same.',
+  'serverText.queueNotice.adjusted': 'An operator adjusted your place in line.',
+
+  'notification.applicationResult.selected':
+    'You have been selected for the {meetingTitle} fan meeting.',
+  'notification.applicationResult.notSelected':
+    'You were not selected for the {meetingTitle} fan meeting.',
+  'notification.meetingCanceled.body': 'The {meetingTitle} fan meeting has been canceled.',
+  'notification.queueChange.moved':
+    'Your queue position changed from {previousPosition} to {newPosition}.',
+  'notification.queueChange.movedWithReason':
+    'Your queue position changed from {previousPosition} to {newPosition}. Reason: {reason}',
+  'notification.queueChange.shifted':
+    "Another participant's reordering changed your queue position from {previousPosition} to {newPosition}.",
+  'notification.queueChange.shiftedWithReason':
+    "Another participant's reordering changed your queue position from {previousPosition} to {newPosition}. Reason: {reason}",
 
   'wait.notices': 'Announcements',
   'wait.noticeCount': '{count}',

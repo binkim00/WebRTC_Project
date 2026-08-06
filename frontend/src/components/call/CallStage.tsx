@@ -5,9 +5,9 @@ import { useTranslation } from '../../i18n'
 /** 화자 이름이 붙은 자막 한 줄이다. */
 export type CaptionLine = {
   speaker: string
-  /** 화자가 말한 원문이며 항상 표시한다. */
+  /** 화면에 표시할 문장이다. 시청자 언어의 번역문이 있으면 번역문, 없으면 원문이다. */
   text: string
-  /** 번역문이 있을 때만 원문 아래에 덧붙이는 보조 줄이다. */
+  /** 본문 아래에 덧붙일 보조 줄이다. 지금은 채우지 않지만 표시 능력은 남겨 둔다. */
   translatedText?: string
   /** 줄을 구분할 안정적인 식별자다. 같은 문장이 반복돼도 React key가 겹치지 않게 한다. */
   id?: string

@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getCallSummary } from '../../api/aiSummaries'
 import { getAuthSession } from '../../api/authSession'
+import { recallFanCallSession } from '../../api/callSessionLog'
 import {
   fetchFanMemos,
   fetchMeetingDetail,
@@ -238,16 +239,28 @@ export function InfluencerFanRecordPage() {
   const selected = sessions.find((session) => session.meetingId === selectedMeetingId)
   const selectedIsCurrent = Boolean(selected && selected.meetingId === fanMeetingId)
 
+  /**
+   * 요약 조회에 쓸 통화 세션이다.
+   *
+   * 통화 화면에서 넘어온 값(현재 회차)이 최우선이고, 그 외 회차는 대기열 폴링이 브라우저에
+   * 남긴 (팬미팅, 팬) → 세션 기록에서 찾는다. 이 기록 덕에 팬미팅이 끝난 뒤에도 지난 회차의
+   * AI 요약을 다시 열 수 있다. (통화를 지켜본 브라우저에만 기록이 남는다)
+   */
+  const summarySessionId = useMemo(() => {
+    if (!selected || !fanId) return undefined
+    if (selectedIsCurrent && callSessionId) return callSessionId
+    return recallFanCallSession(selected.meetingId, fanId)
+  }, [callSessionId, fanId, selected, selectedIsCurrent])
+
   useEffect(() => {
-    // 대화 요약은 통화 세션 단위라, 목록 화면이 넘겨 준 현재 통화에서만 조회할 수 있다.
-    if (!callSessionId || !selectedIsCurrent || !authToken) {
+    if (!summarySessionId || !authToken) {
       setSummaryLines([])
       return
     }
 
     const controller = new AbortController()
 
-    void getCallSummary(callSessionId, authToken, controller.signal)
+    void getCallSummary(summarySessionId, authToken, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return
         setSummaryLines(
@@ -265,7 +278,7 @@ export function InfluencerFanRecordPage() {
       })
 
     return () => controller.abort()
-  }, [authToken, callSessionId, selectedIsCurrent])
+  }, [authToken, summarySessionId])
 
   const editing = Boolean(selected && editingMeetingId === selected.meetingId)
   const hasMemo = Boolean(selected?.memo.trim())

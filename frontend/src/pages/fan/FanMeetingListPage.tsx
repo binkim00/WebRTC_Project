@@ -516,8 +516,8 @@ export function FanMeetingListPage() {
               // LIVE 상태만으로 입장을 허용하지 않는다. 대기열 오픈 시각이 지나고
               // 서버가 참가자 입장을 허용한 경우에만 대기실로 이동한다.
               const queueIsOpen = isWaitingRoomOpen(item.detail?.meeting.operation.queueOpenAt)
-              // 화면을 열어 둔 사이 팬미팅이 끝나면 이 카드가 아직 예정 목록에 남아 있다.
-              // 종료·취소를 먼저 확인해야 READY 예외 경로로 입장 버튼이 살아나지 않는다.
+              // 종료·취소된 팬미팅은 목록 갱신이 늦어 예정 탭에 남아 있어도 입장을 막는다.
+              // 종료를 먼저 확인해야 READY 예외 경로로 입장 버튼이 살아나지 않는다.
               const meetingClosed = isClosedFanMeetingStatus(item.detail?.meeting.status)
               const canEnter = Boolean(
                 !meetingClosed &&

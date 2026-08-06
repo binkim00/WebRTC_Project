@@ -446,7 +446,7 @@ export function FanCardSection({
       .then((photos) => {
         if (!active) return undefined
         return drawFanCard(canvas, {
-          text: selectedText,
+          text: selectedText ?? '',
           meetingTitle,
           influencerName,
           fanNickname,
@@ -596,7 +596,7 @@ export function FanCardSection({
     try {
       const photos = await resolveSelectedPhotos()
       await drawFanCard(canvas, {
-        text: selectedText,
+        text: selectedText ?? '',
         meetingTitle,
         influencerName,
         fanNickname,
@@ -711,13 +711,13 @@ export function FanCardSection({
 
               {/* 저장 완료도 오류와 같은 배너 체계로 알린다. 초록 문장 한 줄만 두면 눈에 띄지 않는다. */}
               {/* 문구를 고르지 않으면 둘 다 undefined 라 저장한 적이 없어도 같다고 나온다. */}
-              {savedText !== undefined && savedText === selectedText ? (
+              {selectedText && savedText === selectedText ? (
                 <AlertBanner className="mt-4" title={t('fanCardSection.t12')} variant="success">
                    {t('fanCardSection.t13')} </AlertBanner>
               ) : null}
 
-              {/* 서버가 보관하는 것은 문구뿐이라 문구를 고른 경우에만 저장 버튼을 연다. */}
               <div className={`mt-6 grid gap-3 ${selectedText ? 'sm:grid-cols-2' : ''}`}>
+                {/* 문구 저장 API는 문구가 있어야 하므로, 문구 없이 만든 카드는 내려받기만 제공한다. */}
                 {selectedText ? (
                   <Button loading={saving} onClick={() => void handleSave()} size="lg">
                     {savedText ? t('fanCardSection.t14') : t('fanCardSection.t15')}

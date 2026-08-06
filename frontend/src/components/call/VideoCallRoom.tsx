@@ -1,8 +1,10 @@
 import { LiveKitRoom } from '@livekit/components-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/auth'
 import {
   getCallSessionStatus,
+  isCallSessionEnded,
   issueLiveKitAccessToken,
   type CallSessionStatusResponse,
   type LiveKitAccessTokenResponse,
@@ -228,7 +230,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
    * 통화 화면에서 튕겨 나가지 않는다. 마지막 팬까지 끝났을 때만 참이 된다.
    */
   const allCallsFinished =
-    hostStaysConnected && noPendingFan && sessionStatus?.status === 'ENDED'
+    hostStaysConnected && noPendingFan && Boolean(sessionStatus && isCallSessionEnded(sessionStatus))
 
   /**
    * 팬미팅을 모두 마친 화면에서 보여 줄 진행 결과다.
@@ -261,6 +263,21 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         setStatusError(undefined)
       } catch (error: unknown) {
         if (signal.aborted) return
+        // 통화가 시작된 세션의 상태 조회가 403·404로 거절되기 시작하면, 서버가 세션을 정리해
+        // 팬이 더 이상 참가자가 아니라는 뜻이다. 이때 오류만 띄우고 폴링을 계속하면 종료 신호를
+        // 영영 못 받아 팬이 통화 방에서 나가지 못하므로, 세션이 끝난 것으로 화면을 정리한다.
+        if (
+          !hostStaysConnected &&
+          error instanceof ApiError &&
+          (error.status === 403 || error.status === 404)
+        ) {
+          setSessionStatus((current) =>
+            current && current.startedAt !== null && !isCallSessionEnded(current)
+              ? { ...current, status: 'ENDED', endedAt: current.endedAt ?? current.serverNow }
+              : current,
+          )
+          return
+        }
         setStatusError(
           error instanceof Error ? error.message : t('videoCallRoom.t9'),
         )

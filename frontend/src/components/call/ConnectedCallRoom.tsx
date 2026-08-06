@@ -17,6 +17,7 @@ import {
   endCallSessionByFan,
   forceEndCallSession,
   getCallSessionStatus,
+  isCallSessionEnded,
   type CallSessionStatusResponse,
 } from '../../api/callSessions'
 import { getAuthSession } from '../../api/auth'
@@ -348,6 +349,10 @@ export function ConnectedCallRoom({
   } = useCallPhotoCapture({
     callSessionId,
     remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
+    // 내 카메라가 켜져 있으면 상대와 나란히 함께 찍힌다. 꺼져 있으면 상대만 찍힌다.
+    localVideoTrack: isCameraEnabled
+      ? localCameraTrack?.publication?.track?.mediaStreamTrack
+      : undefined,
   })
   const photoCaptureVisible = authSession?.role === 'FAN' && isConnected
 
@@ -503,7 +508,7 @@ export function ConnectedCallRoom({
           // 다른 경로에서 이미 종료된 경우에는 성공으로 간주하고, 그 외 실패는 화면에 남아 재시도하게 한다.
           const latestStatus = await getCallSessionStatus(callSessionId, { authToken })
             .catch(() => undefined)
-          if (latestStatus?.status !== 'ENDED') {
+          if (!latestStatus || !isCallSessionEnded(latestStatus)) {
             setMediaError(
               error instanceof Error
                 ? error.message
@@ -596,8 +601,12 @@ export function ConnectedCallRoom({
     })
   }
 
+  // 서버가 세션을 마감했는지다. status 문자열이 'ENDED'가 아니어도 endedAt이 있으면 끝난 것으로
+  // 본다. 문자열 하나에만 묶어 두면 서버가 다른 상태 값으로 마감했을 때 팬이 방에서 못 나간다.
+  const sessionEnded = isCallSessionEnded(sessionStatus)
+
   useEffect(() => {
-    if (sessionStatus.status !== 'ENDED') {
+    if (!sessionEnded) {
       return
     }
 
@@ -635,7 +644,7 @@ export function ConnectedCallRoom({
     hostStaysConnected,
     navigate,
     room,
-    sessionStatus.status,
+    sessionEnded,
     stopAndUpload,
   ])
 
@@ -673,7 +682,7 @@ export function ConnectedCallRoom({
   }
   const timeRatioBase = timeRatioBaseRef.current
 
-  const waitingForNextFan = Boolean(hostStaysConnected) && sessionStatus.status === 'ENDED'
+  const waitingForNextFan = Boolean(hostStaysConnected) && sessionEnded
   /** 방금 끝난 통화의 길이다. 서버가 시각을 주지 않았으면 표시하지 않는다. */
   const finishedDurationLabel = formatCallDuration(sessionStatus.startedAt, sessionStatus.endedAt)
 

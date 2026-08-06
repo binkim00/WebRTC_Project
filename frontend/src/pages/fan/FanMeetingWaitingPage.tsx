@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertBanner, Button, Dialog, Textarea } from '../../components'
-import { useTranslation } from '../../i18n'
+import { localizeQueueChangeNotice, useTranslation } from '../../i18n'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
 import {
@@ -691,7 +691,7 @@ export function FanMeetingWaitingPage() {
           {/* backend가 순번 변경 대상별로 저장한 안내 문구를 대기 화면에도 표시한다. */}
           {queueSnapshot?.lastChangeReason ? (
             <AlertBanner className="mt-5" title={t('wait.positionChanged.title')} variant="info">
-              <p>{queueSnapshot.lastChangeReason}</p>
+              <p>{localizeQueueChangeNotice(queueSnapshot.lastChangeReason)}</p>
               {queueSnapshot.lastChangedAt ? (
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                   {t('wait.positionChanged.at', {

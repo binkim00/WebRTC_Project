@@ -145,10 +145,10 @@ describe('isOwnSubtitle', () => {
 })
 
 describe('pickSubtitleTexts', () => {
-  it('원문과 번역문을 함께 담는다', () => {
+  it('번역문이 있으면 번역문만 보여 준다', () => {
+    // 번역문은 시청자의 언어로 온다. 시청자가 읽지 못하는 상대 언어 원문은 띄우지 않는다.
     expect(pickSubtitleTexts(payload({ speakerRole: 'FAN' }))).toEqual({
-      text: '안녕하세요',
-      translatedText: 'Hello',
+      text: 'Hello',
     })
   })
 
@@ -176,7 +176,7 @@ describe('pickSubtitleSpeaker', () => {
 })
 
 describe('appendSubtitleLine', () => {
-  it('새 발화가 이전 발화를 대체하고 원문과 번역문을 함께 담는다', () => {
+  it('새 발화가 이전 발화를 대체하고 번역문을 본문으로 담는다', () => {
     const first = appendSubtitleLine([], payload({ subtitleId: '1' }), 'INFLUENCER', NAMES)
     const second = appendSubtitleLine(
       first,
@@ -185,10 +185,9 @@ describe('appendSubtitleLine', () => {
       NAMES,
     )
 
-    // 자막은 한 줄만 남는다. 원문이 본문이고 번역문은 별도 필드로 따라간다.
+    // 자막은 한 줄만 남는다. 시청자 언어의 번역문이 본문이 된다.
     expect(second).toHaveLength(1)
-    expect(second[0]?.text).toBe('두 번째')
-    expect(second[0]?.translatedText).toBe('second')
+    expect(second[0]?.text).toBe('second')
   })
 
   it('내가 말한 대사는 화면에 올리지 않는다', () => {
@@ -205,13 +204,23 @@ describe('appendSubtitleLine', () => {
   it('상대가 말한 대사는 이전 상대 발화만 대체한다', () => {
     const mine = appendSubtitleLine(
       [],
-      payload({ subtitleId: '1', speakerRole: 'INFLUENCER', originalText: '내 말' }),
+      payload({
+        subtitleId: '1',
+        speakerRole: 'INFLUENCER',
+        originalText: '내 말',
+        translatedText: null,
+      }),
       'INFLUENCER',
       NAMES,
     )
     const theirs = appendSubtitleLine(
       mine,
-      payload({ subtitleId: '2', speakerRole: 'FAN', originalText: '팬 말' }),
+      payload({
+        subtitleId: '2',
+        speakerRole: 'FAN',
+        originalText: '팬 말',
+        translatedText: null,
+      }),
       'INFLUENCER',
       NAMES,
     )
@@ -231,7 +240,7 @@ describe('appendSubtitleLine', () => {
     )
 
     expect(refined).toHaveLength(1)
-    expect(refined[0]?.translatedText).toBe('Hello there')
+    expect(refined[0]?.text).toBe('Hello there')
   })
 
   it('최근 SUBTITLE_HISTORY_SIZE개만 유지한다', () => {
@@ -239,7 +248,11 @@ describe('appendSubtitleLine', () => {
     for (let index = 1; index <= SUBTITLE_HISTORY_SIZE + 2; index += 1) {
       lines = appendSubtitleLine(
         lines,
-        payload({ subtitleId: String(index), originalText: `line ${index}` }),
+        payload({
+          subtitleId: String(index),
+          originalText: `line ${index}`,
+          translatedText: null,
+        }),
         'INFLUENCER',
         NAMES,
       )
