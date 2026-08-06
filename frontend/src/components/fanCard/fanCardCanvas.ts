@@ -385,6 +385,9 @@ export type FanCardLayout =
   | 'FOURCUT_HORIZONTAL'
   | 'FILM'
   | 'SIXCUT'
+  | 'HEART'
+  | 'CIRCLE'
+  | 'SCATTER'
 
 /** FOURCUT이 채우는 칸 수다. */
 const FOUR_CUT_SLOTS = 4
@@ -394,6 +397,12 @@ const TWO_CUT_SLOTS = 2
 
 /** SIXCUT이 채우는 칸 수다. */
 const SIX_CUT_SLOTS = 6
+
+/** CIRCLE이 채우는 칸 수다. */
+const CIRCLE_SLOTS = 3
+
+/** SCATTER가 채우는 칸 수다. */
+const SCATTER_SLOTS = 3
 
 /**
  * 팬이 고를 수 있는 카드 글꼴이다.
@@ -818,6 +827,18 @@ function drawSignatureForLayout(
       drawSignature(ctx, name, signatureFont, width - 150, stripBottom - 26, 40)
       return
     }
+    case 'HEART':
+      // 하트 아래 오른쪽이다. 곡선을 침범하지 않게 조금 안쪽에 둔다.
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 260, 940, 48)
+      return
+    case 'CIRCLE':
+      // 마지막 동그라미 오른쪽 아래다.
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 220, 1090, 42)
+      return
+    case 'SCATTER':
+      // 흩어 놓은 사진 사이 오른쪽 아래 빈 자리다.
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 230, 1170, 44)
+      return
     case 'SIXCUT': {
       // 격자가 세 줄이라 아래 여백이 좁다. 마지막 줄 오른쪽 아래에 겹쳐 그린다.
       const slotWidth = (CARD_WIDTH - 66 * 2 - 18) / 2
@@ -892,6 +913,15 @@ export async function drawFanCard(
         break
       case 'SIXCUT':
         slots = drawSixCutCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'HEART':
+        slots = drawHeartCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'CIRCLE':
+        slots = drawCircleCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'SCATTER':
+        slots = drawScatterCard(ctx, artwork, photos, fontFamily)
         break
       default:
         drawQuoteOnlyCard(ctx, artwork, fontFamily)
@@ -1132,6 +1162,93 @@ function drawPhotoCover(
   const limits = photoOffsetLimits(width, height, photo.width, photo.height, zoom)
   const offsetX = Math.min(Math.max(adjustment?.offsetX ?? 0, -limits.x), limits.x)
   const offsetY = Math.min(Math.max(adjustment?.offsetY ?? 0, -limits.y), limits.y)
+  ctx.drawImage(
+    photo,
+    x + (width - drawWidth) / 2 + offsetX * width,
+    y + (height - drawHeight) / 2 + offsetY * height,
+    drawWidth,
+    drawHeight,
+  )
+  ctx.restore()
+}
+
+
+/**
+ * 하트 모양 경로를 만든다. 사진을 이 모양으로 오려 붙이는 데 쓴다.
+ *
+ * <p>두 개의 곡선을 위에서 만나게 하고 아래를 한 점으로 모아 그린다. 좌표는 지정한 사각형 안에
+ * 들어가도록 맞춘다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param x 왼쪽 좌표
+ * @param y 위쪽 좌표
+ * @param width 너비
+ * @param height 높이
+ */
+function heartPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): void {
+  const centerX = x + width / 2
+  const topY = y + height * 0.28
+  ctx.beginPath()
+  ctx.moveTo(centerX, y + height)
+  ctx.bezierCurveTo(
+    x - width * 0.08, y + height * 0.62,
+    x + width * 0.1, y - height * 0.06,
+    centerX, topY,
+  )
+  ctx.bezierCurveTo(
+    x + width * 0.9, y - height * 0.06,
+    x + width * 1.08, y + height * 0.62,
+    centerX, y + height,
+  )
+  ctx.closePath()
+}
+
+/**
+ * 사진을 원하는 모양으로 오려 붙인다.
+ *
+ * <p>둥근 사각형만 쓰던 drawPhotoCover 와 달리 경로를 호출 측이 정한다. 배치는 같은 규칙(원본
+ * 전체를 담고 팬이 키운 만큼 확대)을 쓰므로 사진이 잘리는 정도도 사각형 칸과 같다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param photo 그릴 사진
+ * @param x 왼쪽 좌표
+ * @param y 위쪽 좌표
+ * @param width 칸 너비
+ * @param height 칸 높이
+ * @param clip 오릴 모양을 그리는 함수
+ * @param adjustment 팬이 정한 배치
+ */
+function drawPhotoInShape(
+  ctx: CanvasRenderingContext2D,
+  photo: ImageBitmap,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  clip: () => void,
+  adjustment?: PhotoAdjustment,
+): void {
+  ctx.save()
+  clip()
+  ctx.clip()
+
+  const zoom = adjustment?.scale ?? 1
+  const contain = Math.min(width / photo.width, height / photo.height)
+  const drawWidth = photo.width * contain * zoom
+  const drawHeight = photo.height * contain * zoom
+  const limits = photoOffsetLimits(width, height, photo.width, photo.height, zoom)
+  const offsetX = Math.min(Math.max(adjustment?.offsetX ?? 0, -limits.x), limits.x)
+  const offsetY = Math.min(Math.max(adjustment?.offsetY ?? 0, -limits.y), limits.y)
+
+  // 오린 모양 안쪽을 먼저 채워, 사진이 모양보다 작을 때 배경이 그대로 비치지 않게 한다.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.12)'
+  ctx.fillRect(x, y, width, height)
   ctx.drawImage(
     photo,
     x + (width - drawWidth) / 2 + offsetX * width,
@@ -2397,6 +2514,274 @@ function drawTwoCutCard(
     CARD_HEIGHT - 74,
   )
   drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 40, themeInk(theme, 0.42))
+
+  return slots
+}
+
+/**
+ * 사진 한 장을 하트로 오려 담는 카드를 그린다.
+ *
+ * <p>사각형 칸만 있던 배치에서 벗어나는 도안이다. 같은 사진이라도 모양이 달라지면 다른 카드처럼
+ * 보인다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 담을 사진 목록이며 첫 장만 쓴다
+ * @param fontFamily 사용할 폰트 패밀리
+ * @returns 사진이 놓인 칸 목록
+ */
+function drawHeartCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): PhotoSlotRect[] {
+  const theme = themeOf(artwork.themeKey)
+  const slots: PhotoSlotRect[] = []
+  drawFourCutBackground(ctx, theme)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = themeInk(theme, 0.72)
+  ctx.font = `600 32px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 132)
+
+  const size = 720
+  const x = (CARD_WIDTH - size) / 2
+  const y = 190
+  const photo = photos[0]
+  slots.push({ index: 0, x, y, width: size, height: size })
+
+  // 하트 뒤에 옅은 그림자를 두어 배경에서 떠 보이게 한다.
+  ctx.save()
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'
+  ctx.shadowBlur = 30
+  ctx.shadowOffsetY = 10
+  heartPath(ctx, x, y, size, size)
+  ctx.fillStyle = themeInk(theme, 0.14)
+  ctx.fill()
+  ctx.restore()
+
+  if (photo) {
+    drawPhotoInShape(
+      ctx, photo, x, y, size, size,
+      () => heartPath(ctx, x, y, size, size),
+      artwork.photoAdjustments?.[0],
+    )
+  }
+
+  // 하트 테두리 — 오린 자리를 또렷하게 만든다.
+  heartPath(ctx, x, y, size, size)
+  ctx.strokeStyle = themeInk(theme, 0.5)
+  ctx.lineWidth = 5
+  ctx.stroke()
+
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, CARD_WIDTH - 220, 130, [44, 39, 34, 30, 26], artwork.quoteScale,
+    )
+    ctx.fillStyle = themeInk(theme, 1)
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, y + size + 96)
+  }
+
+  ctx.fillStyle = themeInk(theme, 0.88)
+  ctx.font = `700 32px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, artwork.influencerName, CARD_WIDTH - 200), CARD_WIDTH / 2, CARD_HEIGHT - 116,
+  )
+  ctx.fillStyle = themeInk(theme, 0.6)
+  ctx.font = `500 26px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.fanNickname} · ${artwork.dateLabel}`, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 74,
+  )
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 40, themeInk(theme, 0.42))
+
+  return slots
+}
+
+/**
+ * 사진 세 장을 동그랗게 오려 세로로 잇는 카드를 그린다.
+ *
+ * <p>스티커를 붙여 놓은 듯한 도안이다. 원은 사각형보다 얼굴 주변만 남으므로 표정이 도드라진다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 담을 사진 목록
+ * @param fontFamily 사용할 폰트 패밀리
+ * @returns 사진이 놓인 칸 목록
+ */
+function drawCircleCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): PhotoSlotRect[] {
+  const theme = themeOf(artwork.themeKey)
+  const slots: PhotoSlotRect[] = []
+  drawFourCutBackground(ctx, theme)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = themeInk(theme, 0.72)
+  ctx.font = `600 30px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 116)
+
+  const size = 300
+  const gap = 26
+  const startY = 168
+  // 가운데를 살짝 비껴 놓아 일부러 붙인 스티커처럼 보이게 한다.
+  const offsets = [-70, 60, -40]
+
+  for (let index = 0; index < CIRCLE_SLOTS; index += 1) {
+    const x = (CARD_WIDTH - size) / 2 + (offsets[index] ?? 0)
+    const y = startY + index * (size + gap)
+    const photo = photos[index]
+    slots.push({ index, x, y, width: size, height: size })
+
+    const circle = () => {
+      ctx.beginPath()
+      ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2)
+      ctx.closePath()
+    }
+
+    if (photo) {
+      drawPhotoInShape(ctx, photo, x, y, size, size, circle, artwork.photoAdjustments?.[index])
+    } else {
+      circle()
+      ctx.fillStyle = themeInk(theme, 0.06)
+      ctx.fill()
+    }
+    circle()
+    ctx.strokeStyle = themeInk(theme, 0.55)
+    ctx.lineWidth = 6
+    ctx.stroke()
+  }
+
+  const stripBottom = startY + CIRCLE_SLOTS * size + (CIRCLE_SLOTS - 1) * gap
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, CARD_WIDTH - 240, 96, [36, 32, 28, 25, 22], artwork.quoteScale,
+    )
+    ctx.fillStyle = themeInk(theme, 1)
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, stripBottom + 58)
+  }
+
+  ctx.fillStyle = themeInk(theme, 0.86)
+  ctx.font = `700 28px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.influencerName} · ${artwork.fanNickname}`, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 96,
+  )
+  ctx.fillStyle = themeInk(theme, 0.58)
+  ctx.font = `500 24px ${fontFamily}`
+  ctx.fillText(artwork.dateLabel, CARD_WIDTH / 2, CARD_HEIGHT - 62)
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 32, themeInk(theme, 0.42))
+
+  return slots
+}
+
+/**
+ * 사진 세 장을 비스듬히 겹쳐 붙인 카드를 그린다.
+ *
+ * <p>책상에 사진을 흩어 놓은 듯한 도안이다. 각 장에 흰 여백과 그림자를 둘러 인화한 사진처럼
+ * 보이게 한다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 담을 사진 목록
+ * @param fontFamily 사용할 폰트 패밀리
+ * @returns 사진이 놓인 칸 목록
+ */
+function drawScatterCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): PhotoSlotRect[] {
+  const theme = themeOf(artwork.themeKey)
+  const slots: PhotoSlotRect[] = []
+  drawFourCutBackground(ctx, theme)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = themeInk(theme, 0.72)
+  ctx.font = `600 30px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 108)
+
+  const photoWidth = 620
+  const photoHeight = Math.round((photoWidth * 9) / 16)
+  const paperInset = 22
+  const places = [
+    { x: 90, y: 190, rotation: -0.07 },
+    { x: 360, y: 520, rotation: 0.05 },
+    { x: 120, y: 850, rotation: -0.03 },
+  ]
+
+  for (let index = 0; index < SCATTER_SLOTS; index += 1) {
+    const place = places[index]
+    if (!place) continue
+    const photo = photos[index]
+
+    ctx.save()
+    ctx.translate(place.x + photoWidth / 2, place.y + photoHeight / 2)
+    ctx.rotate(place.rotation)
+    ctx.translate(-(photoWidth / 2), -(photoHeight / 2))
+
+    // 인화지 — 흰 여백과 그림자로 실제 사진을 올려 둔 느낌을 만든다.
+    ctx.save()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.42)'
+    ctx.shadowBlur = 26
+    ctx.shadowOffsetY = 12
+    ctx.fillStyle = '#fdfcf8'
+    roundedRectPath(
+      ctx, -paperInset, -paperInset,
+      photoWidth + paperInset * 2, photoHeight + paperInset * 3, 10,
+    )
+    ctx.fill()
+    ctx.restore()
+
+    if (photo) {
+      drawPhotoCover(
+        ctx, photo, 0, 0, photoWidth, photoHeight, 4, artwork.photoAdjustments?.[index],
+      )
+    } else {
+      drawEmptySlot(ctx, 0, 0, photoWidth, photoHeight, 4, theme)
+    }
+    ctx.restore()
+
+    // 끌기 판정은 회전을 무시한 자리로 둔다. 기울기가 작아 체감 차이가 크지 않고, 회전까지
+    // 반영하려면 화면 쪽에서도 같은 변환을 되짚어야 해 복잡해진다.
+    slots.push({ index, x: place.x, y: place.y, width: photoWidth, height: photoHeight })
+  }
+
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, CARD_WIDTH - 240, 84, [34, 30, 27, 24, 21], artwork.quoteScale,
+    )
+    ctx.fillStyle = themeInk(theme, 1)
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, CARD_HEIGHT - 176)
+  }
+
+  ctx.fillStyle = themeInk(theme, 0.86)
+  ctx.font = `700 28px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.influencerName} · ${artwork.fanNickname}`, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 96,
+  )
+  ctx.fillStyle = themeInk(theme, 0.58)
+  ctx.font = `500 24px ${fontFamily}`
+  ctx.fillText(artwork.dateLabel, CARD_WIDTH / 2, CARD_HEIGHT - 62)
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 32, themeInk(theme, 0.42))
 
   return slots
 }
