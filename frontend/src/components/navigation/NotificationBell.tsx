@@ -271,7 +271,12 @@ export function NotificationBell() {
                             {localizeNotificationTitle(notification.type, notification.title)}
                           </strong>
                           <span className="mt-[5px] block text-[15px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
-                            {localizeNotificationMessage(notification.type, notification.message)}
+                            {localizeNotificationMessage(
+  notification.type,
+  notification.message,
+  notification.messageKey,
+  notification.messageArgs,
+)}
                           </span>
                           <span className="mt-2 block text-sm font-bold text-[var(--color-primary-coral)]">
                             {content.action}

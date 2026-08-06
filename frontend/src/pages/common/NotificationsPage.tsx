@@ -323,7 +323,12 @@ export function NotificationsPage() {
                         {localizeNotificationTitle(notification.type, notification.title)}
                       </span>
                       <span className="text-sm text-[var(--color-text-secondary)]">
-                        {localizeNotificationMessage(notification.type, notification.message)}
+                        {localizeNotificationMessage(
+  notification.type,
+  notification.message,
+  notification.messageKey,
+  notification.messageArgs,
+)}
                       </span>
                     </button>
                   </li>

@@ -135,10 +135,14 @@ type FanCardSectionProps = {
 }
 
 /**
- * 팬이 통화에서 인상 깊었던 문구를 골라 기념 카드로 만드는 섹션이다.
+ * 팬이 통화에서 남긴 사진과 인상 깊었던 문구로 기념 카드를 만드는 섹션이다.
  *
  * AI 추천 문구는 통화가 끝난 뒤 생성되므로 준비되지 않았을 수 있다. 그래서 추천을 기다리는
  * 동안에도 자막에서 직접 고를 수 있게 두 목록을 함께 보여 준다.
+ *
+ * <p>문구 고르기는 선택 사항이다. 추천이 늦거나 마음에 드는 말이 없어도 사진과 꾸미기만으로
+ * 카드를 완성해 내려받을 수 있다. 다만 서버가 보관하는 것은 문구뿐이라, 문구를 고른 경우에만
+ * 저장 버튼을 열어 준다.
  */
 export function FanCardSection({
   callSessionId,
@@ -180,8 +184,13 @@ export function FanCardSection({
     (decoration) => decoration.id === selectedDecorationId,
   )
 
-  // 문구를 고르지 않아도 사진이 있으면 카드를 만들 수 있다. 문구는 선택 사항이다.
-  const hasCardContent = Boolean(selectedText) || photoBlobs.length > 0
+  /**
+   * 카드에 담을 것이 하나라도 있는지.
+   *
+   * <p>문구 고르기는 선택 사항이라 사진만으로도 카드를 완성할 수 있다. 다만 문구도 사진도
+   * 없으면 빈 도안만 남으므로 그때는 미리보기와 내려받기를 열지 않는다.
+   */
+  const canCompose = Boolean(selectedText) || selectedPhotoIndexes.length > 0
 
   /**
    * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
@@ -429,7 +438,7 @@ export function FanCardSection({
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !hasCardContent) return
+    if (!canvas || !canCompose) return
 
     let active = true
 
@@ -479,11 +488,11 @@ export function FanCardSection({
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 미리보기 재그리기를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    canCompose,
     dateLabel,
     decorations,
     fanNickname,
     fontKey,
-    hasCardContent,
     influencerName,
     layout,
     meetingTitle,
@@ -548,6 +557,12 @@ export function FanCardSection({
     [layout],
   )
 
+  /**
+   * 고른 문구를 서버에 저장한다.
+   *
+   * <p>서버가 보관하는 것은 문구뿐이고 빈 문구는 받지 않으므로, 문구를 고르지 않았으면
+   * 저장 자체를 시도하지 않는다. 사진과 꾸미기는 내려받은 이미지에만 담긴다.
+   */
   const handleSave = useCallback(async () => {
     if (!selectedText) return
 
@@ -574,7 +589,7 @@ export function FanCardSection({
    * 없는 캔버스에 같은 내용을 다시 그려 점선이 파일에 남지 않게 한다.
    */
   async function handleDownload() {
-    if (!hasCardContent) return
+    if (!canCompose) return
 
     const canvas = document.createElement('canvas')
 
@@ -644,6 +659,7 @@ export function FanCardSection({
             selectedText={selectedText}
           />
 
+          {/* 문구는 선택 사항이라 사진만 있어도 배치를 고를 수 있어야 한다. */}
           {photoBlobs.length > 0 ? (
             <FanCardLayoutPicker
               layout={layout}
@@ -654,14 +670,18 @@ export function FanCardSection({
             />
           ) : null}
 
-          {hasCardContent ? (
+          {canCompose ? (
             <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
               <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
 
               <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
                  {t('fanCardSection.t9')} </h3>
               <canvas
-                aria-label={t('fanCardSection.t10', { p0: selectedText ?? '' })}
+                aria-label={
+                  selectedText
+                    ? t('fanCardSection.t10', { p0: selectedText })
+                    : t('fanCardSection.t17')
+                }
                 // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
                 className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
                   decorations.length > 0 ? 'cursor-grab' : ''
@@ -690,6 +710,7 @@ export function FanCardSection({
               ) : null}
 
               {/* 저장 완료도 오류와 같은 배너 체계로 알린다. 초록 문장 한 줄만 두면 눈에 띄지 않는다. */}
+              {/* 문구를 고르지 않으면 둘 다 undefined 라 저장한 적이 없어도 같다고 나온다. */}
               {selectedText && savedText === selectedText ? (
                 <AlertBanner className="mt-4" title={t('fanCardSection.t12')} variant="success">
                    {t('fanCardSection.t13')} </AlertBanner>
@@ -705,6 +726,12 @@ export function FanCardSection({
                 <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
                    {t('fanCardSection.t16')} </Button>
               </div>
+
+              {selectedText ? null : (
+                <p className="mt-3 text-xs text-[var(--color-text-secondary)]">
+                  {t('fanCardSection.t18')}
+                </p>
+              )}
             </div>
           ) : null}
         </CardContent>

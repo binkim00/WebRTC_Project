@@ -6,6 +6,7 @@ import {
   parseSubtitlePayload,
   pickSubtitleSpeaker,
   pickSubtitleTexts,
+  shouldStartWithCaption,
   type SubtitleLine,
   type SubtitlePayload,
 } from './subtitleChannel'
@@ -28,6 +29,26 @@ function payload(overrides: Partial<SubtitlePayload> = {}): SubtitlePayload {
     ...overrides,
   }
 }
+
+describe('shouldStartWithCaption', () => {
+  it('양쪽 언어가 같으면 자막을 꺼진 상태로 시작한다', () => {
+    expect(shouldStartWithCaption('ko', 'ko')).toBe(false)
+  })
+
+  it('언어 표기가 대소문자·공백만 다르면 같은 언어로 본다', () => {
+    expect(shouldStartWithCaption(' KO ', 'ko')).toBe(false)
+  })
+
+  it('양쪽 언어가 다르면 자막을 켠 상태로 시작한다', () => {
+    expect(shouldStartWithCaption('en', 'ko')).toBe(true)
+  })
+
+  it('어느 한쪽 언어라도 알 수 없으면 자막을 켠 상태로 시작한다', () => {
+    expect(shouldStartWithCaption(null, 'ko')).toBe(true)
+    expect(shouldStartWithCaption('ko', undefined)).toBe(true)
+    expect(shouldStartWithCaption('  ', '  ')).toBe(true)
+  })
+})
 
 describe('parseSubtitlePayload', () => {
   it('AI 워커가 보내는 snake_case payload를 해석한다', () => {

@@ -17,6 +17,8 @@ function status(
     remainingSec: 0,
     reconnectAllowedUntil: null,
     endReason: null,
+    fanLanguage: null,
+    influencerLanguage: null,
     ...overrides,
   }
 }

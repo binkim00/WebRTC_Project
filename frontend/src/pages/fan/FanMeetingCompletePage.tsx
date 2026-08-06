@@ -375,6 +375,12 @@ export function FanMeetingCompletePage() {
   const eyebrowDate = formatDate(
     currentRecording?.completedAt ?? new Date().toISOString(),
   )
+  // 통화가 끝나면 대기열 응답에서 callSessionId가 사라지므로 통화 화면이 넘겨 준 값을 우선 쓰고,
+  // 새로고침 등으로 라우터 state가 없으면 녹화 정보에서 되찾는다.
+  const fanCardSessionId = routeState?.callSessionId
+    ?? (currentRecording
+      ? String(currentRecording.callSessionId)
+      : routeState?.pendingRecordingSessionId)
   // 완료 시각 최신순이다. 완료되지 않아 시각을 모르는 기록은 completedTime이 0을 주어 뒤로 밀린다.
   const archive = [...(recordings ?? [])].sort(
     (left, right) => completedTime(right.completedAt) - completedTime(left.completedAt),
@@ -582,6 +588,27 @@ export function FanMeetingCompletePage() {
             {memo ? `“${memo}”` : t('done.myNote.empty')}
           </p>
         </section>
+
+        {/*
+          기념 카드는 녹화와 무관하므로 녹화가 없거나 실패해도 제공한다.
+          만들기 화면은 스티커를 끌어 옮길 자리가 필요해 따로 두고, 여기서는 들어가는
+          입구만 보여 준다.
+        */}
+        {session && fanCardSessionId ? (
+          <section className="mt-10 rounded-[var(--radius-panel)] border border-[var(--color-divider)] p-6">
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">기념 카드 만들기</h2>
+            <p className="mt-2 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
+              통화에서 인상 깊었던 한마디와 남긴 사진으로 카드를 만들어 보세요.
+              사진은 통화가 끝나고 하루 동안만 이 기기에 보관합니다.
+            </p>
+            <Link
+              className="mj-font-label mt-4 inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] font-bold text-white hover:opacity-90"
+              to={`/fan/fan-meetings/${fanMeetingId}/cards/${fanCardSessionId}`}
+            >
+              기념 카드 만들러 가기
+            </Link>
+          </section>
+        ) : null}
       </div>
 
       <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] min-[1081px]:w-[min(100%-88px,1240px)]">

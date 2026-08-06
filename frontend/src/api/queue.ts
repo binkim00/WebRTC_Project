@@ -141,6 +141,12 @@ export function interpretQueueEnterError(
         alreadyEntered: false,
         message: translate('queue.t6'),
       }
+    case 'FAN_MEETING_CLOSED':
+      return {
+        alreadyEntered: false,
+        message:
+          '이미 끝난 팬미팅이라 입장할 수 없습니다. 녹화 다시보기와 기념 카드는 마이페이지에서 확인할 수 있어요.',
+      }
     default:
       // 상태 코드만 아는 새 오류는 재입장으로 단정하지 않고 서버 메시지를 그대로 보여 준다.
       return { alreadyEntered: false, message: error.message }

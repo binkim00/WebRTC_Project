@@ -1,4 +1,5 @@
 import type { NotificationType } from '../api/notifications'
+import type { TranslationKey } from './locales'
 import { getActiveLocale, translate } from './translate'
 
 /**
@@ -16,6 +17,25 @@ const KOREAN_CHAR_PATTERN = /[ㄱ-ㅎㅏ-ㅣ가-힣]/
 /** 화면 언어가 한국어가 아니고 원문이 한국어일 때만 대체 문구로 바꾼다. */
 function shouldLocalize(text: string): boolean {
   return getActiveLocale() !== 'ko' && KOREAN_CHAR_PATTERN.test(text)
+}
+
+/**
+ * 서버가 함께 준 사전 키로 문장을 만든다.
+ *
+ * 키가 있으면 원문을 추정할 필요가 없다. 화면 언어가 계정 선호 언어와 달라도 키로 다시 만들면
+ * 언제나 화면 언어를 따라가므로, 아래 키워드 추정보다 항상 우선한다.
+ *
+ * 사전에 없는 키는 translate가 키를 그대로 돌려준다. 서버가 프론트보다 먼저 새 문구를 내보낸
+ * 경우이므로, 그때는 키 문자열을 화면에 보이지 않고 서버 문장으로 넘긴다.
+ */
+function fromServerKey(
+  key: string | null | undefined,
+  args: Record<string, string> | null | undefined,
+): string | undefined {
+  if (!key) return undefined
+
+  const translated = translate(key as TranslationKey, args ?? undefined)
+  return translated === key ? undefined : translated
 }
 
 /** 원문에서 "3번" 같은 순번 숫자를 찾는다. 없으면 undefined다. */
@@ -44,8 +64,21 @@ export function localizeNotificationTitle(type: NotificationType, title: string)
   }
 }
 
-/** 알림 본문을 화면 언어에 맞춘 문장으로 돌려준다. */
-export function localizeNotificationMessage(type: NotificationType, message: string): string {
+/**
+ * 알림 본문을 화면 언어에 맞춘 문장으로 돌려준다.
+ *
+ * 서버가 사전 키를 함께 준 알림은 그 키로 만든다. 키가 없는 예전 알림만 원문에서 유형과
+ * 키워드를 추정해 대체한다.
+ */
+export function localizeNotificationMessage(
+  type: NotificationType,
+  message: string,
+  messageKey?: string | null,
+  messageArgs?: Record<string, string> | null,
+): string {
+  const fromKey = fromServerKey(messageKey, messageArgs)
+  if (fromKey) return fromKey
+
   if (!shouldLocalize(message)) return message
 
   switch (type) {

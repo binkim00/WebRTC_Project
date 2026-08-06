@@ -91,6 +91,20 @@ export type PublicFanMeetingDetail = {
   }
 }
 
+/**
+ * 종료·취소되어 더 이상 대기열 입장과 장비 점검을 할 수 없는 팬미팅인지 판별한다.
+ *
+ * 백엔드도 ENDED·CANCELED 두 상태만 최종 상태로 보고 대기실 입장(`POST .../queue/enter`)과
+ * 장비 점검 저장(`POST .../device-checks`)을 409 `FAN_MEETING_CLOSED`로 막는다.
+ * 이 상태에서 팬에게 남는 동선은 녹화 다시보기와 기념 카드뿐이다.
+ *
+ * 상세 조회에 실패해 상태를 모르는 경우(undefined)는 막지 않는다. 조회 장애 때문에
+ * 정상 팬미팅의 입장까지 잠기면 안 되고, 실제 차단은 서버가 다시 판정하기 때문이다.
+ */
+export function isClosedFanMeetingStatus(status: string | null | undefined): boolean {
+  return status === 'ENDED' || status === 'CANCELED'
+}
+
 const publicMeetingStatuses: readonly PublicFanMeetingStatus[] = [
   'PUBLISHED',
   'APPLICATION_OPEN',

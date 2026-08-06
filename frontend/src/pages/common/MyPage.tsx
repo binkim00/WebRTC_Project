@@ -36,7 +36,6 @@ type RoleContent = {
   withdrawDescription: string
 }
 
-
 /** 역할별 정적 문구·메뉴다. dc.html의 ROLES 객체와 값이 같다. */
 function roleContentOf(role: LoginRole): RoleContent {
   if (role === 'FAN') {
