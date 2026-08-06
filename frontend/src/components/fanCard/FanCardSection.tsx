@@ -232,6 +232,13 @@ export function FanCardSection({
   const [layout, setLayout] = useState<FanCardLayout>()
   const [selectedPhotoIndexes, setSelectedPhotoIndexes] = useState<readonly number[]>([])
   const [fontKey, setFontKey] = useState<FanCardFont>('DEFAULT')
+  /**
+   * 문구 크기 배율이다.
+   *
+   * <p>글꼴마다 같은 px 에서 글자가 커 보이는 정도가 달라, 글꼴을 바꾸면 문구가 갑자기 작아
+   * 보이거나 답답해진다. 자동 맞춤을 기준으로 팬이 조금씩 키우고 줄일 수 있게 한다.
+   */
+  const [quoteScale, setQuoteScale] = useState(1)
   const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
   const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
   const decorationCounterRef = useRef(0)
@@ -512,6 +519,7 @@ export function FanCardSection({
           setFontKey(draft.fontKey)
           setSelectedPhotoIndexes(draft.selectedPhotoIndexes)
           setPhotoAdjustments(draft.photoAdjustments ?? [])
+          setQuoteScale(draft.quoteScale ?? 1)
           setDecorations(draft.decorations)
           // 이어 붙일 식별자가 겹치지 않게 이미 쓴 번호 뒤에서 시작한다.
           decorationCounterRef.current = draft.decorations.length
@@ -549,13 +557,22 @@ export function FanCardSection({
         fontKey,
         selectedPhotoIndexes: [...selectedPhotoIndexes],
         photoAdjustments: [...photoAdjustments],
+        quoteScale,
         decorations: [...decorations],
         savedAt: new Date().toISOString(),
       }).catch(() => undefined)
     }, DRAFT_SAVE_DELAY_MS)
 
     return () => window.clearTimeout(timer)
-  }, [callSessionId, decorations, fontKey, layout, photoAdjustments, selectedPhotoIndexes])
+  }, [
+    callSessionId,
+    decorations,
+    fontKey,
+    layout,
+    photoAdjustments,
+    quoteScale,
+    selectedPhotoIndexes,
+  ])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -652,6 +669,7 @@ export function FanCardSection({
           fontKey,
           decorations,
           photoAdjustments,
+          quoteScale,
         })
       })
       .then((slots) => {
@@ -760,6 +778,7 @@ export function FanCardSection({
   }, [
     canCompose,
     photoAdjustments,
+    quoteScale,
     selectedPhotoIndex,
     dateLabel,
     decorations,
@@ -872,6 +891,7 @@ export function FanCardSection({
       const photos = await resolveSelectedPhotos()
       await drawFanCard(canvas, {
         photoAdjustments,
+        quoteScale,
         text: selectedText ?? '',
         meetingTitle,
         influencerName,
@@ -949,6 +969,34 @@ export function FanCardSection({
           {canCompose ? (
             <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
               <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
+
+              {selectedText ? (
+                <div className="mt-3 flex items-center gap-3">
+                  <label
+                    className="text-xs font-bold text-[var(--color-text-secondary)]"
+                    htmlFor="fan-card-quote-scale"
+                  >
+                    {t('fanCardSection.t24')}
+                  </label>
+                  <input
+                    className="h-1.5 flex-1 cursor-pointer accent-[var(--color-primary-coral)]"
+                    id="fan-card-quote-scale"
+                    max={1.4}
+                    min={0.7}
+                    onChange={(event) => setQuoteScale(Number(event.target.value))}
+                    step={0.05}
+                    type="range"
+                    value={quoteScale}
+                  />
+                  <button
+                    className="mj-font-label whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface-panel)]"
+                    onClick={() => setQuoteScale(1)}
+                    type="button"
+                  >
+                    {t('fanCardSection.t22')}
+                  </button>
+                </div>
+              ) : null}
 
               <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
                  {t('fanCardSection.t9')} </h3>

@@ -30,6 +30,8 @@ export type FanCardDraft = {
   decorations: CardDecoration[]
   /** 사진을 칸 안에서 옮기고 키운 값이며 예전 초안에는 없다. */
   photoAdjustments?: PhotoAdjustment[]
+  /** 문구 크기 배율이며 예전 초안에는 없다. */
+  quoteScale?: number
   /** 마지막으로 저장한 시각 (ISO) */
   savedAt: string
 }

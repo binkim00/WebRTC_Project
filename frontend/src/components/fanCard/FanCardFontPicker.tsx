@@ -14,6 +14,9 @@ const FONT_OPTIONS = (): readonly { key: FanCardFont; label: string; previewFami
   { key: 'ROUND', label: translate('fanCardFontPicker.t2'), previewFamily: '"Jua"' },
   { key: 'HANDWRITING', label: translate('fanCardFontPicker.t3'), previewFamily: '"Gaegu"' },
   { key: 'HEADLINE', label: translate('fanCardFontPicker.t4'), previewFamily: '"Do Hyeon"' },
+  { key: 'IMPACT', label: translate('fanCardFontPicker.t6'), previewFamily: '"Black Han Sans"' },
+  { key: 'SOFT', label: translate('fanCardFontPicker.t7'), previewFamily: '"Dongle"' },
+  { key: 'CUTE', label: translate('fanCardFontPicker.t8'), previewFamily: '"Hi Melody"' },
 ]
 
 type FanCardFontPickerProps = {

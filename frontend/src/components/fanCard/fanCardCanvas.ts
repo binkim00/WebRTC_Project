@@ -73,7 +73,14 @@ const FOUR_CUT_SLOTS = 4
  * <p>DEFAULT는 서비스 본문과 같은 글꼴이고 나머지는 index.css의 @font-face로 등록해 둔
  * 것이다. 값을 늘리려면 @font-face 선언과 아래 매핑을 함께 넓혀야 한다.
  */
-export type FanCardFont = 'DEFAULT' | 'ROUND' | 'HANDWRITING' | 'HEADLINE'
+export type FanCardFont =
+  | 'DEFAULT'
+  | 'ROUND'
+  | 'HANDWRITING'
+  | 'HEADLINE'
+  | 'IMPACT'
+  | 'SOFT'
+  | 'CUTE'
 
 /** 글꼴 키를 Canvas font 속성에 넣을 패밀리 이름으로 옮긴다. DEFAULT는 페이지 글꼴을 쓴다. */
 const FONT_FAMILY_BY_KEY: Record<FanCardFont, string | undefined> = {
@@ -81,6 +88,9 @@ const FONT_FAMILY_BY_KEY: Record<FanCardFont, string | undefined> = {
   ROUND: '"Jua"',
   HANDWRITING: '"Gaegu"',
   HEADLINE: '"Do Hyeon"',
+  IMPACT: '"Black Han Sans"',
+  SOFT: '"Dongle"',
+  CUTE: '"Hi Melody"',
 }
 
 /**
@@ -184,6 +194,13 @@ export type FanCardArtwork = {
   photoAdjustments?: readonly PhotoAdjustment[]
   /** 팬이 고른 글꼴이다. 없거나 내려받지 못하면 서비스 기본 글꼴로 그린다. */
   fontKey?: FanCardFont
+  /**
+   * 문구 크기 배율이며 없으면 1이다.
+   *
+   * <p>글꼴마다 같은 px 에서 글자가 커 보이는 정도가 달라, 글꼴을 바꾸면 문구가 갑자기 작아
+   * 보이거나 답답해진다. 자동 맞춤 결과를 이 값으로 키우거나 줄일 수 있게 열어 둔다.
+   */
+  quoteScale?: number
   /** 팬이 카드 위에 올린 스티커와 글자다. 목록 순서대로 위에 쌓인다. */
   decorations?: readonly CardDecoration[]
 }
@@ -268,10 +285,14 @@ function fitQuote(
   maxWidth: number,
   areaHeight: number = QUOTE_AREA_HEIGHT,
   fontSizes: readonly number[] = QUOTE_FONT_SIZES,
+  scale: number = 1,
 ): { fontSize: number; lines: string[] } {
-  let fallback = { fontSize: fontSizes.at(-1) ?? 34, lines: [text] }
+  // 글꼴마다 같은 px 에서 글자가 커 보이는 정도가 달라, 팬이 고른 배율을 후보 크기에 곱한다.
+  // 배율이 1이면 후보가 그대로여서 지금까지와 같은 크기가 나온다.
+  const candidates = scale === 1 ? fontSizes : fontSizes.map((size) => size * scale)
+  let fallback = { fontSize: candidates.at(-1) ?? 34, lines: [text] }
 
-  for (const fontSize of fontSizes) {
+  for (const fontSize of candidates) {
     ctx.font = `700 ${fontSize}px ${fontFamily}`
     const lines = wrapText(ctx, text, maxWidth)
     const height = lines.length * fontSize * QUOTE_LINE_HEIGHT_RATIO
@@ -560,7 +581,10 @@ function drawQuoteOnlyCard(
   // 문구 — 카드의 주인공이라 남은 공간을 최대한 쓴다. 문구를 고르지 않았으면 비워 둔다.
   const quoteText = cardQuoteText(artwork)
   if (quoteText) {
-    const quote = fitQuote(ctx, quoteText, fontFamily, contentWidth)
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, contentWidth,
+      QUOTE_AREA_HEIGHT, QUOTE_FONT_SIZES, artwork.quoteScale,
+    )
     const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
     const quoteBlockHeight = quote.lines.length * lineHeight
     let quoteY = (CARD_HEIGHT - quoteBlockHeight) / 2 + quote.fontSize * 0.34
@@ -1200,7 +1224,7 @@ function drawInstaCard(
 
   if (quoteText) {
     const quote = fitQuote(
-      ctx, quoteText, fontFamily, captionWidth, 78, [30, 27, 24, 22, 20],
+      ctx, quoteText, fontFamily, captionWidth, 78, [30, 27, 24, 22, 20], artwork.quoteScale,
     )
 
     ctx.textAlign = 'left'
@@ -1321,7 +1345,7 @@ function drawPolaroidCard(
 
   if (quoteText) {
     const quote = fitQuote(
-      ctx, quoteText, fontFamily, captionWidth, 130, [46, 40, 35, 30, 26],
+      ctx, quoteText, fontFamily, captionWidth, 130, [46, 40, 35, 30, 26], artwork.quoteScale,
     )
     ctx.save()
     ctx.translate(CARD_WIDTH / 2, captionTop + 74)
@@ -1418,7 +1442,7 @@ function drawFourCutCard(
   const quoteText = cardQuoteText(artwork)
   if (quoteText) {
     const quote = fitQuote(
-      ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 110, [40, 35, 31, 27, 24],
+      ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 110, [40, 35, 31, 27, 24], artwork.quoteScale,
     )
     ctx.fillStyle = '#ffffff'
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
@@ -1510,7 +1534,7 @@ function drawFourCutVerticalCard(
   const quoteText = cardQuoteText(artwork)
   if (quoteText) {
     const quote = fitQuote(
-      ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [30, 27, 24, 21, 19],
+      ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [30, 27, 24, 21, 19], artwork.quoteScale,
     )
     ctx.fillStyle = '#ffffff'
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
@@ -1595,7 +1619,7 @@ function drawFourCutHorizontalCard(
   const quoteText = cardQuoteText(artwork)
   if (quoteText) {
     const quote = fitQuote(
-      ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [34, 30, 27, 24, 21],
+      ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [34, 30, 27, 24, 21], artwork.quoteScale,
     )
     ctx.fillStyle = '#ffffff'
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
