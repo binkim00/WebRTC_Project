@@ -225,6 +225,31 @@ class FollowingServiceTest {
         assertThat(response.totalElements()).isEqualTo(1L);
     }
 
+    /**
+     * 공개 프로필이 없는 인플루언서를 팔로우해도 목록 조회가 실패하지 않고
+     * 활동명 자리에 계정 닉네임이 대체되는지 검증한다.
+     */
+    @Test
+    void getsMyFollowingsWhenInfluencerProfileMissing() {
+        Following following = Following.follow(fan, influencer);
+        ReflectionTestUtils.setField(following, "createdAt",
+                LocalDateTime.of(2026, 7, 30, 15, 0));
+        PageRequest pageable = PageRequest.of(0, 20);
+        when(followingRepository.findAllByFollower_IdOrderByCreatedAtDescIdDesc(1L, pageable))
+                .thenReturn(new PageImpl<>(List.of(following), pageable, 1));
+        when(influencerProfileRepository.findAllByUser_IdIn(List.of(2L)))
+                .thenReturn(List.of());
+
+        PageResponse<FollowingSummaryResponse> response =
+                followingService.getMyFollowings(0, 20, fanPrincipal);
+
+        assertThat(response.content()).singleElement().satisfies(item -> {
+            assertThat(item.influencerId()).isEqualTo(2L);
+            assertThat(item.influencerName()).isEqualTo("인플루언서");
+            assertThat(item.introduction()).isNull();
+        });
+    }
+
     /** 팔로잉 목록이 최신순을 유지하고 모든 페이지 메타데이터를 정확히 반환하는지 검증한다. */
     @Test
     void getsMyFollowingsInLatestOrderWithPageMetadata() {

@@ -15,6 +15,7 @@ export type AppHeaderNavigationItem = {
 
 const fanNavigation = [
   { labelKey: 'nav.fan.events', to: '/fan/events' },
+  { labelKey: 'nav.fan.influencers', to: '/fan/influencers' },
   { labelKey: 'nav.fan.mypage', to: '/fan/mypage/profile' },
   { labelKey: 'nav.notifications', to: '/notifications' },
 ] as const satisfies readonly AppHeaderNavigationItem[]

@@ -133,14 +133,13 @@ public class FollowingService {
                         .toList())
                 .stream()
                 .collect(Collectors.toMap(profile -> profile.getUser().getId(), Function.identity()));
-        Page<FollowingSummaryResponse> responses = followings.map(following -> {
-            Long influencerId = following.getFollowedInfluencer().getId();
-            InfluencerProfile profile = profilesByUserId.get(influencerId);
-            if (profile == null) {
-                throw new BusinessException(ErrorCode.INFLUENCER_NOT_FOUND);
-            }
-            return FollowingSummaryResponse.from(following, profile);
-        });
+        // 공개 프로필이 없는 인플루언서도 팔로우될 수 있다(탐색 목록이 left join으로 함께 노출한다).
+        // 여기서 실패시키면 그 한 명 때문에 팔로잉 목록 전체가 막히므로 응답 변환에 맡겨 닉네임으로 대체한다.
+        Page<FollowingSummaryResponse> responses = followings.map(following ->
+                FollowingSummaryResponse.from(
+                        following,
+                        profilesByUserId.get(following.getFollowedInfluencer().getId())
+                ));
         return PageResponse.from(responses);
     }
 

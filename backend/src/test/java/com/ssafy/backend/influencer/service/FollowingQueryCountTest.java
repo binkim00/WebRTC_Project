@@ -1,12 +1,16 @@
 package com.ssafy.backend.influencer.service;
 
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.call.service.CallSessionExpirationScheduler;
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.influencer.domain.Following;
 import com.ssafy.backend.influencer.domain.InfluencerProfile;
 import com.ssafy.backend.influencer.dto.FollowingSummaryResponse;
 import com.ssafy.backend.influencer.repository.FollowingRepository;
 import com.ssafy.backend.influencer.repository.InfluencerProfileRepository;
+import com.ssafy.backend.meeting.service.MeetingApplicationOpeningScheduler;
+import com.ssafy.backend.recording.egress.RecordingEgressRecoveryService;
+import com.ssafy.backend.recording.service.RecordingExpirationScheduler;
 import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
@@ -19,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +48,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 @Transactional
 class FollowingQueryCountTest {
+
+    /*
+     * SchedulingConfig의 전역 @EnableScheduling 때문에 이 컨텍스트에서도 배치 잡이 함께 뜬다.
+     * 기본 스케줄러 풀은 스레드 1개라 1초 주기 잡에 밀린 다른 잡의 첫 실행이 측정 구간으로 들어오면,
+     * 팔로잉 조회와 무관한 SQL이 Hibernate 통계에 섞여 이 테스트가 무작위로 깨진다.
+     * 실제로 녹화 만료 잡의 조회가 섞여 4건으로 측정된 적이 있어 스케줄러 빈을 목으로 대체한다.
+     */
+    @MockitoBean
+    private CallSessionExpirationScheduler callSessionExpirationScheduler;
+
+    @MockitoBean
+    private MeetingApplicationOpeningScheduler meetingApplicationOpeningScheduler;
+
+    @MockitoBean
+    private RecordingExpirationScheduler recordingExpirationScheduler;
+
+    @MockitoBean
+    private RecordingEgressRecoveryService recordingEgressRecoveryService;
 
     @Autowired
     private FollowingService followingService;

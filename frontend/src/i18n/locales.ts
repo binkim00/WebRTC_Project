@@ -3146,6 +3146,42 @@ const ko = {
   'fanCardPage.t20': '. 시간이 지나면 사진과 꾸미던             내용이 사라지니, 마음에 드는 카드는 잊지 말고 내려받아 주세요.',
   'fanCardPage.t21': '인플루언서',
   'fanCardPage.t22': '팬미팅',
+
+  'nav.fan.influencers': '인플루언서',
+
+  'myPage.t64': '팔로우한 인플루언서',
+  'myPage.t65': '팔로우한 인플루언서를 모아 보고 새 팬미팅 소식을 확인하세요.',
+
+  'fanInfluencerListPage.t16': '전체 탐색',
+  'fanInfluencerListPage.t17': '팔로잉',
+  'fanInfluencerListPage.t18': '팔로우',
+  'fanInfluencerListPage.t19': '팔로잉 중',
+  'fanInfluencerListPage.t20': '팔로우한 인플루언서가 없습니다',
+  'fanInfluencerListPage.t21': '마음에 드는 인플루언서를 팔로우하면 여기에서 모아 볼 수 있습니다.',
+  'fanInfluencerListPage.t22': '팔로우 목록을 불러오지 못했습니다.',
+  'fanInfluencerListPage.t23': '팔로우를 변경하지 못했습니다.',
+  'fanInfluencerListPage.t24': '팔로우하려면 로그인해 주세요.',
+  'fanInfluencerListPage.t25': '{p0}부터 팔로우',
+  'fanInfluencerListPage.t26': '팔로우 목록을 불러오는 중',
+  'fanInfluencerListPage.t27': '목록 구분',
+
+  'fanInfluencerDetailPage.t18': '팔로우',
+  'fanInfluencerDetailPage.t19': '팔로잉 중',
+  'fanInfluencerDetailPage.t20': '팔로우를 변경하지 못했습니다.',
+  'fanInfluencerDetailPage.t21': '팔로우하려면 로그인해 주세요.',
+
+  'influencerMyFansPage.t45': '내 팬',
+  'influencerMyFansPage.t46': '팔로워',
+  'influencerMyFansPage.t47': '목록 구분',
+  'influencerMyFansPage.t48': '팔로워를 불러오는 중',
+  'influencerMyFansPage.t49': '팔로워를 불러오지 못했습니다.',
+  'influencerMyFansPage.t50': '아직 팔로워가 없습니다',
+  'influencerMyFansPage.t51': '팬이 프로필에서 팔로우하면 여기에 모입니다.',
+  'influencerMyFansPage.t52': '팔로워',
+  'influencerMyFansPage.t53': '명',
+  'influencerMyFansPage.t54': '팔로우한 날',
+  'influencerMyFansPage.t55': '팬 번호',
+  'influencerMyFansPage.t56': '참가 이력이 있는 팬만 집계합니다. 팔로워와는 다를 수 있습니다.',
 } as const
 
 /** 사전 키다. 한국어 사전에 있는 키만 쓸 수 있다. */
@@ -6421,6 +6457,42 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanCardPage.t20': '. Once the time passes, the photos and your decorations disappear, so remember to download any card you like.',
   'fanCardPage.t21': 'Influencer',
   'fanCardPage.t22': 'Fan meeting',
+
+  'nav.fan.influencers': 'Influencers',
+
+  'myPage.t64': 'Influencers you follow',
+  'myPage.t65': 'See everyone you follow and catch their new fan meetings.',
+
+  'fanInfluencerListPage.t16': 'Discover',
+  'fanInfluencerListPage.t17': 'Following',
+  'fanInfluencerListPage.t18': 'Follow',
+  'fanInfluencerListPage.t19': 'Following',
+  'fanInfluencerListPage.t20': 'You are not following anyone yet',
+  'fanInfluencerListPage.t21': 'Follow the influencers you like and they will gather here.',
+  'fanInfluencerListPage.t22': 'Could not load the list you follow.',
+  'fanInfluencerListPage.t23': 'Could not change the follow state.',
+  'fanInfluencerListPage.t24': 'Please sign in to follow.',
+  'fanInfluencerListPage.t25': 'Following since {p0}',
+  'fanInfluencerListPage.t26': 'Loading the list you follow',
+  'fanInfluencerListPage.t27': 'List sections',
+
+  'fanInfluencerDetailPage.t18': 'Follow',
+  'fanInfluencerDetailPage.t19': 'Following',
+  'fanInfluencerDetailPage.t20': 'Could not change the follow state.',
+  'fanInfluencerDetailPage.t21': 'Please sign in to follow.',
+
+  'influencerMyFansPage.t45': 'My fans',
+  'influencerMyFansPage.t46': 'Followers',
+  'influencerMyFansPage.t47': 'List sections',
+  'influencerMyFansPage.t48': 'Loading followers',
+  'influencerMyFansPage.t49': 'Could not load followers.',
+  'influencerMyFansPage.t50': 'No followers yet',
+  'influencerMyFansPage.t51': 'Fans who follow you from your profile will appear here.',
+  'influencerMyFansPage.t52': 'Followers',
+  'influencerMyFansPage.t53': '',
+  'influencerMyFansPage.t54': 'Followed on',
+  'influencerMyFansPage.t55': 'Fan ID',
+  'influencerMyFansPage.t56': 'Counts only fans with participation history, so it can differ from your followers.',
 }
 
 /** 언어별 사전이다. ko는 완전하고 en은 부분 번역을 허용한다. */

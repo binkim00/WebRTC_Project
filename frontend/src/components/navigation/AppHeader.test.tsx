@@ -24,6 +24,7 @@ beforeEach(() => {
 const expectedNavigation = {
   FAN: [
     { labelKey: 'nav.fan.events', label: '이벤트', to: '/fan/events' },
+    { labelKey: 'nav.fan.influencers', label: '인플루언서', to: '/fan/influencers' },
     { labelKey: 'nav.fan.mypage', label: '마이페이지', to: '/fan/mypage/profile' },
     { labelKey: 'nav.notifications', label: '알림', to: '/notifications' },
   ],
