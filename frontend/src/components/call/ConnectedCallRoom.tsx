@@ -338,6 +338,21 @@ export function ConnectedCallRoom({
     [],
   )
 
+  /**
+   * 팬이 대기실에서 적어 둔 "하고 싶은 말" 메모다.
+   *
+   * 대기실이 sessionStorage(`melly-fan-note:{meetingId}`)에 저장하고 "통화 화면에 함께
+   * 표시됩니다"라고 안내하므로, 통화 중에 실제로 보여 줘야 한다. 같은 탭에서 대기실 → 통화로
+   * 이동하므로 sessionStorage가 그대로 이어진다. 통화 중에는 바뀌지 않는 값이라 한 번만 읽는다.
+   */
+  const [fanMemo] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(`melly-fan-note:${meetingId}`)?.trim() ?? ''
+    } catch {
+      return ''
+    }
+  })
+
   // 기념 사진은 팬만 남긴다. 녹화 설정과 무관하게 쓸 수 있어야 하므로 recordingEnabled를 보지 않는다.
   const {
     capture,
@@ -828,6 +843,16 @@ export function ConnectedCallRoom({
         timeUrgent={remaining.counting && remaining.label <= '00:05'}
         timeValue={remaining.label}
       />
+
+      {/* 대기실에서 적어 둔 메모 — 통화 중 하고 싶은 말을 잊지 않게 화면에 함께 둔다. */}
+      {authSession?.role === 'FAN' && fanMemo ? (
+        <div className="rounded-[10px] bg-white/[0.08] px-[18px] py-3.5">
+          <p className="text-[13px] font-bold text-white/60">{t('connectedCallRoom.memo.title')}</p>
+          <p className="mt-1 whitespace-pre-line text-[15px] font-medium leading-[1.6] text-white/90">
+            “{fanMemo}”
+          </p>
+        </div>
+      ) : null}
 
       {footNote ? (
         <p className="text-[15px] font-medium leading-[1.6] text-white/65">{footNote}</p>

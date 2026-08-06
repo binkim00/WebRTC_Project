@@ -1210,12 +1210,11 @@ function SettingsPanel({
               label={t('managerMeetingDetailPage.t50')}
               onChange={(event) => setField('recordingEnabled', event.target.checked)}
             />
-            <Checkbox
-              checked={form.translationEnabled}
-              disabled={operationLocked}
-              label={t('managerMeetingDetailPage.t51')}
-              onChange={(event) => setField('translationEnabled', event.target.checked)}
-            />
+            {/*
+              번역 자막 토글은 두지 않는다. 자막은 AI 워커가 참가자 언어를 보고 알아서
+              제공하므로 팬미팅 단위 설정이 아니다. 값은 기존 설정을 그대로 유지한다
+              (수정하지 않으므로 PATCH에 담기지 않는다).
+            */}
           </div>
         </CardContent>
       </Card>

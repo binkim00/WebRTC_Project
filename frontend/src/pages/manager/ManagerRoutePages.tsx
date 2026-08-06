@@ -182,6 +182,53 @@ function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
   )
 }
 
+/** Date를 datetime-local 입력값(YYYY-MM-DDTHH:mm)으로 바꾼다. */
+function toLocalInputValue(date: Date): string {
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/**
+ * 시작 일시 기준의 추천 시각을 한 번에 채우는 선택 버튼 줄이다.
+ *
+ * 생성 마법사에 날짜 입력이 다섯 곳(시작·대기열 오픈·응모 시작·마감·발표)이라 달력에서
+ * 하나하나 고르기 번거롭다는 피드백을 반영했다. 값을 몰래 채우지 않고 "시작 30분 전" 같은
+ * 버튼을 눌러 직접 고르게 한다. 시작 일시를 아직 정하지 않았으면 버튼을 잠근다.
+ */
+function SchedulePresetChips({
+  options,
+  disabled,
+  disabledReason,
+  onPick,
+}: {
+  options: readonly { label: string; value: string }[]
+  disabled?: boolean
+  disabledReason?: string
+  onPick: (value: string) => void
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {options.map((option) => (
+        <button
+          className="inline-flex min-h-8 items-center whitespace-nowrap rounded-full border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-3 text-[13px] font-bold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)] disabled:cursor-not-allowed disabled:border-[var(--color-divider)] disabled:text-[var(--color-text-tertiary)]"
+          disabled={disabled}
+          key={option.label}
+          onClick={() => onPick(option.value)}
+          title={disabled ? disabledReason : undefined}
+          type="button"
+        >
+          {option.label}
+        </button>
+      ))}
+      {disabled && disabledReason ? (
+        <span className="text-[13px] font-medium text-[var(--color-text-muted)]">
+          {disabledReason}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 /** 백엔드가 허용하는 응모 질문 최대 개수다. */
 const MAX_DRAFT_QUESTIONS = 10
 
@@ -235,6 +282,18 @@ export function ManagerMeetingCreatePage() {
   })
   // 참가자를 정하는 방식이며 이전 로컬 초안에는 없을 수 있어 기본값으로 채운다.
   const selectionType: ParticipantSelectionType = form.participantSelectionType ?? 'APPLICATION'
+
+  // "시작 30분 전" 같은 추천 시각 버튼의 계산 기준이다. 시작 일시를 정하기 전에는 버튼을 잠근다.
+  const scheduledStartDate = new Date(form.scheduledStartAt)
+  const hasScheduledStart =
+    Boolean(form.scheduledStartAt) && !Number.isNaN(scheduledStartDate.getTime())
+  /** 시작 일시에서 ms만큼 앞선 시각이다. 과거가 되면 현재 시각으로 끌어올려 검증에 걸리지 않게 한다. */
+  const presetBeforeStart = (ms: number) => {
+    if (!hasScheduledStart) return ''
+    const derived = new Date(scheduledStartDate.getTime() - ms)
+    const now = new Date()
+    return toLocalInputValue(derived > now ? derived : now)
+  }
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [templateDownloadError, setTemplateDownloadError] = useState<string>()
 
@@ -947,7 +1006,13 @@ export function ManagerMeetingCreatePage() {
             {step === 0 ? (
               <div className="grid items-start gap-5 sm:grid-cols-2">
                 <TextField label={t('managerRoutePages.t17')} maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText={t('managerRoutePages.t18')} />
-                <TextField label={t('managerRoutePages.t19')} required type="datetime-local" value={form.scheduledStartAt} onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })} />
+                <TextField
+                  label={t('managerRoutePages.t19')}
+                  required
+                  type="datetime-local"
+                  value={form.scheduledStartAt}
+                  onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })}
+                />
                 <div>
                   {isInfluencerAccount ? (
                     <div className="grid gap-2">
@@ -1050,23 +1115,37 @@ export function ManagerMeetingCreatePage() {
                     </p>
                   </div>
                   <div className="grid items-start gap-5 sm:grid-cols-2">
-                    <TextField
-                      error={queueOpenError}
-                      helperText={t('managerRoutePages.t35')}
-                      label={
-                        <span className="inline-flex items-center gap-2">
-                          {t('managerRoutePages.t36')}
-                          <span className="rounded-[var(--radius-control)] bg-[var(--color-primary-coral-soft)] px-2 py-0.5 text-xs font-bold text-[var(--color-primary-coral)]">
-                            {t('managerRoutePages.t37')}
+                    <div>
+                      <TextField
+                        error={queueOpenError}
+                        helperText={t('managerRoutePages.t35')}
+                        label={
+                          <span className="inline-flex items-center gap-2">
+                            {t('managerRoutePages.t36')}
+                            <span className="rounded-[var(--radius-control)] bg-[var(--color-primary-coral-soft)] px-2 py-0.5 text-xs font-bold text-[var(--color-primary-coral)]">
+                              {t('managerRoutePages.t37')}
+                            </span>
                           </span>
-                        </span>
-                      }
-                      required
-                      reserveMessageSpace
-                      type="datetime-local"
-                      value={form.operation.queueOpenAt}
-                      onChange={(event) => setForm({ ...form, operation: { ...form.operation, queueOpenAt: event.target.value } })}
-                    />
+                        }
+                        required
+                        reserveMessageSpace
+                        type="datetime-local"
+                        value={form.operation.queueOpenAt}
+                        onChange={(event) => setForm({ ...form, operation: { ...form.operation, queueOpenAt: event.target.value } })}
+                      />
+                      <SchedulePresetChips
+                        disabled={!hasScheduledStart}
+                        disabledReason={t('managerCreate.preset.needStart')}
+                        onPick={(value) =>
+                          setForm({ ...form, operation: { ...form.operation, queueOpenAt: value } })
+                        }
+                        options={[
+                          { label: t('managerCreate.preset.minutesBefore', { p0: 30 }), value: presetBeforeStart(30 * 60 * 1000) },
+                          { label: t('managerCreate.preset.hoursBefore', { p0: 1 }), value: presetBeforeStart(60 * 60 * 1000) },
+                          { label: t('managerCreate.preset.hoursBefore', { p0: 2 }), value: presetBeforeStart(2 * 60 * 60 * 1000) },
+                        ]}
+                      />
+                    </div>
                   </div>
                 </section>
 
@@ -1138,17 +1217,12 @@ export function ManagerMeetingCreatePage() {
                         })
                       }
                     />
-                    <Switch
-                      checked={form.operation.translationEnabled}
-                      description={t('managerRoutePages.t50')}
-                      label={t('managerRoutePages.t51')}
-                      onCheckedChange={(checked) =>
-                        setForm({
-                          ...form,
-                          operation: { ...form.operation, translationEnabled: checked },
-                        })
-                      }
-                    />
+                    {/*
+                      번역 자막 토글은 두지 않는다. 자막은 AI 워커가 참가자 언어를 보고 알아서
+                      제공하고 화면 표시 여부도 통화 화면이 결정하므로, 팬미팅 단위로 미리 끌
+                      이유가 없다. API가 요구하는 translationEnabled는 항상 true로 보낸다.
+                      (managerMeetingCreateDraft의 기본값)
+                    */}
                   </div>
                 </section>
               </div>
@@ -1221,9 +1295,49 @@ export function ManagerMeetingCreatePage() {
 
                   {selectionType === 'APPLICATION' ? (
                     <div className="grid gap-5 sm:grid-cols-2">
-                      <TextField label={t('managerRoutePages.t54')} required reserveMessageSpace type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
-                      <TextField error={applicationEndError} label={t('managerRoutePages.t55')} required reserveMessageSpace type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
-                      <TextField error={resultAnnouncementError} label={t('managerRoutePages.t56')} required reserveMessageSpace type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
+                      <div>
+                        <TextField label={t('managerRoutePages.t54')} required reserveMessageSpace type="datetime-local" value={form.application.startAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, startAt: event.target.value } })} />
+                        <SchedulePresetChips
+                          onPick={(value) =>
+                            setForm({ ...form, application: { ...form.application, startAt: value } })
+                          }
+                          options={[
+                            { label: t('managerCreate.preset.now'), value: toLocalInputValue(new Date()) },
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <TextField error={applicationEndError} label={t('managerRoutePages.t55')} required reserveMessageSpace type="datetime-local" value={form.application.endAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, endAt: event.target.value } })} />
+                        <SchedulePresetChips
+                          disabled={!hasScheduledStart}
+                          disabledReason={t('managerCreate.preset.needStart')}
+                          onPick={(value) =>
+                            setForm({ ...form, application: { ...form.application, endAt: value } })
+                          }
+                          options={[
+                            { label: t('managerCreate.preset.daysBefore', { p0: 1 }), value: presetBeforeStart(24 * 60 * 60 * 1000) },
+                            { label: t('managerCreate.preset.daysBefore', { p0: 2 }), value: presetBeforeStart(2 * 24 * 60 * 60 * 1000) },
+                            { label: t('managerCreate.preset.daysBefore', { p0: 3 }), value: presetBeforeStart(3 * 24 * 60 * 60 * 1000) },
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <TextField error={resultAnnouncementError} label={t('managerRoutePages.t56')} required reserveMessageSpace type="datetime-local" value={form.application.resultAnnouncementAt ?? ''} onChange={(event) => setForm({ ...form, application: { ...form.application, resultAnnouncementAt: event.target.value } })} />
+                        <SchedulePresetChips
+                          disabled={!hasScheduledStart}
+                          disabledReason={t('managerCreate.preset.needStart')}
+                          onPick={(value) =>
+                            setForm({
+                              ...form,
+                              application: { ...form.application, resultAnnouncementAt: value },
+                            })
+                          }
+                          options={[
+                            { label: t('managerCreate.preset.hoursBefore', { p0: 12 }), value: presetBeforeStart(12 * 60 * 60 * 1000) },
+                            { label: t('managerCreate.preset.daysBefore', { p0: 1 }), value: presetBeforeStart(24 * 60 * 60 * 1000) },
+                          ]}
+                        />
+                      </div>
                       <TextField label={t('managerRoutePages.t57')} min={1} required type="number" value={form.application.capacity} onChange={(event) => setForm({ ...form, application: { ...form.application, capacity: Number(event.target.value) } })} />
                     </div>
                   ) : (
@@ -1445,7 +1559,6 @@ export function ManagerMeetingCreatePage() {
                         : []),
                       [t('managerRoutePages.t216'), formatDateTime(form.operation.queueOpenAt)],
                       [t('managerRoutePages.t217'), form.operation.recordingEnabled ? t('managerRoutePages.t218') : t('managerRoutePages.t219')],
-                      [t('managerRoutePages.t220'), form.operation.translationEnabled ? t('managerRoutePages.t221') : t('managerRoutePages.t222')],
                       [t('managerRoutePages.t223'), form.operation.reconnectGraceSec == null ? t('managerRoutePages.t224') : t('managerRoutePages.t315', { p0: form.operation.reconnectGraceSec })],
                       [t('managerRoutePages.t225'), form.operation.maxRecallCount == null ? t('managerRoutePages.t226') : t('managerRoutePages.t316', { p0: form.operation.maxRecallCount })],
                       ...(selectionType === 'APPLICATION'
