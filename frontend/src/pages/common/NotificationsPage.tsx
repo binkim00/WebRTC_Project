@@ -19,7 +19,12 @@ import {
   Spinner,
   type BadgeVariant,
 } from '../../components'
-import { translate, useTranslation } from '../../i18n'
+import {
+  localizeNotificationMessage,
+  localizeNotificationTitle,
+  translate,
+  useTranslation,
+} from '../../i18n'
 
 const PAGE_SIZE = 10
 
@@ -315,10 +320,15 @@ export function NotificationsPage() {
                             : 'font-semibold text-[var(--color-text-secondary)]'
                         }`}
                       >
-                        {notification.title}
+                        {localizeNotificationTitle(notification.type, notification.title)}
                       </span>
                       <span className="text-sm text-[var(--color-text-secondary)]">
-                        {notification.message}
+                        {localizeNotificationMessage(
+  notification.type,
+  notification.message,
+  notification.messageKey,
+  notification.messageArgs,
+)}
                       </span>
                     </button>
                   </li>

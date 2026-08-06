@@ -11,6 +11,30 @@ import type { CaptionLine } from './CallStage'
  */
 export const SUBTITLE_DATA_TOPIC = 'subtitle'
 
+/**
+ * 실시간 자막을 켠 상태로 시작할 통화인지 판단한다.
+ *
+ * 자막의 목적은 서로 다른 언어를 잇는 것이다. 한국어 인플루언서와 한국어 팬처럼 양쪽 언어가
+ * 같으면 번역할 것이 없어 자막이 화면만 가리므로 꺼진 상태로 시작한다.
+ * (AI 워커도 같은 비교로 번역 여부를 정한다 — `ai/agent.py`의 need_translation)
+ *
+ * 어느 한쪽 언어라도 알 수 없으면 켠 상태로 둔다. 필요한 자막이 없는 것보다 필요 없는 자막이
+ * 보이는 편이 낫고, 사용자가 직접 끌 수 있다.
+ *
+ * @param fanLanguage 통화의 팬 언어 코드
+ * @param influencerLanguage 통화의 인플루언서 언어 코드
+ */
+export function shouldStartWithCaption(
+  fanLanguage: string | null | undefined,
+  influencerLanguage: string | null | undefined,
+): boolean {
+  const fan = fanLanguage?.trim().toLowerCase()
+  const influencer = influencerLanguage?.trim().toLowerCase()
+  if (!fan || !influencer) return true
+
+  return fan !== influencer
+}
+
 /** 자막 payload를 만든 화자의 역할이며 AI 워커가 이 두 값만 보낸다. */
 export type SubtitleSpeakerRole = 'INFLUENCER' | 'FAN'
 
@@ -18,9 +42,19 @@ export type SubtitleSpeakerRole = 'INFLUENCER' | 'FAN'
  * AI 워커가 데이터 채널로 보내는 자막 한 건이다.
  *
  * `ai/pipeline/processor.py`가 직렬화하는 필드와 1:1로 맞춘다.
+ *
+ * 번역 통화에서는 문장이 완성되기 전에도 **부분 자막(interim)** 이 여러 번 오고,
+ * 문장이 확정되면 final이 온다. 같은 문장의 interim들과 final은 `segmentId`가 같다.
+ * 각 interim은 델타가 아니라 "지금까지의 문장 전체"라서 그대로 덮어쓰면 된다.
+ * 한↔한 통화나 구버전 워커는 interim 없이 final만 보낸다.
  */
 export type SubtitlePayload = {
+  /** DB 채번 식별자다. interim에는 없어(null) 로컬 채번으로 대체된다. */
   subtitleId: string
+  /** 한 발화(문장)의 식별자다. 같은 문장의 interim·final이 같은 값을 갖는다. 없으면 null이다. */
+  segmentId: string | null
+  /** false면 자라는 중인 부분 자막, true면 확정 자막이다. 필드가 없으면 확정으로 본다. */
+  isFinal: boolean
   speakerRole: SubtitleSpeakerRole
   originalText: string
   originalLang: string | null
@@ -111,8 +145,21 @@ export function parseSubtitlePayload(data: Uint8Array): SubtitlePayload | undefi
       ? String(rawId)
       : `local-${(fallbackSubtitleSeq += 1)}`
 
+  // 한 발화의 interim들과 final을 같은 줄로 묶는 식별자다. 숫자로 오므로 문자열로 정규화한다.
+  const rawSegment = record.segment_id ?? record.segmentId
+  const segmentId =
+    typeof rawSegment === 'string' || typeof rawSegment === 'number'
+      ? String(rawSegment)
+      : null
+
+  // is_final이 없는 payload(구버전 워커, 한↔한 통화)는 전부 확정 자막이다.
+  const rawFinal = record.is_final ?? record.isFinal
+  const isFinal = rawFinal !== false
+
   return {
     subtitleId,
+    segmentId,
+    isFinal,
     speakerRole,
     originalText,
     originalLang: asString(record.original_lang ?? record.originalLang),
@@ -131,20 +178,19 @@ export function isOwnSubtitle(
   return viewerRole === 'INFLUENCER' || viewerRole === 'SOLO_INFLUENCER'
 }
 
-/** 한 자막에서 화면에 뿌릴 원문과 번역문이다. */
+/** 한 자막에서 화면에 뿌릴 문장이다. */
 export type SubtitleTexts = {
-  /** 화자가 실제로 말한 원문이며 항상 표시한다. */
+  /** 화면에 표시할 문장이다. 번역문이 있으면 번역문, 없으면 원문이다. */
   text: string
-  /** 번역문이 따로 있을 때만 채워지는 보조 줄이다. */
-  translatedText?: string
 }
 
 /**
  * 상대 발화에서 화면에 뿌릴 문장을 고른다.
  *
- * **원문은 항상 표시하고**, 번역문은 있을 때만 아래에 덧붙인다. 이전에는 번역문이 원문을
- * 대체해, 번역이 어긋났을 때 사용자가 원문을 확인할 방법이 없었다.
- * 번역문이 원문과 같으면(같은 언어) 같은 문장을 두 줄로 반복하지 않는다.
+ * **번역문이 있으면 번역문만 표시한다.** 워커는 화자의 말을 상대(시청자)의 언어로 번역해
+ * 보내므로, 번역문이 곧 시청자가 읽을 수 있는 문장이다. 이전에는 원문을 항상 함께 띄웠는데,
+ * 언어가 다른 팬과 인플루언서의 통화에서는 시청자가 읽지 못하는 상대 언어 원문이 화면을
+ * 차지했다. 번역문이 없거나 원문과 같으면(같은 언어) 원문만 표시한다.
  *
  * 내 발화는 화면에 띄우지 않으므로(appendSubtitleLine에서 걸러진다) 여기서 다루지 않는다.
  */
@@ -153,7 +199,7 @@ export function pickSubtitleTexts(payload: SubtitlePayload): SubtitleTexts {
 
   const translated = payload.translatedText?.trim()
   if (!translated || translated === text) return { text }
-  return { text, translatedText: translated }
+  return { text: translated }
 }
 
 export type SubtitleSpeakerNames = {
@@ -176,6 +222,19 @@ export function pickSubtitleSpeaker(
 }
 
 /**
+ * 자막 한 건이 화면에서 차지할 줄의 식별자다.
+ *
+ * segment_id가 있으면(실시간 번역 통화) 같은 문장의 interim·final이 **한 줄을 공유**해야
+ * 하므로 화자+세그먼트로 묶는다. 화자를 함께 넣는 이유는 두 화자의 세그먼트 번호가 각자
+ * 증가해 서로 겹칠 수 있기 때문이다. 없으면(구버전·한↔한) subtitle_id 기반으로 구분한다.
+ */
+function subtitleLineKey(payload: SubtitlePayload): string {
+  return payload.segmentId !== null
+    ? `seg:${payload.speakerRole}:${payload.segmentId}`
+    : `sub:${payload.subtitleId}`
+}
+
+/**
  * 받은 자막을 화면 목록에 반영한다.
  *
  * **내가 말한 대사는 표시하지 않는다.** 내 말은 내가 이미 알고 있어 자막으로 다시 읽을 필요가
@@ -184,10 +243,10 @@ export function pickSubtitleSpeaker(
  * 새 발화는 이전 발화를 밀어내고 {@link SUBTITLE_HISTORY_SIZE}줄만 남는다.
  * 빈 문장은 화면에 빈 줄을 만들 뿐이라 버린다.
  *
- * `subtitleId`가 같으면 붙이지 않고 **교체**한다. 워커는 확정된 발화마다 DB INSERT의
- * 채번 결과를 id로 쓰므로 같은 id를 다시 보내지는 않지만, reliable 채널 재전송처럼
- * 같은 payload가 두 번 도착해도 같은 줄이 겹쳐 보이지 않게 하는 방어 장치다.
- * (id 없이 온 자막은 parseSubtitlePayload가 매번 다른 로컬 id를 주므로 교체되지 않는다.)
+ * **부분 자막(interim)은 같은 줄을 교체하며 자라고, final에서 굳는다.** 각 interim이
+ * "지금까지의 문장 전체"라 그대로 덮어쓴다. interim은 유실될 수 있는(lossy) 전송이라
+ * 순서가 어긋나 final 뒤에 도착할 수도 있는데, 이미 확정된 줄은 interim으로 되돌리지 않는다.
+ * (final은 reliable이라 항상 온다)
  *
  * 화자 이름은 **받은 시점에 계산해 문자열로 저장**한다. 참가자가 나가서 이름을 알 수 없게 되어도
  * 이미 지나간 자막의 이름이 바뀌지 않게 하려는 것이다.
@@ -204,14 +263,20 @@ export function appendSubtitleLine(
   const texts = pickSubtitleTexts(payload)
   if (!texts.text) return [...current]
 
+  const key = subtitleLineKey(payload)
   const line: SubtitleLine = {
-    id: payload.subtitleId,
+    id: key,
     speaker: pickSubtitleSpeaker(payload, names),
+    pending: !payload.isFinal,
     ...texts,
   }
 
-  const existingIndex = current.findIndex((item) => item.id === payload.subtitleId)
+  const existingIndex = current.findIndex((item) => item.id === key)
   if (existingIndex >= 0) {
+    const existing = current[existingIndex]
+    // 확정된 줄은 늦게 도착한 interim으로 되돌리지 않는다.
+    if (existing && !existing.pending && !payload.isFinal) return [...current]
+
     const next = [...current]
     next[existingIndex] = line
     return next
@@ -223,6 +288,6 @@ export function appendSubtitleLine(
 /**
  * 화면에 뿌릴 자막 한 줄이다.
  *
- * `id`는 워커가 준 subtitle_id(없으면 로컬 채번값)이며, 갱신 대상 찾기와 React key에 함께 쓴다.
+ * `id`는 발화 단위 줄 식별자({@link subtitleLineKey})이며, 갱신 대상 찾기와 React key에 함께 쓴다.
  */
 export type SubtitleLine = CaptionLine & { id: string }

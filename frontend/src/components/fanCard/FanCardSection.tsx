@@ -28,7 +28,11 @@ import { FanCardQuotePicker } from './FanCardQuotePicker'
 import { FanCardLayoutPicker } from './FanCardLayoutPicker'
 import { photoCountOf } from './fanCardLayoutOptions'
 import { FanCardFontPicker } from './FanCardFontPicker'
-import { FanCardStickerPanel } from './FanCardStickerPanel'
+import {
+  FanCardStickerPanel,
+  MAX_DECORATION_SIZE,
+  MIN_DECORATION_SIZE,
+} from './FanCardStickerPanel'
 import { useTranslation } from '../../i18n'
 
 /** AI 추천 문구가 생성 중일 때 다시 조회하는 간격이다. */
@@ -86,6 +90,49 @@ function toCardPoint(
   }
 }
 
+/** 요소 중심에서 테두리까지의 반높이·반너비다. 글자는 글자 수만큼 가로로 넓다. */
+function decorationExtents(decoration: CardDecoration): { half: number; halfWidth: number } {
+  const half = decoration.size / 2
+  const halfWidth = decoration.kind === 'TEXT'
+    ? Math.max(half, (decoration.content.length * decoration.size * 0.6) / 2)
+    : half
+  return { half, halfWidth }
+}
+
+/** 선택 테두리(점선)와 요소 사이의 간격이다. 핸들도 이 테두리 모서리에 앉는다. */
+const SELECTION_INSET = 8
+
+/** 카드 좌표계 기준 핸들 원의 반지름(그리기)과 판정 반경이다. 손가락으로도 집히게 판정을 넉넉히 둔다. */
+const HANDLE_DRAW_RADIUS = 26
+const HANDLE_HIT_RADIUS = 48
+
+/**
+ * 선택한 요소의 조절 핸들(오른쪽 아래)과 삭제 핸들(오른쪽 위)의 카드 좌표다.
+ *
+ * <p>요소가 회전해 있으면 핸들도 테두리를 따라 함께 돈다.
+ */
+function decorationHandlePositions(decoration: CardDecoration): {
+  transform: { x: number; y: number }
+  remove: { x: number; y: number }
+} {
+  const { half, halfWidth } = decorationExtents(decoration)
+  const cos = Math.cos(decoration.rotation)
+  const sin = Math.sin(decoration.rotation)
+  const rotated = (x: number, y: number) => ({
+    x: decoration.x + x * cos - y * sin,
+    y: decoration.y + x * sin + y * cos,
+  })
+
+  return {
+    transform: rotated(halfWidth + SELECTION_INSET, half + SELECTION_INSET),
+    remove: rotated(halfWidth + SELECTION_INSET, -half - SELECTION_INSET),
+  }
+}
+
+function distanceBetween(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
 /**
  * 누른 지점에 있는 꾸미기 요소를 찾는다.
  *
@@ -104,14 +151,11 @@ function findDecorationAt(
     const decoration = decorations[index]
     if (!decoration) continue
 
-    const halfHeight = decoration.size / 2
-    const halfWidth = decoration.kind === 'TEXT'
-      ? Math.max(halfHeight, (decoration.content.length * decoration.size * 0.6) / 2)
-      : halfHeight
+    const { half, halfWidth } = decorationExtents(decoration)
 
     if (
       Math.abs(point.x - decoration.x) <= halfWidth
-      && Math.abs(point.y - decoration.y) <= halfHeight
+      && Math.abs(point.y - decoration.y) <= half
     ) {
       return decoration
     }
@@ -135,10 +179,14 @@ type FanCardSectionProps = {
 }
 
 /**
- * 팬이 통화에서 인상 깊었던 문구를 골라 기념 카드로 만드는 섹션이다.
+ * 팬이 통화에서 남긴 사진과 인상 깊었던 문구로 기념 카드를 만드는 섹션이다.
  *
  * AI 추천 문구는 통화가 끝난 뒤 생성되므로 준비되지 않았을 수 있다. 그래서 추천을 기다리는
  * 동안에도 자막에서 직접 고를 수 있게 두 목록을 함께 보여 준다.
+ *
+ * <p>문구 고르기는 선택 사항이다. 추천이 늦거나 마음에 드는 말이 없어도 사진과 꾸미기만으로
+ * 카드를 완성해 내려받을 수 있다. 다만 서버가 보관하는 것은 문구뿐이라, 문구를 고른 경우에만
+ * 저장 버튼을 열어 준다.
  */
 export function FanCardSection({
   callSessionId,
@@ -172,13 +220,34 @@ export function FanCardSection({
   const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
   const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
   const decorationCounterRef = useRef(0)
-  const draggingRef = useRef<{ id: string; offsetX: number; offsetY: number }>(undefined)
+  /** 진행 중인 끌기다. move는 위치 이동, transform은 모서리 핸들로 크기·기울기 조절이다. */
+  const draggingRef = useRef<
+    | { kind: 'move'; id: string; offsetX: number; offsetY: number }
+    | {
+        kind: 'transform'
+        id: string
+        center: { x: number; y: number }
+        startDistance: number
+        startAngle: number
+        startSize: number
+        startRotation: number
+      }
+    | undefined
+  >(undefined)
   /** 보관해 둔 상태를 다 불러왔는지. 불러오기 전에 저장하면 초기값이 덮어쓴다. */
   const draftLoadedRef = useRef(false)
 
   const selectedDecoration = decorations.find(
     (decoration) => decoration.id === selectedDecorationId,
   )
+
+  /**
+   * 카드에 담을 것이 하나라도 있는지.
+   *
+   * <p>문구 고르기는 선택 사항이라 사진만으로도 카드를 완성할 수 있다. 다만 문구도 사진도
+   * 없으면 빈 도안만 남으므로 그때는 미리보기와 내려받기를 열지 않는다.
+   */
+  const canCompose = Boolean(selectedText) || selectedPhotoIndexes.length > 0
 
   /**
    * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
@@ -205,23 +274,6 @@ export function FanCardSection({
     [layout],
   )
 
-  /**
-   * 선택한 요소의 값을 바꾼다.
-   *
-   * @param patch 바꿀 속성만 담은 값
-   */
-  const updateSelectedDecoration = useCallback(
-    (patch: Partial<Pick<CardDecoration, 'x' | 'y' | 'size' | 'rotation'>>) => {
-      if (!selectedDecorationId) return
-      setDecorations((current) =>
-        current.map((decoration) =>
-          decoration.id === selectedDecorationId ? { ...decoration, ...patch } : decoration,
-        ),
-      )
-    },
-    [selectedDecorationId],
-  )
-
   /** 선택한 요소를 카드에서 뗀다. */
   const removeSelectedDecoration = useCallback(() => {
     if (!selectedDecorationId) return
@@ -232,7 +284,10 @@ export function FanCardSection({
   }, [selectedDecorationId])
 
   /**
-   * 카드를 눌렀을 때 그 자리의 요소를 집는다. 빈 곳을 누르면 선택을 푼다.
+   * 카드를 눌렀을 때 그 자리의 요소나 핸들을 집는다. 빈 곳을 누르면 선택을 푼다.
+   *
+   * <p>선택한 요소에는 카드 위에 삭제(×)·조절(모서리) 핸들이 떠 있다. 핸들을 먼저 판정해야
+   * 요소 밖으로 살짝 나가 있는 핸들이 빈 곳 클릭으로 오인되지 않는다.
    *
    * @param event 포인터 누름 이벤트
    */
@@ -240,20 +295,52 @@ export function FanCardSection({
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
       const canvas = event.currentTarget
       const point = toCardPoint(canvas, event.clientX, event.clientY)
+
+      if (selectedDecoration) {
+        const handles = decorationHandlePositions(selectedDecoration)
+
+        // 삭제 핸들 — 누르는 즉시 뗀다.
+        if (distanceBetween(point, handles.remove) <= HANDLE_HIT_RADIUS) {
+          removeSelectedDecoration()
+          return
+        }
+
+        // 조절 핸들 — 중심에서 멀어지면 커지고, 중심을 축으로 돌리면 기울어진다.
+        if (distanceBetween(point, handles.transform) <= HANDLE_HIT_RADIUS) {
+          const center = { x: selectedDecoration.x, y: selectedDecoration.y }
+          draggingRef.current = {
+            kind: 'transform',
+            id: selectedDecoration.id,
+            center,
+            startDistance: Math.max(1, distanceBetween(point, center)),
+            startAngle: Math.atan2(point.y - center.y, point.x - center.x),
+            startSize: selectedDecoration.size,
+            startRotation: selectedDecoration.rotation,
+          }
+          canvas.setPointerCapture(event.pointerId)
+          return
+        }
+      }
+
       const hit = findDecorationAt(decorations, point)
 
       setSelectedDecorationId(hit?.id)
       if (!hit) return
 
       // 집은 지점과 요소 중심의 차이를 기억해야 끌 때 요소가 튀지 않는다.
-      draggingRef.current = { id: hit.id, offsetX: point.x - hit.x, offsetY: point.y - hit.y }
+      draggingRef.current = {
+        kind: 'move',
+        id: hit.id,
+        offsetX: point.x - hit.x,
+        offsetY: point.y - hit.y,
+      }
       canvas.setPointerCapture(event.pointerId)
     },
-    [decorations],
+    [decorations, removeSelectedDecoration, selectedDecoration],
   )
 
   /**
-   * 집은 요소를 끌어 옮긴다.
+   * 집은 요소를 끌어 옮기거나, 조절 핸들로 크기·기울기를 바꾼다.
    *
    * @param event 포인터 이동 이벤트
    */
@@ -264,6 +351,24 @@ export function FanCardSection({
 
       const canvas = event.currentTarget
       const point = toCardPoint(canvas, event.clientX, event.clientY)
+
+      if (dragging.kind === 'transform') {
+        const distance = Math.max(1, distanceBetween(point, dragging.center))
+        const size = Math.min(
+          MAX_DECORATION_SIZE,
+          Math.max(MIN_DECORATION_SIZE, dragging.startSize * (distance / dragging.startDistance)),
+        )
+        const angle = Math.atan2(point.y - dragging.center.y, point.x - dragging.center.x)
+        const rotation = dragging.startRotation + (angle - dragging.startAngle)
+
+        setDecorations((current) =>
+          current.map((decoration) =>
+            decoration.id === dragging.id ? { ...decoration, size, rotation } : decoration,
+          ),
+        )
+        return
+      }
+
       // 카드 밖으로 완전히 나가 다시 집지 못하는 일이 없게 안쪽으로 붙잡아 둔다.
       const x = Math.min(Math.max(point.x - dragging.offsetX, 0), canvas.width)
       const y = Math.min(Math.max(point.y - dragging.offsetY, 0), canvas.height)
@@ -426,7 +531,7 @@ export function FanCardSection({
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !selectedText) return
+    if (!canvas || !canCompose) return
 
     let active = true
 
@@ -434,7 +539,7 @@ export function FanCardSection({
       .then((photos) => {
         if (!active) return undefined
         return drawFanCard(canvas, {
-          text: selectedText,
+          text: selectedText ?? '',
           meetingTitle,
           influencerName,
           fanNickname,
@@ -446,24 +551,75 @@ export function FanCardSection({
         })
       })
       .then(() => {
-        // 고른 요소를 알아볼 수 있게 점선을 두른다. 이 표시는 미리보기에만 그리고
+        // 고른 요소를 알아볼 수 있게 점선을 두르고, 카드 위에서 바로 조작할 수 있는
+        // 삭제(×)·조절(↔) 핸들을 모서리에 그린다. 이 표시는 미리보기에만 그리고
         // 내려받을 때는 따로 그린 캔버스를 쓰므로 저장본에는 남지 않는다.
         if (!active || !selectedDecoration) return
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
-        const half = selectedDecoration.size / 2
-        const halfWidth = selectedDecoration.kind === 'TEXT'
-          ? Math.max(half, (selectedDecoration.content.length * selectedDecoration.size * 0.6) / 2)
-          : half
+        const { half, halfWidth } = decorationExtents(selectedDecoration)
+        const selectionColor = resolveSelectionColor()
 
         ctx.save()
         ctx.translate(selectedDecoration.x, selectedDecoration.y)
         ctx.rotate(selectedDecoration.rotation)
         ctx.setLineDash([14, 10])
         ctx.lineWidth = 4
-        ctx.strokeStyle = resolveSelectionColor()
-        ctx.strokeRect(-halfWidth - 8, -half - 8, halfWidth * 2 + 16, half * 2 + 16)
+        ctx.strokeStyle = selectionColor
+        ctx.strokeRect(
+          -halfWidth - SELECTION_INSET,
+          -half - SELECTION_INSET,
+          halfWidth * 2 + SELECTION_INSET * 2,
+          half * 2 + SELECTION_INSET * 2,
+        )
+        ctx.setLineDash([])
+
+        /** 테두리 모서리에 흰 원 핸들 하나를 그린다. */
+        const drawHandleCircle = (x: number, y: number) => {
+          ctx.beginPath()
+          ctx.arc(x, y, HANDLE_DRAW_RADIUS, 0, Math.PI * 2)
+          ctx.fillStyle = '#ffffff'
+          ctx.fill()
+          ctx.lineWidth = 4
+          ctx.strokeStyle = selectionColor
+          ctx.stroke()
+        }
+
+        const cornerX = halfWidth + SELECTION_INSET
+        const cornerY = half + SELECTION_INSET
+        const iconRadius = HANDLE_DRAW_RADIUS * 0.42
+
+        // 오른쪽 위 — 삭제(×) 핸들
+        drawHandleCircle(cornerX, -cornerY)
+        ctx.lineWidth = 5
+        ctx.lineCap = 'round'
+        ctx.strokeStyle = selectionColor
+        ctx.beginPath()
+        ctx.moveTo(cornerX - iconRadius, -cornerY - iconRadius)
+        ctx.lineTo(cornerX + iconRadius, -cornerY + iconRadius)
+        ctx.moveTo(cornerX + iconRadius, -cornerY - iconRadius)
+        ctx.lineTo(cornerX - iconRadius, -cornerY + iconRadius)
+        ctx.stroke()
+
+        // 오른쪽 아래 — 크기·기울기 조절(↔) 핸들
+        drawHandleCircle(cornerX, cornerY)
+        ctx.beginPath()
+        ctx.moveTo(cornerX - iconRadius, cornerY + iconRadius)
+        ctx.lineTo(cornerX + iconRadius, cornerY - iconRadius)
+        ctx.stroke()
+        for (const [tipX, tipY] of [
+          [cornerX + iconRadius, cornerY - iconRadius],
+          [cornerX - iconRadius, cornerY + iconRadius],
+        ] as const) {
+          const direction = tipY < cornerY ? 1 : -1
+          ctx.beginPath()
+          ctx.moveTo(tipX - direction * iconRadius * 0.9, tipY)
+          ctx.lineTo(tipX, tipY)
+          ctx.lineTo(tipX, tipY + direction * iconRadius * 0.9)
+          ctx.stroke()
+        }
+
         ctx.restore()
       })
       .catch(() => {
@@ -476,6 +632,7 @@ export function FanCardSection({
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 미리보기 재그리기를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    canCompose,
     dateLabel,
     decorations,
     fanNickname,
@@ -544,6 +701,12 @@ export function FanCardSection({
     [layout],
   )
 
+  /**
+   * 고른 문구를 서버에 저장한다.
+   *
+   * <p>서버가 보관하는 것은 문구뿐이고 빈 문구는 받지 않으므로, 문구를 고르지 않았으면
+   * 저장 자체를 시도하지 않는다. 사진과 꾸미기는 내려받은 이미지에만 담긴다.
+   */
   const handleSave = useCallback(async () => {
     if (!selectedText) return
 
@@ -570,14 +733,14 @@ export function FanCardSection({
    * 없는 캔버스에 같은 내용을 다시 그려 점선이 파일에 남지 않게 한다.
    */
   async function handleDownload() {
-    if (!selectedText) return
+    if (!canCompose) return
 
     const canvas = document.createElement('canvas')
 
     try {
       const photos = await resolveSelectedPhotos()
       await drawFanCard(canvas, {
-        text: selectedText,
+        text: selectedText ?? '',
         meetingTitle,
         influencerName,
         fanNickname,
@@ -640,7 +803,8 @@ export function FanCardSection({
             selectedText={selectedText}
           />
 
-          {selectedText && photoBlobs.length > 0 ? (
+          {/* 문구는 선택 사항이라 사진만 있어도 배치를 고를 수 있어야 한다. */}
+          {photoBlobs.length > 0 ? (
             <FanCardLayoutPicker
               layout={layout}
               onLayoutChange={changeLayout}
@@ -650,14 +814,18 @@ export function FanCardSection({
             />
           ) : null}
 
-          {selectedText ? (
+          {canCompose ? (
             <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
               <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
 
               <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
                  {t('fanCardSection.t9')} </h3>
               <canvas
-                aria-label={t('fanCardSection.t10', { p0: selectedText })}
+                aria-label={
+                  selectedText
+                    ? t('fanCardSection.t10', { p0: selectedText })
+                    : t('fanCardSection.t17')
+                }
                 // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
                 className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
                   decorations.length > 0 ? 'cursor-grab' : ''
@@ -674,9 +842,6 @@ export function FanCardSection({
                 decorationCount={decorations.length}
                 onAddSticker={(code) => addDecoration('STICKER', code)}
                 onAddText={(text) => addDecoration('TEXT', text)}
-                onRemoveSelected={removeSelectedDecoration}
-                onUpdateSelected={updateSelectedDecoration}
-                selectedDecoration={selectedDecoration}
               />
 
               {saveError ? (
@@ -686,18 +851,28 @@ export function FanCardSection({
               ) : null}
 
               {/* 저장 완료도 오류와 같은 배너 체계로 알린다. 초록 문장 한 줄만 두면 눈에 띄지 않는다. */}
-              {savedText === selectedText ? (
+              {/* 문구를 고르지 않으면 둘 다 undefined 라 저장한 적이 없어도 같다고 나온다. */}
+              {selectedText && savedText === selectedText ? (
                 <AlertBanner className="mt-4" title={t('fanCardSection.t12')} variant="success">
                    {t('fanCardSection.t13')} </AlertBanner>
               ) : null}
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <Button loading={saving} onClick={() => void handleSave()} size="lg">
-                  {savedText ? t('fanCardSection.t14') : t('fanCardSection.t15')}
-                </Button>
+              <div className={`mt-6 grid gap-3 ${selectedText ? 'sm:grid-cols-2' : ''}`}>
+                {/* 문구 저장 API는 문구가 있어야 하므로, 문구 없이 만든 카드는 내려받기만 제공한다. */}
+                {selectedText ? (
+                  <Button loading={saving} onClick={() => void handleSave()} size="lg">
+                    {savedText ? t('fanCardSection.t14') : t('fanCardSection.t15')}
+                  </Button>
+                ) : null}
                 <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
                    {t('fanCardSection.t16')} </Button>
               </div>
+
+              {selectedText ? null : (
+                <p className="mt-3 text-xs text-[var(--color-text-secondary)]">
+                  {t('fanCardSection.t18')}
+                </p>
+              )}
             </div>
           ) : null}
         </CardContent>

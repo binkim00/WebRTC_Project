@@ -24,6 +24,15 @@ export type CallSessionStatusResponse = {
   remainingSec: number
   reconnectAllowedUntil: string | null
   endReason: string | null
+  /**
+   * 이 통화의 팬 자막 언어 코드(ko·en·ja·zh·vi)다.
+   *
+   * 통화 시작 시점의 값으로 서버에 고정 저장되어 있다. 통화 화면은 이 값과
+   * `influencerLanguage`를 비교해 실시간 자막의 초기 표시 여부를 정한다.
+   */
+  fanLanguage: string | null
+  /** 이 통화의 인플루언서 자막 언어 코드다. 서버가 확인할 수 없으면 null이다. */
+  influencerLanguage: string | null
 }
 
 export type ForceEndCallSessionRequest = {
@@ -104,7 +113,10 @@ function isCallSessionStatusResponse(
     Number.isFinite(value.remainingSec) &&
     value.remainingSec >= 0 &&
     isOptionalString(value.reconnectAllowedUntil) &&
-    isOptionalString(value.endReason)
+    isOptionalString(value.endReason) &&
+    // 언어는 자막 표시 힌트이므로 값이 없어도 통화 상태 조회를 실패로 보지 않는다.
+    isOptionalString(value.fanLanguage) &&
+    isOptionalString(value.influencerLanguage)
   )
 }
 
@@ -190,6 +202,17 @@ export async function getCallSessionStatus(
   }
 
   return data
+}
+
+/**
+ * 서버가 세션을 마감했는지 판단한다.
+ *
+ * status 문자열이 'ENDED'가 아니어도(예: 서버가 TIMEOUT 같은 별도 상태로 마감) `endedAt`이
+ * 채워져 있으면 끝난 세션으로 본다. 종료 감지가 문자열 하나에 묶여 있으면 서버가 상태 값을
+ * 다르게 마감했을 때 팬이 통화 방에서 나가지 못한다.
+ */
+export function isCallSessionEnded(status: CallSessionStatusResponse): boolean {
+  return status.status === 'ENDED' || status.endedAt !== null
 }
 
 export async function forceEndCallSession(

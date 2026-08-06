@@ -5,10 +5,10 @@ import { useCallback, useRef, type SyntheticEvent, type VideoHTMLAttributes } fr
  *
  * ## 왜 별도 컴포넌트인가
  *
- * 녹화는 브라우저 `MediaRecorder`로 만든 WebM인데, MediaRecorder는 **길이(Duration)를
+ * 녹화는 브라우저 `MediaRecorder`로 만든 MP4 또는 WebM인데, MediaRecorder는 **길이(Duration)를
  * 컨테이너 헤더에 쓰지 않는다.** 스트리밍 중에는 최종 길이를 알 수 없기 때문이다.
  * 그래서 그냥 재생하면 `video.duration`이 `Infinity`가 되고, 브라우저가 전체 길이를
- * 모르니 **진행바를 드래그할 수 없다.**
+ * 모르니 **진행바를 드래그할 수 없다.** 조각 단위로 이어 붙이는 mp4도 사정이 같다.
  *
  * 서버 문제가 아니다. 백엔드 `GET /api/v1/recordings/{id}/content`는 이미
  * `Accept-Ranges: bytes`와 206 Partial Content를 지원한다.

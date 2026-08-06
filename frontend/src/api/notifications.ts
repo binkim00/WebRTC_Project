@@ -14,6 +14,15 @@ export type NotificationResponse = {
   type: NotificationType
   title: string
   message: string
+  /**
+   * 본문을 화면 언어로 다시 만들 때 쓰는 사전 키다. 예전에 만든 알림은 null이다.
+   *
+   * 서버는 알림을 만든 시점 수신자의 선호 언어로 `message`를 저장한다. 화면 언어는 계정
+   * 선호 언어와 따로 움직이므로, 저장된 문장만으로는 화면 언어를 따라갈 수 없다.
+   */
+  messageKey: string | null
+  /** 본문 자리표시자 이름별 값이며 담을 값이 없으면 null이다. */
+  messageArgs: Record<string, string> | null
   /** 관련 팬미팅이 없으면 null */
   meetingId: number | null
   /** 읽지 않았으면 null */

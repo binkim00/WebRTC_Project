@@ -18,7 +18,6 @@ import { AlertBanner, EmailVerificationNotice, SocialLoginButtons } from '../../
 import { useTranslation, type TranslationKey } from '../../i18n'
 import { landingPathForRole } from '../../router/roleCapabilities'
 
-
 /**
  * 역할 선택 옵션이다. 값은 백엔드 enum을 그대로 쓰고, 라벨·설명은 **사전 키**로 들고 있는다.
  *
@@ -43,7 +42,6 @@ const roleOptions: readonly {
   },
   { value: 'MANAGER', labelKey: 'signup.role.manager', noteKey: 'signup.role.manager.note' },
 ]
-
 
 const signupInputClass =
   'mt-2 min-h-[50px] w-full rounded-lg border bg-white px-[13px] text-base font-semibold text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]'
@@ -555,6 +553,12 @@ export function SignupPage() {
               />
             </label>
             {show('nickname', nicknameError) ? <FieldError>{nicknameError}</FieldError> : null}
+            {/* 인플루언서 닉네임은 팬미팅 이름과 함께 해외 팬에게 그대로 노출되므로 영어 이름을 권장한다. */}
+            {role === 'INFLUENCER' || role === 'SOLO_INFLUENCER' ? (
+              <p className="mt-1.5 text-[13px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
+                {t('signup.nicknameEnglishHint')}
+              </p>
+            ) : null}
           </div>
         </div>
 

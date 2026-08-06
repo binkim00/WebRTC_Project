@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getCallSummary } from '../../api/aiSummaries'
 import { getAuthSession } from '../../api/authSession'
+import { recallFanCallSession } from '../../api/callSessionLog'
 import {
   fetchFanMemos,
   fetchMeetingDetail,
@@ -91,6 +92,8 @@ export function InfluencerFanRecordPage() {
   const [savedMeetingId, setSavedMeetingId] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [summaryLines, setSummaryLines] = useState<string[]>([])
+  /** 요약을 보여 줄 수 없을 때의 이유 안내다. 요약이 표시되면 비운다. */
+  const [summaryNotice, setSummaryNotice] = useState<string>()
 
   const loadMemos = useCallback(
     async (signal?: AbortSignal) => {
@@ -238,34 +241,57 @@ export function InfluencerFanRecordPage() {
   const selected = sessions.find((session) => session.meetingId === selectedMeetingId)
   const selectedIsCurrent = Boolean(selected && selected.meetingId === fanMeetingId)
 
+  /**
+   * 요약 조회에 쓸 통화 세션이다.
+   *
+   * 통화 화면에서 넘어온 값(현재 회차)이 최우선이고, 그 외 회차는 대기열 폴링이 브라우저에
+   * 남긴 (팬미팅, 팬) → 세션 기록에서 찾는다. 이 기록 덕에 팬미팅이 끝난 뒤에도 지난 회차의
+   * AI 요약을 다시 열 수 있다. (통화를 지켜본 브라우저에만 기록이 남는다)
+   */
+  const summarySessionId = useMemo(() => {
+    if (!selected || !fanId) return undefined
+    if (selectedIsCurrent && callSessionId) return callSessionId
+    return recallFanCallSession(selected.meetingId, fanId)
+  }, [callSessionId, fanId, selected, selectedIsCurrent])
+
   useEffect(() => {
-    // 대화 요약은 통화 세션 단위라, 목록 화면이 넘겨 준 현재 통화에서만 조회할 수 있다.
-    if (!callSessionId || !selectedIsCurrent || !authToken) {
+    if (!summarySessionId || !authToken) {
       setSummaryLines([])
+      // 세션 기록이 없으면 왜 비어 있는지 알려 준다. 통화 기록은 브라우저에만 남기 때문이다.
+      setSummaryNotice(selected ? t('influencerFanRecordPage.summary.noRecord') : undefined)
       return
     }
 
     const controller = new AbortController()
+    setSummaryNotice(undefined)
 
-    void getCallSummary(callSessionId, authToken, controller.signal)
+    void getCallSummary(summarySessionId, authToken, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return
-        setSummaryLines(
-          result.state === 'COMPLETED'
-            ? result.summary.summary
-                .split('\n')
-                .map((line) => line.trim())
-                .filter(Boolean)
-            : [],
-        )
+        if (result.state === 'COMPLETED') {
+          setSummaryLines(
+            result.summary.summary
+              .split('\n')
+              .map((line) => line.trim())
+              .filter(Boolean),
+          )
+          setSummaryNotice(undefined)
+          return
+        }
+        setSummaryLines([])
+        setSummaryNotice(t('influencerFanRecordPage.summary.generating'))
       })
       .catch(() => {
         // 요약이 아직 없거나 조회에 실패하면 줄을 비워 두고 안내 문구만 남긴다.
-        if (!controller.signal.aborted) setSummaryLines([])
+        if (controller.signal.aborted) return
+        setSummaryLines([])
+        setSummaryNotice(t('influencerFanRecordPage.summary.failed'))
       })
 
     return () => controller.abort()
-  }, [authToken, callSessionId, selectedIsCurrent])
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, selected, summarySessionId])
 
   const editing = Boolean(selected && editingMeetingId === selected.meetingId)
   const hasMemo = Boolean(selected?.memo.trim())
@@ -484,6 +510,11 @@ export function InfluencerFanRecordPage() {
               <p className="mt-[7px] text-sm font-medium leading-[1.55] text-[var(--color-text-muted)]">
                 {t('influencerFanRecordPage.t11')}
               </p>
+              {summaryLines.length === 0 && summaryNotice ? (
+                <p className="mt-[11px] text-sm font-semibold text-[var(--color-text-muted)]">
+                  {summaryNotice}
+                </p>
+              ) : null}
               {summaryLines.map((line) => (
                 <p
                   className="mt-[11px] max-w-[60ch] text-base font-medium leading-[1.75] text-[var(--color-text-body)]"

@@ -316,6 +316,10 @@ const ko = {
   'wait.error.queueLoad': '대기열 상태를 불러오지 못했습니다.',
   'wait.error.title': '대기실 정보를 확인할 수 없습니다',
   'wait.error.retry': '다시 확인',
+  'wait.closed.title': '팬미팅이 끝났어요',
+  'wait.closed.description': '더 이상 대기실에서 호출을 기다릴 수 없습니다. 녹화 다시보기와 기념 카드로 그날을 남겨 보세요.',
+  'wait.closed.record': '기록 보기',
+  'wait.closed.myMeetings': '내 팬미팅 목록',
 
   // 대기 단계별 문구
   'wait.waiting.title': '호출을 기다려 주세요',
@@ -382,6 +386,51 @@ const ko = {
   'wait.change.tooLong': '요청 사유는 {max}자 이하로 입력해 주세요.',
   'wait.change.duplicate': '이미 접수된 순서 변경 요청이 있습니다.',
   'wait.change.failed': '순서 변경 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+
+  'signup.nicknameEnglishHint':
+    '닉네임은 팬미팅 이름과 함께 해외 팬에게도 그대로 보여요. 영어 이름 사용을 권장해요.',
+
+  // 종료된 팬미팅 차단 안내
+  'deviceCheckPage.ended.title': '이미 종료된 팬미팅입니다',
+  'deviceCheckPage.ended.message':
+    '종료된 팬미팅에는 입장할 수 없습니다. 녹화 영상과 기념 카드는 나의 팬미팅 > 다녀온 팬미팅에서 확인할 수 있어요.',
+  'wait.ended.title': '이미 종료된 팬미팅입니다',
+  'wait.ended.desc': '대기열 입장이 마감되었습니다. 녹화 영상과 기념 카드는 완료 화면에서 확인할 수 있어요.',
+  'wait.ended.cta': '완료 화면으로 이동',
+
+  // 서버가 한국어로 저장해 내려주는 알림·안내 문구의 화면 언어 대체 문구
+  'serverText.notif.applicationResult.title': '응모 결과가 발표되었습니다',
+  'serverText.notif.applicationResult.message': '팬미팅 응모 결과를 확인해 주세요.',
+  'serverText.notif.queueOrderAssigned.title': '대기 순번이 배정되었습니다',
+  'serverText.notif.queueOrderAssigned.message': '대기실에서 내 순번을 확인해 주세요.',
+  'serverText.notif.queueOrderAssigned.messageWithPosition': '내 대기 순번은 {position}번입니다.',
+  'serverText.notif.queueChangeResult.title': '순서 변경 요청이 처리되었습니다',
+  'serverText.notif.queueChangeResult.approved':
+    '순서 변경 요청이 승인되어 대기열 순서가 조정되었습니다.',
+  'serverText.notif.queueChangeResult.rejected':
+    '순서 변경 요청이 거절되어 기존 순서가 유지됩니다.',
+  'serverText.notif.queueChangeResult.message':
+    '순서 변경 요청 처리 결과를 대기실에서 확인해 주세요.',
+  'serverText.notif.enterNow.title': '지금 입장해 주세요',
+  'serverText.notif.enterNow.message': '내 차례가 되었어요. 제한 시간 안에 통화에 입장해 주세요.',
+  'serverText.notif.meetingChanged.title': '팬미팅 정보가 변경되었습니다',
+  'serverText.notif.meetingChanged.message': '변경된 일정과 안내를 확인해 주세요.',
+  'serverText.notif.meetingCanceled.title': '팬미팅이 취소되었습니다',
+  'serverText.notif.meetingCanceled.message': '자세한 내용은 팬미팅 상세에서 확인해 주세요.',
+  'serverText.queueNotice.approved':
+    '순서 변경 요청이 승인되어 대기열 마지막 순서로 이동했습니다.',
+  'serverText.queueNotice.rejected': '순서 변경 요청이 거절되어 기존 순서가 유지됩니다.',
+  'serverText.queueNotice.adjusted': '운영자가 대기 순번을 조정했습니다.',
+
+  // 서버가 알림과 함께 내려주는 사전 키다. 백엔드 NotificationMessage 의 키·문장 틀과
+  // 자리표시자 이름이 같아야 하며, 한쪽만 고치면 문장이 어긋난다.
+  'notification.applicationResult.selected': '{meetingTitle} 팬미팅 응모에 당첨되었습니다.',
+  'notification.applicationResult.notSelected': '{meetingTitle} 팬미팅 응모에 당첨되지 않았습니다.',
+  'notification.meetingCanceled.body': '{meetingTitle} 팬미팅이 취소되었습니다.',
+  'notification.queueChange.moved': '대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다.',
+  'notification.queueChange.movedWithReason': '대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다. 사유: {reason}',
+  'notification.queueChange.shifted': '다른 참가자의 순서 조정으로 대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다.',
+  'notification.queueChange.shiftedWithReason': '다른 참가자의 순서 조정으로 대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다. 사유: {reason}',
 
   // 공지·메모·유의사항
   'wait.notices': '운영 공지',
@@ -1002,6 +1051,10 @@ const ko = {
   'influencerFanRecordPage.t9': '팬미팅마다 메모를 하나씩 남길 수 있어요.',
   'influencerFanRecordPage.t10': '대화 요약',
   'influencerFanRecordPage.t11': '통화가 끝나면 자동으로 기록돼요.',
+  'influencerFanRecordPage.summary.noRecord':
+    '이 브라우저에 남은 통화 기록이 없어 요약을 불러올 수 없어요. 통화를 진행한 브라우저에서 확인해 주세요.',
+  'influencerFanRecordPage.summary.generating': '요약을 만드는 중이에요. 잠시 뒤 다시 확인해 주세요.',
+  'influencerFanRecordPage.summary.failed': '요약을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
   'influencerFanRecordPage.t12': '내 메모',
   'influencerFanRecordPage.t13': '내 메모',
   'influencerFanRecordPage.t14': '예: 다음 통화에서는 과학 동아리 활동이 어땠는지 물어보기.',
@@ -1279,6 +1332,7 @@ const ko = {
   'managerMeetingListPage.t19': '상세 관리',
   'managerMeetingListPage.t20': '참가자',
   'managerMeetingListPage.t21': '운영',
+  'managerMeetingListPage.statistics': '결과 통계',
   'managerMeetingListPage.t22': '발행',
   'managerMeetingListPage.t23': '삭제',
   'managerMeetingListPage.t24': '취소',
@@ -1412,8 +1466,16 @@ const ko = {
   'managerRoutePages.t43': '회까지 다시 호출',
   'managerRoutePages.t44': '입장 요청에 응답하지 않은 팬을 다시 호출할 수 있는 최대 횟수입니다. 입력하지 않으면 서비스 기본값이 적용됩니다.',
   'managerRoutePages.t45': '응답 없는 팬 다시 호출',
-  'managerRoutePages.t46': '녹화 및 실시간 기능',
-  'managerRoutePages.t47': '통화 중 사용할 녹화와 번역 자막 기능을 선택합니다.',
+  'managerCreate.preset.inMinutes': '{p0}분 뒤부터',
+  'managerCreate.preset.inHours': '{p0}시간 뒤부터',
+  'managerCreate.preset.minutesBefore': '시작 {p0}분 전',
+  'managerCreate.preset.hoursBefore': '시작 {p0}시간 전',
+  'managerCreate.preset.daysBefore': '시작 {p0}일 전',
+  'managerCreate.preset.needStart': '기본 정보에서 시작 일시를 먼저 정해 주세요.',
+  'connectedCallRoom.memo.title': '대기실에서 남긴 메모',
+  'managerRoutePages.t46': '녹화 기능',
+  'managerRoutePages.t47':
+    '통화 중 사용할 녹화 기능을 선택합니다. 번역 자막은 참가자 언어에 맞춰 자동으로 제공돼요.',
   'managerRoutePages.t48': '영상통화를 녹화합니다. 녹화 영상은 팬미팅 종료 후 5일 동안 보관된 뒤 삭제됩니다.',
   'managerRoutePages.t49': '영상통화 녹화',
   'managerRoutePages.t50': '통화 중 팬과 인플루언서에게 실시간 번역 자막을 제공합니다.',
@@ -2550,6 +2612,12 @@ const ko = {
   'deviceCheckPage.t75': '장비를 시작하지 못했습니다',
   'deviceCheckPage.t76': '{p0} 입장 전',
   'deviceCheckPage.t77': '아직 확인되지 않은 항목이 있어요: {p0}',
+  'deviceCheckPage.t78': '팬미팅',
+  'deviceCheckPage.t79': '이미 끝난 팬미팅이에요',
+  'deviceCheckPage.t80': '장비 점검과 대기실 입장은 더 이상 이용할 수 없습니다. 녹화 다시보기와 기념 카드로 그날을 남겨 보세요.',
+  'deviceCheckPage.t81': '장비 점검과 입장은 더 이상 이용할 수 없습니다. 지난 팬미팅 기록은 내 팬미팅에서 확인할 수 있어요.',
+  'deviceCheckPage.t82': '기록 보기',
+  'deviceCheckPage.t83': '내 팬미팅으로',
   'liveKitTestPage.t21': '연결 완료 · {p0} · {p1}',
   'myPage.t26': '내 정보와 참여 내역을 관리하세요.',
   'myPage.t27': '프로필',
@@ -2599,6 +2667,10 @@ const ko = {
   'fanApplicationResultPage.t43': '{p0} 발표',
   'fanApplicationResultPage.t44': '팬미팅에서 만나게 될 {p0}',
   'fanApplicationResultPage.t45': '{p0}명 선정',
+  'fanApplicationResultPage.t46': '은 이미 끝났습니다. 녹화 다시보기와 기념 카드로 그날을 남겨 보세요.',
+  'fanApplicationResultPage.t47': '끝난 팬미팅이라 장비 점검과 대기실 입장은 더 이상 이용할 수 없습니다. 녹화는 팬미팅 후 5일 동안 보관됩니다.',
+  'fanApplicationResultPage.t48': '기록 보기',
+  'fanApplicationResultPage.t49': '녹화 다시보기와 기념 카드는 마이페이지 내 팬미팅에서도 열 수 있습니다.',
   'fanApplicationsPage.t21': '전체',
   'fanApplicationsPage.t22': '발표 전',
   'fanApplicationsPage.t23': '당첨',
@@ -2612,6 +2684,7 @@ const ko = {
   'fanInfluencerDetailPage.t17': '{p0} 썸네일',
   'fanMeetingListPage.t55': '녹화 목록을 불러오지 못했습니다: {p0}',
   'fanMeetingListPage.t56': '{p0}개 팬미팅의 최신 상태를 확인하지 못했습니다.',
+  'fanMeetingListPage.t57': '이미 끝난 팬미팅이에요',
   'fanMeetingStatus.t1': '임시 저장',
   'fanMeetingStatus.t2': '모집 예정',
   'fanMeetingStatus.t3': '모집 중',
@@ -2913,6 +2986,8 @@ const ko = {
   'meetingLifecycle.t23': '응모 마감 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
   'meetingLifecycle.t24': '결과 발표 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
   'meetingLifecycle.t25': '대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.',
+  'meetingLifecycle.resultBeforeQueueOpen':
+    '결과 발표 일시는 대기열 오픈 일시보다 이전이어야 합니다.',
 
   // 3차 코드모드로 추출한 화면 문구 (컴포넌트 밖 헬퍼·상태 라벨·api 오류 메시지 포함)
   'capturedPhotos.t1': '이 브라우저는 통화 사진 보관을 지원하지 않습니다.',
@@ -3028,13 +3103,14 @@ const ko = {
   'fanCardQuotePicker.t8': '직접 고르기',
   'fanCardQuotePicker.t9': '통화에서 나온 말 중에 고르기',
   'fanCardQuotePicker.t10': 'AI 추천을 기다리는 동안 먼저 고를 수 있어요',
+  'fanCardQuotePicker.t11': '문구는 선택 사항이에요. 고른 문구를 다시 누르면 뺄 수 있습니다.',
   'fanCardSection.t1': '기념 카드 문구를 불러오지 못했습니다.',
   'fanCardSection.t2': '카드 이미지를 그리지 못했습니다.',
   'fanCardSection.t3': '기념 카드를 저장하지 못했습니다.',
   'fanCardSection.t4': '카드 이미지를 만들지 못했습니다.',
   'fanCardSection.t5': '카드 이미지를 만들지 못했습니다.',
   'fanCardSection.t6': '기념 카드 만들기',
-  'fanCardSection.t7': '통화에서 인상 깊었던 한마디와 남긴 사진으로 카드를 만들 수 있어요.',
+  'fanCardSection.t7': '통화에서 남긴 사진으로 카드를 만들 수 있어요. 인상 깊었던 한마디는 원하면 함께 넣으세요.',
   'fanCardSection.t8': '통화에서 인상 깊었던 한마디를 골라 카드로 간직할 수 있어요.',
   'fanCardSection.t9': '카드 미리보기',
   'fanCardSection.t10': '기념 카드 미리보기: {p0}',
@@ -3044,8 +3120,11 @@ const ko = {
   'fanCardSection.t14': '이 문구로 다시 저장',
   'fanCardSection.t15': '카드 저장하기',
   'fanCardSection.t16': '이미지 내려받기',
+  'fanCardSection.t17': '기념 카드 미리보기',
+  'fanCardSection.t18': '문구 없이도 카드를 내려받을 수 있어요. 문구를 고르면 계정에도 저장해 두고 나중에 다시 볼 수 있습니다.',
   'fanCardStickerPanel.t1': '스티커로 꾸미기',
-  'fanCardStickerPanel.t2': '카드 위에서 끌어 옮길 수 있어요.',
+  'fanCardStickerPanel.t2':
+    '카드에서 끌어 옮기고, 모서리 핸들로 크기·기울기를, × 핸들로 삭제할 수 있어요.',
   'fanCardStickerPanel.t3': '눌러서 카드에 올려 보세요.',
   'fanCardStickerPanel.t4': '카드에 올릴 글자',
   'fanCardStickerPanel.t5': '카드에 올릴 짧은 글자',
@@ -3513,6 +3592,12 @@ const en: Partial<Record<TranslationKey, string>> = {
   'influencerFanRecordPage.t9': 'You can leave one note per fan meeting.',
   'influencerFanRecordPage.t10': 'Conversation summary',
   'influencerFanRecordPage.t11': 'Recorded automatically when the call ends.',
+  'influencerFanRecordPage.summary.noRecord':
+    "No call record is left in this browser, so the summary can't be loaded. Open it from the browser used during the call.",
+  'influencerFanRecordPage.summary.generating':
+    'The summary is being generated. Check again shortly.',
+  'influencerFanRecordPage.summary.failed':
+    'Could not load the summary. Please try again shortly.',
   'influencerFanRecordPage.t12': 'My note',
   'influencerFanRecordPage.t13': 'My note',
   'influencerFanRecordPage.t14':
@@ -3817,6 +3902,7 @@ const en: Partial<Record<TranslationKey, string>> = {
   'managerMeetingListPage.t19': 'Manage',
   'managerMeetingListPage.t20': 'Participants',
   'managerMeetingListPage.t21': 'Operations',
+  'managerMeetingListPage.statistics': 'Statistics',
   'managerMeetingListPage.t22': 'Publish',
   'managerMeetingListPage.t23': 'Delete',
   'managerMeetingListPage.t24': 'Cancel',
@@ -4259,8 +4345,16 @@ const en: Partial<Record<TranslationKey, string>> = {
   'managerRoutePages.t44':
     'The maximum number of times a fan who did not answer can be called again. Leave it empty to use the service default.',
   'managerRoutePages.t45': 'Recall unresponsive fans',
-  'managerRoutePages.t46': 'Recording and live features',
-  'managerRoutePages.t47': 'Choose the recording and translated subtitles used during calls.',
+  'managerCreate.preset.inMinutes': 'From {p0} min from now',
+  'managerCreate.preset.inHours': 'From {p0} hr from now',
+  'managerCreate.preset.minutesBefore': '{p0} min before start',
+  'managerCreate.preset.hoursBefore': '{p0} hr before start',
+  'managerCreate.preset.daysBefore': '{p0} days before start',
+  'managerCreate.preset.needStart': 'Set the start time in Basic info first.',
+  'connectedCallRoom.memo.title': 'Note you left in the waiting room',
+  'managerRoutePages.t46': 'Recording',
+  'managerRoutePages.t47':
+    'Choose whether calls are recorded. Translated subtitles are provided automatically based on participant languages.',
   'managerRoutePages.t48':
     'Record the video calls. Recordings are kept for 5 days after the fan meeting and then deleted.',
   'managerRoutePages.t49': 'Record video calls',
@@ -4612,6 +4706,11 @@ const en: Partial<Record<TranslationKey, string>> = {
   'wait.error.queueLoad': 'Could not load the queue status.',
   'wait.error.title': 'Cannot load the waiting room',
   'wait.error.retry': 'Check again',
+  'wait.closed.title': 'The fan meeting has ended',
+  'wait.closed.description':
+    'You can no longer wait for your call here. Look back on the day with the recording and your keepsake card.',
+  'wait.closed.record': 'View the record',
+  'wait.closed.myMeetings': 'My fan meetings',
 
   'wait.waiting.title': 'Please wait to be called',
   'wait.waiting.desc':
@@ -4676,6 +4775,55 @@ const en: Partial<Record<TranslationKey, string>> = {
   'wait.change.tooLong': 'Keep the reason within {max} characters.',
   'wait.change.duplicate': 'You already have a pending reorder request.',
   'wait.change.failed': 'Could not send the reorder request. Please try again shortly.',
+
+  'signup.nicknameEnglishHint':
+    'Your name is shown to fans worldwide alongside fan meeting titles. We recommend an English name.',
+
+  'deviceCheckPage.ended.title': 'This fan meeting has ended',
+  'deviceCheckPage.ended.message':
+    'You can no longer enter this fan meeting. Find its recording and photo card under My fan meetings > Past fan meetings.',
+  'wait.ended.title': 'This fan meeting has ended',
+  'wait.ended.desc':
+    'The queue is closed. You can still view the recording and photo card on the completion page.',
+  'wait.ended.cta': 'Go to the completion page',
+
+  'serverText.notif.applicationResult.title': 'Application results are out',
+  'serverText.notif.applicationResult.message': 'Check the results of your fan meeting application.',
+  'serverText.notif.queueOrderAssigned.title': 'Your queue number is assigned',
+  'serverText.notif.queueOrderAssigned.message': 'Check your place in line in the waiting room.',
+  'serverText.notif.queueOrderAssigned.messageWithPosition': 'Your place in line is No. {position}.',
+  'serverText.notif.queueChangeResult.title': 'Your reorder request was processed',
+  'serverText.notif.queueChangeResult.approved':
+    'Your reorder request was approved and your place in line was adjusted.',
+  'serverText.notif.queueChangeResult.rejected':
+    'Your reorder request was declined, so your current place in line stays the same.',
+  'serverText.notif.queueChangeResult.message':
+    'See the result of your reorder request in the waiting room.',
+  'serverText.notif.enterNow.title': 'Enter now',
+  'serverText.notif.enterNow.message': "It's your turn. Join the call within the time limit.",
+  'serverText.notif.meetingChanged.title': 'Fan meeting details changed',
+  'serverText.notif.meetingChanged.message': 'Check the updated schedule and details.',
+  'serverText.notif.meetingCanceled.title': 'Fan meeting canceled',
+  'serverText.notif.meetingCanceled.message': 'See the fan meeting page for details.',
+  'serverText.queueNotice.approved':
+    'Your reorder request was approved — you were moved to the end of the line.',
+  'serverText.queueNotice.rejected':
+    'Your reorder request was declined, so your current place in line stays the same.',
+  'serverText.queueNotice.adjusted': 'An operator adjusted your place in line.',
+
+  'notification.applicationResult.selected':
+    'You have been selected for the {meetingTitle} fan meeting.',
+  'notification.applicationResult.notSelected':
+    'You were not selected for the {meetingTitle} fan meeting.',
+  'notification.meetingCanceled.body': 'The {meetingTitle} fan meeting has been canceled.',
+  'notification.queueChange.moved':
+    'Your queue position changed from {previousPosition} to {newPosition}.',
+  'notification.queueChange.movedWithReason':
+    'Your queue position changed from {previousPosition} to {newPosition}. Reason: {reason}',
+  'notification.queueChange.shifted':
+    "Another participant's reordering changed your queue position from {previousPosition} to {newPosition}.",
+  'notification.queueChange.shiftedWithReason':
+    "Another participant's reordering changed your queue position from {previousPosition} to {newPosition}. Reason: {reason}",
 
   'wait.notices': 'Announcements',
   'wait.noticeCount': '{count}',
@@ -5754,6 +5902,12 @@ const en: Partial<Record<TranslationKey, string>> = {
   'deviceCheckPage.t75': 'We could not start your devices',
   'deviceCheckPage.t76': 'Before joining {p0}',
   'deviceCheckPage.t77': 'Some items are not confirmed yet: {p0}',
+  'deviceCheckPage.t78': 'Fan meeting',
+  'deviceCheckPage.t79': 'This fan meeting has already ended',
+  'deviceCheckPage.t80': 'The device check and the waiting room are no longer available. Look back on the day with the recording and your keepsake card.',
+  'deviceCheckPage.t81': 'The device check and entry are no longer available. You can find past fan meetings under My fan meetings.',
+  'deviceCheckPage.t82': 'View the record',
+  'deviceCheckPage.t83': 'Go to my fan meetings',
   'liveKitTestPage.t21': 'Connected · {p0} · {p1}',
   'myPage.t26': 'Manage your details and your participation history.',
   'myPage.t27': 'Profile',
@@ -5803,6 +5957,13 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanApplicationResultPage.t43': 'Announced {p0}',
   'fanApplicationResultPage.t44': '{p0}, who you will meet at the fan meeting',
   'fanApplicationResultPage.t45': '{p0} selected',
+  'fanApplicationResultPage.t46':
+    ' has already ended. Look back on the day with the recording and your keepsake card.',
+  'fanApplicationResultPage.t47':
+    'This fan meeting has ended, so the device check and the waiting room are no longer available. Recordings are kept for 5 days after the fan meeting.',
+  'fanApplicationResultPage.t48': 'View the record',
+  'fanApplicationResultPage.t49':
+    'You can also open the recording and your keepsake card from My fan meetings.',
   'fanApplicationsPage.t21': 'All',
   'fanApplicationsPage.t22': 'Before results',
   'fanApplicationsPage.t23': 'Selected',
@@ -5816,6 +5977,7 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanInfluencerDetailPage.t17': '{p0} thumbnail',
   'fanMeetingListPage.t55': 'We could not load your recordings: {p0}',
   'fanMeetingListPage.t56': 'We could not check the latest status of {p0} fan meetings.',
+  'fanMeetingListPage.t57': 'This fan meeting has already ended',
   'fanMeetingStatus.t1': 'Draft',
   'fanMeetingStatus.t2': 'Applications soon',
   'fanMeetingStatus.t3': 'Applications open',
@@ -6117,6 +6279,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'meetingLifecycle.t23': 'The application closing time must be before the fan meeting start time.',
   'meetingLifecycle.t24': 'The results announcement time must be before the fan meeting start time.',
   'meetingLifecycle.t25': 'The queue open time must be before the fan meeting start time.',
+  'meetingLifecycle.resultBeforeQueueOpen':
+    'The results announcement time must be before the queue open time.',
 
   // 3차 코드모드 문구의 영어 번역
   'capturedPhotos.t1': 'This browser cannot store call photos.',
@@ -6232,13 +6396,14 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanCardQuotePicker.t8': 'Choose your own',
   'fanCardQuotePicker.t9': 'Choose from what was said during the call',
   'fanCardQuotePicker.t10': 'You can choose one now while the AI suggestions load',
+  'fanCardQuotePicker.t11': 'A quote is optional. Tap the one you picked again to remove it.',
   'fanCardSection.t1': 'Could not load the keepsake card quotes.',
   'fanCardSection.t2': 'Could not draw the card image.',
   'fanCardSection.t3': 'Could not save the keepsake card.',
   'fanCardSection.t4': 'Could not create the card image.',
   'fanCardSection.t5': 'Could not create the card image.',
   'fanCardSection.t6': 'Make a keepsake card',
-  'fanCardSection.t7': 'Make a card from a line that stayed with you and the photos you took.',
+  'fanCardSection.t7': 'Make a card from the photos you took during the call. Add a line that stayed with you if you like.',
   'fanCardSection.t8': 'Pick a line that stayed with you from the call and keep it as a card.',
   'fanCardSection.t9': 'Card preview',
   'fanCardSection.t10': 'Keepsake card preview: {p0}',
@@ -6248,8 +6413,11 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanCardSection.t14': 'Save again with this quote',
   'fanCardSection.t15': 'Save the card',
   'fanCardSection.t16': 'Download image',
+  'fanCardSection.t17': 'Keepsake card preview',
+  'fanCardSection.t18': 'You can download the card without a quote. Pick one and it is also saved to your account so you can see it again later.',
   'fanCardStickerPanel.t1': 'Decorate with stickers',
-  'fanCardStickerPanel.t2': 'You can drag them around on the card.',
+  'fanCardStickerPanel.t2':
+    'Drag to move, use the corner handle to resize and tilt, and the × handle to delete.',
   'fanCardStickerPanel.t3': 'Tap one to put it on the card.',
   'fanCardStickerPanel.t4': 'Text to put on the card',
   'fanCardStickerPanel.t5': 'A short line for the card',

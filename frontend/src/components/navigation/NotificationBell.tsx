@@ -9,7 +9,12 @@ import {
   type NotificationType,
 } from '../../api/notifications'
 import { cn } from '../ui/cn'
-import { translate, useTranslation } from '../../i18n'
+import {
+  localizeNotificationMessage,
+  localizeNotificationTitle,
+  translate,
+  useTranslation,
+} from '../../i18n'
 
 const PANEL_SIZE = 5
 
@@ -263,10 +268,15 @@ export function NotificationBell() {
                               unread ? 'font-extrabold' : 'font-semibold',
                             )}
                           >
-                            {notification.title}
+                            {localizeNotificationTitle(notification.type, notification.title)}
                           </strong>
                           <span className="mt-[5px] block text-[15px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
-                            {notification.message}
+                            {localizeNotificationMessage(
+  notification.type,
+  notification.message,
+  notification.messageKey,
+  notification.messageArgs,
+)}
                           </span>
                           <span className="mt-2 block text-sm font-bold text-[var(--color-primary-coral)]">
                             {content.action}

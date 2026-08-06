@@ -28,7 +28,6 @@ import {
 } from '../../components'
 import { useTranslation, type TranslationKey } from '../../i18n'
 
-
 /**
  * 마이페이지 활동 바로가기다.
  *

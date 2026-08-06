@@ -85,8 +85,8 @@ const FONT_FAMILY_BY_KEY: Record<FanCardFont, string | undefined> = {
 
 /** 카드에 담을 정보다. */
 export type FanCardArtwork = {
-  /** 팬이 고른 문구 */
-  text: string
+  /** 팬이 고른 문구다. 문구 고르기는 선택 사항이라 없을 수 있다. */
+  text?: string
   /** 팬미팅 제목 */
   meetingTitle: string
   /** 인플루언서 표시 이름 */
@@ -203,6 +203,19 @@ function fitQuote(
 }
 
 /**
+ * 카드에 실제로 그릴 문구를 정리해 돌려준다.
+ *
+ * <p>문구 고르기는 선택 사항이라 없을 수 있다. 공백만 있는 값도 빈 문구로 보아, 따옴표만
+ * 덩그러니 남거나 빈 줄이 자리를 차지하는 일을 막는다.
+ *
+ * @param artwork 카드에 담을 정보
+ * @returns 그릴 문구이며 고르지 않았으면 빈 문자열
+ */
+function cardQuoteText(artwork: FanCardArtwork): string {
+  return artwork.text?.trim() ?? ''
+}
+
+/**
  * 페이지가 실제로 쓰는 폰트를 읽어 카드에도 같은 글꼴을 적용한다.
  *
  * @returns Canvas font 속성에 넣을 폰트 패밀리
@@ -243,13 +256,135 @@ async function resolveCardFontFamily(fontKey: FanCardFont | undefined): Promise<
 }
 
 /**
+ * 인플루언서 싸인에 쓸 손글씨 글꼴을 준비한다.
+ *
+ * <p>팬이 고른 카드 글꼴과 무관하게 싸인은 항상 손글씨 계열로 그린다. 내려받지 못하면
+ * 브라우저 필기체 계열로 대신 그린다.
+ *
+ * @returns Canvas font 속성에 넣을 패밀리 문자열
+ */
+async function resolveSignatureFontFamily(): Promise<string> {
+  const fallback = '"Segoe Script", "Brush Script MT", cursive'
+  const family = '"Gaegu"'
+  if (!document.fonts) return fallback
+
+  try {
+    await document.fonts.load(`700 40px ${family}`)
+  } catch {
+    return fallback
+  }
+
+  return document.fonts.check(`700 40px ${family}`) ? `${family}, ${fallback}` : fallback
+}
+
+/**
+ * 인플루언서 이름을 사인처럼 그린다.
+ *
+ * <p>손글씨 글꼴에 살짝 기울기를 주고 밑줄 획을 더해 실제 싸인 느낌을 낸다. 사진 위에
+ * 올라가도 읽히도록 어두운 그림자를 함께 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param name 인플루언서 표시 이름
+ * @param signatureFont 손글씨 글꼴 패밀리
+ * @param centerX 싸인의 가로 중심
+ * @param baselineY 싸인 글자의 기준선 y좌표
+ * @param size 글자 크기
+ */
+function drawSignature(
+  ctx: CanvasRenderingContext2D,
+  name: string,
+  signatureFont: string,
+  centerX: number,
+  baselineY: number,
+  size: number,
+): void {
+  if (!name.trim()) return
+
+  ctx.save()
+  ctx.translate(centerX, baselineY)
+  ctx.rotate(-0.08)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.55)'
+  ctx.shadowBlur = 10
+  ctx.shadowOffsetY = 2
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `700 ${size}px ${signatureFont}`
+  ctx.fillText(name, 0, 0)
+
+  // 이름 아래로 흐르는 밑줄 획이 사인 인상을 만든다.
+  const width = ctx.measureText(name).width
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = Math.max(2, size * 0.055)
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(-width * 0.56, size * 0.26)
+  ctx.quadraticCurveTo(0, size * 0.52, width * 0.6, size * 0.16)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/**
+ * 레이아웃별로 정한 자리에 인플루언서 싸인을 얹는다.
+ *
+ * <p>사진 레이아웃은 사진 위 오른쪽 아래에, 문구 전용 카드는 하단 정보 위에 그린다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param layout 실제로 그린 레이아웃이며 undefined면 문구 전용이다
+ * @param signatureFont 손글씨 글꼴 패밀리
+ */
+function drawSignatureForLayout(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  layout: FanCardLayout | undefined,
+  signatureFont: string,
+): void {
+  const name = artwork.influencerName
+
+  switch (layout) {
+    case 'INSTA':
+      // 사진 영역(40 + 90 + 76 ~ +860)의 오른쪽 아래 구석이다.
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 250, 1000, 56)
+      return
+    case 'POLAROID':
+      // 정사각 사진(90+45 ~ +810)의 오른쪽 아래 구석이다.
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 280, 880, 56)
+      return
+    case 'FOURCUT':
+      // 2×2 격자 아래 오른쪽이다. 가운데 문구와 겹치지 않게 구석에 둔다.
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 250, 1120, 52)
+      return
+    case 'FOURCUT_VERTICAL': {
+      const { width } = FOURCUT_VERTICAL_SIZE
+      const slotHeight = Math.round(((width - 48) * 9) / 16)
+      const stripBottom = 200 + FOUR_CUT_SLOTS * slotHeight + (FOUR_CUT_SLOTS - 1) * 10
+      // 마지막 칸 오른쪽 아래에 겹쳐 그린다.
+      drawSignature(ctx, name, signatureFont, width - 160, stripBottom - 28, 42)
+      return
+    }
+    case 'FOURCUT_HORIZONTAL': {
+      const { width } = FOURCUT_HORIZONTAL_SIZE
+      const slotWidth = (width - 48 - 12 * (FOUR_CUT_SLOTS - 1)) / FOUR_CUT_SLOTS
+      const stripBottom = 196 + Math.round((slotWidth * 16) / 9)
+      drawSignature(ctx, name, signatureFont, width - 170, stripBottom - 30, 42)
+      return
+    }
+    default:
+      // 문구 전용 카드 — 하단 정보 블록 위 오른쪽이다.
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 300, CARD_HEIGHT - 320, 60)
+  }
+}
+
+/**
  * 기념 카드를 캔버스에 그린다.
  *
  * 웹폰트가 아직 로드되지 않았으면 글자가 대체 글꼴로 그려져 저장된 이미지가 화면과 달라지므로
  * 폰트 준비를 기다린 뒤 그린다.
  *
  * <p>사진을 넘기지 않았거나 레이아웃을 고르지 않았으면 문구 전용 카드를 그린다. 셔터를
- * 누르지 않았거나 촬영에 실패한 팬도 카드를 받을 수 있어야 하기 때문이다.
+ * 누르지 않았거나 촬영에 실패한 팬도 카드를 받을 수 있어야 하기 때문이다. 반대로 문구도
+ * 선택 사항이라, 문구가 없으면 그 자리만 비우고 사진과 꾸미기로 카드를 완성한다.
  *
  * @param canvas 그릴 대상 캔버스
  * @param artwork 카드에 담을 정보
@@ -297,6 +432,15 @@ export async function drawFanCard(
     }
   }
 
+  // 인플루언서 싸인 — 도안 위, 꾸미기 요소 아래에 얹는다.
+  const signatureFont = await resolveSignatureFontFamily()
+  drawSignatureForLayout(
+    ctx,
+    artwork,
+    photos.length > 0 ? artwork.layout : undefined,
+    signatureFont,
+  )
+
   // 꾸미기 요소는 카드를 다 그린 뒤 맨 위에 얹는다.
   if (artwork.decorations?.length) {
     await drawDecorations(ctx, artwork.decorations, fontFamily)
@@ -326,21 +470,24 @@ function drawQuoteOnlyCard(
   ctx.font = `600 34px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), CARD_WIDTH / 2, 168)
 
-  // 문구 — 카드의 주인공이라 남은 공간을 최대한 쓴다.
-  const quote = fitQuote(ctx, artwork.text, fontFamily, contentWidth)
-  const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
-  const quoteBlockHeight = quote.lines.length * lineHeight
-  let quoteY = (CARD_HEIGHT - quoteBlockHeight) / 2 + quote.fontSize * 0.34
+  // 문구 — 카드의 주인공이라 남은 공간을 최대한 쓴다. 문구를 고르지 않았으면 비워 둔다.
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(ctx, quoteText, fontFamily, contentWidth)
+    const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
+    const quoteBlockHeight = quote.lines.length * lineHeight
+    let quoteY = (CARD_HEIGHT - quoteBlockHeight) / 2 + quote.fontSize * 0.34
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.26)'
-  ctx.font = `700 132px ${fontFamily}`
-  ctx.fillText('“', CARD_WIDTH / 2, quoteY - quote.fontSize * 0.9)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.26)'
+    ctx.font = `700 132px ${fontFamily}`
+    ctx.fillText('“', CARD_WIDTH / 2, quoteY - quote.fontSize * 0.9)
 
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  for (const line of quote.lines) {
-    ctx.fillText(line, CARD_WIDTH / 2, quoteY)
-    quoteY += lineHeight
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    for (const line of quote.lines) {
+      ctx.fillText(line, CARD_WIDTH / 2, quoteY)
+      quoteY += lineHeight
+    }
   }
 
   // 하단 정보
@@ -444,10 +591,12 @@ function roundedRectPath(
 }
 
 /**
- * 사진을 지정한 사각형에 비율을 유지한 채 가득 채워 그린다.
+ * 사진을 지정한 사각형에 **자르지 않고** 전부 담아 그린다.
  *
- * <p>가로세로 비가 맞지 않으면 넘치는 쪽을 중앙 기준으로 잘라 낸다. 늘려 맞추면 얼굴이
- * 찌그러지므로 크롭을 택한다.
+ * <p>통화 캡처는 가로 영상(상대 화면 + 셀프뷰)이라 칸 비율에 맞춰 잘라 내면 사람 얼굴이나
+ * 셀프뷰 창이 통째로 잘려 나간다. 그래서 원본 전체를 비율대로 담고(contain), 남는 띠는
+ * 같은 사진을 흐리게 확대한 채움으로 메워 빈 여백처럼 보이지 않게 한다.
+ * 칸과 사진 비율이 같으면 채움이 완전히 덮여 이전과 똑같이 보인다.
  *
  * @param ctx 그릴 대상 컨텍스트
  * @param photo 그릴 사진
@@ -475,9 +624,27 @@ function drawPhotoCover(
   }
   ctx.clip()
 
-  const scale = Math.max(width / photo.width, height / photo.height)
-  const drawWidth = photo.width * scale
-  const drawHeight = photo.height * scale
+  // 1) 배경 — 흐린 확대 채움. 블러가 가장자리에서 옅어지지 않게 살짝 키워 그린다.
+  const coverScale = Math.max(width / photo.width, height / photo.height) * 1.12
+  const coverWidth = photo.width * coverScale
+  const coverHeight = photo.height * coverScale
+  ctx.filter = 'blur(26px)'
+  ctx.drawImage(
+    photo,
+    x + (width - coverWidth) / 2,
+    y + (height - coverHeight) / 2,
+    coverWidth,
+    coverHeight,
+  )
+  ctx.filter = 'none'
+  // 흐린 배경을 한 단계 눌러 원본 사진이 또렷하게 도드라지게 한다.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'
+  ctx.fillRect(x, y, width, height)
+
+  // 2) 전경 — 원본 전체를 비율대로 담는다.
+  const containScale = Math.min(width / photo.width, height / photo.height)
+  const drawWidth = photo.width * containScale
+  const drawHeight = photo.height * containScale
   ctx.drawImage(
     photo,
     x + (width - drawWidth) / 2,
@@ -922,24 +1089,32 @@ function drawInstaCard(
     ctx, frameX + frameWidth - inset - actionIconSize, actionIconY, actionIconSize,
   )
 
-  // 캡션 — 계정명에 이어 문구를 쓰는 게시물 형식이다.
+  // 캡션 — 계정명에 이어 문구를 쓰는 게시물 형식이다. 문구를 고르지 않았으면 비워 둔다.
   const captionTop = actionTop + actionHeight
   const captionHeight = 118
   const captionWidth = frameWidth - inset * 2
-  const quote = fitQuote(
-    ctx, artwork.text, fontFamily, captionWidth, 78, [30, 27, 24, 22, 20],
-  )
+  const quoteText = cardQuoteText(artwork)
 
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, captionWidth, 78, [30, 27, 24, 22, 20],
+    )
+
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillStyle = ink
+    ctx.font = `500 ${quote.fontSize}px ${fontFamily}`
+    let captionY = captionTop + 34
+    const captionLineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
+    for (const line of quote.lines) {
+      ctx.fillText(line, frameX + inset, captionY)
+      captionY += captionLineHeight
+    }
+  }
+
+  // 문구를 건너뛰어도 뒤이어 그리는 글자가 같은 기준으로 놓이도록 정렬을 되돌린다.
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = ink
-  ctx.font = `500 ${quote.fontSize}px ${fontFamily}`
-  let captionY = captionTop + 34
-  const captionLineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
-  for (const line of quote.lines) {
-    ctx.fillText(line, frameX + inset, captionY)
-    captionY += captionLineHeight
-  }
 
   ctx.fillStyle = 'rgba(31, 20, 48, 0.45)'
   ctx.font = `500 21px ${fontFamily}`
@@ -1022,27 +1197,31 @@ function drawPolaroidCard(
     )
   }
 
-  // 아래 여백 — 문구를 손글씨처럼 기울여 사인 느낌을 준다.
+  // 아래 여백 — 문구를 손글씨처럼 기울여 사인 느낌을 준다. 문구를 고르지 않았으면 비워 둔다.
   const captionTop = frameY + photoInset + photoSize
   const captionWidth = photoSize
-  const quote = fitQuote(
-    ctx, artwork.text, fontFamily, captionWidth, 130, [46, 40, 35, 30, 26],
-  )
+  const quoteText = cardQuoteText(artwork)
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.save()
-  ctx.translate(CARD_WIDTH / 2, captionTop + 74)
-  ctx.rotate(-0.022)
-  ctx.fillStyle = '#2a1547'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  let quoteY = 0
-  const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
-  for (const line of quote.lines) {
-    ctx.fillText(line, 0, quoteY)
-    quoteY += lineHeight
+
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, captionWidth, 130, [46, 40, 35, 30, 26],
+    )
+    ctx.save()
+    ctx.translate(CARD_WIDTH / 2, captionTop + 74)
+    ctx.rotate(-0.022)
+    ctx.fillStyle = '#2a1547'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    let quoteY = 0
+    const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
+    for (const line of quote.lines) {
+      ctx.fillText(line, 0, quoteY)
+      quoteY += lineHeight
+    }
+    ctx.restore()
   }
-  ctx.restore()
 
   ctx.fillStyle = 'rgba(42, 21, 71, 0.9)'
   ctx.font = `700 34px ${fontFamily}`
@@ -1116,14 +1295,17 @@ function drawFourCutCard(
     }
   }
 
-  // 문구
+  // 문구 — 고르지 않았으면 사진 아래를 비워 팬이 꾸밀 자리로 남긴다.
   const gridBottom = gridY + slotSize * 2 + gap
-  const quote = fitQuote(
-    ctx, `“${artwork.text}”`, fontFamily, CARD_WIDTH - 200, 110, [40, 35, 31, 27, 24],
-  )
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  drawQuoteLines(ctx, quote.lines, quote.fontSize, gridBottom + 62)
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 110, [40, 35, 31, 27, 24],
+    )
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, gridBottom + 62)
+  }
 
   // 하단 정보
   ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
@@ -1203,12 +1385,16 @@ function drawFourCutVerticalCard(
   ctx.font = `600 24px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), centerX, 58)
 
-  const quote = fitQuote(
-    ctx, `“${artwork.text}”`, fontFamily, contentWidth, 96, [30, 27, 24, 21, 19],
-  )
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  drawQuoteLines(ctx, quote.lines, quote.fontSize, 104, centerX)
+  // 문구를 고르지 않았으면 스트립 위를 비운다. 칸 위치는 그대로라 사진 배치는 달라지지 않는다.
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [30, 27, 24, 21, 19],
+    )
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, 104, centerX)
+  }
 
   // 세로 스트립 — 칸이 카드 폭을 꽉 채워 좌우에 빈 공간이 없다.
   const gap = 10
@@ -1278,12 +1464,16 @@ function drawFourCutHorizontalCard(
   ctx.font = `600 24px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), centerX, 56)
 
-  const quote = fitQuote(
-    ctx, `“${artwork.text}”`, fontFamily, contentWidth, 96, [34, 30, 27, 24, 21],
-  )
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-  drawQuoteLines(ctx, quote.lines, quote.fontSize, 102, centerX)
+  // 문구를 고르지 않았으면 스트립 위를 비운다. 칸 위치는 그대로라 사진 배치는 달라지지 않는다.
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [34, 30, 27, 24, 21],
+    )
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, 102, centerX)
+  }
 
   // 가로 스트립 — 칸이 카드 폭을 꽉 채워 좌우에 빈 공간이 없다.
   const gap = 12

@@ -43,12 +43,28 @@ export type UseCallRecordingResult = {
   pendingRecordingPersisted: boolean
 }
 
+/**
+ * 녹화 컨테이너 후보이며 앞에 있는 것부터 실제 지원 여부를 확인해 고른다.
+ *
+ * <p>mp4를 앞세우는 이유는 팬이 내려받은 파일을 휴대폰 사진첩이나 기본 재생기에서 바로
+ * 열 수 있기 때문이다. mp4 녹화를 지원하지 않는 브라우저(Firefox 등)에서는 뒤에 둔
+ * webm으로 자연히 내려간다. 코덱까지 적은 후보를 먼저 두는 것은 브라우저마다 받아들이는
+ * 코덱 표기가 달라서이며, 백엔드 {@code RecordingMediaType}은 세미콜론 앞 기본 타입만
+ * 보므로 어느 표기로 정해져도 업로드 검증을 통과한다.
+ */
 const MIME_TYPE_CANDIDATES = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/mp4;codecs=avc1,mp4a.40.2',
+  'video/mp4',
   'video/webm;codecs=vp8,opus',
   'video/webm',
-  'video/mp4',
 ] as const
 
+/**
+ * 이 브라우저가 실제로 만들 수 있는 녹화 형식을 고른다.
+ *
+ * @returns MediaRecorder에 넘길 MIME 타입이며 후보가 모두 막히면 undefined
+ */
 function pickSupportedMimeType(): string | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined
 
@@ -364,7 +380,9 @@ export function useCallRecording({
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
         : new MediaRecorder(stream)
-      mimeTypeRef.current = mimeType ?? (recorder.mimeType || 'video/webm')
+      // 실제로 무엇을 만드는지는 recorder가 안다. 요청한 형식을 브라우저가 그대로 쓰지
+      // 않을 수 있는데, 잘못 적으면 업로드 확장자와 내용이 어긋나 다시보기가 깨진다.
+      mimeTypeRef.current = recorder.mimeType || mimeType || 'video/webm'
       chunksRef.current = []
       recorder.addEventListener('dataavailable', (event: BlobEvent) => {
         if (event.data.size > 0) chunksRef.current.push(event.data)

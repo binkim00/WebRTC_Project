@@ -36,7 +36,6 @@ type RoleContent = {
   withdrawDescription: string
 }
 
-
 /** 역할별 정적 문구·메뉴다. dc.html의 ROLES 객체와 값이 같다. */
 function roleContentOf(role: LoginRole): RoleContent {
   if (role === 'FAN') {
@@ -315,12 +314,15 @@ export function MyPage() {
                       {preferredLanguageLabel(profile.preferredLanguage)}
                     </dd>
                   </div>
-                  <div className="flex items-baseline gap-2.5">
-                    <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
-                      {t('myPage.t11')}
-                    </dt>
-                    <dd className="text-[15px] font-bold tabular-nums">{profile.userId}</dd>
-                  </div>
+                  {/* 회원번호는 운영·소속 확인에 쓰는 인플루언서·매니저에게만 보여 준다. 팬에게는 불필요한 값이라 숨긴다. */}
+                  {role !== 'FAN' ? (
+                    <div className="flex items-baseline gap-2.5">
+                      <dt className="text-[15px] font-semibold text-[var(--color-text-muted)]">
+                        {t('myPage.t11')}
+                      </dt>
+                      <dd className="text-[15px] font-bold tabular-nums">{profile.userId}</dd>
+                    </div>
+                  ) : null}
                 </dl>
               </div>
 

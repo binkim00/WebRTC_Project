@@ -297,7 +297,8 @@ function MeetingRow({
           <VideoCamera aria-hidden="true" size={21} weight="fill" />
         </span>
         <div className="min-w-0">
-          <Link className="truncate font-extrabold hover:text-[var(--color-primary-coral)]" to={detailTo}>
+          {/* 인라인 <a>에는 truncate가 듣지 않아 긴 제목이 옆 칸을 침범한다. 블록으로 바꿔 말줄임한다. */}
+          <Link className="block truncate font-extrabold hover:text-[var(--color-primary-coral)]" to={detailTo}>
             {meeting.title}
           </Link>
           <p className="mt-1 flex items-center gap-2 text-xs text-[var(--color-text-tertiary)]">
@@ -340,6 +341,15 @@ function MeetingRow({
             to={`${detailTo}/monitor`}
           >
             {t('managerMeetingListPage.t21')}
+          </Link>
+        ) : null}
+        {/* 결과 통계는 종료된 팬미팅에서만 의미가 있어 상세 화면 대신 여기서 진입한다. */}
+        {meeting.status === 'ENDED' ? (
+          <Link
+            className="inline-flex min-h-[38px] items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3.5 text-sm font-bold transition-colors hover:border-[var(--color-text-tertiary)]"
+            to={`${detailTo}/statistics`}
+          >
+            {t('managerMeetingListPage.statistics')}
           </Link>
         ) : null}
         {actions.canPublish ? (

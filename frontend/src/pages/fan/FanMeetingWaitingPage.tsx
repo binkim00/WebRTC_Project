@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertBanner, Button, Dialog, Textarea } from '../../components'
-import { useTranslation } from '../../i18n'
+import { localizeQueueChangeNotice, useTranslation } from '../../i18n'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
 import {
   fetchPublicFanMeetingDetail,
+  isClosedFanMeetingStatus,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import {
@@ -161,6 +162,14 @@ export function FanMeetingWaitingPage() {
     [fanMeetingId],
   )
 
+  /**
+   * 팬미팅이 끝났거나 취소되어 더 이상 호출을 기다릴 수 없는 상태다.
+   *
+   * 종료 처리가 Redis 대기열을 지우므로 대기열 조회만 보면 "아직 열지 않음"과 구분할 수 없다.
+   * 팬미팅 상세의 상태로 확정해 대기 화면 대신 기록 동선을 안내한다.
+   */
+  const meetingClosed = isClosedFanMeetingStatus(detail?.meeting.status)
+
   const loadMeetingInfo = useCallback(async (signal?: AbortSignal) => {
     if (!fanMeetingId) return
 
@@ -238,7 +247,8 @@ export function FanMeetingWaitingPage() {
 
   // 대기 순번은 실시간성이 중요하므로 3초마다 갱신한다.
   // usePolling은 직렬 폴링이라 느린 네트워크에서도 응답 순서가 뒤집히지 않는다.
-  usePolling(loadQueueState, { intervalMs: 3_000 })
+  // 끝난 팬미팅은 대기열이 이미 정리되어 더 볼 상태가 없으므로 폴링을 멈춘다.
+  usePolling(loadQueueState, { intervalMs: 3_000, enabled: !meetingClosed })
 
   // 운영 공지 — 게시된 공지만 내려오는 공개 API를 쓰고, 본문은 상세에서 보강한다.
   useEffect(() => {
@@ -360,6 +370,38 @@ export function FanMeetingWaitingPage() {
 
   if (!fanMeetingId) {
     return null
+  }
+
+  // 팬미팅이 끝난 뒤 남아 있는 탭이나 알림 링크로 이 화면에 들어올 수 있다.
+  // 호출을 기다리게 두지 않고 기록 동선만 남긴다.
+  if (meetingClosed) {
+    return (
+      <div className="mx-auto w-[min(100%-40px,1240px)] py-[72px]">
+        <p className="text-[15px] font-bold text-[var(--color-text-muted)]">
+          {detail?.meeting.title ?? t('wait.fallbackMeeting')}
+        </p>
+        <h1 className="mt-3.5 text-[clamp(30px,3.2vw,40px)] font-black leading-[1.16] tracking-[-0.045em]">
+          {t('wait.closed.title')}
+        </h1>
+        <p className="mt-[18px] max-w-[52ch] text-lg font-medium leading-[1.7] text-[var(--color-text-body)]">
+          {t('wait.closed.description')}
+        </p>
+        <div className="mt-9 flex flex-wrap gap-3">
+          <Link
+            className="mj-font-emphasis inline-flex min-h-[54px] items-center rounded-[10px] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] px-7 text-[17px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+            to={`/fan/fan-meetings/${fanMeetingId}/complete`}
+          >
+            {t('wait.closed.record')}
+          </Link>
+          <Link
+            className="mj-font-label inline-flex min-h-[54px] items-center rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-6 text-base hover:border-[var(--color-text-muted)]"
+            to="/fan/mypage/fan-meetings?status=completed&page=1"
+          >
+            {t('wait.closed.myMeetings')}
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   const influencerName = detail?.influencer.name ?? t('wait.fallbackInfluencer')
@@ -649,7 +691,7 @@ export function FanMeetingWaitingPage() {
           {/* backend가 순번 변경 대상별로 저장한 안내 문구를 대기 화면에도 표시한다. */}
           {queueSnapshot?.lastChangeReason ? (
             <AlertBanner className="mt-5" title={t('wait.positionChanged.title')} variant="info">
-              <p>{queueSnapshot.lastChangeReason}</p>
+              <p>{localizeQueueChangeNotice(queueSnapshot.lastChangeReason)}</p>
               {queueSnapshot.lastChangedAt ? (
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                   {t('wait.positionChanged.at', {

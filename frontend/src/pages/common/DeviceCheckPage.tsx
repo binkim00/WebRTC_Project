@@ -1,7 +1,9 @@
 import { PlayIcon } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
+import { isClosedFanMeetingStatus } from '../../api/fanMeetings'
 import { enterQueue, interpretQueueEnterError } from '../../api/queue'
 import { saveDeviceCheck } from '../../api/deviceChecks'
 import { fetchMeetingDetail } from '../../api/fanMeetingParticipants'
@@ -114,6 +116,9 @@ export function DeviceCheckPage() {
   const [isEnteringQueue, setIsEnteringQueue] = useState(false)
   const [queueError, setQueueError] = useState<string>()
   const [deviceCheckWarning, setDeviceCheckWarning] = useState<string>()
+  // 종료·취소 여부를 확인하기 전(undefined)에는 아직 판단하지 않는다.
+  // 조회에 실패해도 false로 확정해 점검 자체가 잠기지 않게 한다.
+  const [meetingClosed, setMeetingClosed] = useState<boolean>()
   const {
     audioLevel,
     cameras,
@@ -134,8 +139,9 @@ export function DeviceCheckPage() {
   useEffect(() => {
     // 장비 점검 화면에 진입하면 즉시 권한 요청을 시작해 별도 클릭 단계를 없앤다.
     // 브라우저가 자동 요청을 차단한 경우에는 아래 재시도 버튼으로 다시 요청할 수 있다.
-    if (status === 'idle') void start()
-  }, [start, status])
+    // 끝난 팬미팅에서는 어차피 입장할 수 없으므로 카메라·마이크를 켜지 않는다.
+    if (status === 'idle' && meetingClosed === false) void start()
+  }, [meetingClosed, start, status])
 
   useEffect(() => {
     // 브라우저의 온라인 상태가 바뀌면 입장 가능 여부도 즉시 다시 계산한다.
@@ -164,11 +170,22 @@ export function DeviceCheckPage() {
 
     const controller = new AbortController()
     const session = getAuthSession()
-    if (!session) return () => controller.abort()
+    // 로그인 정보가 없으면 상태를 확인할 수 없다. 아래 입장 버튼이 로그인을 안내하도록
+    // 종료 여부는 '아님'으로 확정해 점검 화면 자체는 그대로 연다.
+    if (!session) {
+      setMeetingClosed(false)
+      return () => controller.abort()
+    }
 
     void fetchMeetingDetail(fanMeetingId, session.accessToken, controller.signal)
-      .then((meeting) => setMeetingTitle(meeting.title))
-      .catch(() => undefined)
+      .then((meeting) => {
+        setMeetingTitle(meeting.title)
+        setMeetingClosed(isClosedFanMeetingStatus(meeting.status))
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return
+        setMeetingClosed(false)
+      })
 
     return () => controller.abort()
   }, [fanMeetingId])
@@ -184,6 +201,37 @@ export function DeviceCheckPage() {
 
   const meetingId = fanMeetingId
   const session = getAuthSession()
+
+  // 끝난 팬미팅은 서버가 장비 점검 저장과 대기실 입장을 모두 막는다.
+  // 점검 화면을 그대로 두면 팬이 끝까지 점검한 뒤에야 실패를 보게 되므로 여기서 갈라 준다.
+  if (meetingClosed) {
+    const isFan = session?.role === 'FAN'
+
+    return (
+      <div>
+        <p className="text-sm font-bold text-[var(--color-text-muted)]">
+          {meetingTitle ?? t('deviceCheckPage.t78')}
+        </p>
+        <h1 className="mt-3 text-[32px] font-black tracking-[-0.04em]">
+          {t('deviceCheckPage.t79')}
+        </h1>
+        <p className="mt-2.5 max-w-[52ch] text-[17px] font-medium leading-[1.6] text-[var(--color-text-body)]">
+          {isFan ? t('deviceCheckPage.t80') : t('deviceCheckPage.t81')}
+        </p>
+        <Link
+          className="mj-font-emphasis mt-7 inline-flex min-h-[54px] items-center rounded-[10px] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] px-7 text-[17px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+          to={
+            isFan
+              ? `/fan/fan-meetings/${encodeURIComponent(meetingId)}/complete`
+              : '/influencer/my-fan-meetings'
+          }
+        >
+          {isFan ? t('deviceCheckPage.t82') : t('deviceCheckPage.t83')}
+        </Link>
+      </div>
+    )
+  }
+
   const currentStatus = statusContent()[status]
   const isRequesting = status === 'requesting'
   const isReady = status === 'ready'
@@ -285,7 +333,7 @@ export function DeviceCheckPage() {
 
   /** 장비 점검 결과를 저장한 뒤 역할에 따라 준비실(인플루언서) 또는 대기실(팬)로 이동한다. */
   async function handleEnterQueue() {
-    if (isEnteringQueue) return
+    if (isEnteringQueue || meetingClosed) return
 
     if (!session) {
       setQueueError(t('deviceCheckPage.t35'))
@@ -337,7 +385,13 @@ export function DeviceCheckPage() {
         },
         session.accessToken,
       )
-    } catch {
+    } catch (error) {
+      // 점검하는 사이 팬미팅이 끝났다면 입장까지 시도하지 않고 종료 안내로 전환한다.
+      if (error instanceof ApiError && error.code === 'FAN_MEETING_CLOSED') {
+        setMeetingClosed(true)
+        setIsEnteringQueue(false)
+        return
+      }
       // 참가자 전용 저장 API가 인플루언서 요청을 거부할 수 있으므로 팬에게만 경고를 보여준다.
       if (!isInfluencerRole) {
         setDeviceCheckWarning(
@@ -362,6 +416,10 @@ export function DeviceCheckPage() {
       const { alreadyEntered, message } = interpretQueueEnterError(error)
       if (alreadyEntered) {
         navigate(`/fan/fan-meetings/${encodeURIComponent(meetingId)}/waiting`)
+        return
+      }
+      if (error instanceof ApiError && error.code === 'FAN_MEETING_CLOSED') {
+        setMeetingClosed(true)
         return
       }
 
@@ -594,13 +652,18 @@ export function DeviceCheckPage() {
           ) : null}
 
           <div className="mt-6 border-t border-[var(--color-divider)] pt-5">
+            {meetingClosed ? (
+              <AlertBanner className="mb-4" title={t('deviceCheckPage.ended.title')} variant="warning">
+                {t('deviceCheckPage.ended.message')}
+              </AlertBanner>
+            ) : null}
             <button
               className={`mj-font-emphasis min-h-14 w-full rounded-[10px] border text-[17px] transition-colors ${
-                !allReady || isEnteringQueue
+                !allReady || isEnteringQueue || meetingClosed
                   ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
                   : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:bg-[var(--color-primary-coral-hover)]'
               }`}
-              disabled={!allReady || isEnteringQueue}
+              disabled={!allReady || isEnteringQueue || meetingClosed}
               onClick={() => void handleEnterQueue()}
               type="button"
             >
@@ -610,9 +673,11 @@ export function DeviceCheckPage() {
               aria-live="polite"
               className="mt-[11px] text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]"
             >
-              {allReady
-                ? t('deviceCheckPage.t63')
-                : t('deviceCheckPage.t77', { p0: missingItems.join(', ') })}
+              {meetingClosed
+                ? t('deviceCheckPage.ended.message')
+                : allReady
+                  ? t('deviceCheckPage.t63')
+                  : t('deviceCheckPage.t77', { p0: missingItems.join(', ') })}
             </p>
             {!isReady ? (
               <Button

@@ -8,7 +8,7 @@ import {
 import { getAuthSession } from '../../api/authSession'
 import {
   fetchPublicFanMeetingDetail,
-  type FanMeetingDetailStatus,
+  isClosedFanMeetingStatus,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
 import { isWaitingRoomOpen, serverLocalDateTimeMs } from '../../api/meetingManagement'
@@ -54,10 +54,6 @@ function formatDate(value: string | null | undefined): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
-}
-
-function isCompletedStatus(status: FanMeetingDetailStatus | undefined): boolean {
-  return status === 'ENDED' || status === 'CANCELED'
 }
 
 function isToday(value: string): boolean {
@@ -203,7 +199,7 @@ export function FanMeetingListPage() {
                 detailNotFound: false,
                 // 상세 조회 실패 시에도 서버에 녹화가 있으면 완료 내역으로 안전하게 분류한다.
                 listStatus:
-                  isCompletedStatus(detail?.meeting.status) || recording
+                  isClosedFanMeetingStatus(detail?.meeting.status) || recording
                     ? 'completed'
                     : 'upcoming',
               }
@@ -520,8 +516,12 @@ export function FanMeetingListPage() {
               // LIVE 상태만으로 입장을 허용하지 않는다. 대기열 오픈 시각이 지나고
               // 서버가 참가자 입장을 허용한 경우에만 대기실로 이동한다.
               const queueIsOpen = isWaitingRoomOpen(item.detail?.meeting.operation.queueOpenAt)
+              // 종료·취소된 팬미팅은 목록 갱신이 늦어 예정 탭에 남아 있어도 입장을 막는다.
+              // 종료를 먼저 확인해야 READY 예외 경로로 입장 버튼이 살아나지 않는다.
+              const meetingClosed = isClosedFanMeetingStatus(item.detail?.meeting.status)
               const canEnter = Boolean(
-                queueIsOpen &&
+                !meetingClosed &&
+                  queueIsOpen &&
                   (item.detail?.viewer.canEnter || item.detail?.meeting.status === 'READY'),
               )
 
@@ -584,9 +584,20 @@ export function FanMeetingListPage() {
                     <span
                       className={`text-sm ${canEnter ? 'font-bold text-[var(--color-success)]' : 'font-semibold text-[var(--color-text-muted)]'}`}
                     >
-                      {canEnter ? t('fanMeetingListPage.t49') : t('fanMeetingListPage.t50')}
+                      {meetingClosed
+                        ? t('fanMeetingListPage.t57')
+                        : canEnter
+                          ? t('fanMeetingListPage.t49')
+                          : t('fanMeetingListPage.t50')}
                     </span>
-                    {canEnter ? (
+                    {meetingClosed ? (
+                      <Link
+                        className="mj-font-emphasis inline-flex min-h-[52px] items-center whitespace-nowrap rounded-[10px] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-6 text-base hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+                        to={`/fan/fan-meetings/${item.application.meetingId}/complete`}
+                      >
+                        기록 보기
+                      </Link>
+                    ) : canEnter ? (
                       <Button
                         className="mj-font-emphasis min-h-[52px] whitespace-nowrap rounded-[10px] px-6 text-base"
                         disabled={enteringMeetingId !== undefined}

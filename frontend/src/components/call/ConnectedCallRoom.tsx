@@ -17,6 +17,7 @@ import {
   endCallSessionByFan,
   forceEndCallSession,
   getCallSessionStatus,
+  isCallSessionEnded,
   type CallSessionStatusResponse,
 } from '../../api/callSessions'
 import { getAuthSession } from '../../api/auth'
@@ -42,6 +43,7 @@ import {
   SUBTITLE_DATA_TOPIC,
   appendSubtitleLine,
   parseSubtitlePayload,
+  shouldStartWithCaption,
   type SubtitleLine,
 } from './subtitleChannel'
 import type { MediaAction, VideoCallRoomProps } from './types'
@@ -176,7 +178,19 @@ export function ConnectedCallRoom({
   const microphoneTracks = useTracks([Track.Source.Microphone])
   const { isCameraEnabled, isMicrophoneEnabled, localParticipant } = useLocalParticipant()
   const [endDialogOpen, setEndDialogOpen] = useState(false)
-  const [captionEnabled, setCaptionEnabled] = useState(true)
+  /**
+   * 이번 통화에서 자막을 켠 상태로 시작할지다. 양쪽 언어가 같으면 꺼진 상태로 시작한다.
+   *
+   * 언어는 통화 상태 응답에서 읽는다. LiveKit 토큰 attributes에는 자기 쪽 언어만 담겨 있어
+   * 상대 언어를 알 수 없고, 상대 참가자 attributes를 기다리면 상대가 입장할 때까지 판단을
+   * 미뤄야 해서 자막이 잠깐 보이다 사라진다. 상태 응답은 통화 화면을 그리기 전에 이미
+   * 받아 두므로(VideoCallRoom) 첫 렌더부터 올바른 값으로 시작할 수 있다.
+   */
+  const captionDefaultEnabled = shouldStartWithCaption(
+    sessionStatus.fanLanguage,
+    sessionStatus.influencerLanguage,
+  )
+  const [captionEnabled, setCaptionEnabled] = useState(captionDefaultEnabled)
   const [mediaAction, setMediaAction] = useState<MediaAction>()
   const [mediaError, setMediaError] = useState<string>()
   const [departurePending, setDeparturePending] = useState(false)
@@ -324,6 +338,21 @@ export function ConnectedCallRoom({
     [],
   )
 
+  /**
+   * 팬이 대기실에서 적어 둔 "하고 싶은 말" 메모다.
+   *
+   * 대기실이 sessionStorage(`melly-fan-note:{meetingId}`)에 저장하고 "통화 화면에 함께
+   * 표시됩니다"라고 안내하므로, 통화 중에 실제로 보여 줘야 한다. 같은 탭에서 대기실 → 통화로
+   * 이동하므로 sessionStorage가 그대로 이어진다. 통화 중에는 바뀌지 않는 값이라 한 번만 읽는다.
+   */
+  const [fanMemo] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(`melly-fan-note:${meetingId}`)?.trim() ?? ''
+    } catch {
+      return ''
+    }
+  })
+
   // 기념 사진은 팬만 남긴다. 녹화 설정과 무관하게 쓸 수 있어야 하므로 recordingEnabled를 보지 않는다.
   const {
     capture,
@@ -335,6 +364,10 @@ export function ConnectedCallRoom({
   } = useCallPhotoCapture({
     callSessionId,
     remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
+    // 내 카메라가 켜져 있으면 상대와 나란히 함께 찍힌다. 꺼져 있으면 상대만 찍힌다.
+    localVideoTrack: isCameraEnabled
+      ? localCameraTrack?.publication?.track?.mediaStreamTrack
+      : undefined,
   })
   const photoCaptureVisible = authSession?.role === 'FAN' && isConnected
 
@@ -383,6 +416,23 @@ export function ConnectedCallRoom({
       // 힌트 전달 실패는 통화 종료 흐름을 막지 않는다.
     }
   }, [callSessionId, localParticipant])
+
+  // 자막 초기값을 이미 적용한 통화 세션이다. 세션당 한 번만 적용해 사용자의 토글을 덮지 않는다.
+  const captionDefaultAppliedForRef = useRef<number>(undefined)
+
+  useEffect(() => {
+    // 호스트는 팬미팅 내내 같은 화면에 머물러 팬만 교체되므로, 새 통화의 언어 조합으로
+    // 자막 초기값을 다시 잡아야 한다. 기준은 **상태 응답이 말하는 세션**이다.
+    // 활성 세션 ID를 기준으로 삼으면, 상태 폴링이 아직 이전 세션을 가리키는 순간에
+    // 이전 통화의 언어로 잘못 판단할 수 있다.
+    //
+    // 같은 세션에서는 다시 실행되지 않으므로 사용자가 켠 자막은 통화가 끝날 때까지 유지된다.
+    const statusSessionId = sessionStatus.callSessionId
+    if (captionDefaultAppliedForRef.current === statusSessionId) return
+
+    captionDefaultAppliedForRef.current = statusSessionId
+    setCaptionEnabled(captionDefaultEnabled)
+  }, [captionDefaultEnabled, sessionStatus.callSessionId])
 
   useEffect(() => {
     // 팬이 교체되면 이전 팬의 대사를 비운다.
@@ -473,7 +523,7 @@ export function ConnectedCallRoom({
           // 다른 경로에서 이미 종료된 경우에는 성공으로 간주하고, 그 외 실패는 화면에 남아 재시도하게 한다.
           const latestStatus = await getCallSessionStatus(callSessionId, { authToken })
             .catch(() => undefined)
-          if (latestStatus?.status !== 'ENDED') {
+          if (!latestStatus || !isCallSessionEnded(latestStatus)) {
             setMediaError(
               error instanceof Error
                 ? error.message
@@ -566,8 +616,12 @@ export function ConnectedCallRoom({
     })
   }
 
+  // 서버가 세션을 마감했는지다. status 문자열이 'ENDED'가 아니어도 endedAt이 있으면 끝난 것으로
+  // 본다. 문자열 하나에만 묶어 두면 서버가 다른 상태 값으로 마감했을 때 팬이 방에서 못 나간다.
+  const sessionEnded = isCallSessionEnded(sessionStatus)
+
   useEffect(() => {
-    if (sessionStatus.status !== 'ENDED') {
+    if (!sessionEnded) {
       return
     }
 
@@ -605,7 +659,7 @@ export function ConnectedCallRoom({
     hostStaysConnected,
     navigate,
     room,
-    sessionStatus.status,
+    sessionEnded,
     stopAndUpload,
   ])
 
@@ -643,7 +697,7 @@ export function ConnectedCallRoom({
   }
   const timeRatioBase = timeRatioBaseRef.current
 
-  const waitingForNextFan = Boolean(hostStaysConnected) && sessionStatus.status === 'ENDED'
+  const waitingForNextFan = Boolean(hostStaysConnected) && sessionEnded
   /** 방금 끝난 통화의 길이다. 서버가 시각을 주지 않았으면 표시하지 않는다. */
   const finishedDurationLabel = formatCallDuration(sessionStatus.startedAt, sessionStatus.endedAt)
 
@@ -789,6 +843,16 @@ export function ConnectedCallRoom({
         timeUrgent={remaining.counting && remaining.label <= '00:05'}
         timeValue={remaining.label}
       />
+
+      {/* 대기실에서 적어 둔 메모 — 통화 중 하고 싶은 말을 잊지 않게 화면에 함께 둔다. */}
+      {authSession?.role === 'FAN' && fanMemo ? (
+        <div className="rounded-[10px] bg-white/[0.08] px-[18px] py-3.5">
+          <p className="text-[13px] font-bold text-white/60">{t('connectedCallRoom.memo.title')}</p>
+          <p className="mt-1 whitespace-pre-line text-[15px] font-medium leading-[1.6] text-white/90">
+            “{fanMemo}”
+          </p>
+        </div>
+      ) : null}
 
       {footNote ? (
         <p className="text-[15px] font-medium leading-[1.6] text-white/65">{footNote}</p>
