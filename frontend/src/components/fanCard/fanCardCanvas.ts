@@ -86,6 +86,8 @@ export type FanCardTheme = {
   slot: string
   /** 문구 따옴표처럼 눈에 띄어야 하는 자리의 색 */
   accent: string
+  /** 배경 위에 얹는 장식이며 NONE 이면 얹지 않는다 */
+  ornament: CardOrnament
 }
 
 /** 도안별 색 묶음이다. NIGHT 는 지금까지 쓰던 색이라 기본값으로 둔다. */
@@ -95,48 +97,56 @@ export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
     ink: [255, 255, 255],
     slot: 'rgba(255, 255, 255, 0.18)',
     accent: 'rgba(255, 255, 255, 0.26)',
+    ornament: 'STARS',
   },
   LAVENDER: {
     background: ['#efe6ff', '#e3d6fb', '#d8c9f5'],
     ink: [58, 38, 92],
     slot: 'rgba(88, 60, 140, 0.22)',
     accent: 'rgba(120, 86, 180, 0.3)',
+    ornament: 'PETALS',
   },
   SKY: {
     background: ['#e4f2ff', '#cfe7fb', '#bcdcf6'],
     ink: [24, 58, 92],
     slot: 'rgba(30, 80, 130, 0.22)',
     accent: 'rgba(50, 110, 170, 0.3)',
+    ornament: 'CLOUDS',
   },
   CREAM: {
     background: ['#fdf6e6', '#f7ead0', '#f0dcbb'],
     ink: [82, 58, 30],
     slot: 'rgba(120, 88, 48, 0.22)',
     accent: 'rgba(150, 110, 60, 0.3)',
+    ornament: 'SPARKS',
   },
   PEACH: {
     background: ['#ffeeee', '#ffdede', '#ffcdd2'],
     ink: [122, 40, 58],
     slot: 'rgba(170, 70, 90, 0.22)',
     accent: 'rgba(200, 90, 110, 0.3)',
+    ornament: 'PETALS',
   },
   MINT: {
     background: ['#e6f8f1', '#d3f0e5', '#c0e8d9'],
     ink: [22, 78, 62],
     slot: 'rgba(30, 110, 90, 0.22)',
     accent: 'rgba(50, 140, 115, 0.3)',
+    ornament: 'BUBBLES',
   },
   SUNSET: {
     background: ['#ff9a6b', '#f2678f', '#a94bb4'],
     ink: [255, 255, 255],
     slot: 'rgba(255, 255, 255, 0.22)',
     accent: 'rgba(255, 255, 255, 0.3)',
+    ornament: 'CONFETTI',
   },
   MONO: {
     background: ['#1a1a1c', '#2a2a2e', '#3a3a40'],
     ink: [246, 246, 248],
     slot: 'rgba(255, 255, 255, 0.16)',
     accent: 'rgba(255, 255, 255, 0.24)',
+    ornament: 'SPARKS',
   },
 }
 
@@ -163,6 +173,201 @@ function themeInk(theme: FanCardTheme, alpha: number): string {
  */
 function themeOf(key: FanCardThemeKey | undefined): FanCardTheme {
   return FAN_CARD_THEMES[key ?? DEFAULT_FAN_CARD_THEME] ?? FAN_CARD_THEMES.NIGHT
+}
+
+
+/**
+ * 도안이 배경 위에 얹는 장식 종류다.
+ *
+ * <p>배경색만 바꾸면 색만 다른 같은 카드로 보인다. 도안마다 성격이 다른 장식을 얹어 프레임처럼
+ * 보이게 한다. 그림 파일이 아니라 도형으로 그리는 이유는 카드 크기가 레이아웃마다 달라 자산을
+ * 배치하면 비율이 어긋나기 때문이다.
+ */
+type CardOrnament = 'STARS' | 'PETALS' | 'CLOUDS' | 'CONFETTI' | 'BUBBLES' | 'SPARKS' | 'NONE'
+
+/**
+ * 정해진 순서로 같은 값을 돌려주는 난수다.
+ *
+ * <p>장식 위치에 Math.random 을 쓰면 다시 그릴 때마다 자리가 바뀌어, 미리보기와 내려받은 카드가
+ * 달라진다. 카드 크기를 씨앗으로 삼아 같은 카드에서는 언제나 같은 자리에 놓이게 한다.
+ *
+ * @param seed 씨앗값
+ * @returns 0 이상 1 미만 값을 차례로 내주는 함수
+ */
+function seededRandom(seed: number): () => number {
+  let value = seed % 2147483647
+  if (value <= 0) value += 2147483646
+  return () => {
+    value = (value * 16807) % 2147483647
+    return (value - 1) / 2147483646
+  }
+}
+
+/** 별 하나를 그린다. 뾰족한 네 갈래로 그려 반짝임처럼 보이게 한다. */
+function drawStarShape(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+): void {
+  ctx.beginPath()
+  for (let index = 0; index < 8; index += 1) {
+    const angle = (Math.PI / 4) * index
+    const length = index % 2 === 0 ? radius : radius * 0.34
+    const px = x + Math.cos(angle) * length
+    const py = y + Math.sin(angle) * length
+    if (index === 0) ctx.moveTo(px, py)
+    else ctx.lineTo(px, py)
+  }
+  ctx.closePath()
+  ctx.fill()
+}
+
+/** 꽃잎 하나를 그린다. 두 곡선을 마주 붙여 잎 모양을 만든다. */
+function drawPetalShape(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  rotation: number,
+): void {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(rotation)
+  ctx.beginPath()
+  ctx.moveTo(0, -size)
+  ctx.quadraticCurveTo(size * 0.72, 0, 0, size)
+  ctx.quadraticCurveTo(-size * 0.72, 0, 0, -size)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+/** 구름 하나를 그린다. 크기가 다른 원 세 개를 겹쳐 뭉치게 만든다. */
+function drawCloudShape(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  ctx.beginPath()
+  ctx.arc(x - size * 0.55, y, size * 0.52, 0, Math.PI * 2)
+  ctx.arc(x + size * 0.2, y - size * 0.22, size * 0.62, 0, Math.PI * 2)
+  ctx.arc(x + size * 0.78, y + size * 0.05, size * 0.44, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/**
+ * 도안 장식을 배경 위에 얹는다.
+ *
+ * <p>사진과 글자보다 아래에 깔리도록 배경을 그린 직후에 호출한다. 사진 칸 자리는 어차피 사진이
+ * 덮으므로 피하지 않고, 대신 진하기를 낮춰 글자를 방해하지 않게 한다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param theme 적용할 도안
+ * @param width 카드 너비
+ * @param height 카드 높이
+ */
+function drawThemeOrnaments(
+  ctx: CanvasRenderingContext2D,
+  theme: FanCardTheme,
+  width: number,
+  height: number,
+): void {
+  if (theme.ornament === 'NONE') return
+
+  const random = seededRandom(Math.round(width * 31 + height * 17))
+  ctx.save()
+
+  switch (theme.ornament) {
+    case 'STARS': {
+      // 밤하늘 — 작은 별을 위쪽에 촘촘히, 아래로 갈수록 드물게 흩뿌린다.
+      for (let index = 0; index < 46; index += 1) {
+        const x = random() * width
+        const y = random() * height
+        const bias = 1 - y / height
+        if (random() > 0.35 + bias * 0.5) continue
+        ctx.fillStyle = themeInk(theme, 0.1 + random() * 0.28)
+        drawStarShape(ctx, x, y, 4 + random() * 9)
+      }
+      break
+    }
+    case 'PETALS': {
+      // 라벤더·복숭아 — 꽃잎이 흩날리는 결을 만든다. 방향을 조금씩 틀어 겹쳐 놓는다.
+      for (let index = 0; index < 26; index += 1) {
+        const x = random() * width
+        const y = random() * height
+        ctx.fillStyle = theme.accent
+        ctx.globalAlpha = 0.34 + random() * 0.3
+        drawPetalShape(ctx, x, y, 12 + random() * 20, random() * Math.PI)
+      }
+      break
+    }
+    case 'CLOUDS': {
+      // 하늘 — 큰 구름을 위아래 구석에 두고 가운데는 비워 사진이 답답하지 않게 한다.
+      const spots = [
+        { x: width * 0.16, y: height * 0.08, size: 62 },
+        { x: width * 0.88, y: height * 0.14, size: 46 },
+        { x: width * 0.12, y: height * 0.93, size: 52 },
+        { x: width * 0.84, y: height * 0.88, size: 68 },
+      ]
+      for (const spot of spots) {
+        ctx.fillStyle = themeInk(theme, 0.12)
+        drawCloudShape(ctx, spot.x, spot.y, spot.size)
+      }
+      break
+    }
+    case 'CONFETTI': {
+      // 노을 — 색종이 조각이 떨어지는 결. 네모를 비스듬히 눕혀 흩뿌린다.
+      for (let index = 0; index < 40; index += 1) {
+        const x = random() * width
+        const y = random() * height
+        const size = 8 + random() * 16
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.rotate(random() * Math.PI)
+        ctx.fillStyle = themeInk(theme, 0.16 + random() * 0.22)
+        ctx.fillRect(-size / 2, -size / 4, size, size / 2)
+        ctx.restore()
+      }
+      break
+    }
+    case 'BUBBLES': {
+      // 민트 — 크기가 다른 동그라미를 테두리 없이 얹어 청량한 결을 만든다.
+      for (let index = 0; index < 30; index += 1) {
+        const x = random() * width
+        const y = random() * height
+        const radius = 10 + random() * 34
+        ctx.beginPath()
+        ctx.arc(x, y, radius, 0, Math.PI * 2)
+        ctx.strokeStyle = themeInk(theme, 0.12 + random() * 0.14)
+        ctx.lineWidth = 2 + random() * 3
+        ctx.stroke()
+      }
+      break
+    }
+    case 'SPARKS': {
+      // 크림·흑백 — 가느다란 십자 반짝임을 드물게 둔다. 종이 결 같은 담백한 장식이다.
+      for (let index = 0; index < 22; index += 1) {
+        const x = random() * width
+        const y = random() * height
+        const length = 8 + random() * 18
+        ctx.strokeStyle = themeInk(theme, 0.14 + random() * 0.16)
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(x - length, y)
+        ctx.lineTo(x + length, y)
+        ctx.moveTo(x, y - length)
+        ctx.lineTo(x, y + length)
+        ctx.stroke()
+      }
+      break
+    }
+    default:
+      break
+  }
+
+  ctx.restore()
 }
 
 /**
@@ -798,6 +1003,8 @@ function drawBackground(ctx: CanvasRenderingContext2D, theme: FanCardTheme): voi
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT)
 
+  drawThemeOrnaments(ctx, theme, CARD_WIDTH, CARD_HEIGHT)
+
   // 카드 테두리
   ctx.strokeStyle = themeInk(theme, 0.28)
   ctx.lineWidth = 3
@@ -1270,13 +1477,15 @@ function drawInstaCard(
 ): PhotoSlotRect[] {
   const theme = themeOf(artwork.themeKey)
   const slots: PhotoSlotRect[] = []
-  // 파스텔 배경
+  // 바탕 — 도안 색을 따라간다. 위에 올리는 흰 게시물 카드와 그 안 글자는 도안과 무관하게
+  // 흰 종이 위 검은 글씨라 그대로 둔다.
   const background = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT)
-  background.addColorStop(0, '#ffe3f1')
-  background.addColorStop(0.5, '#efe0ff')
-  background.addColorStop(1, '#dde7ff')
+  background.addColorStop(0, theme.background[0])
+  background.addColorStop(0.5, theme.background[1])
+  background.addColorStop(1, theme.background[2])
   ctx.fillStyle = background
   ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT)
+  drawThemeOrnaments(ctx, theme, CARD_WIDTH, CARD_HEIGHT)
 
   const frameX = 40
   const frameY = 40
@@ -1451,13 +1660,14 @@ function drawPolaroidCard(
 ): PhotoSlotRect[] {
   const theme = themeOf(artwork.themeKey)
   const slots: PhotoSlotRect[] = []
-  // 어두운 배경이라야 흰 폴라로이드가 떠 보인다.
+  // 바탕 — 도안 색을 따라간다. 흰 폴라로이드 종이는 도안과 무관하게 그대로 둔다.
   const background = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT)
-  background.addColorStop(0, '#2a1547')
-  background.addColorStop(0.6, '#3b1d63')
-  background.addColorStop(1, '#57265f')
+  background.addColorStop(0, theme.background[0])
+  background.addColorStop(0.6, theme.background[1])
+  background.addColorStop(1, theme.background[2])
   ctx.fillStyle = background
   ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT)
+  drawThemeOrnaments(ctx, theme, CARD_WIDTH, CARD_HEIGHT)
 
   const frameX = 90
   const frameY = 80
@@ -1653,6 +1863,8 @@ function drawFourCutBackground(
   background.addColorStop(1, theme.background[2])
   ctx.fillStyle = background
   ctx.fillRect(0, 0, width, height)
+
+  drawThemeOrnaments(ctx, theme, width, height)
 
   ctx.strokeStyle = themeInk(theme, 0.22)
   ctx.lineWidth = 3
