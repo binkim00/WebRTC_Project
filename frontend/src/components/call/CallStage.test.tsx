@@ -72,27 +72,19 @@ describe('CallStage 리액션·남은 시간 게이지', () => {
   })
 
   /*
-   * 팬 화면은 인플루언서와 달리 캐릭터 참여 블록이 함께 붙는다. 그 블록이 좌측 조작 열을 밀어내
+   * 팬 화면은 인플루언서와 달리 사진 셔터가 함께 붙는다. 그 버튼이 좌측 조작 열을 밀어내
    * 리액션이 사라지는 일이 없어야 하므로, 팬과 같은 조합으로도 함께 그려지는지 확인한다.
    */
-  it('팬 화면 조합(캐릭터 + 사진 셔터)에서도 리액션과 게이지를 함께 그린다', () => {
+  it('팬 화면 조합(사진 셔터)에서도 리액션과 게이지를 함께 그린다', () => {
     renderStage({
       reactionEmojis: REACTION_EMOJIS,
       onReactionSend: vi.fn(),
       timeRatio: 0.25,
       onCapture: vi.fn(),
       captureLabel: '사진 0/20',
-      character: {
-        enabled: false,
-        presets: [{ id: 'coral', hair: '#e8615c', skin: '#ffd9c9' }],
-        selectedPresetId: 'coral',
-        onSelect: vi.fn(),
-        onToggle: vi.fn(),
-      },
     })
 
     expect(screen.getByRole('group', { name: '리액션 보내기' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '캐릭터로 참여' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '기념 사진 찍기' })).toBeTruthy()
   })
 })

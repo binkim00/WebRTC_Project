@@ -67,15 +67,6 @@ const ko = {
   // 무엇이 왜 막혔는지와 대신 할 수 있는 일을 함께 알려 준다.
   'fanApplicationsPage.resultReady': '결과 도착',
 
-  'characterSetup.title': '캐릭터로 참여',
-  'characterSetup.on': '사용 중',
-  'characterSetup.off': '사용 안 함',
-  'characterSetup.description':
-    '얼굴을 보이지 않고 캐릭터로 참여할 수 있어요. 말하면 입이 움직이고, 통화 중에도 언제든 끌 수 있습니다.',
-  'characterSetup.preview': '캐릭터 미리보기',
-  'characterSetup.pick': '캐릭터 고르기',
-  'characterSetup.unsupported': '이 브라우저에서는 캐릭터로 참여할 수 없습니다.',
-
   'app.title.fanCard': '기념 카드 | MELLY',
   'fanCard.entry.title': '기념 카드 만들기',
   'fanCard.entry.description':
@@ -88,13 +79,6 @@ const ko = {
 
   'callStage.reactionGroup': '리액션 보내기',
   'callStage.reactionSend': '{p0} 리액션 보내기',
-  'callStage.characterOn': '캐릭터로 참여 중',
-  'callStage.characterOff': '캐릭터로 참여',
-  'callStage.characterPick': '캐릭터 고르기',
-  'connectedCallRoom.characterUnsupported':
-    '이 브라우저에서는 캐릭터로 참여할 수 없습니다.',
-  'connectedCallRoom.characterFailed':
-    '캐릭터를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.',
   'influencerCallSidePanel.answersTitle': '응모 답변',
   'influencerCallSidePanel.answersEmpty': '작성된 응모 답변이 없습니다.',
   'influencerCallSidePanel.answersCollapse': '답변 접기',
@@ -3143,15 +3127,6 @@ const en: Partial<Record<TranslationKey, string>> = {
 
   'fanApplicationsPage.resultReady': 'Result ready',
 
-  'characterSetup.title': 'Join as a character',
-  'characterSetup.on': 'On',
-  'characterSetup.off': 'Off',
-  'characterSetup.description':
-    'Join with a character instead of your face. Its mouth moves when you speak, and you can turn it off during the call at any time.',
-  'characterSetup.preview': 'Character preview',
-  'characterSetup.pick': 'Choose a character',
-  'characterSetup.unsupported': 'This browser cannot join as a character.',
-
   'app.title.fanCard': 'Keepsake card | MELLY',
   'fanCard.entry.title': 'Make a keepsake card',
   'fanCard.entry.description':
@@ -3164,13 +3139,6 @@ const en: Partial<Record<TranslationKey, string>> = {
 
   'callStage.reactionGroup': 'Send a reaction',
   'callStage.reactionSend': 'Send {p0} reaction',
-  'callStage.characterOn': 'Joined as a character',
-  'callStage.characterOff': 'Join as a character',
-  'callStage.characterPick': 'Choose a character',
-  'connectedCallRoom.characterUnsupported':
-    'This browser cannot join as a character.',
-  'connectedCallRoom.characterFailed':
-    'Could not start the character. Please try again in a moment.',
   'influencerCallSidePanel.answersTitle': 'Application answers',
   'influencerCallSidePanel.answersEmpty': 'No application answers were written.',
   'influencerCallSidePanel.answersCollapse': 'Collapse answers',

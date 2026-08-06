@@ -9,7 +9,7 @@ import {
   useTracks,
 } from '@livekit/components-react'
 import { UserCircleIcon } from '@phosphor-icons/react'
-import { ConnectionState, LocalVideoTrack, ParticipantKind, Track } from 'livekit-client'
+import { ConnectionState, ParticipantKind, Track } from 'livekit-client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useNavigate } from 'react-router-dom'
@@ -30,16 +30,6 @@ import {
   encodeCallEndedSignal,
   parseCallEndedSignal,
 } from './callControlChannel'
-import {
-  readCharacterPreference,
-  writeCharacterPreference,
-} from './characterPreference'
-import {
-  CHARACTER_PRESETS,
-  startCharacterRenderer,
-  type CharacterPresetId,
-  type CharacterRenderer,
-} from './characterVideoTrack'
 import { EndCallDialog } from './EndCallDialog'
 import {
   REACTION_DATA_TOPIC,
@@ -334,17 +324,6 @@ export function ConnectedCallRoom({
     [],
   )
 
-  /**
-   * 팬이 얼굴 대신 캐릭터로 참여하는 모드다.
-   *
-   * 얼굴 공개가 부담스러운 팬을 위한 것이며, 지금까지는 "카메라 끄기"밖에 없어 검은 화면으로
-   * 참여해야 했다. 캐릭터는 canvas로 그려 **카메라 자리에 발행**하므로 상대 화면과 녹화에도
-   * 그대로 담긴다. (받는 쪽에 덧그리면 녹화는 원본 트랙을 담아 캐릭터가 남지 않는다.)
-   *
-   * 인플루언서에게는 열지 않는다. 팬미팅의 가치가 인플루언서 얼굴을 직접 보는 데 있기 때문이다.
-   */
-  const characterAvailable = authSession?.role === 'FAN'
-
   // 기념 사진은 팬만 남긴다. 녹화 설정과 무관하게 쓸 수 있어야 하므로 recordingEnabled를 보지 않는다.
   const {
     capture,
@@ -358,138 +337,6 @@ export function ConnectedCallRoom({
     remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
   })
   const photoCaptureVisible = authSession?.role === 'FAN' && isConnected
-  // 장비 점검 화면에서 미리 고른 설정으로 시작한다. 통화가 시작된 뒤에 켜면 그전 몇 초 동안
-  // 얼굴이 상대에게 보이므로, 처음부터 캐릭터로 입장할 수 있어야 한다.
-  const [characterPreference] = useState(readCharacterPreference)
-  const [characterPresetId, setCharacterPresetId] = useState<CharacterPresetId>(
-    characterPreference.presetId,
-  )
-  const [characterOn, setCharacterOn] = useState(false)
-  const [characterError, setCharacterError] = useState<string>()
-  /** 발행 중인 캐릭터 트랙이다. 끌 때 되돌리려면 원본 참조가 필요하다. */
-  const characterRef = useRef<{ renderer: CharacterRenderer; published: LocalVideoTrack }>(
-    undefined,
-  )
-
-  /**
-   * 캐릭터 트랙을 내린다. (카메라 복구는 호출한 쪽이 정한다)
-   *
-   * 통화 화면을 떠날 때는 카메라를 되살릴 필요가 없고, 사용자가 직접 끈 경우에는 되살려야 하므로
-   * 여기서는 캐릭터만 정리한다.
-   */
-  const stopCharacter = useCallback(async () => {
-    const active = characterRef.current
-    characterRef.current = undefined
-    if (!active) return
-
-    try {
-      await localParticipant.unpublishTrack(active.published, true)
-    } catch {
-      // 이미 정리된 트랙일 수 있다. 렌더러만 확실히 멈추면 된다.
-    }
-    active.renderer.stop()
-  }, [localParticipant])
-
-  /**
-   * 캐릭터 모드를 켠다.
-   *
-   * 카메라 트랙을 **언퍼블리시한 뒤** 캐릭터를 Camera 소스로 발행한다.
-   *
-   * `setCameraEnabled(false)`를 쓰면 안 된다. LiveKit은 그때 카메라를 내리지 않고 **mute만** 한다
-   * (언퍼블리시는 ScreenShare에만 적용된다). 그러면 Camera 소스에 mute된 카메라와 캐릭터가 둘 다
-   * 남아, 상대 화면의 `useTracks([Camera])`가 어느 쪽을 고를지 보장되지 않는다. 실제로 먼저 잡힌
-   * mute된 카메라가 선택되면 상대는 캐릭터가 아니라 검은 화면을 본다.
-   */
-  const startCharacter = useCallback(async () => {
-    setCharacterError(undefined)
-
-    const renderer = startCharacterRenderer(
-      characterPresetId,
-      localMicrophoneTrack?.publication.track?.mediaStreamTrack,
-    )
-    if (!renderer) {
-      setCharacterError(t('connectedCallRoom.characterUnsupported'))
-      return
-    }
-
-    try {
-      // Camera 자리를 확실히 비운다. stopOnUnpublish=true로 카메라 하드웨어도 함께 놓아
-      // 캐릭터로 참여하는 동안 카메라 표시등이 켜져 있지 않게 한다.
-      const cameraPublication = localParticipant.getTrackPublication(Track.Source.Camera)
-      if (cameraPublication?.track) {
-        await localParticipant.unpublishTrack(cameraPublication.track, true)
-      }
-
-      const published = new LocalVideoTrack(renderer.track)
-      await localParticipant.publishTrack(published, { source: Track.Source.Camera })
-      characterRef.current = { renderer, published }
-      setCharacterOn(true)
-    } catch {
-      renderer.stop()
-      setCharacterError(t('connectedCallRoom.characterFailed'))
-      // 카메라를 내렸는데 캐릭터 발행이 실패하면 검은 화면으로 남으므로 되돌린다.
-      try {
-        await localParticipant.setCameraEnabled(true)
-      } catch {
-        // 여기서도 실패하면 사용자가 카메라 버튼으로 직접 켤 수 있다.
-      }
-    }
-    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 이 함수를 다시 만든다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    characterPresetId,
-    localMicrophoneTrack?.publication.track?.mediaStreamTrack,
-    localParticipant,
-  ])
-
-  /**
-   * 캐릭터 모드를 켜고 끈다. 통화 중 언제든 얼굴로 돌아갈 수 있어야 한다.
-   *
-   * 여기서 고른 값은 저장해 둔다. 다음 화면·다음 팬미팅에서도 같은 선택이 유지되고, 통화 중에 끈
-   * 경우에는 장비 점검 화면에도 꺼진 상태로 반영된다.
-   */
-  const toggleCharacter = useCallback(async () => {
-    if (characterOn) {
-      await stopCharacter()
-      setCharacterOn(false)
-      writeCharacterPreference({ enabled: false, presetId: characterPresetId })
-      try {
-        await localParticipant.setCameraEnabled(true)
-      } catch {
-        // 카메라 복구 실패는 기존 카메라 버튼으로 다시 시도할 수 있다.
-      }
-      return
-    }
-
-    await startCharacter()
-    writeCharacterPreference({ enabled: true, presetId: characterPresetId })
-  }, [characterOn, characterPresetId, localParticipant, startCharacter, stopCharacter])
-
-  /**
-   * 장비 점검 화면에서 캐릭터를 골라 뒀으면 통화 시작과 함께 켠다.
-   *
-   * 연결된 뒤에 켜는 이유는 카메라 트랙이 올라간 다음에 교체해야 발행 순서가 어긋나지 않기
-   * 때문이다. 통화 세션마다 한 번만 시도하고, 사용자가 끈 뒤에 다시 켜지는 일이 없도록 ref로 막는다.
-   */
-  const characterAutoStartedForRef = useRef<string>(undefined)
-
-  useEffect(() => {
-    if (!characterAvailable || !characterPreference.enabled) return
-    if (!isConnected || !callSessionId) return
-    if (characterAutoStartedForRef.current === callSessionId) return
-
-    characterAutoStartedForRef.current = callSessionId
-    void startCharacter()
-  }, [
-    callSessionId,
-    characterAvailable,
-    characterPreference.enabled,
-    isConnected,
-    startCharacter,
-  ])
-
-  // 통화 화면을 떠날 때 캐릭터 렌더러가 계속 돌지 않게 한다.
-  useEffect(() => () => void stopCharacter(), [stopCharacter])
 
   const handleReactionMessage = useCallback(
     (message: { payload: Uint8Array }) => {
@@ -573,13 +420,6 @@ export function ConnectedCallRoom({
   })
 
   async function toggleCamera() {
-    // 캐릭터가 Camera 자리를 쓰고 있으면 카메라를 그냥 켤 수 없다(같은 소스를 두 트랙이 다툰다).
-    // 이때 카메라 버튼은 "얼굴로 돌아가기"로 동작하는 것이 사용자 기대에 맞는다.
-    if (characterOn) {
-      await toggleCharacter()
-      return
-    }
-
     setMediaAction('camera')
     setMediaError(undefined)
 
@@ -859,11 +699,9 @@ export function ConnectedCallRoom({
       }
     : undefined
 
-  // 방금 누른 조작의 결과(캐릭터 시작·사진 저장 실패)를 다른 안내보다 먼저 알린다.
+  // 방금 누른 조작의 결과(사진 저장 실패)를 다른 안내보다 먼저 알린다.
   // 통화를 막는 오류가 아니므로 배너가 아니라 같은 자리의 보조 문구로 둔다.
-  const footNote = characterError
-    ? characterError
-    : captureError
+  const footNote = captureError
     ? captureError
     : mediaError
     ? t('connectedCallRoom.t39')
@@ -887,13 +725,8 @@ export function ConnectedCallRoom({
     </div>
   )
 
-  /*
-    캐릭터 모드에서는 카메라를 껐지만(setCameraEnabled(false)) 캐릭터 트랙을 Camera 자리에
-    발행하므로 보여 줄 영상이 있다. `isCameraEnabled`만 보면 내 화면이 빈 아이콘으로 남아
-    내가 상대에게 어떻게 보이는지 확인할 수 없다.
-  */
   const localVideo =
-    localCameraTrack && (isCameraEnabled || characterOn) ? (
+    localCameraTrack && isCameraEnabled ? (
       <VideoTrack
         aria-label={t('connectedCallRoom.t2')}
         className="size-full -scale-x-100 object-cover"
@@ -922,23 +755,6 @@ export function ConnectedCallRoom({
           capturing
             ? t('connectedCallRoom.capturing')
             : t('connectedCallRoom.captureCount', { p0: photoCount, p1: maxPhotoCount })
-        }
-        // 캐릭터 참여는 팬에게만 연다. 인플루언서 얼굴을 보는 것이 팬미팅의 핵심 가치이기 때문이다.
-        character={
-          characterAvailable
-            ? {
-                enabled: characterOn,
-                presets: CHARACTER_PRESETS,
-                selectedPresetId: characterPresetId,
-                onSelect: (presetId) => {
-                  const next = CHARACTER_PRESETS.find(
-                    (preset) => preset.id === presetId,
-                  )?.id
-                  if (next) setCharacterPresetId(next)
-                },
-                onToggle: () => void toggleCharacter(),
-              }
-            : undefined
         }
         connected={isConnected}
         connectionLabel={connectionLabel}

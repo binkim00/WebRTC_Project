@@ -60,20 +60,6 @@ export type CallStageProps = {
    * 별도 영역을 만들지 않고 **기존 카운트다운 자리의 테두리**만 쓴다. 값이 없으면 게이지를 숨긴다.
    */
   timeRatio?: number
-  /**
-   * 캐릭터로 참여하기 제어다. 팬에게만 넘겨 준다.
-   *
-   * 얼굴을 보이고 싶지 않은 참가자가 카메라를 끄는 대신 고를 수 있는 선택지다.
-   * 이 값이 없으면 관련 UI를 전부 숨긴다.
-   */
-  character?: {
-    enabled: boolean
-    /** 고를 수 있는 캐릭터 목록이며 미리보기 색으로 구분한다. */
-    presets: readonly { id: string; hair: string; skin: string }[]
-    selectedPresetId: string
-    onSelect: (presetId: string) => void
-    onToggle: () => void
-  }
   /** 보낼 수 있는 리액션 목록이며 비어 있으면 리액션 UI를 숨긴다. */
   reactionEmojis?: readonly string[]
   /** 화면에 떠오르는 중인 리액션들이다. */
@@ -116,7 +102,6 @@ export function CallStage({
   timeValue,
   timeUrgent,
   timeRatio,
-  character,
   reactionEmojis,
   floatingReactions,
   onReactionSend,
@@ -365,56 +350,6 @@ export function CallStage({
               {emoji}
             </button>
           ))}
-        </div>
-      ) : null}
-
-      {/*
-        캐릭터로 참여 — 얼굴을 보이고 싶지 않은 팬의 선택지다.
-        좌측 조작 열(자막 토글 18px, 리액션 70px) 위에 쌓는다. 우측은 내 화면 PIP가,
-        중앙 하단은 자막이 쓰고 있어 그 자리를 침범하지 않는다.
-      */}
-      {character ? (
-        <div className="absolute bottom-[122px] left-[18px] z-10 flex flex-col items-start gap-1.5">
-          {/* 캐릭터가 켜져 있을 때만 색을 고를 수 있다. 꺼진 상태에서 고르게 하면 무엇이 바뀌는지 알 수 없다. */}
-          {character.enabled ? (
-            <div
-              aria-label={t('callStage.characterPick')}
-              className="order-first flex items-center gap-1 rounded-lg bg-[rgb(15_17_21/78%)] px-2 py-1.5"
-              role="group"
-            >
-              {character.presets.map((preset) => (
-                <button
-                  aria-label={preset.id}
-                  aria-pressed={preset.id === character.selectedPresetId}
-                  className={cn(
-                    'size-6 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:hover:scale-100',
-                    preset.id === character.selectedPresetId
-                      ? 'border-white'
-                      : 'border-transparent',
-                  )}
-                  key={preset.id}
-                  onClick={() => character.onSelect(preset.id)}
-                  style={{
-                    background: `radial-gradient(circle at 50% 62%, ${preset.skin} 0 46%, ${preset.hair} 47% 100%)`,
-                  }}
-                  type="button"
-                />
-              ))}
-            </div>
-          ) : null}
-          <button
-            aria-pressed={character.enabled}
-            className={cn(
-              'min-h-9 whitespace-nowrap rounded-lg px-3 text-[13px] font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
-              character.enabled
-                ? 'bg-white/90 text-[var(--color-surface-dark)]'
-                : 'bg-[rgb(15_17_21/78%)] text-white/90 hover:bg-[rgb(15_17_21/92%)]',
-            )}
-            onClick={character.onToggle}
-            type="button"
-          >
-            {character.enabled ? t('callStage.characterOn') : t('callStage.characterOff')}
-          </button>
         </div>
       ) : null}
 
