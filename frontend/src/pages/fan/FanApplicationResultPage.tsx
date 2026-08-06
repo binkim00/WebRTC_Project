@@ -276,14 +276,18 @@ export function FanApplicationResultPage() {
                 </div>
               </div>
               <p className="mt-7 max-w-[56ch] border-t border-[var(--color-divider)] pt-5 text-base font-medium leading-[1.75] text-[var(--color-text-muted)]">
-                {meetingClosed ? (
-                  t('fanApplicationResultPage.t47')
-                ) : (
-                  <>
-                    {t('fanApplicationResultPage.t14')} {operation?.earlyStartMinutes ?? 10}
-                    {t('fanApplicationResultPage.t15')}
-                  </>
-                )}
+                {meetingClosed
+                  ? t('fanApplicationResultPage.t47')
+                  // 대기실 입장 시각은 queueOpenAt 이 정한다. earlyStartMinutes 는 매니저가 예정보다
+                  // 일찍 시작할 수 있는 여유라 팬 안내에 쓸 값이 아니었고, 값이 커서 "17280분 전부터"
+                  // 처럼 읽혔다.
+                  : `${t('fanApplicationResultPage.t14')} ${
+                    operation?.queueOpenAt
+                      ? t('fanApplicationResultPage.t15', {
+                        p0: formatDateTime(operation.queueOpenAt),
+                      })
+                      : t('fanApplicationResultPage.t50')
+                  }`}
               </p>
             </section>
             <section aria-label={t('fanApplicationResultPage.t16')}>

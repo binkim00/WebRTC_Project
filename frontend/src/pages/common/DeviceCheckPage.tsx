@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import { isClosedFanMeetingStatus } from '../../api/fanMeetings'
-import { enterQueue, interpretQueueEnterError } from '../../api/queue'
+import { enterQueue, getMyQueue, interpretQueueEnterError } from '../../api/queue'
 import { saveDeviceCheck } from '../../api/deviceChecks'
 import { fetchMeetingDetail } from '../../api/fanMeetingParticipants'
 import { AlertBanner, Button, MediaDevicePreview, Select } from '../../components'
@@ -119,6 +119,13 @@ export function DeviceCheckPage() {
   // 종료·취소 여부를 확인하기 전(undefined)에는 아직 판단하지 않는다.
   // 조회에 실패해도 false로 확정해 점검 자체가 잠기지 않게 한다.
   const [meetingClosed, setMeetingClosed] = useState<boolean>()
+  /**
+   * 이 팬이 자기 순서를 이미 마쳤는지이며, 확인하기 전에는 undefined 다.
+   *
+   * <p>팬미팅이 아직 진행 중이어도 자기 통화가 끝난 팬은 다시 입장할 곳이 없다. 팬미팅 상태만
+   * 보면 이 경우를 걸러 낼 수 없어 대기열 상태를 따로 확인한다.
+   */
+  const [callFinished, setCallFinished] = useState<boolean>()
   const {
     audioLevel,
     cameras,
@@ -139,9 +146,34 @@ export function DeviceCheckPage() {
   useEffect(() => {
     // 장비 점검 화면에 진입하면 즉시 권한 요청을 시작해 별도 클릭 단계를 없앤다.
     // 브라우저가 자동 요청을 차단한 경우에는 아래 재시도 버튼으로 다시 요청할 수 있다.
-    // 끝난 팬미팅에서는 어차피 입장할 수 없으므로 카메라·마이크를 켜지 않는다.
-    if (status === 'idle' && meetingClosed === false) void start()
-  }, [meetingClosed, start, status])
+    // 끝난 팬미팅과 이미 통화를 마친 팬에게는 입장할 곳이 없으므로 카메라·마이크를 켜지 않는다.
+    if (status === 'idle' && meetingClosed === false && callFinished === false) void start()
+  }, [callFinished, meetingClosed, start, status])
+
+  useEffect(() => {
+    // 자기 순서를 마친 팬은 점검할 이유가 없다. 예전에는 점검을 끝까지 하고 입장을 눌러야
+    // 대기실이 종료 화면으로 넘겨 주었다. 진입할 때 대기열 상태를 보고 곧바로 넘긴다.
+    const session = getAuthSession()
+    if (!fanMeetingId?.trim() || session?.role !== 'FAN') {
+      setCallFinished(false)
+      return
+    }
+
+    const controller = new AbortController()
+    void getMyQueue(fanMeetingId, session.accessToken, controller.signal)
+      .then((snapshot) => setCallFinished(snapshot.displayStatus === 'COMPLETED'))
+      // 대기열이 아직 없거나 참가자가 아니면 조회가 실패한다. 그때는 평소대로 점검을 진행한다.
+      .catch(() => {
+        if (!controller.signal.aborted) setCallFinished(false)
+      })
+
+    return () => controller.abort()
+  }, [fanMeetingId])
+
+  useEffect(() => {
+    if (!callFinished || !fanMeetingId?.trim()) return
+    navigate(`/fan/fan-meetings/${encodeURIComponent(fanMeetingId)}/complete`, { replace: true })
+  }, [callFinished, fanMeetingId, navigate])
 
   useEffect(() => {
     // 브라우저의 온라인 상태가 바뀌면 입장 가능 여부도 즉시 다시 계산한다.

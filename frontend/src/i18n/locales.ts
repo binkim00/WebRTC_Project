@@ -894,8 +894,10 @@ const ko = {
   'fanApplicationResultPage.t11': '통화 시간',
   'fanApplicationResultPage.t12': '인플루언서',
   'fanApplicationResultPage.t13': '장비 점검 기한',
-  'fanApplicationResultPage.t14': '기한까지 장비 점검을 완료하지 않으면 참여가 취소될 수 있습니다. 팬미팅 당일에는 시작',
-  'fanApplicationResultPage.t15': '분 전부터 대기실에 입장할 수 있어요.',
+  'fanApplicationResultPage.t14':
+    '기한까지 장비 점검을 완료하지 않으면 참여가 취소될 수 있습니다.',
+  'fanApplicationResultPage.t15': '{p0}부터 대기실에 입장할 수 있어요.',
+  'fanApplicationResultPage.t50': '대기실이 열리면 알림으로 알려 드릴게요.',
   'fanApplicationResultPage.t16': '다음 단계',
   'fanApplicationResultPage.t17': '장비 점검하기',
   'fanApplicationResultPage.t18': '응모 내역과 결과는 마이페이지에서 다시 확인할 수 있습니다.',
@@ -3755,8 +3757,9 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanApplicationResultPage.t12': 'Influencer',
   'fanApplicationResultPage.t13': 'Device check deadline',
   'fanApplicationResultPage.t14':
-    'If you do not finish the device check by the deadline, your spot may be cancelled. On the day you can enter the waiting room from',
-  'fanApplicationResultPage.t15': 'minutes before the start.',
+    'If you do not finish the device check by the deadline, your spot may be cancelled.',
+  'fanApplicationResultPage.t15': 'The waiting room opens at {p0}.',
+  'fanApplicationResultPage.t50': "We'll notify you when the waiting room opens.",
   'fanApplicationResultPage.t16': 'Next step',
   'fanApplicationResultPage.t17': 'Run device check',
   'fanApplicationResultPage.t18':
