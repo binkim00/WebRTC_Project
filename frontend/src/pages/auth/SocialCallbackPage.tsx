@@ -11,6 +11,8 @@ import {
   type SocialLoginResult,
 } from '../../api/socialAuth'
 import { AlertBanner, Button, Card, CardContent, Spinner } from '../../components'
+import { landingPathForRole } from '../../router/roleCapabilities'
+import { translate, useTranslation } from '../../i18n'
 
 /** 소셜 로그인 실패를 사용자에게 알릴 때 쓰는 문구다. */
 type CallbackFailure = {
@@ -27,9 +29,9 @@ type CallbackFailure = {
  * 그 두 경우만 프론트 문구로 바꾸고, 나머지는 서버가 준 한국어 detail을 그대로 쓴다.
  */
 function messageFor(error: ApiError): string {
-  if (error.status === 403) return '이 계정은 현재 사용할 수 없습니다. 운영팀에 문의해 주세요.'
+  if (error.status === 403) return translate('socialCallbackPage.t9')
   if (error.status === 429) {
-    return '비밀번호 확인 시도가 너무 많아 잠시 차단되었습니다. 잠시 후 다시 시도해 주세요.'
+    return translate('socialCallbackPage.t10')
   }
 
   return error.message
@@ -45,6 +47,7 @@ function messageFor(error: ApiError): string {
  * 실패 시 재시도는 로그인 화면부터 다시 시작하게 안내한다.
  */
 export function SocialCallbackPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { provider: providerParam } = useParams()
   const [searchParams] = useSearchParams()
@@ -53,7 +56,7 @@ export function SocialCallbackPage() {
   const startedRef = useRef(false)
 
   const provider = isSocialProviderPath(providerParam) ? providerParam : undefined
-  const providerLabel = provider ? SOCIAL_PROVIDER_LABELS[provider] : ''
+  const providerLabel = provider ? SOCIAL_PROVIDER_LABELS()[provider] : ''
 
   useEffect(() => {
     if (!provider || startedRef.current) return
@@ -67,8 +70,8 @@ export function SocialCallbackPage() {
     if (providerError || !code) {
       setFailure({
         message: providerError
-          ? `${providerLabel} 로그인이 취소되었거나 완료되지 않았습니다.`
-          : '인가 코드를 받지 못했습니다. 다시 시도해 주세요.',
+          ? t('socialCallbackPage.t11', { p0: providerLabel })
+          : t('socialCallbackPage.t1'),
         restartFromLogin: true,
       })
       return
@@ -77,7 +80,7 @@ export function SocialCallbackPage() {
     // state는 위조 요청을 걸러내는 유일한 수단이므로 API 호출 전에 대조한다.
     if (!consumeOauthState(provider, state)) {
       setFailure({
-        message: '로그인 요청을 확인할 수 없습니다. 보안을 위해 처음부터 다시 시도해 주세요.',
+        message: t('socialCallbackPage.t2'),
         restartFromLogin: true,
       })
       return
@@ -91,7 +94,7 @@ export function SocialCallbackPage() {
       const authToken = getAuthSession()?.accessToken
       if (!authToken) {
         setFailure({
-          message: '로그인이 만료되었습니다. 다시 로그인한 뒤 연결해 주세요.',
+          message: t('socialCallbackPage.t3'),
           restartFromLogin: true,
         })
         return
@@ -107,7 +110,7 @@ export function SocialCallbackPage() {
             message:
               reason instanceof ApiError
                 ? messageFor(reason)
-                : '소셜 계정을 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+                : t('socialCallbackPage.t4'),
             restartFromLogin: false,
           })
         })
@@ -126,7 +129,7 @@ export function SocialCallbackPage() {
           message:
             reason instanceof ApiError
               ? messageFor(reason)
-              : '소셜 로그인을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+              : t('socialCallbackPage.t5'),
           restartFromLogin: true,
         })
       })
@@ -141,13 +144,7 @@ export function SocialCallbackPage() {
     if (result.status === 'LOGIN' && result.login) {
       // 기존 로그인과 동일한 형태라 세션 저장 방식도 같다.
       saveAuthSession(result.login, false)
-      const landing =
-        result.login.role === 'FAN'
-          ? '/fan/mypage/fan-meetings?status=upcoming'
-          : result.login.role === 'INFLUENCER' || result.login.role === 'SOLO_INFLUENCER'
-            ? '/influencer/fan-meetings'
-            : '/manager/fan-meetings'
-      navigate(landing, { replace: true })
+      navigate(landingPathForRole(result.login.role), { replace: true })
       return
     }
 
@@ -163,7 +160,7 @@ export function SocialCallbackPage() {
     }
 
     setFailure({
-      message: '소셜 로그인 응답을 이해할 수 없습니다. 처음부터 다시 시도해 주세요.',
+      message: t('socialCallbackPage.t6'),
       restartFromLogin: true,
     })
   }
@@ -177,7 +174,7 @@ export function SocialCallbackPage() {
         <CardContent className="grid gap-6 p-8">
           {failure ? (
             <>
-              <AlertBanner title={`${providerLabel} 로그인을 완료하지 못했습니다`} variant="error">
+              <AlertBanner title={t('socialCallbackPage.t12', { p0: providerLabel })} variant="error">
                 {failure.message}
               </AlertBanner>
               <Button
@@ -185,15 +182,14 @@ export function SocialCallbackPage() {
                 onClick={() => navigate(failure.restartFromLogin ? '/login' : '/', { replace: true })}
                 size="lg"
               >
-                {failure.restartFromLogin ? '로그인 화면으로 돌아가기' : '홈으로 가기'}
+                {failure.restartFromLogin ? t('socialCallbackPage.t7') : t('socialCallbackPage.t8')}
               </Button>
             </>
           ) : (
             <div className="grid min-h-40 place-items-center gap-4 text-center">
-              <Spinner label={`${providerLabel} 로그인을 확인하는 중`} size="lg" />
+              <Spinner label={t('socialCallbackPage.t13', { p0: providerLabel })} size="lg" />
               <p className="text-sm font-medium text-[var(--color-text-secondary)]">
-                이 화면을 닫거나 새로고침하지 말아 주세요.
-              </p>
+                 {t('socialCallbackPage.t14')} </p>
             </div>
           )}
         </CardContent>

@@ -9,11 +9,12 @@ import {
   type NotificationType,
 } from '../../api/notifications'
 import { cn } from '../ui/cn'
+import { translate, useTranslation } from '../../i18n'
 
 const PANEL_SIZE = 5
 
 /** 알림 종류별 태그·강조색·이동 목적지다. 제품에 실제로 존재하는 사건만 다룬다. */
-const typeContent: Record<
+const typeContent = (): Record<
   NotificationType,
   {
     tag: string
@@ -21,48 +22,48 @@ const typeContent: Record<
     action: string
     to: (meetingId: number | null) => string
   }
-> = {
+> => ({
   APPLICATION_RESULT: {
-    tag: '응모 결과',
+    tag: translate('notificationBell.t9'),
     tone: 'coral',
-    action: '결과 확인하기 →',
+    action: translate('notificationBell.t10'),
     to: (meetingId) =>
       meetingId === null ? '/notifications' : `/fan/events/${meetingId}/application-result`,
   },
   ENTER_NOW: {
-    tag: '팬미팅 시작',
+    tag: translate('notificationBell.t11'),
     tone: 'coral',
-    action: '대기실 입장 →',
+    action: translate('notificationBell.t12'),
     to: (meetingId) =>
       meetingId === null ? '/notifications' : `/fan/fan-meetings/${meetingId}/waiting`,
   },
   QUEUE_ORDER_ASSIGNED: {
-    tag: '팬미팅 시작',
+    tag: translate('notificationBell.t13'),
     tone: 'muted',
-    action: '대기실 확인 →',
+    action: translate('notificationBell.t14'),
     to: (meetingId) =>
       meetingId === null ? '/notifications' : `/fan/fan-meetings/${meetingId}/waiting`,
   },
   QUEUE_CHANGE_RESULT: {
-    tag: '팬미팅 시작',
+    tag: translate('notificationBell.t15'),
     tone: 'muted',
-    action: '대기실 확인 →',
+    action: translate('notificationBell.t16'),
     to: (meetingId) =>
       meetingId === null ? '/notifications' : `/fan/fan-meetings/${meetingId}/waiting`,
   },
   MEETING_CHANGED: {
-    tag: '팬미팅 안내',
+    tag: translate('notificationBell.t17'),
     tone: 'warning',
-    action: '팬미팅 보기 →',
+    action: translate('notificationBell.t18'),
     to: (meetingId) => (meetingId === null ? '/notifications' : `/fan/events/${meetingId}`),
   },
   MEETING_CANCELED: {
-    tag: '팬미팅 안내',
+    tag: translate('notificationBell.t19'),
     tone: 'warning',
-    action: '팬미팅 보기 →',
+    action: translate('notificationBell.t20'),
     to: (meetingId) => (meetingId === null ? '/notifications' : `/fan/events/${meetingId}`),
   },
-}
+})
 
 const toneClass = {
   coral: 'text-[var(--color-primary-coral)]',
@@ -77,11 +78,11 @@ function formatWhen(iso: string): string {
 
   const diffMs = Date.now() - date.getTime()
   const minutes = Math.floor(diffMs / 60_000)
-  if (minutes < 1) return '방금'
-  if (minutes < 60) return `${minutes}분 전`
+  if (minutes < 1) return translate('notificationBell.t21')
+  if (minutes < 60) return translate('notificationBell.t22', { p0: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}시간 전`
-  if (hours < 48) return '어제'
+  if (hours < 24) return translate('notificationBell.t23', { p0: hours })
+  if (hours < 48) return translate('notificationBell.t24')
   return `${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
 }
 
@@ -92,6 +93,7 @@ function formatWhen(iso: string): string {
  * 전체 목록은 기존 /notifications 화면이 담당한다.
  */
 export function NotificationBell() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<NotificationResponse[]>([])
@@ -165,7 +167,7 @@ export function NotificationBell() {
       setUnreadCount((count) => Math.max(0, count - 1))
       void markRead(notification.notificationId)
     }
-    navigate(typeContent[notification.type].to(notification.meetingId))
+    navigate(typeContent()[notification.type].to(notification.meetingId))
   }
 
   async function readAll() {
@@ -182,7 +184,7 @@ export function NotificationBell() {
     <div className="relative" ref={rootRef}>
       <button
         aria-expanded={open}
-        aria-label={unreadCount > 0 ? `알림 ${unreadCount}개 읽지 않음` : '알림'}
+        aria-label={unreadCount > 0 ? t('notificationBell.t25', { p0: unreadCount }) : t('notificationBell.t8')}
         className={cn(
           'flex min-h-11 items-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] border px-3 transition-colors',
           open
@@ -192,7 +194,7 @@ export function NotificationBell() {
         onClick={toggle}
         type="button"
       >
-        <span className="text-[15px] font-bold text-[var(--color-text-primary)]">알림</span>
+        <span className="text-[15px] font-bold text-[var(--color-text-primary)]">{t('notificationBell.t1')}</span>
         {unreadCount > 0 ? (
           <span className="grid h-[22px] min-w-[22px] place-items-center rounded-full bg-[var(--color-primary-coral)] px-1.5 text-xs font-extrabold text-white tabular-nums">
             {unreadCount}
@@ -202,18 +204,18 @@ export function NotificationBell() {
 
       {open ? (
         <section
-          aria-label="알림"
+          aria-label={t('notificationBell.t2')}
           className="absolute right-0 top-[calc(100%+10px)] z-30 max-h-[460px] w-[400px] max-w-[calc(100vw-2rem)] overflow-auto rounded-xl border border-[var(--color-divider)] bg-[var(--color-surface-panel)] shadow-[var(--shadow-modal)]"
         >
           <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-[var(--color-divider)] bg-[var(--color-surface-panel)] px-[18px] py-4">
-            <h2 className="text-[17px] font-extrabold tracking-[-0.028em]">알림</h2>
+            <h2 className="text-[17px] font-extrabold tracking-[-0.028em]">{t('notificationBell.t3')}</h2>
             {unreadCount > 0 ? (
               <button
                 className="mj-font-label min-h-9 whitespace-nowrap px-2.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-primary-coral)]"
                 onClick={() => void readAll()}
                 type="button"
               >
-                모두 읽음
+                {t('notificationBell.t4')}
               </button>
             ) : null}
           </div>
@@ -221,16 +223,16 @@ export function NotificationBell() {
           {items.length === 0 ? (
             <div className="grid place-items-center px-6 py-14 text-center" role="status">
               <img alt="" className="size-[72px] object-contain opacity-55" src={moldEmptyImage} />
-              <strong className="mt-3.5 text-base font-extrabold">새로운 알림이 없어요</strong>
+              <strong className="mt-3.5 text-base font-extrabold">{t('notificationBell.t5')}</strong>
               <span className="mt-[7px] text-[15px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
-                응모 결과와 팬미팅 안내를 여기서 알려드릴게요.
+                {t('notificationBell.t6')}
               </span>
             </div>
           ) : (
             <>
               <ul className="m-0 list-none p-0">
                 {items.map((notification) => {
-                  const content = typeContent[notification.type]
+                  const content = typeContent()[notification.type]
                   const unread = !notification.readAt
 
                   return (
@@ -284,7 +286,7 @@ export function NotificationBell() {
                   onClick={() => setOpen(false)}
                   to="/notifications"
                 >
-                  알림 전체 보기
+                  {t('notificationBell.t7')}
                 </Link>
               </div>
             </>

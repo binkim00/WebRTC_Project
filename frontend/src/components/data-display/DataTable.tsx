@@ -1,5 +1,6 @@
 import type { Key, ReactNode } from 'react'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 export type SortDirection = 'asc' | 'desc'
 
@@ -36,11 +37,14 @@ export function DataTable<T>({
   rows,
   rowKey,
   caption,
-  emptyMessage = '표시할 데이터가 없습니다.',
+  emptyMessage,
   sort,
   onSort,
   className,
 }: DataTableProps<T>) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const emptyMessageResolved = emptyMessage ?? t('dataTable.t1')
   function changeSort(columnId: string) {
     const nextDirection: SortDirection =
       sort?.columnId === columnId && sort.direction === 'asc' ? 'desc' : 'asc'
@@ -118,7 +122,7 @@ export function DataTable<T>({
                 className="mj-font-body px-4 py-10 text-center text-[var(--color-text-muted)]"
                 colSpan={columns.length}
               >
-                {emptyMessage}
+                {emptyMessageResolved}
               </td>
             </tr>
           )}

@@ -10,6 +10,7 @@ import {
 } from '../../api/externalParticipants'
 import { AlertBanner, Button, Dialog } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { useTranslation } from '../../i18n'
 
 function errorMessage(reason: unknown, fallback: string): string {
   return reason instanceof ApiError || reason instanceof TypeError ? reason.message : fallback
@@ -23,6 +24,7 @@ function errorMessage(reason: unknown, fallback: string): string {
  * 팬미팅 상태가 READY로 바뀐다 — 한 번 확정하면 같은 팬미팅에는 다시 올릴 수 없다.
  */
 export function ManagerExternalParticipantsPage() {
+  const { t } = useTranslation()
   const fanMeetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
   const navigate = useNavigate()
 
@@ -39,8 +41,8 @@ export function ManagerExternalParticipantsPage() {
   if (!fanMeetingId.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 fanMeetingId 값이 없습니다. 팬미팅 관리 목록에서 다시 선택해 주세요."
-        title="필수 URL 파라미터가 없습니다"
+        message={t('managerExternalParticipantsPage.t1')}
+        title={t('managerExternalParticipantsPage.t2')}
       />
     )
   }
@@ -60,7 +62,7 @@ export function ManagerExternalParticipantsPage() {
       anchor.click()
       URL.revokeObjectURL(objectUrl)
     } catch (reason) {
-      setTemplateError(errorMessage(reason, '명단 양식을 내려받지 못했습니다.'))
+      setTemplateError(errorMessage(reason, t('managerExternalParticipantsPage.t34')))
     } finally {
       setDownloadingTemplate(false)
     }
@@ -74,7 +76,7 @@ export function ManagerExternalParticipantsPage() {
 
     const token = getAuthSession()?.accessToken
     if (!token) {
-      setPreviewError('명단을 업로드하려면 먼저 로그인해 주세요.')
+      setPreviewError(t('managerExternalParticipantsPage.t35'))
       return
     }
 
@@ -86,7 +88,7 @@ export function ManagerExternalParticipantsPage() {
     try {
       setPreview(await previewExternalParticipantsCsv(fanMeetingId, selected, token))
     } catch (reason) {
-      setPreviewError(errorMessage(reason, '명단 파일을 확인하지 못했습니다.'))
+      setPreviewError(errorMessage(reason, t('managerExternalParticipantsPage.t36')))
       setFile(undefined)
     } finally {
       setPreviewing(false)
@@ -111,12 +113,12 @@ export function ManagerExternalParticipantsPage() {
       setConfirmDialogOpen(false)
       navigate(`/manager/fan-meetings/${fanMeetingId}`)
     } catch (reason) {
-      const message = errorMessage(reason, '참가자 명단을 확정하지 못했습니다.')
+      const message = errorMessage(reason, t('managerExternalParticipantsPage.t37'))
       // 백엔드 전역 핸들러가 모든 DB 제약 위반을 회원가입용 문구로 돌려줘 이 화면과 문맥이
       // 어긋난다. 명단 확정에서는 실제로는 참가자 저장이 실패한 것이므로 상황을 설명해 준다.
       setConfirmError(
         message === 'Login ID or email is already in use.'
-          ? `참가자 정보를 저장하는 중 서버 데이터 제약과 충돌했습니다. 같은 명단을 이미 확정했거나 서버 스키마 문제일 수 있습니다. (서버 응답: ${message})`
+          ? t('managerExternalParticipantsPage.t44', { p0: message })
           : message,
       )
       // 오류가 모달 뒤에 가려지지 않도록 확인 창을 닫고 화면의 오류 배너로 보여 준다.
@@ -133,28 +135,27 @@ export function ManagerExternalParticipantsPage() {
           className="inline-flex w-fit text-sm font-bold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
           to={`/manager/fan-meetings/${fanMeetingId}`}
         >
-          ← 팬미팅 상세로
+          {t('managerExternalParticipantsPage.t3')}
         </Link>
-        <h1 className="mt-3 text-3xl font-black tracking-[-0.05em]">참가자 명단 등록</h1>
+        <h1 className="mt-3 text-3xl font-black tracking-[-0.05em]">{t('managerExternalParticipantsPage.t4')}</h1>
         <p className="mt-2 text-[var(--color-text-secondary)]">
-          CSV로 준비한 명단을 올려 참가자와 대기 순번을 확정하세요. 확정하면 되돌릴 수 없습니다.
+          {t('managerExternalParticipantsPage.t5')}
         </p>
       </header>
 
       {!preview ? (
         <div className="grid gap-4 rounded-[var(--radius-panel)] border border-[var(--color-divider)] p-6">
           <div>
-            <h2 className="text-lg font-extrabold">CSV 양식</h2>
+            <h2 className="text-lg font-extrabold">{t('managerExternalParticipantsPage.t6')}</h2>
             <p className="mt-1.5 text-sm text-[var(--color-text-secondary)]">
-              첫 줄은 머리글이고 <strong>이메일</strong>과 <strong>대기 순번</strong> 두 열이
-              필요합니다. 대기 순번이 통화 순서가 됩니다.
+              {t('managerExternalParticipantsPage.t7')} <strong>{t('managerExternalParticipantsPage.t8')}</strong>{t('managerExternalParticipantsPage.t9')} <strong>{t('managerExternalParticipantsPage.t10')}</strong> {t('managerExternalParticipantsPage.t11')}
             </p>
           </div>
 
           <div className="overflow-hidden rounded-[var(--radius-control)] border border-[var(--color-divider)]">
             <div className="grid grid-cols-2 border-b border-[var(--color-divider)] bg-[var(--color-surface-page)] px-4 py-2.5 text-sm font-bold">
-              <span>이메일</span>
-              <span>대기 순번</span>
+              <span>{t('managerExternalParticipantsPage.t12')}</span>
+              <span>{t('managerExternalParticipantsPage.t13')}</span>
             </div>
             <div className="grid grid-cols-2 border-b border-[var(--color-border-row)] px-4 py-2.5 text-sm">
               <span>fan1@example.com</span>
@@ -167,12 +168,12 @@ export function ManagerExternalParticipantsPage() {
           </div>
 
           {previewError ? (
-            <AlertBanner title="명단을 확인하지 못했습니다" variant="error">
+            <AlertBanner title={t('managerExternalParticipantsPage.t14')} variant="error">
               {previewError}
             </AlertBanner>
           ) : null}
           {templateError ? (
-            <AlertBanner title="양식을 내려받지 못했습니다" variant="error">
+            <AlertBanner title={t('managerExternalParticipantsPage.t15')} variant="error">
               {templateError}
             </AlertBanner>
           ) : null}
@@ -184,14 +185,14 @@ export function ManagerExternalParticipantsPage() {
               type="button"
               variant="outline"
             >
-              양식 다운로드
+              {t('managerExternalParticipantsPage.t16')}
             </Button>
             <label
               className={`inline-flex min-h-11 cursor-pointer items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] px-5 text-sm font-bold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)] ${
                 previewing ? 'pointer-events-none opacity-60' : ''
               }`}
             >
-              {previewing ? '확인하는 중…' : 'CSV 업로드'}
+              {previewing ? t('managerExternalParticipantsPage.t38') : t('managerExternalParticipantsPage.t39')}
               <input
                 accept=".csv,text/csv"
                 className="sr-only"
@@ -202,23 +203,23 @@ export function ManagerExternalParticipantsPage() {
             </label>
           </div>
           <p className="text-sm font-medium text-[var(--color-text-muted)]">
-            CSV를 업로드하면 행별 확인 결과를 볼 수 있어요.
+            {t('managerExternalParticipantsPage.t17')}
           </p>
         </div>
       ) : (
         <div className="grid gap-4 rounded-[var(--radius-panel)] border border-[var(--color-divider)] p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="text-lg font-extrabold">등록될 참가자</h2>
+              <h2 className="text-lg font-extrabold">{t('managerExternalParticipantsPage.t18')}</h2>
               <p className="mt-1 truncate text-sm text-[var(--color-text-secondary)]">
-                {file?.name} · {preview.totalRowCount}행 읽음
+                {file?.name} · {preview.totalRowCount}{t('managerExternalParticipantsPage.t19')}
               </p>
             </div>
             <p className="whitespace-nowrap text-sm font-bold">
-              {preview.validRowCount}명 등록
+              {preview.validRowCount}{t('managerExternalParticipantsPage.t20')}
               {preview.invalidRowCount > 0
-                ? ` · ${preview.invalidRowCount}건 확인 필요`
-                : ' · 모두 정상'}
+                ? t('managerExternalParticipantsPage.t45', { p0: preview.invalidRowCount })
+                : t('managerExternalParticipantsPage.t40')}
             </p>
           </div>
 
@@ -226,11 +227,11 @@ export function ManagerExternalParticipantsPage() {
             <table className="w-full min-w-[560px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-[var(--color-divider)] text-left text-[var(--color-text-secondary)]">
-                  <th className="py-2 pr-3 font-bold">순번</th>
-                  <th className="py-2 pr-3 font-bold">이메일</th>
-                  <th className="py-2 pr-3 font-bold">대기 순번</th>
-                  <th className="py-2 pr-3 font-bold">아이디(매칭)</th>
-                  <th className="py-2 pr-3 text-right font-bold">확인</th>
+                  <th className="py-2 pr-3 font-bold">{t('managerExternalParticipantsPage.t21')}</th>
+                  <th className="py-2 pr-3 font-bold">{t('managerExternalParticipantsPage.t22')}</th>
+                  <th className="py-2 pr-3 font-bold">{t('managerExternalParticipantsPage.t23')}</th>
+                  <th className="py-2 pr-3 font-bold">{t('managerExternalParticipantsPage.t24')}</th>
+                  <th className="py-2 pr-3 text-right font-bold">{t('managerExternalParticipantsPage.t25')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -247,7 +248,7 @@ export function ManagerExternalParticipantsPage() {
                         row.valid ? 'text-[var(--color-success)]' : 'text-[var(--color-error)]'
                       }`}
                     >
-                      {row.valid ? '정상' : (row.errorMessage ?? '오류')}
+                      {row.valid ? t('managerExternalParticipantsPage.t41') : (row.errorMessage ?? t('managerExternalParticipantsPage.t42'))}
                     </td>
                   </tr>
                 ))}
@@ -256,19 +257,19 @@ export function ManagerExternalParticipantsPage() {
           </div>
 
           {preview.fileErrors.map((fileError) => (
-            <AlertBanner key={fileError.errorCode} title="명단을 확정할 수 없습니다" variant="error">
+            <AlertBanner key={fileError.errorCode} title={t('managerExternalParticipantsPage.t26')} variant="error">
               {fileError.errorMessage}
             </AlertBanner>
           ))}
           {confirmError ? (
-            <AlertBanner title="확정에 실패했습니다" variant="error">
+            <AlertBanner title={t('managerExternalParticipantsPage.t27')} variant="error">
               {confirmError}
             </AlertBanner>
           ) : null}
 
           <div className="flex flex-wrap justify-end gap-2">
             <Button disabled={confirming} onClick={handleReset} type="button" variant="outline">
-              다시 업로드
+              {t('managerExternalParticipantsPage.t28')}
             </Button>
             <Button
               disabled={!preview.confirmable}
@@ -276,23 +277,23 @@ export function ManagerExternalParticipantsPage() {
               title={
                 preview.confirmable
                   ? undefined
-                  : '형식 오류가 있는 행을 모두 고친 뒤 다시 업로드해 주세요.'
+                  : t('managerExternalParticipantsPage.t43')
               }
               type="button"
             >
-              명단 확정
+              {t('managerExternalParticipantsPage.t29')}
             </Button>
           </div>
           {!preview.confirmable ? (
             <p className="text-sm font-medium text-[var(--color-text-muted)]">
-              형식 오류가 있는 행을 고친 뒤 다시 업로드하면 확정할 수 있어요.
+              {t('managerExternalParticipantsPage.t30')}
             </p>
           ) : null}
         </div>
       )}
 
       <Dialog
-        description="확정하면 참가자와 대기 순번이 만들어지고 팬미팅이 진행 준비 상태가 됩니다. 이 명단은 다시 올릴 수 없습니다."
+        description={t('managerExternalParticipantsPage.t31')}
         footer={
           <>
             <Button
@@ -300,10 +301,10 @@ export function ManagerExternalParticipantsPage() {
               onClick={() => setConfirmDialogOpen(false)}
               variant="outline"
             >
-              취소
+              {t('managerExternalParticipantsPage.t32')}
             </Button>
             <Button loading={confirming} onClick={() => void handleConfirm()}>
-              명단 확정
+              {t('managerExternalParticipantsPage.t33')}
             </Button>
           </>
         }
@@ -311,7 +312,7 @@ export function ManagerExternalParticipantsPage() {
           if (!confirming) setConfirmDialogOpen(open)
         }}
         open={confirmDialogOpen}
-        title={`참가자 ${preview?.validRowCount ?? 0}명을 등록할까요?`}
+        title={t('managerExternalParticipantsPage.t46', { p0: preview?.validRowCount ?? 0 })}
       />
     </div>
   )

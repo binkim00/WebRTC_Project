@@ -145,52 +145,38 @@ describe('isOwnSubtitle', () => {
 })
 
 describe('pickSubtitleTexts', () => {
-  it('내가 말한 대사는 원문만 보여 준다', () => {
-    // 번역문은 상대방 언어로 만들어지므로 내 화면에 내 말이 외국어로 뜨면 안 된다.
-    expect(pickSubtitleTexts(payload({ speakerRole: 'FAN' }), 'FAN')).toEqual({
-      text: '안녕하세요',
-    })
-  })
-
-  it('상대가 말한 대사는 원문과 번역문을 함께 보여 준다', () => {
-    expect(pickSubtitleTexts(payload({ speakerRole: 'FAN' }), 'INFLUENCER')).toEqual({
+  it('원문과 번역문을 함께 담는다', () => {
+    expect(pickSubtitleTexts(payload({ speakerRole: 'FAN' }))).toEqual({
       text: '안녕하세요',
       translatedText: 'Hello',
     })
   })
 
   it('번역이 비어 있으면 원문만 남긴다', () => {
-    expect(
-      pickSubtitleTexts(payload({ speakerRole: 'FAN', translatedText: '   ' }), 'INFLUENCER'),
-    ).toEqual({ text: '안녕하세요' })
-    expect(
-      pickSubtitleTexts(payload({ speakerRole: 'FAN', translatedText: null }), 'INFLUENCER'),
-    ).toEqual({ text: '안녕하세요' })
+    expect(pickSubtitleTexts(payload({ speakerRole: 'FAN', translatedText: '   ' }))).toEqual({
+      text: '안녕하세요',
+    })
+    expect(pickSubtitleTexts(payload({ speakerRole: 'FAN', translatedText: null }))).toEqual({
+      text: '안녕하세요',
+    })
   })
 
   it('번역문이 원문과 같으면 같은 문장을 두 번 보여 주지 않는다', () => {
     expect(
-      pickSubtitleTexts(
-        payload({ speakerRole: 'FAN', translatedText: '안녕하세요' }),
-        'INFLUENCER',
-      ),
+      pickSubtitleTexts(payload({ speakerRole: 'FAN', translatedText: '안녕하세요' })),
     ).toEqual({ text: '안녕하세요' })
   })
 })
 
 describe('pickSubtitleSpeaker', () => {
-  it('내 발화는 나로 표시한다', () => {
-    expect(pickSubtitleSpeaker(payload({ speakerRole: 'FAN' }), 'FAN', NAMES)).toBe('나')
-  })
-
-  it('상대 발화는 역할에 맞는 이름으로 표시한다', () => {
-    expect(pickSubtitleSpeaker(payload({ speakerRole: 'FAN' }), 'INFLUENCER', NAMES)).toBe('민지')
-    expect(pickSubtitleSpeaker(payload({ speakerRole: 'INFLUENCER' }), 'FAN', NAMES)).toBe('서은')
+  it('payload 역할에 맞는 이름으로 표시한다', () => {
+    expect(pickSubtitleSpeaker(payload({ speakerRole: 'FAN' }), NAMES)).toBe('민지')
+    expect(pickSubtitleSpeaker(payload({ speakerRole: 'INFLUENCER' }), NAMES)).toBe('서은')
   })
 })
 
 describe('appendSubtitleLine', () => {
-  it('새 발화를 뒤에 붙이고 원문과 번역문을 함께 담는다', () => {
+  it('새 발화가 이전 발화를 대체하고 원문과 번역문을 함께 담는다', () => {
     const first = appendSubtitleLine([], payload({ subtitleId: '1' }), 'INFLUENCER', NAMES)
     const second = appendSubtitleLine(
       first,
@@ -199,9 +185,39 @@ describe('appendSubtitleLine', () => {
       NAMES,
     )
 
-    // 화면 첫 줄은 항상 원문이고, 번역문은 별도 필드로 따라간다.
-    expect(second.map((line) => line.text)).toEqual(['안녕하세요', '두 번째'])
-    expect(second.map((line) => line.translatedText)).toEqual(['Hello', 'second'])
+    // 자막은 한 줄만 남는다. 원문이 본문이고 번역문은 별도 필드로 따라간다.
+    expect(second).toHaveLength(1)
+    expect(second[0]?.text).toBe('두 번째')
+    expect(second[0]?.translatedText).toBe('second')
+  })
+
+  it('내가 말한 대사는 화면에 올리지 않는다', () => {
+    // 팬 계정으로 보는 화면에서는 팬(나)의 발화가 자막으로 뜨지 않아야 한다.
+    const lines = appendSubtitleLine([], payload({ speakerRole: 'FAN' }), 'FAN', NAMES)
+    expect(lines).toEqual([])
+
+    // 1인 운영 계정도 인플루언서 발화의 주인이라 같은 규칙을 따른다.
+    expect(
+      appendSubtitleLine([], payload({ speakerRole: 'INFLUENCER' }), 'SOLO_INFLUENCER', NAMES),
+    ).toEqual([])
+  })
+
+  it('상대가 말한 대사는 이전 상대 발화만 대체한다', () => {
+    const mine = appendSubtitleLine(
+      [],
+      payload({ subtitleId: '1', speakerRole: 'INFLUENCER', originalText: '내 말' }),
+      'INFLUENCER',
+      NAMES,
+    )
+    const theirs = appendSubtitleLine(
+      mine,
+      payload({ subtitleId: '2', speakerRole: 'FAN', originalText: '팬 말' }),
+      'INFLUENCER',
+      NAMES,
+    )
+
+    expect(theirs).toHaveLength(1)
+    expect(theirs[0]?.text).toBe('팬 말')
   })
 
   it('같은 subtitleId는 새로 붙이지 않고 교체한다', () => {
@@ -218,24 +234,6 @@ describe('appendSubtitleLine', () => {
     expect(refined[0]?.translatedText).toBe('Hello there')
   })
 
-  it('서로 다른 식별자의 같은 문장은 각각 남긴다', () => {
-    // "네"처럼 짧은 대답이 반복될 때 뒤 자막이 앞 자막을 덮어 사라지면 안 된다.
-    const first = appendSubtitleLine(
-      [],
-      payload({ subtitleId: 'local-1', originalText: '네', translatedText: null }),
-      'INFLUENCER',
-      NAMES,
-    )
-    const second = appendSubtitleLine(
-      first,
-      payload({ subtitleId: 'local-2', originalText: '네', translatedText: null }),
-      'INFLUENCER',
-      NAMES,
-    )
-
-    expect(second).toHaveLength(2)
-  })
-
   it('최근 SUBTITLE_HISTORY_SIZE개만 유지한다', () => {
     let lines: SubtitleLine[] = []
     for (let index = 1; index <= SUBTITLE_HISTORY_SIZE + 2; index += 1) {
@@ -248,8 +246,7 @@ describe('appendSubtitleLine', () => {
     }
 
     expect(lines).toHaveLength(SUBTITLE_HISTORY_SIZE)
-    // 앞의 두 줄이 밀려나고 마지막 줄이 가장 최근 발화로 남는다.
-    expect(lines[0]?.text).toBe('line 3')
+    // 가장 최근 발화만 남고 앞의 발화는 밀려난다.
     expect(lines.at(-1)?.text).toBe(`line ${SUBTITLE_HISTORY_SIZE + 2}`)
   })
 

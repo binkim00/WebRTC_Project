@@ -16,7 +16,7 @@ import {
   getFanCardDraft,
   saveFanCardDraft,
 } from '../../api/capturedPhotos'
-import { AlertBanner, Button, Card } from '..'
+import { AlertBanner, Button, Card, CardContent } from '..'
 import {
   drawFanCard,
   fanCardSizeOf,
@@ -29,6 +29,7 @@ import { FanCardLayoutPicker } from './FanCardLayoutPicker'
 import { photoCountOf } from './fanCardLayoutOptions'
 import { FanCardFontPicker } from './FanCardFontPicker'
 import { FanCardStickerPanel } from './FanCardStickerPanel'
+import { useTranslation } from '../../i18n'
 
 /** AI 추천 문구가 생성 중일 때 다시 조회하는 간격이다. */
 const SUGGESTION_POLL_INTERVAL_MS = 3_000
@@ -151,6 +152,7 @@ export function FanCardSection({
   dateLabel,
   authToken,
 }: FanCardSectionProps) {
+  const { t } = useTranslation()
   const [candidates, setCandidates] = useState<FanCardCandidates>()
   const [selectedText, setSelectedText] = useState<string>()
   const [savedText, setSavedText] = useState<string>()
@@ -379,11 +381,13 @@ export function FanCardSection({
         setLoadError(
           error instanceof Error
             ? error.message
-            : '기념 카드 문구를 불러오지 못했습니다.',
+            : t('fanCardSection.t1'),
         )
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, callSessionId, reloadKey])
 
   useEffect(() => {
@@ -475,12 +479,14 @@ export function FanCardSection({
         ctx.restore()
       })
       .catch(() => {
-        if (active) setSaveError('카드 이미지를 그리지 못했습니다.')
+        if (active) setSaveError(t('fanCardSection.t2'))
       })
 
     return () => {
       active = false
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 미리보기 재그리기를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     canCompose,
     dateLabel,
@@ -567,11 +573,13 @@ export function FanCardSection({
       setSavedText(saved.text)
     } catch (error: unknown) {
       setSaveError(
-        error instanceof Error ? error.message : '기념 카드를 저장하지 못했습니다.',
+        error instanceof Error ? error.message : t('fanCardSection.t3'),
       )
     } finally {
       setSaving(false)
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, callSessionId, selectedText])
 
   /**
@@ -599,13 +607,13 @@ export function FanCardSection({
         decorations,
       })
     } catch {
-      setSaveError('카드 이미지를 만들지 못했습니다.')
+      setSaveError(t('fanCardSection.t4'))
       return
     }
 
     canvas.toBlob((blob) => {
       if (!blob) {
-        setSaveError('카드 이미지를 만들지 못했습니다.')
+        setSaveError(t('fanCardSection.t5'))
         return
       }
 
@@ -627,99 +635,106 @@ export function FanCardSection({
 
   return (
     <section className="mt-8">
-      <Card className="p-6">
-        <header>
-          <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
-            기념 카드 만들기
-          </h2>
-          <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-            {photoBlobs.length > 0
-              ? '통화에서 남긴 사진으로 카드를 만들 수 있어요. 인상 깊었던 한마디는 원하면 함께 넣으세요.'
-              : '통화에서 인상 깊었던 한마디를 골라 카드로 간직할 수 있어요.'}
-          </p>
-        </header>
+      {/*
+        Card는 이 프로젝트에서 위쪽 구분선만 그리는 요소이고 여백은 CardContent가 담당한다.
+        Card에 직접 p-6을 주면 다른 화면의 카드와 여백 규칙이 어긋나므로 관례대로 둘을 겹쳐 쓴다.
+      */}
+      <Card>
+        <CardContent>
+          <header>
+            <h2 className="text-xl font-extrabold tracking-[-0.03em] text-[var(--color-text-primary)]">
+               {t('fanCardSection.t6')} </h2>
+            <p className="mt-2 text-[15px] font-medium leading-[1.7] text-[var(--color-text-muted)]">
+              {photoBlobs.length > 0
+                ? t('fanCardSection.t7')
+                : t('fanCardSection.t8')}
+            </p>
+          </header>
 
-        <FanCardQuotePicker
-          candidates={candidates}
-          loadError={loadError}
-          onRetry={() => setReloadKey((key) => key + 1)}
-          onSelect={setSelectedText}
-          selectedText={selectedText}
-        />
-
-        {photoBlobs.length > 0 ? (
-          <FanCardLayoutPicker
-            layout={layout}
-            onLayoutChange={changeLayout}
-            onTogglePhoto={togglePhoto}
-            photoUrls={photoUrls}
-            selectedPhotoIndexes={selectedPhotoIndexes}
+          <FanCardQuotePicker
+            candidates={candidates}
+            loadError={loadError}
+            onRetry={() => setReloadKey((key) => key + 1)}
+            onSelect={setSelectedText}
+            selectedText={selectedText}
           />
-        ) : null}
 
-        {canCompose ? (
-          <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
-            <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
-
-            <h3 className="mt-6 text-sm font-semibold text-[var(--color-text-primary)]">
-              카드 미리보기
-            </h3>
-            <canvas
-              aria-label={
-                selectedText ? `기념 카드 미리보기: ${selectedText}` : '기념 카드 미리보기'
-              }
-              // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
-              className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] ${
-                decorations.length > 0 ? 'cursor-grab' : ''
-              }`}
-              onPointerCancel={handleCanvasPointerUp}
-              onPointerDown={handleCanvasPointerDown}
-              onPointerMove={handleCanvasPointerMove}
-              onPointerUp={handleCanvasPointerUp}
-              ref={canvasRef}
-              role="img"
+          {/* 문구는 선택 사항이라 사진만 있어도 배치를 고를 수 있어야 한다. */}
+          {photoBlobs.length > 0 ? (
+            <FanCardLayoutPicker
+              layout={layout}
+              onLayoutChange={changeLayout}
+              onTogglePhoto={togglePhoto}
+              photoUrls={photoUrls}
+              selectedPhotoIndexes={selectedPhotoIndexes}
             />
+          ) : null}
 
-            <FanCardStickerPanel
-              decorationCount={decorations.length}
-              onAddSticker={(code) => addDecoration('STICKER', code)}
-              onAddText={(text) => addDecoration('TEXT', text)}
-              onRemoveSelected={removeSelectedDecoration}
-              onUpdateSelected={updateSelectedDecoration}
-              selectedDecoration={selectedDecoration}
-            />
+          {canCompose ? (
+            <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
+              <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
 
-            {saveError ? (
-              <AlertBanner className="mt-4" title="카드를 처리하지 못했습니다" variant="error">
-                {saveError}
-              </AlertBanner>
-            ) : null}
+              <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
+                 {t('fanCardSection.t9')} </h3>
+              <canvas
+                aria-label={
+                  selectedText
+                    ? t('fanCardSection.t10', { p0: selectedText })
+                    : t('fanCardSection.t17')
+                }
+                // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
+                className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
+                  decorations.length > 0 ? 'cursor-grab' : ''
+                }`}
+                onPointerCancel={handleCanvasPointerUp}
+                onPointerDown={handleCanvasPointerDown}
+                onPointerMove={handleCanvasPointerMove}
+                onPointerUp={handleCanvasPointerUp}
+                ref={canvasRef}
+                role="img"
+              />
 
-            {savedText !== undefined && savedText === selectedText ? (
-              <p className="mt-4 text-sm text-[var(--color-success)]">
-                카드를 저장했습니다. 이미지로도 내려받을 수 있어요.
-              </p>
-            ) : null}
+              <FanCardStickerPanel
+                decorationCount={decorations.length}
+                onAddSticker={(code) => addDecoration('STICKER', code)}
+                onAddText={(text) => addDecoration('TEXT', text)}
+                onRemoveSelected={removeSelectedDecoration}
+                onUpdateSelected={updateSelectedDecoration}
+                selectedDecoration={selectedDecoration}
+              />
 
-            <div className={`mt-4 grid gap-3 ${selectedText ? 'sm:grid-cols-2' : ''}`}>
-              {selectedText ? (
-                <Button loading={saving} onClick={() => void handleSave()} size="lg">
-                  {savedText ? '이 문구로 다시 저장' : '카드 저장하기'}
-                </Button>
+              {saveError ? (
+                <AlertBanner className="mt-4" title={t('fanCardSection.t11')} variant="error">
+                  {saveError}
+                </AlertBanner>
               ) : null}
-              <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
-                이미지 내려받기
-              </Button>
-            </div>
 
-            {selectedText ? null : (
-              <p className="mt-3 text-xs text-[var(--color-text-secondary)]">
-                문구 없이도 카드를 내려받을 수 있어요. 문구를 고르면 계정에도 저장해 두고
-                나중에 다시 볼 수 있습니다.
-              </p>
-            )}
-          </div>
-        ) : null}
+              {/* 저장 완료도 오류와 같은 배너 체계로 알린다. 초록 문장 한 줄만 두면 눈에 띄지 않는다. */}
+              {/* 문구를 고르지 않으면 둘 다 undefined 라 저장한 적이 없어도 같다고 나온다. */}
+              {savedText !== undefined && savedText === selectedText ? (
+                <AlertBanner className="mt-4" title={t('fanCardSection.t12')} variant="success">
+                   {t('fanCardSection.t13')} </AlertBanner>
+              ) : null}
+
+              {/* 서버가 보관하는 것은 문구뿐이라 문구를 고른 경우에만 저장 버튼을 연다. */}
+              <div className={`mt-6 grid gap-3 ${selectedText ? 'sm:grid-cols-2' : ''}`}>
+                {selectedText ? (
+                  <Button loading={saving} onClick={() => void handleSave()} size="lg">
+                    {savedText ? t('fanCardSection.t14') : t('fanCardSection.t15')}
+                  </Button>
+                ) : null}
+                <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
+                   {t('fanCardSection.t16')} </Button>
+              </div>
+
+              {selectedText ? null : (
+                <p className="mt-3 text-xs text-[var(--color-text-secondary)]">
+                  {t('fanCardSection.t18')}
+                </p>
+              )}
+            </div>
+          ) : null}
+        </CardContent>
       </Card>
     </section>
   )

@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
 export type PublicFanMeetingStatus =
   | 'PUBLISHED'
@@ -133,7 +134,7 @@ function unwrapData(value: unknown): unknown {
 
 function readString(value: unknown, fieldName: string): string {
   if (typeof value === 'string' && value.trim()) return value
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('fanMeetings.t1', { p0: fieldName }))
 }
 
 function readNullableString(value: unknown, fieldName: string): string | null {
@@ -143,12 +144,12 @@ function readNullableString(value: unknown, fieldName: string): string | null {
 
 function readNumber(value: unknown, fieldName: string): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('fanMeetings.t2', { p0: fieldName }))
 }
 
 function readBoolean(value: unknown, fieldName: string): boolean {
   if (typeof value === 'boolean') return value
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('fanMeetings.t3', { p0: fieldName }))
 }
 
 function isPublicMeetingStatus(value: unknown): value is PublicFanMeetingStatus {
@@ -168,13 +169,13 @@ function readApplicationStatus(
   ) {
     return value as FanMeetingApplicationStatus
   }
-  throw new TypeError('applicationStatus 응답 형식이 올바르지 않습니다.')
+  throw new TypeError(translate('fanMeetings.t4'))
 }
 
 function parseMeeting(value: unknown): PublicFanMeetingSummary {
   const record = asRecord(value)
   if (!record || !isPublicMeetingStatus(record.status)) {
-    throw new TypeError('팬미팅 목록 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetings.t5'))
   }
 
   return {
@@ -201,7 +202,7 @@ function parseMeeting(value: unknown): PublicFanMeetingSummary {
 function parsePage(value: unknown): PublicFanMeetingPage {
   const record = asRecord(unwrapData(value))
   if (!record || !Array.isArray(record.content)) {
-    throw new TypeError('팬미팅 페이지 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetings.t6'))
   }
 
   return {
@@ -239,7 +240,7 @@ function parseDetail(value: unknown): PublicFanMeetingDetail {
     typeof status !== 'string' ||
     !detailStatuses.includes(status as FanMeetingDetailStatus)
   ) {
-    throw new TypeError('팬미팅 상세 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetings.t7'))
   }
 
   return {

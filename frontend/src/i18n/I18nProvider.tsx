@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { I18nContext, type I18nContextValue } from './context'
 import { DICTIONARIES, LOCALE_HTML_LANG, isLocale, type Locale } from './locales'
+import { setActiveLocale } from './translate'
 
 /** 선택한 화면 언어를 보관하는 키다. 탭을 닫아도 유지되어야 하므로 localStorage를 쓴다. */
 const STORAGE_KEY = 'melly-locale'
@@ -55,6 +56,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = LOCALE_HTML_LANG[locale]
   }, [locale])
+
+  // 컴포넌트 밖에서 쓰는 translate()가 같은 언어를 보게 맞춘다.
+  // useEffect가 아니라 렌더 중에 맞추는 이유: effect는 자식 렌더 뒤에 실행되므로, 언어를 바꾼
+  // 직후 첫 렌더에서 자식이 이전 언어의 문장을 읽게 된다. 대입은 부수효과가 없어 안전하다.
+  setActiveLocale(locale)
 
   const value = useMemo<I18nContextValue>(() => {
     const dictionary = DICTIONARIES[locale]

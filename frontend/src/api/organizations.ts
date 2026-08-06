@@ -1,5 +1,6 @@
 import { ApiError } from './ApiError'
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
 export type Organization = {
   organizationId: number
@@ -77,7 +78,7 @@ function isOrganizationMember(value: unknown): value is OrganizationMember {
 
 function unwrap<T>(value: unknown, guard: (candidate: unknown) => candidate is T): T {
   const envelope = isRecord(value) && value.success === true ? value.data : value
-  if (!guard(envelope)) throw new TypeError('조직 API 응답 형식이 올바르지 않습니다.')
+  if (!guard(envelope)) throw new TypeError(translate('organizations.t1'))
   return envelope
 }
 

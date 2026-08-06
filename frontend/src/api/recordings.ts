@@ -2,6 +2,7 @@ import { ApiError } from './ApiError'
 import { apiRequest } from './client'
 import { buildQuery, unwrapEnvelope, type PageResponse } from './envelope'
 import { deletePendingRecording, getPendingRecording } from './pendingRecordings'
+import { translate } from '../i18n'
 
 const API_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
 
@@ -108,7 +109,7 @@ async function readUploadError(response: Response): Promise<ApiError> {
   return new ApiError(
     response.status,
     code ?? `HTTP_${response.status}`,
-    detail ?? message ?? 'API 요청에 실패했습니다.',
+    detail ?? message ?? translate('recordings.t1'),
     detail,
   )
 }

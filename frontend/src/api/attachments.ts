@@ -1,5 +1,6 @@
 import { ApiError } from './ApiError'
 import { unwrapEnvelope } from './envelope'
+import { translate } from '../i18n'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -44,7 +45,7 @@ async function readUploadError(response: Response): Promise<ApiError> {
   return new ApiError(
     response.status,
     code ?? `HTTP_${response.status}`,
-    detail ?? message ?? '첨부파일 업로드에 실패했습니다.',
+    detail ?? message ?? translate('attachments.t1'),
     detail,
   )
 }

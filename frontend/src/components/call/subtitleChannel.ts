@@ -53,12 +53,13 @@ export type SubtitlePayload = {
 }
 
 /**
- * 화면에 유지할 최근 대사 수.
+ * 화면에 유지할 대사 수.
  *
- * 3줄이던 것을 늘렸다. 짧은 대답이 자주 오가는 통화에서 방금 지나간 대사가 곧바로 밀려나
- * "자막이 누락됐다"고 보이는 경우가 있었다.
+ * **1줄이다.** 새 문장이 오면 이전 문장을 지우고 그 자리에 놓는다. 여러 줄을 쌓아 두면
+ * 통화가 길어질수록 자막이 화면을 잠식하고 지금 하는 말이 어느 줄인지 흐려진다.
+ * (여러 줄을 다시 보여 주려면 이 값만 올리면 되고 나머지 로직은 그대로 동작한다.)
  */
-export const SUBTITLE_HISTORY_SIZE = 6
+export const SUBTITLE_HISTORY_SIZE = 1
 
 /** subtitle_id 없이 온 자막에 붙일 로컬 식별자 번호다. */
 let fallbackSubtitleSeq = 0
@@ -163,20 +164,16 @@ export type SubtitleTexts = {
 }
 
 /**
- * 보는 사람에게 맞는 자막 문장을 고른다.
+ * 상대 발화에서 화면에 뿌릴 문장을 고른다.
  *
- * **원문은 항상 표시하고**, 번역문은 있을 때만 아래에 덧붙인다. 이전에는 상대 발화에서
- * 번역문이 원문을 대체해, 번역이 어긋났을 때 사용자가 원문을 확인할 방법이 없었다.
- *
- * 내가 말한 대사의 번역문은 상대방 언어로 만들어진 것이라 내 화면에서는 의미가 없으므로 뺀다.
+ * **원문은 항상 표시하고**, 번역문은 있을 때만 아래에 덧붙인다. 이전에는 번역문이 원문을
+ * 대체해, 번역이 어긋났을 때 사용자가 원문을 확인할 방법이 없었다.
  * 번역문이 원문과 같으면(같은 언어) 같은 문장을 두 줄로 반복하지 않는다.
+ *
+ * 내 발화는 화면에 띄우지 않으므로(appendSubtitleLine에서 걸러진다) 여기서 다루지 않는다.
  */
-export function pickSubtitleTexts(
-  payload: SubtitlePayload,
-  viewerRole: string | undefined,
-): SubtitleTexts {
+export function pickSubtitleTexts(payload: SubtitlePayload): SubtitleTexts {
   const text = payload.originalText.trim()
-  if (isOwnSubtitle(payload.speakerRole, viewerRole)) return { text }
 
   const translated = payload.translatedText?.trim()
   if (!translated || translated === text) return { text }
@@ -190,20 +187,25 @@ export type SubtitleSpeakerNames = {
   fan: string
 }
 
-/** 자막 앞에 붙일 화자 이름을 만든다. 내가 말한 대사는 '나'로 표시한다. */
+/**
+ * 자막 앞에 붙일 화자 이름을 만든다.
+ *
+ * 상대 발화만 화면에 오므로 payload의 역할에 맞는 이름을 그대로 쓴다.
+ */
 export function pickSubtitleSpeaker(
   payload: SubtitlePayload,
-  viewerRole: string | undefined,
   names: SubtitleSpeakerNames,
 ): string {
-  if (isOwnSubtitle(payload.speakerRole, viewerRole)) return '나'
   return payload.speakerRole === 'INFLUENCER' ? names.influencer : names.fan
 }
 
 /**
- * 받은 자막을 최근 대사 목록에 반영한다.
+ * 받은 자막을 화면 목록에 반영한다.
  *
- * 새 발화는 뒤에 붙이고 최근 {@link SUBTITLE_HISTORY_SIZE}개만 남긴다.
+ * **내가 말한 대사는 표시하지 않는다.** 내 말은 내가 이미 알고 있어 자막으로 다시 읽을 필요가
+ * 없고, 두 사람의 말이 섞여 올라오면 상대가 무슨 말을 했는지 따라가기 어려워진다.
+ *
+ * 새 발화는 이전 발화를 밀어내고 {@link SUBTITLE_HISTORY_SIZE}줄만 남는다.
  * 빈 문장은 화면에 빈 줄을 만들 뿐이라 버린다.
  *
  * `subtitleId`가 같으면 붙이지 않고 **교체**한다. 워커는 확정된 발화마다 DB INSERT의
@@ -220,12 +222,15 @@ export function appendSubtitleLine(
   viewerRole: string | undefined,
   names: SubtitleSpeakerNames,
 ): SubtitleLine[] {
-  const texts = pickSubtitleTexts(payload, viewerRole)
+  // 내 발화는 화면에 올리지 않는다. 상대 발화만 남긴다.
+  if (isOwnSubtitle(payload.speakerRole, viewerRole)) return [...current]
+
+  const texts = pickSubtitleTexts(payload)
   if (!texts.text) return [...current]
 
   const line: SubtitleLine = {
     id: payload.subtitleId,
-    speaker: pickSubtitleSpeaker(payload, viewerRole, names),
+    speaker: pickSubtitleSpeaker(payload, names),
     ...texts,
   }
 

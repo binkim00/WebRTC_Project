@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 import { unwrapEnvelope } from './envelope'
+import { translate } from '../i18n'
 
 export type FanMeetingStatus =
   | 'DRAFT'
@@ -61,11 +62,13 @@ export type ImmediateFanMeetingStatus =
   | 'APPLICATION_CLOSED'
   | 'LIVE'
 
+
 /**
- * 현재 백엔드가 제공하는 강제 전환 API를 운영 UI에서 안전하게 제한하기 위한 순방향 표다.
+ * 운영 UI에서 허용하는 순방향 전환 표다.
  *
- * 이 검사는 실수 방지용이며 최종 권한·상태 검증은 반드시 서버가 수행해야 한다. 프론트에서는
- * 과거 상태 복원이나 종료 상태 재개 같은 위험한 조합을 요청할 수 없게 막는다.
+ * 신설된 정식 명령은 엔티티의 전이 규칙(`openApplications()`·`closeApplications()`)을 그대로
+ * 태우므로 서버가 최종 판정을 한다. 이 표는 실수 방지용이며, 과거 상태 복원처럼 명령 자체가
+ * 존재하지 않는 조합을 화면에서 미리 걸러 불필요한 요청을 막는다.
  */
 const IMMEDIATE_TRANSITIONS: Partial<
   Record<FanMeetingStatus, readonly ImmediateFanMeetingStatus[]>
@@ -168,13 +171,6 @@ export async function controlFanMeetingForTest(
 }
 
 /**
- * 예약 시각만 우회해 다음 운영 상태로 즉시 전환한다.
- *
- * 접수 기간과 대기실 오픈 시각을 다시 잡는 일은 서버의 운영 명령이 맡는다. 상태와 기간이
- * 어긋나면 팬이 응모하거나 입장할 수 없으므로 한 트랜잭션에서 함께 바뀌어야 한다.
- */
-
-/**
  * 서버가 보낸 LocalDateTime 문자열을 밀리초로 바꾼다.
  *
  * offset이 없는 값은 서버 시간대(KST) 기준으로 해석한다. `new Date(value)`에 그대로 넘기면
@@ -203,35 +199,41 @@ export function isWaitingRoomOpen(queueOpenAt?: string | null, now = Date.now())
 /**
  * 예약 시각을 기다리지 않고 다음 운영 상태로 넘긴다.
  *
- * <p>서버의 운영 명령이 상태와 함께 접수 기간·대기실 오픈 시각까지 맞춰 주므로 화면은
- * 목표 상태만 정하면 된다. 여기서는 되돌아가거나 종료 상태를 되살리는 조합을 미리 막고,
- * 최종 권한과 상태 검증은 서버가 다시 한다.
+ * 백엔드가 이 용도의 **정식 명령 3개**를 신설해(`applications/open`·`applications/close`·
+ * `waiting-room/open`) 그것만 호출한다. 요청 본문은 없고, 상태와 기간을 서버가 한 트랜잭션에서
+ * 함께 바꾼다. 상태가 맞지 않으면 서버가 `FAN_MEETING_STATE_CONFLICT`로 거절한다.
  *
- * @param meetingId 팬미팅 식별자
- * @param currentStatus 지금 상태
- * @param targetStatus 넘어갈 상태
- * @param authToken 액세스 토큰
- * @param signal 요청 취소 신호
- * @returns 전환된 팬미팅 관리 정보
- * @throws TypeError 순방향으로 허용하지 않는 조합인 경우
+ * 이전에는 이 기능이 시연용 `/test-control`에 얹혀 있었다. 그 컨트롤러는 운영 배포에서 빈 자체가
+ * 등록되지 않아(`@ConditionalOnProperty`) 404가 났고, 매니저의 "응모 지금 시작·마감·지금 시작"이
+ * 모두 동작하지 않았다. 프론트에서 KST 변환과 응모 기간 계산을 흉내 내던 코드도 함께 걷어냈다 —
+ * 서버가 자기 시계로 계산하는 편이 정확하고, 검증 규칙이 바뀔 때 프론트가 따라갈 필요도 없다.
  */
 export async function transitionFanMeetingImmediately(
   meetingId: string | number,
   currentStatus: FanMeetingStatus,
   targetStatus: ImmediateFanMeetingStatus,
   authToken: string,
-  signal?: AbortSignal,
+  options: {
+    /**
+     * 팬미팅 예정 시작 일시다. 예정 시각 **전에** 시작하려면 필요하다.
+     *
+     * 서버 `start()`는 `now >= 예정시각 - earlyStartMinutes`일 때만 시작을 허용한다. 이 값이
+     * 없으면 조기 시작 폭을 계산할 수 없어, 예정 시각 전에는 서버가 시작을 거절한다.
+     */
+    scheduledStartAt?: string | null
+    signal?: AbortSignal
+  } = {},
 ): Promise<FanMeetingManagementResponse> {
+  const { scheduledStartAt, signal } = options
   const allowedTargets = IMMEDIATE_TRANSITIONS[currentStatus]
   if (!allowedTargets?.includes(targetStatus)) {
     throw new TypeError(
-      `${currentStatus} 상태에서 ${targetStatus} 상태로 즉시 전환할 수 없습니다.`,
+      translate('meetingManagement.t1', { p0: currentStatus, p1: targetStatus }),
     )
   }
 
   if (targetStatus === 'APPLICATION_OPEN') {
-    // 접수 시작·마감 시각을 다시 잡는 일은 서버가 한다. 상태와 기간이 어긋나면 팬이
-    // 응모할 수 없으므로 한 트랜잭션에서 함께 처리해야 한다.
+    // 응모 시작 시각을 지금으로 옮기고, 마감이 이미 지났으면 원래 접수 기간만큼 서버가 연장한다.
     return postCommand(meetingId, 'applications/open', authToken, signal)
   }
 
@@ -239,13 +241,62 @@ export async function transitionFanMeetingImmediately(
     return postCommand(meetingId, 'applications/close', authToken, signal)
   }
 
-  // 정식 시작 명령은 대기실 오픈 시각을 건드리지 않는다. 먼저 대기실을 열어야 참가자가
-  // 바로 들어올 수 있다.
+  /*
+   * 지금 시작 — 조기 시작 폭을 넓힌 뒤 대기실을 열고 정식 start 명령을 호출한다.
+   *
+   * 신설된 `waiting-room/open`은 대기실 오픈 시각만 지금으로 옮기고 **예정 시작 시각은 건드리지
+   * 않는다.** 그래서 예정 시각이 아직 오지 않았으면 `start()`의 시간 조건에 걸려
+   * `FAN_MEETING_START_NOT_ALLOWED`로 거절된다. "지금 시작"은 바로 그 시각 전에 쓰는 기능이므로,
+   * 예정 시각까지 남은 만큼 `earlyStartMinutes`를 넓혀 서버가 허용하는 범위로 만든다.
+   *
+   * `earlyStartMinutes`를 쓰는 이유: 응모가 시작된 뒤에도 바꿀 수 있는 몇 안 되는 운영 설정이라
+   * READY 상태에서도 PATCH가 통과한다(`hasApplicationRestrictedChanges`가 막지 않는다).
+   * 예정 시각 자체를 옮기지 않으므로 확정 참가자에게 안내된 시각도 그대로 남는다.
+   */
+  const earlyStartMinutes = minutesUntil(scheduledStartAt)
+  if (earlyStartMinutes !== undefined) {
+    try {
+      await patchFanMeeting(
+        meetingId,
+        { operation: { earlyStartMinutes } },
+        authToken,
+        signal,
+      )
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') throw cause
+      // 넓히지 못했더라도 시작을 시도한다. 이미 예정 시각이 지난 경우라면 그대로 성공하고,
+      // 아니라면 서버의 시작 거절 메시지가 원인을 더 정확히 알려 준다.
+    }
+  }
+
+  /*
+   * 대기실 열기가 실패하면 시작하지 않고 그대로 오류를 올린다. 팬이 들어올 수 없는 상태로
+   * 팬미팅을 진행 중으로 만들어 두는 것보다, 시작되지 않는 편이 낫다.
+   */
   await postCommand(meetingId, 'waiting-room/open', authToken, signal)
   return startFanMeeting(meetingId, authToken, signal)
 }
 
-/** 팬미팅 시작 전에도 참가자가 대기실에서 장비를 점검할 수 있도록 대기열을 즉시 연다. */
+/**
+ * 지금부터 예정 시작 시각까지 남은 분을 올림해 돌려준다.
+ *
+ * 조기 시작 허용 폭(`earlyStartMinutes`)으로 쓴다. 경계에서 밀리지 않도록 1분을 더한다.
+ * 예정 시각을 알 수 없거나 이미 지났으면 넓힐 필요가 없어 undefined다.
+ */
+function minutesUntil(scheduledStartAt?: string | null): number | undefined {
+  const scheduledStartMs = serverLocalDateTimeMs(scheduledStartAt)
+  if (!Number.isFinite(scheduledStartMs)) return undefined
+
+  const diffMs = scheduledStartMs - Date.now()
+  if (diffMs <= 0) return undefined
+  return Math.ceil(diffMs / 60_000) + 1
+}
+
+/**
+ * 팬미팅 시작 전에도 참가자가 대기실에서 장비를 점검할 수 있도록 대기열을 즉시 연다.
+ *
+ * 상태는 바꾸지 않고 대기실 오픈 시각만 지금으로 옮기는 정식 명령이다.
+ */
 export function openWaitingRoomImmediately(
   meetingId: string | number,
   authToken: string,
@@ -370,8 +421,8 @@ export async function downloadFanMeetingStatisticsCsv(
   if (!response.ok) {
     throw new Error(
       response.status === 403
-        ? '이 팬미팅의 결과를 내보낼 권한이 없습니다.'
-        : `결과 파일을 내려받지 못했습니다. (HTTP ${response.status})`,
+        ? translate('meetingManagement.t2')
+        : translate('meetingManagement.t3', { p0: response.status }),
     )
   }
 

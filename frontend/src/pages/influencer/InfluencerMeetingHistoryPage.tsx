@@ -7,19 +7,20 @@ import {
   fetchMyMeetings,
   type ManagerMeetingSummary,
 } from '../../api/managerMeetings'
+import { translate, useTranslation } from '../../i18n'
 
-const statusContent: Record<string, { label: string; className: string }> = {
-  DRAFT: { label: '작성 중', className: 'text-[var(--color-text-secondary)]' },
-  PUBLISHED: { label: '발행됨', className: 'text-[var(--color-text-secondary)]' },
-  APPLICATION_OPEN: { label: '응모 접수 중', className: 'text-[var(--color-primary-coral)]' },
-  APPLICATION_CLOSED: { label: '응모 마감', className: 'text-[var(--color-text-secondary)]' },
-  READY: { label: '시작 대기', className: 'text-[var(--color-warning)]' },
-  LIVE: { label: '진행 중', className: 'text-[var(--color-success)]' },
-  ENDED: { label: '종료', className: 'text-[var(--color-text-secondary)]' },
-  CANCELED: { label: '취소됨', className: 'text-[var(--color-error)]' },
-}
+const statusContent = (): Record<string, { label: string; className: string }> => ({
+  DRAFT: { label: translate('influencerMeetingHistoryPage.t33'), className: 'text-[var(--color-text-secondary)]' },
+  PUBLISHED: { label: translate('influencerMeetingHistoryPage.t34'), className: 'text-[var(--color-text-secondary)]' },
+  APPLICATION_OPEN: { label: translate('influencerMeetingHistoryPage.t35'), className: 'text-[var(--color-primary-coral)]' },
+  APPLICATION_CLOSED: { label: translate('influencerMeetingHistoryPage.t36'), className: 'text-[var(--color-text-secondary)]' },
+  READY: { label: translate('influencerMeetingHistoryPage.t37'), className: 'text-[var(--color-warning)]' },
+  LIVE: { label: translate('influencerMeetingHistoryPage.t38'), className: 'text-[var(--color-success)]' },
+  ENDED: { label: translate('influencerMeetingHistoryPage.t39'), className: 'text-[var(--color-text-secondary)]' },
+  CANCELED: { label: translate('influencerMeetingHistoryPage.t40'), className: 'text-[var(--color-error)]' },
+})
 
-const fallbackStatus = { label: '종료', className: 'text-[var(--color-text-secondary)]' }
+const fallbackStatus = () => ({ label: translate('influencerMeetingHistoryPage.t41'), className: 'text-[var(--color-text-secondary)]' })
 
 const PAGE_SIZE = 5
 /** 이 화면에서만 팬미팅을 만드는 1인 인플루언서·매니저 전용 경로다. 소속 인플루언서가 열면 라우터가 403으로 보낸다. */
@@ -36,15 +37,16 @@ function formatSchedule(value: string) {
 function errorMessage(reason: unknown) {
   return reason instanceof ApiError || reason instanceof TypeError
     ? reason.message
-    : '팬미팅 이력을 불러오지 못했습니다.'
+    : translate('influencerMeetingHistoryPage.t42')
 }
 
 function statusOf(meeting: ManagerMeetingSummary) {
   // 백엔드가 새 상태를 추가해도 배지 렌더링이 중단되지 않도록 안전한 기본값을 둔다.
-  return statusContent[meeting.status ?? 'ENDED'] ?? fallbackStatus
+  return statusContent()[meeting.status ?? 'ENDED'] ?? fallbackStatus()
 }
 
 export function InfluencerMeetingHistoryPage() {
+  const { t } = useTranslation()
   const authSession = getAuthSession()
   const authToken = authSession?.accessToken
   // 팬미팅 상세 허브(/manager/fan-meetings/{id})는 관리 권한이 있는 1인 인플루언서만 열 수 있다.
@@ -67,7 +69,7 @@ export function InfluencerMeetingHistoryPage() {
 
   useEffect(() => {
     if (!authToken) {
-      setLoadError('로그인 정보가 없습니다. 로그인 후 다시 시도해 주세요.')
+      setLoadError(t('influencerMeetingHistoryPage.t17'))
       setLoading(false)
       return
     }
@@ -93,6 +95,8 @@ export function InfluencerMeetingHistoryPage() {
       })
 
     return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, keyword, page])
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -111,9 +115,9 @@ export function InfluencerMeetingHistoryPage() {
 
   return (
     <div>
-      <h1 className="text-[25px] font-black tracking-[-0.035em]">내 팬미팅 이력</h1>
+      <h1 className="text-[25px] font-black tracking-[-0.035em]">{t('influencerMeetingHistoryPage.t1')}</h1>
       <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-muted)]">
-        생성하거나 진행한 1:1 영상통화 팬미팅을 확인하세요.
+        {t('influencerMeetingHistoryPage.t2')}
       </p>
 
       <div className="mt-6 flex flex-col items-stretch gap-4 border-b border-[var(--color-divider)] pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -124,66 +128,66 @@ export function InfluencerMeetingHistoryPage() {
         >
           <TextField
             containerClassName="min-w-0 flex-1"
-            label="팬미팅 검색"
+            label={t('influencerMeetingHistoryPage.t3')}
             onChange={(event) => setKeywordInput(event.currentTarget.value)}
-            placeholder="팬미팅명을 입력하세요"
+            placeholder={t('influencerMeetingHistoryPage.t4')}
             value={keywordInput}
           />
           <Button className="whitespace-nowrap" type="submit" variant="secondary">
-            검색
+            {t('influencerMeetingHistoryPage.t5')}
           </Button>
         </form>
         <Link
           className="mj-font-emphasis inline-flex min-h-11 items-center whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
           to={NEW_MEETING_PATH}
         >
-          새 팬미팅
+          {t('influencerMeetingHistoryPage.t6')}
         </Link>
       </div>
 
       {loadError ? (
-        <AlertBanner className="mt-6" title="팬미팅 이력을 불러오지 못했습니다" variant="error">
+        <AlertBanner className="mt-6" title={t('influencerMeetingHistoryPage.t7')} variant="error">
           {loadError}
         </AlertBanner>
       ) : null}
 
       {loading ? (
         <div className="flex min-h-72 items-center justify-center">
-          <Spinner label="팬미팅 이력을 불러오는 중" />
+          <Spinner label={t('influencerMeetingHistoryPage.t8')} />
         </div>
       ) : isEmpty ? (
         <div className="grid place-items-center px-6 py-20 text-center" role="status">
           <strong className="text-xl font-extrabold tracking-[-0.03em]">
-            {keyword ? '검색 결과가 없습니다' : '아직 생성한 팬미팅이 없습니다'}
+            {keyword ? t('influencerMeetingHistoryPage.t18') : t('influencerMeetingHistoryPage.t19')}
           </strong>
           <span className="mt-[9px] max-w-[420px] text-base font-medium leading-[1.6] text-[var(--color-text-muted)]">
             {keyword
-              ? '입력한 팬미팅명을 확인하고 다시 검색해 주세요.'
-              : '새 팬미팅을 만들면 일정과 진행 상태를 이곳에서 확인할 수 있어요.'}
+              ? t('influencerMeetingHistoryPage.t20')
+              : t('influencerMeetingHistoryPage.t21')}
           </span>
           {keyword ? (
             <Button className="mt-5" onClick={resetSearch} variant="secondary">
-              검색 초기화
+              {t('influencerMeetingHistoryPage.t9')}
             </Button>
           ) : (
             <Link
               className="mj-font-emphasis mt-5 inline-flex min-h-11 items-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
               to={NEW_MEETING_PATH}
             >
-              새 팬미팅
+              {t('influencerMeetingHistoryPage.t10')}
             </Link>
           )}
         </div>
       ) : (
         <>
-          <div className="mt-[22px]" role="table" aria-label="팬미팅 목록">
+          <div className="mt-[22px]" role="table" aria-label={t('influencerMeetingHistoryPage.t11')}>
             <div
               className={`hidden ${desktopColumns} gap-[18px] border-b border-[var(--color-border-control)] pb-[11px] md:grid`}
               role="row"
             >
               {(canOpenDetail
-                ? ['팬미팅', '일정', '상태', '팬 정보', '보고서', '상세']
-                : ['팬미팅', '일정', '상태', '팬 정보', '보고서']
+                ? [t('influencerMeetingHistoryPage.t22'), t('influencerMeetingHistoryPage.t23'), t('influencerMeetingHistoryPage.t24'), t('influencerMeetingHistoryPage.t25'), t('influencerMeetingHistoryPage.t26'), t('influencerMeetingHistoryPage.t27')]
+                : [t('influencerMeetingHistoryPage.t28'), t('influencerMeetingHistoryPage.t29'), t('influencerMeetingHistoryPage.t30'), t('influencerMeetingHistoryPage.t31'), t('influencerMeetingHistoryPage.t32')]
               ).map((label) => (
                 <span
                   className="text-[13px] font-bold text-[var(--color-text-muted)]"
@@ -209,7 +213,7 @@ export function InfluencerMeetingHistoryPage() {
                       {meeting.title}
                     </strong>
                     <span className="mt-1 block text-sm font-medium text-[var(--color-text-muted)]">
-                      1:1 영상통화 팬미팅
+                      {t('influencerMeetingHistoryPage.t12')}
                     </span>
                   </div>
                   <div className="min-w-0" role="cell">
@@ -227,7 +231,7 @@ export function InfluencerMeetingHistoryPage() {
                       className="mj-font-label inline-flex min-h-10 items-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-[13px] text-sm hover:border-[var(--color-text-muted)]"
                       to={`/fan-meetings/${encodeURIComponent(meeting.meetingId)}/fans`}
                     >
-                      참가 팬
+                      {t('influencerMeetingHistoryPage.t13')}
                     </Link>
                   </div>
                   <div className="min-w-0" role="cell">
@@ -236,11 +240,11 @@ export function InfluencerMeetingHistoryPage() {
                         className="mj-font-label inline-flex min-h-10 items-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-[13px] text-sm hover:border-[var(--color-text-muted)]"
                         to={`/fan-meetings/${encodeURIComponent(meeting.meetingId)}/statistics`}
                       >
-                        통계 보고서
+                        {t('influencerMeetingHistoryPage.t14')}
                       </Link>
                     ) : (
                       <span className="whitespace-nowrap text-sm font-semibold text-[var(--color-text-muted)]">
-                        종료 후 제공
+                        {t('influencerMeetingHistoryPage.t15')}
                       </span>
                     )}
                   </div>
@@ -250,7 +254,7 @@ export function InfluencerMeetingHistoryPage() {
                         className="mj-font-label inline-flex min-h-10 items-center whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-[13px] text-sm hover:border-[var(--color-text-muted)]"
                         to={`/manager/fan-meetings/${encodeURIComponent(meeting.meetingId)}`}
                       >
-                        상세
+                        {t('influencerMeetingHistoryPage.t16')}
                       </Link>
                     </div>
                   ) : null}

@@ -2,15 +2,17 @@ import { useParams } from 'react-router-dom'
 import { VideoCallRoom } from '../../components/call/VideoCallRoom'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 import { InfluencerCallSidePanel } from './InfluencerCallSidePanel'
+import { useTranslation } from '../../i18n'
 
 export function InfluencerMeetingCallPage() {
+  const { t } = useTranslation()
   const { fanMeetingId, callSessionId } = useParams()
 
   if (!fanMeetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 fanMeetingId 값이 없습니다. 이전 화면에서 올바른 팬미팅을 선택해 주세요."
-        title="필수 URL 파라미터가 없습니다"
+        message={t('influencerRoutePages.t1')}
+        title={t('influencerRoutePages.t2')}
       />
     )
   }
@@ -18,8 +20,8 @@ export function InfluencerMeetingCallPage() {
   if (!callSessionId?.trim()) {
     return (
       <InvalidRouteState
-        message="실제 영상통화 입장에는 callSessionId가 필요합니다. 준비실에서 현재 통화 세션으로 입장해 주세요."
-        title="통화 세션 ID가 없습니다"
+        message={t('influencerRoutePages.t3')}
+        title={t('influencerRoutePages.t4')}
       />
     )
   }
@@ -32,7 +34,7 @@ export function InfluencerMeetingCallPage() {
       //  1인 운영자의 대기열 오픈·호출도 지금은 운영 콘솔이 아니라 대기실에 있다.)
       endTo={`/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/ready`}
       meetingId={fanMeetingId}
-      participantLabel="팬 영상"
+      participantLabel={t('influencerRoutePages.t5')}
       screenId="ID-003"
       sidePanel={<InfluencerCallSidePanel meetingId={fanMeetingId} />}
       forceEndOnLeave

@@ -5,6 +5,7 @@ import type {
   FanCardFont,
   FanCardLayout,
 } from '../components/fanCard/fanCardCanvas'
+import { translate } from '../i18n'
 
 /** 통화 중 팬이 셔터로 찍어 둔 기념 카드용 사진이다. */
 export type CapturedPhotos = {
@@ -69,7 +70,7 @@ const DRAFT_STORE = 'card-drafts'
  */
 function openDatabase(): Promise<IDBDatabase> {
   if (!('indexedDB' in window)) {
-    return Promise.reject(new Error('이 브라우저는 통화 사진 보관을 지원하지 않습니다.'))
+    return Promise.reject(new Error(translate('capturedPhotos.t1')))
   }
 
   return new Promise((resolve, reject) => {
@@ -86,7 +87,7 @@ function openDatabase(): Promise<IDBDatabase> {
     request.addEventListener('success', () => resolve(request.result), { once: true })
     request.addEventListener(
       'error',
-      () => reject(request.error ?? new Error('통화 사진 저장소를 열지 못했습니다.')),
+      () => reject(request.error ?? new Error(translate('capturedPhotos.t2'))),
       { once: true },
     )
   })
@@ -115,7 +116,7 @@ function runRequest<T>(
         request.addEventListener('success', () => resolve(request.result), { once: true })
         request.addEventListener(
           'error',
-          () => reject(request.error ?? new Error('통화 사진 저장소 요청에 실패했습니다.')),
+          () => reject(request.error ?? new Error(translate('capturedPhotos.t3'))),
           { once: true },
         )
         transaction.addEventListener('complete', () => database.close(), { once: true })

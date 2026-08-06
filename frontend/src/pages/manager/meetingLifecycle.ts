@@ -6,26 +6,27 @@
  */
 
 import type { FanMeetingStatus } from '../../api/meetingManagement'
+import { translate } from '../../i18n'
 
 /** API와 화면이 서로 다른 상태 유니온을 만들지 않도록 백엔드 응답 타입을 그대로 재사용한다. */
 export type MeetingLifecycleStatus = FanMeetingStatus
 
 /** 팬미팅 상태 코드를 화면용 한국어 라벨로 바꾼다. */
-export const meetingStatusLabels: Record<string, string> = {
-  DRAFT: '초안',
-  PUBLISHED: '발행됨',
-  APPLICATION_OPEN: '응모 접수 중',
-  APPLICATION_CLOSED: '응모 마감',
-  READY: '진행 준비',
-  LIVE: '진행 중',
-  ENDED: '종료',
-  CANCELED: '취소됨',
-}
+export const meetingStatusLabels = (): Record<string, string> => ({
+  DRAFT: translate('meetingLifecycle.t1'),
+  PUBLISHED: translate('meetingLifecycle.t2'),
+  APPLICATION_OPEN: translate('meetingLifecycle.t3'),
+  APPLICATION_CLOSED: translate('meetingLifecycle.t4'),
+  READY: translate('meetingLifecycle.t5'),
+  LIVE: translate('meetingLifecycle.t6'),
+  ENDED: translate('meetingLifecycle.t7'),
+  CANCELED: translate('meetingLifecycle.t8'),
+})
 
 /** 상태 코드를 라벨로 바꾸고, 알 수 없는 값이면 코드 자체를 보여 준다. */
 export function meetingStatusLabel(status?: string | null): string {
-  if (!status) return '상태 미확인'
-  return meetingStatusLabels[status] ?? status
+  if (!status) return translate('meetingLifecycle.t9')
+  return meetingStatusLabels()[status] ?? status
 }
 
 /** 팬미팅 상태에 맞는 배지 색상을 고른다. */
@@ -40,16 +41,16 @@ export function meetingStatusBadge(
 }
 
 /** 목록의 상태 필터 드롭다운에서 사용하는 선택지다. */
-export const meetingStatusFilterOptions: readonly { value: string; label: string }[] = [
-  { value: '', label: '전체 상태' },
-  { value: 'DRAFT', label: '초안' },
-  { value: 'PUBLISHED', label: '발행됨' },
-  { value: 'APPLICATION_OPEN', label: '응모 접수 중' },
-  { value: 'APPLICATION_CLOSED', label: '응모 마감' },
-  { value: 'READY', label: '진행 준비' },
-  { value: 'LIVE', label: '진행 중' },
-  { value: 'ENDED', label: '종료' },
-  { value: 'CANCELED', label: '취소됨' },
+export const meetingStatusFilterOptions = (): readonly { value: string; label: string }[] => [
+  { value: '', label: translate('meetingLifecycle.t10') },
+  { value: 'DRAFT', label: translate('meetingLifecycle.t11') },
+  { value: 'PUBLISHED', label: translate('meetingLifecycle.t12') },
+  { value: 'APPLICATION_OPEN', label: translate('meetingLifecycle.t13') },
+  { value: 'APPLICATION_CLOSED', label: translate('meetingLifecycle.t14') },
+  { value: 'READY', label: translate('meetingLifecycle.t15') },
+  { value: 'LIVE', label: translate('meetingLifecycle.t16') },
+  { value: 'ENDED', label: translate('meetingLifecycle.t17') },
+  { value: 'CANCELED', label: translate('meetingLifecycle.t18') },
 ]
 
 /** 팬미팅이 아직 시작되지 않아 정보 수정이 가능한 상태 목록이다. */
@@ -165,8 +166,8 @@ export function getAvailableActions(context: MeetingActionContext): MeetingActio
   if (status === 'READY' && !canStart) {
     startBlockedReason =
       participantCount <= 0
-        ? '확정 참가자가 없어 팬미팅을 시작할 수 없습니다.'
-        : `조기 시작 허용 시각(${earliestStartAt?.toLocaleString('ko-KR') ?? '-'}) 이후부터 시작할 수 있습니다.`
+        ? translate('meetingLifecycle.t19')
+        : translate('meetingLifecycle.t20', { p0: earliestStartAt?.toLocaleString('ko-KR') ?? '-' })
   }
 
   return {
@@ -188,6 +189,7 @@ export function getAvailableActions(context: MeetingActionContext): MeetingActio
     canEnd: status === 'LIVE',
     // 수동 운영 전환은 시간만 우회한다. 상태 순서와 참가자 존재 조건은 그대로 지킨다.
     canOpenApplicationsNow: status === 'PUBLISHED' && context.applicationEnabled === true,
+    // 정식 명령 `applications/close`가 APPLICATION_OPEN → APPLICATION_CLOSED만 허용한다.
     canCloseApplicationsNow: status === 'APPLICATION_OPEN',
     canStartNow,
     applicationStarted,
@@ -242,21 +244,21 @@ export function getScheduleErrors(input: MeetingScheduleInput): string[] {
 
   if (input.applicationEnabled) {
     if (applicationStart && applicationEnd && applicationEnd <= applicationStart) {
-      errors.push('응모 마감 일시는 응모 시작 일시보다 이후여야 합니다.')
+      errors.push(translate('meetingLifecycle.t21'))
     }
     if (applicationEnd && resultAnnouncement && resultAnnouncement < applicationEnd) {
-      errors.push('결과 발표 일시는 응모 마감 일시보다 빠를 수 없습니다.')
+      errors.push(translate('meetingLifecycle.t22'))
     }
     if (applicationEnd && scheduledStart && applicationEnd >= scheduledStart) {
-      errors.push('응모 마감 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+      errors.push(translate('meetingLifecycle.t23'))
     }
     if (resultAnnouncement && scheduledStart && resultAnnouncement >= scheduledStart) {
-      errors.push('결과 발표 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+      errors.push(translate('meetingLifecycle.t24'))
     }
   }
 
   if (queueOpen && scheduledStart && queueOpen >= scheduledStart) {
-    errors.push('대기열 오픈 일시는 팬미팅 시작 일시보다 이전이어야 합니다.')
+    errors.push(translate('meetingLifecycle.t25'))
   }
 
   return errors

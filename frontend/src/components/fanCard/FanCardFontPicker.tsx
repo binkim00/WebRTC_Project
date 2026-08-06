@@ -1,4 +1,6 @@
 import type { FanCardFont } from './fanCardCanvas'
+import { selectableChipClass } from './fanCardChipClass'
+import { translate, useTranslation } from '../../i18n'
 
 /**
  * 팬이 고를 수 있는 글꼴이다.
@@ -7,11 +9,11 @@ import type { FanCardFont } from './fanCardCanvas'
  * 글꼴은 fanCardCanvas가 키로 정한다. 글꼴 파일은 public/fonts에 있고 index.css의
  * @font-face로 등록해 둔다.
  */
-const FONT_OPTIONS: readonly { key: FanCardFont; label: string; previewFamily?: string }[] = [
-  { key: 'DEFAULT', label: '기본' },
-  { key: 'ROUND', label: '둥글둥글', previewFamily: '"Jua"' },
-  { key: 'HANDWRITING', label: '손글씨', previewFamily: '"Gaegu"' },
-  { key: 'HEADLINE', label: '또렷하게', previewFamily: '"Do Hyeon"' },
+const FONT_OPTIONS = (): readonly { key: FanCardFont; label: string; previewFamily?: string }[] => [
+  { key: 'DEFAULT', label: translate('fanCardFontPicker.t1') },
+  { key: 'ROUND', label: translate('fanCardFontPicker.t2'), previewFamily: '"Jua"' },
+  { key: 'HANDWRITING', label: translate('fanCardFontPicker.t3'), previewFamily: '"Gaegu"' },
+  { key: 'HEADLINE', label: translate('fanCardFontPicker.t4'), previewFamily: '"Do Hyeon"' },
 ]
 
 type FanCardFontPickerProps = {
@@ -27,19 +29,16 @@ type FanCardFontPickerProps = {
  * <p>버튼 라벨 자체를 그 글꼴로 그려, 고르기 전에 모양을 볼 수 있게 한다.
  */
 export function FanCardFontPicker({ fontKey, onChange }: FanCardFontPickerProps) {
+  const { t } = useTranslation()
   return (
     <>
-      <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">글꼴 고르기</h3>
+      <h3 className="text-[15px] font-extrabold text-[var(--color-text-primary)]">{t('fanCardFontPicker.t5')}</h3>
       <ul className="mt-3 flex flex-wrap gap-2">
-        {FONT_OPTIONS.map((option) => (
+        {FONT_OPTIONS().map((option) => (
           <li key={option.key}>
             <button
               aria-pressed={fontKey === option.key}
-              className={`rounded-full border px-3 py-1.5 text-sm transition-colors duration-200 motion-reduce:transition-none ${
-                fontKey === option.key
-                  ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
-                  : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)]'
-              }`}
+              className={selectableChipClass(fontKey === option.key)}
               onClick={() => onChange(option.key)}
               style={option.previewFamily ? { fontFamily: option.previewFamily } : undefined}
               type="button"

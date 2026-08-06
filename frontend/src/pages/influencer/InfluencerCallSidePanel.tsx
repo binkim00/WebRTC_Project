@@ -10,8 +10,10 @@ import {
   type FanMemo,
   type MeetingQueue,
 } from '../../api/fanMeetingParticipants'
+import { getApplicants, type ApplicantAnswerResponse } from '../../api/applications'
 import { changeQueuePosition } from '../../api/queueManagement'
 import { AlertBanner, Button, Dialog } from '../../components'
+import { useTranslation } from '../../i18n'
 
 type ConfirmKind = 'noshow' | 'skip'
 
@@ -22,6 +24,7 @@ type ConfirmKind = 'noshow' | 'skip'
  * 노쇼 처리와 다음 팬 넘기기의 최소 조작을 여기서 제공한다.
  */
 export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [session] = useState(() => getAuthSession())
   const isSolo = session?.role === 'SOLO_INFLUENCER'
@@ -95,6 +98,43 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
     return () => controller.abort()
   }, [currentFanId])
 
+  /**
+   * 지금 통화 중인 팬이 응모할 때 쓴 답변을 읽는다.
+   *
+   * 통화가 2분 남짓이라 무슨 말을 할지 정하는 데 시간을 쓰면 그대로 침묵이 된다. 팬이 응모 폼에
+   * 이미 적어 둔 답변("좋아하는 곡", "하고 싶은 말")을 통화 화면에 띄우면 그 시간을 대화로 채울 수
+   * 있다. 서버에 이미 있는 데이터라 새 API 없이 응모자 목록에서 이 팬만 골라 쓴다.
+   *
+   * 응모를 받지 않는 팬미팅(CSV 명단)에서는 응모 자체가 없으므로 결과가 비고, 이 블록은 숨는다.
+   */
+  const [answers, setAnswers] = useState<readonly ApplicantAnswerResponse[]>([])
+  const [answersOpen, setAnswersOpen] = useState(false)
+
+  useEffect(() => {
+    if (!currentFanId) {
+      setAnswers([])
+      return
+    }
+    const token = getAuthSession()?.accessToken
+    if (!token) return
+
+    const controller = new AbortController()
+    // 확정 참가자 수만큼만 조회하면 되므로 한 페이지로 충분하다.
+    void getApplicants(meetingId, { size: 100 }, token, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return
+        const matched = response.content.find(
+          (applicant) => String(applicant.fanId) === String(currentFanId),
+        )
+        setAnswers(matched?.answers ?? [])
+      })
+      .catch(() => {
+        // 보조 정보이므로 조회 실패로 통화를 방해하지 않는다.
+        if (!controller.signal.aborted) setAnswers([])
+      })
+    return () => controller.abort()
+  }, [currentFanId, meetingId])
+
   /** 운영 조치 후에는 다음 팬을 호출할 대기실로 복귀한다. */
   function returnToReady() {
     navigate(`/influencer/fan-meetings/${encodeURIComponent(meetingId)}/ready`)
@@ -112,7 +152,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
       const sessionId = queue?.currentCall?.callSessionId
       if (sessionId) {
         try {
-          await forceEndCallSession(sessionId, { reason: '노쇼 처리' }, { authToken: token })
+          await forceEndCallSession(sessionId, { reason: t('influencerCallSidePanel.t16') }, { authToken: token })
         } catch {
           // 노쇼 처리와 함께 서버가 세션을 이미 정리한 경우다.
         }
@@ -123,7 +163,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
       setOpsError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '노쇼 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('influencerCallSidePanel.t17'),
       )
     } finally {
       setOpsBusy(false)
@@ -141,7 +181,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
       if (queue?.currentCall?.callSessionId) {
         await forceEndCallSession(
           queue.currentCall.callSessionId,
-          { reason: '다음 팬으로 넘기기' },
+          { reason: t('influencerCallSidePanel.t18') },
           { authToken: token },
         )
       }
@@ -155,7 +195,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
       setOpsError(
         reason instanceof ApiError || reason instanceof TypeError
           ? reason.message
-          : '다음 팬으로 넘기지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('influencerCallSidePanel.t19'),
       )
     } finally {
       setOpsBusy(false)
@@ -167,40 +207,40 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
 
   return (
     <aside
-      aria-label="팬 정보"
+      aria-label={t('influencerCallSidePanel.t1')}
       className="min-w-0 rounded-xl border border-white/10 bg-[var(--color-surface-dark-panel)] p-5"
     >
       <div className="flex items-baseline justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[13px] font-bold text-white/65">현재 팬</p>
+          <p className="text-[13px] font-bold text-white/65">{t('influencerCallSidePanel.t2')}</p>
           <h2 className="mt-1.5 truncate text-2xl font-black tracking-[-0.035em] text-white">
-            {currentFanName ?? '확인 중'}
+            {currentFanName ?? t('influencerCallSidePanel.t20')}
           </h2>
         </div>
         {currentEntry ? (
           <span className="whitespace-nowrap text-sm font-extrabold text-white/75 tabular-nums">
-            {currentEntry.position}번째
+            {currentEntry.position}{t('influencerCallSidePanel.t3')}
           </span>
         ) : null}
       </div>
 
       <dl className="mt-5 grid gap-[13px] border-t border-white/10 pt-4">
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-[15px] font-semibold text-white/65">통화 상태</dt>
+          <dt className="text-[15px] font-semibold text-white/65">{t('influencerCallSidePanel.t4')}</dt>
           <dd
             className={`text-[15px] font-extrabold ${callConnected ? 'text-[var(--color-success-on-dark)]' : 'text-[var(--color-warning-on-dark)]'}`}
           >
-            {callConnected ? '통화 연결됨' : '연결 중'}
+            {callConnected ? t('influencerCallSidePanel.t21') : t('influencerCallSidePanel.t22')}
           </dd>
         </div>
       </dl>
 
       <section className="mt-5 border-t border-white/10 pt-4">
-        <h3 className="text-sm font-extrabold text-white/90">기존 메모</h3>
+        <h3 className="text-sm font-extrabold text-white/90">{t('influencerCallSidePanel.t5')}</h3>
         <p
           className={`mt-2.5 text-[15px] font-medium leading-[1.75] text-white/80 ${memoOpen ? '' : 'line-clamp-2'}`}
         >
-          {memoContent || '작성된 메모가 없습니다.'}
+          {memoContent || t('influencerCallSidePanel.t23')}
         </p>
         {showMemoToggle ? (
           <button
@@ -209,13 +249,47 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
             onClick={() => setMemoOpen((open) => !open)}
             type="button"
           >
-            {memoOpen ? '메모 접기' : '메모 전체 보기'}
+            {memoOpen ? t('influencerCallSidePanel.t24') : t('influencerCallSidePanel.t25')}
           </button>
         ) : null}
       </section>
 
+      {/*
+        응모 답변 — 팬이 응모할 때 직접 쓴 문장이다. 2분 통화의 첫 화두로 쓰라고 통화 화면에 둔다.
+        접힌 상태에서는 첫 답변만 보여 주고, 필요하면 펼쳐 전체를 읽는다.
+      */}
+      {answers.length ? (
+        <section className="mt-5 border-t border-white/10 pt-4">
+          <h3 className="text-sm font-extrabold text-white/90">
+            {t('influencerCallSidePanel.answersTitle')}
+          </h3>
+          <dl className="mt-2.5 grid gap-3">
+            {(answersOpen ? answers : answers.slice(0, 1)).map((answer) => (
+              <div key={answer.questionId}>
+                <dt className="text-[13px] font-bold text-white/60">{answer.questionText}</dt>
+                <dd className="mt-1 text-[15px] font-medium leading-[1.7] text-white/85">
+                  {answer.answerText || t('influencerCallSidePanel.answersEmpty')}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {answers.length > 1 ? (
+            <button
+              aria-expanded={answersOpen}
+              className="mt-2 min-h-9 text-sm font-extrabold text-[var(--color-primary-coral-on-dark)]"
+              onClick={() => setAnswersOpen((open) => !open)}
+              type="button"
+            >
+              {answersOpen
+                ? t('influencerCallSidePanel.answersCollapse')
+                : t('influencerCallSidePanel.answersExpand')}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="mt-5 border-t border-white/10 pt-4">
-        <p className="text-[13px] font-bold text-white/65">다음 팬</p>
+        <p className="text-[13px] font-bold text-white/65">{t('influencerCallSidePanel.t6')}</p>
         {nextEntry ? (
           <div className="mt-2.5 flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -223,7 +297,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
                 {nextEntry.nickname}
               </strong>
               <span className="mt-[3px] block text-sm font-medium text-white/65 tabular-nums">
-                {nextEntry.position}번째 순서
+                {nextEntry.position}{t('influencerCallSidePanel.t7')}
               </span>
             </div>
             <span
@@ -235,7 +309,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
           </div>
         ) : (
           <p className="mt-2.5 text-sm font-medium leading-[1.6] text-white/65">
-            이번 통화가 오늘의 마지막 순서예요.
+            {t('influencerCallSidePanel.t8')}
           </p>
         )}
       </section>
@@ -243,10 +317,10 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
       {isSolo ? (
         <section aria-labelledby="ic-ops" className="mt-5 border-t border-white/10 pt-4">
           <h3 className="text-[13px] font-bold text-white/65" id="ic-ops">
-            운영
+            {t('influencerCallSidePanel.t9')}
           </h3>
           <p className="mt-[7px] text-sm font-medium leading-[1.55] text-white/75">
-            팬이 들어오지 않거나 연결되지 않으면 노쇼로 처리하고 다음 순번으로 넘어갈 수 있어요.
+            {t('influencerCallSidePanel.t10')}
           </p>
           <div className="mt-3 grid gap-2">
             <button
@@ -258,7 +332,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
               }}
               type="button"
             >
-              노쇼 처리
+              {t('influencerCallSidePanel.t11')}
             </button>
             <button
               className="mj-font-label min-h-11 rounded-lg border border-white/35 bg-white/10 text-[15px] text-white/90 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
@@ -269,7 +343,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
               }}
               type="button"
             >
-              다음 팬으로 넘기기
+              {t('influencerCallSidePanel.t12')}
             </button>
           </div>
         </section>
@@ -278,22 +352,22 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
       <Dialog
         description={
           confirm === 'noshow'
-            ? `통화가 즉시 종료되고 ${currentFanName ?? '현재 팬'} 님은 대기열에서 빠집니다. 기록에 노쇼로 남으며 되돌릴 수 없습니다.`
+            ? t('influencerCallSidePanel.t33', { p0: currentFanName ?? t('influencerCallSidePanel.t26') })
             : nextEntry
-              ? `지금 통화를 끝내고 ${nextEntry.position}번째 ${nextEntry.nickname} 님과의 연결을 대기실에서 이어갑니다. ${currentFanName ?? '현재 팬'} 님은 대기열 마지막으로 이동합니다.`
-              : `대기열에 다음 팬이 없어 지금 통화를 끝내는 것으로 오늘 진행이 마무리됩니다.`
+              ? t('influencerCallSidePanel.t34', { p0: nextEntry.position, p1: nextEntry.nickname, p2: currentFanName ?? t('influencerCallSidePanel.t27') })
+              : t('influencerCallSidePanel.t28')
         }
         footer={
           <>
             <Button disabled={opsBusy} onClick={() => setConfirm(undefined)} variant="secondary">
-              취소
+              {t('influencerCallSidePanel.t13')}
             </Button>
             <Button
               loading={opsBusy}
               onClick={() => void (confirm === 'noshow' ? handleNoShow() : handleSkip())}
               variant={confirm === 'noshow' ? 'danger' : 'primary'}
             >
-              {confirm === 'noshow' ? '노쇼 처리' : '다음 팬으로'}
+              {confirm === 'noshow' ? t('influencerCallSidePanel.t29') : t('influencerCallSidePanel.t30')}
             </Button>
           </>
         }
@@ -303,8 +377,8 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
         open={confirm !== undefined}
         title={
           confirm === 'noshow'
-            ? `${currentFanName ?? '현재 팬'} 님을 노쇼로 처리할까요?`
-            : '다음 팬으로 넘길까요?'
+            ? t('influencerCallSidePanel.t35', { p0: currentFanName ?? t('influencerCallSidePanel.t31') })
+            : t('influencerCallSidePanel.t32')
         }
       >
         {confirm === 'noshow' || opsError ? (
@@ -314,11 +388,11 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
                 className="rounded-lg bg-[var(--color-error-soft)] px-[15px] py-[13px] text-[15px] font-bold leading-[1.55] text-[var(--color-error)]"
                 role="alert"
               >
-                이 작업은 취소할 수 없습니다.
+                {t('influencerCallSidePanel.t14')}
               </p>
             ) : null}
             {opsError ? (
-              <AlertBanner title="처리하지 못했습니다" variant="error">
+              <AlertBanner title={t('influencerCallSidePanel.t15')} variant="error">
                 {opsError}
               </AlertBanner>
             ) : null}

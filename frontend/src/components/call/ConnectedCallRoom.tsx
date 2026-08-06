@@ -23,7 +23,7 @@ import { getAuthSession } from '../../api/auth'
 import { useCallPhotoCapture } from '../../hooks/useCallPhotoCapture'
 import { useCallRecording } from '../../hooks/useCallRecording'
 import { AlertBanner } from '../feedback'
-import { CallStage } from './CallStage'
+import { CallStage, type FloatingReaction } from './CallStage'
 import { CallSummaryPanel } from './CallSummaryPanel'
 import {
   CALL_CONTROL_DATA_TOPIC,
@@ -31,6 +31,13 @@ import {
   parseCallEndedSignal,
 } from './callControlChannel'
 import { EndCallDialog } from './EndCallDialog'
+import {
+  REACTION_DATA_TOPIC,
+  REACTION_EMOJIS,
+  encodeReaction,
+  isReactionEmoji,
+  parseReaction,
+} from './reactionChannel'
 import {
   SUBTITLE_DATA_TOPIC,
   appendSubtitleLine,
@@ -40,6 +47,7 @@ import {
 } from './subtitleChannel'
 import type { MediaAction, VideoCallRoomProps } from './types'
 import { useRemainingTime } from './useRemainingTime'
+import { translate, useTranslation } from '../../i18n'
 
 /**
  * 종료 시각을 넘긴 뒤 서버 status=ENDED를 기다려 주는 시간이다.
@@ -71,8 +79,8 @@ function formatCallDuration(
 
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
-  if (minutes === 0) return `${seconds}초`
-  return seconds > 0 ? `${minutes}분 ${seconds}초` : `${minutes}분`
+  if (minutes === 0) return translate('connectedCallRoom.t46', { p0: seconds })
+  return seconds > 0 ? translate('connectedCallRoom.t47', { p0: minutes, p1: seconds }) : translate('connectedCallRoom.t48', { p0: minutes })
 }
 
 /** 자막·이름 계산에 필요한 참가자 정보만 좁혀 받는다. (Participant·TrackReference 모두 이 형태를 만족한다) */
@@ -149,9 +157,10 @@ export function ConnectedCallRoom({
     onReconnectNeeded,
     onPeerCallEnded,
 }: ConnectedCallRoomProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   /**
-   * 완료 화면에 넘길 라우터 state다.
+   * 통화 화면을 떠날 때 완료 화면에 함께 넘기는 값이다.
    *
    * 통화가 끝나면 대기열 스냅샷의 callSessionId가 null로 바뀌어(CALLED·IN_CALL에서만 채워진다)
    * 완료 화면이 세션을 다시 찾을 방법이 없다. 기념 카드는 통화 세션 단위라 이 값이 필요하므로
@@ -244,9 +253,11 @@ export function ConnectedCallRoom({
       participants.find((participant) => participantRole(participant) === role)?.name?.trim()
 
     return {
-      influencer: nameOf('INFLUENCER') || '인플루언서',
-      fan: nameOf('FAN') || '팬',
+      influencer: nameOf('INFLUENCER') || t('connectedCallRoom.t18'),
+      fan: nameOf('FAN') || t('connectedCallRoom.t19'),
     }
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participants])
 
   // 핸들러 identity가 바뀌면 데이터 채널 구독이 다시 걸릴 수 있고, 그 틈에 도착한 자막을
@@ -293,6 +304,82 @@ export function ConnectedCallRoom({
   useDataChannel(CALL_CONTROL_DATA_TOPIC, handleCallControlMessage)
 
   /**
+   * 화면에 떠오르는 중인 리액션이다.
+   *
+   * 표시 전용이라 서버에 남기지 않는다. 애니메이션이 끝나는 시간에 맞춰 스스로 사라지게 해
+   * 목록이 무한정 자라지 않도록 한다.
+   */
+  const [floatingReactions, setFloatingReactions] = useState<readonly FloatingReaction[]>([])
+  /** 리액션마다 고유 id를 만든다. 같은 이모지를 연달아 눌러도 React key가 겹치지 않아야 한다. */
+  const reactionSeqRef = useRef(0)
+  /** 정리해야 할 타이머들이다. 통화 화면을 떠날 때 남은 타이머를 모두 끊는다. */
+  const reactionTimersRef = useRef<number[]>([])
+
+  const showReaction = useCallback((emoji: string) => {
+    const id = `reaction-${++reactionSeqRef.current}`
+    // 가로 위치를 흩뿌려 연속으로 눌렀을 때 한 줄에 겹쳐 보이지 않게 한다.
+    const leftPercent = 12 + Math.random() * 26
+    setFloatingReactions((current) => [...current, { id, emoji, leftPercent }])
+
+    // CSS 애니메이션(2200ms)이 끝난 뒤 목록에서 지운다.
+    const timerId = window.setTimeout(() => {
+      setFloatingReactions((current) => current.filter((item) => item.id !== id))
+      reactionTimersRef.current = reactionTimersRef.current.filter((value) => value !== timerId)
+    }, 2_400)
+    reactionTimersRef.current.push(timerId)
+  }, [])
+
+  useEffect(
+    () => () => {
+      for (const timerId of reactionTimersRef.current) window.clearTimeout(timerId)
+      reactionTimersRef.current = []
+    },
+    [],
+  )
+
+  // 기념 사진은 팬만 남긴다. 녹화 설정과 무관하게 쓸 수 있어야 하므로 recordingEnabled를 보지 않는다.
+  const {
+    capture,
+    photoCount,
+    maxPhotoCount,
+    captureError,
+    canCapture,
+    capturing,
+  } = useCallPhotoCapture({
+    callSessionId,
+    remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
+  })
+  const photoCaptureVisible = authSession?.role === 'FAN' && isConnected
+
+  const handleReactionMessage = useCallback(
+    (message: { payload: Uint8Array }) => {
+      const signal = parseReaction(message.payload)
+      if (!signal) return
+      showReaction(signal.emoji)
+    },
+    [showReaction],
+  )
+
+  useDataChannel(REACTION_DATA_TOPIC, handleReactionMessage)
+
+  /**
+   * 리액션을 보낸다.
+   *
+   * `publishData`는 보낸 사람에게 되돌아오지 않으므로 내 화면에도 직접 띄운다. 전송이 실패해도
+   * 내 화면에는 보이게 해서, 표현이 씹힌 것처럼 느껴지지 않게 한다.
+   */
+  const sendReaction = useCallback(
+    (emoji: string) => {
+      if (!isReactionEmoji(emoji)) return
+      showReaction(emoji)
+      void localParticipant
+        .publishData(encodeReaction(emoji), { reliable: true, topic: REACTION_DATA_TOPIC })
+        .catch(() => undefined)
+    },
+    [localParticipant, showReaction],
+  )
+
+  /**
    * 통화가 끝났음을 같은 방의 다른 참가자에게 알린다.
    *
    * 실패해도 무시한다. 이 알림은 상대의 폴링을 앞당기는 힌트일 뿐이고, 못 보내면 상대는
@@ -334,6 +421,8 @@ export function ConnectedCallRoom({
     setSubtitleLines([])
     // 마무리 화면에 쓰는 상대 이름도 함께 비운다. 이전 팬 이름이 새 통화에 남으면 안 된다.
     setLastRemoteName(undefined)
+    // 게이지 분모도 통화마다 다시 잰다. 이전 통화의 최댓값을 물려받으면 비율이 어긋난다.
+    timeRatioBaseRef.current = 0
   }, [callSessionId])
 
   // 통화가 끝나면 상대가 방을 떠나 이름을 알 수 없게 된다. 마무리 화면에서 "○○님과의 통화가
@@ -360,20 +449,6 @@ export function ConnectedCallRoom({
     localAudioTrack: localMicrophoneTrack?.publication?.track?.mediaStreamTrack,
   })
 
-  // 기념 사진은 팬만 남긴다. 녹화 설정과 무관하게 쓸 수 있어야 하므로 recordingEnabled를 보지 않는다.
-  const {
-    capture,
-    photoCount,
-    maxPhotoCount,
-    captureError,
-    canCapture,
-    capturing,
-  } = useCallPhotoCapture({
-    callSessionId,
-    remoteVideoTrack: remoteCameraTrack?.publication?.track?.mediaStreamTrack,
-  })
-  const photoCaptureVisible = authSession?.role === 'FAN' && isConnected
-
   async function toggleCamera() {
     setMediaAction('camera')
     setMediaError(undefined)
@@ -381,7 +456,7 @@ export function ConnectedCallRoom({
     try {
       await localParticipant.setCameraEnabled(!isCameraEnabled)
     } catch (error: unknown) {
-      setMediaError(error instanceof Error ? error.message : '카메라 상태를 변경하지 못했습니다.')
+      setMediaError(error instanceof Error ? error.message : t('connectedCallRoom.t20'))
     } finally {
       setMediaAction(undefined)
     }
@@ -394,7 +469,7 @@ export function ConnectedCallRoom({
     try {
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
     } catch (error: unknown) {
-      setMediaError(error instanceof Error ? error.message : '마이크 상태를 변경하지 못했습니다.')
+      setMediaError(error instanceof Error ? error.message : t('connectedCallRoom.t21'))
     } finally {
       setMediaAction(undefined)
     }
@@ -420,7 +495,7 @@ export function ConnectedCallRoom({
           } else {
             await forceEndCallSession(
               callSessionId,
-              { reason: '영상통화 종료' },
+              { reason: t('connectedCallRoom.t22') },
               { authToken },
             )
           }
@@ -432,7 +507,7 @@ export function ConnectedCallRoom({
             setMediaError(
               error instanceof Error
                 ? error.message
-                : '통화 종료 상태를 서버에 반영하지 못했습니다.',
+                : t('connectedCallRoom.t23'),
             )
             return
           }
@@ -454,11 +529,12 @@ export function ConnectedCallRoom({
       }
       navigate(endTo, { state: endNavigationState })
     },
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 콜백을 다시 만든다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       announceCallEnded,
       authSession,
       callSessionId,
-      endNavigationState,
       endTo,
       forceEndOnLeave,
       hostStaysConnected,
@@ -477,7 +553,9 @@ export function ConnectedCallRoom({
     leavingRef.current = true
     await room.disconnect()
     navigate(endTo, { state: endNavigationState })
-  }, [endNavigationState, endTo, navigate, room])
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endTo, navigate, room])
 
   async function handleRecordingRetry() {
     const uploaded = await retryUpload()
@@ -551,6 +629,7 @@ export function ConnectedCallRoom({
   }, [
     announceCallEnded,
     callSessionId,
+    // callSessionId에서만 파생되는 값이라 이 목록에 넣어도 효과가 더 자주 실행되지 않는다.
     endNavigationState,
     endTo,
     hostStaysConnected,
@@ -576,43 +655,61 @@ export function ConnectedCallRoom({
   }, [connectionState, hostStaysConnected, onReconnectNeeded])
 
   /** 호스트가 방에 머문 채 다음 팬 배정을 기다리는 상태다. */
+  /**
+   * 남은 시간 게이지의 분모다. 지금까지 본 가장 큰 남은 시간을 100%로 잡는다.
+   *
+   * 팬미팅 운영 설정의 `callDurationSec`을 쓰면 가장 정확하지만, 그 값은 통화 진입 시 **별도
+   * 상세 조회**로 받아 오므로 그 요청이 실패하면 undefined로 남는다. 게이지는 보조 표현일 뿐인데
+   * 그 때문에 통째로 사라지면 안 되므로, 값을 못 받은 경우에는 카운트다운에서 관측한 최댓값을
+   * 분모로 쓴다. 서버가 준 남은 시간만으로도 비율을 만들 수 있다.
+   */
+  const timeRatioBaseRef = useRef(0)
+  if (remaining.counting) {
+    timeRatioBaseRef.current = Math.max(
+      timeRatioBaseRef.current,
+      remaining.seconds,
+      callDurationSec ?? 0,
+    )
+  }
+  const timeRatioBase = timeRatioBaseRef.current
+
   const waitingForNextFan = Boolean(hostStaysConnected) && sessionStatus.status === 'ENDED'
   /** 방금 끝난 통화의 길이다. 서버가 시각을 주지 않았으면 표시하지 않는다. */
   const finishedDurationLabel = formatCallDuration(sessionStatus.startedAt, sessionStatus.endedAt)
 
-  let connectionLabel = '연결 중'
+  let connectionLabel = t('connectedCallRoom.t24')
 
   if (waitingForNextFan) {
-    connectionLabel = '다음 팬 대기 중'
+    connectionLabel = t('connectedCallRoom.t25')
   } else if (isConnected && remoteParticipants.length > 0) {
-    connectionLabel = '연결 완료'
+    connectionLabel = t('connectedCallRoom.t26')
   } else if (isConnected) {
-    connectionLabel = '입장 대기'
+    connectionLabel = t('connectedCallRoom.t27')
   } else if (isReconnecting) {
-    connectionLabel = '연결 끊김'
+    connectionLabel = t('connectedCallRoom.t28')
   } else if (connectionState === ConnectionState.Disconnected) {
-    connectionLabel = '연결 종료'
+    connectionLabel = t('connectedCallRoom.t29')
   }
 
   // dc.html의 connecting·disconnected 오버레이. 연결이 정상이면 아무것도 덮지 않는다.
   const overlay = isReconnecting
     ? {
-        title: '연결이 끊어졌어요',
-        description: '현재 화면을 유지한 채 연결 상태를 확인하고 있습니다.',
+        title: t('connectedCallRoom.t30'),
+        description: t('connectedCallRoom.t31'),
         showLink: true,
       }
     : connectionState === ConnectionState.Connecting
       ? {
-          title: '영상통화를 연결하고 있어요',
-          description: '잠시만 기다려 주세요.',
+          title: t('connectedCallRoom.t32'),
+          description: t('connectedCallRoom.t33'),
           showLink: true,
         }
       : connectionState === ConnectionState.Disconnected && !departurePending
         ? {
-            title: '연결이 끊어졌어요',
-            description: '현재 팬 정보는 그대로 유지됩니다.',
+            title: t('connectedCallRoom.t34'),
+            description: t('connectedCallRoom.t35'),
             showLink: false,
-            actionLabel: '다시 연결',
+            actionLabel: t('connectedCallRoom.t36'),
             // LiveKit 자동 복구가 끝내 실패한 상태라, 토큰 발급부터 다시 시작한다.
             onAction: () => window.location.reload(),
           }
@@ -621,9 +718,9 @@ export function ConnectedCallRoom({
   // dc.html의 device-error — 통화를 가리지 않고 상단 배너로 원인과 복구 행동을 준다.
   const deviceAlert = mediaError
     ? {
-        title: '장치를 확인해 주세요',
+        title: t('connectedCallRoom.t37'),
         description: mediaError,
-        actionLabel: '장치 재확인',
+        actionLabel: t('connectedCallRoom.t38'),
         onAction: () => {
           setMediaError(undefined)
           void localParticipant.setCameraEnabled(true).catch(() => undefined)
@@ -632,14 +729,16 @@ export function ConnectedCallRoom({
       }
     : undefined
 
-  const footNote = mediaError
-    ? '장치 문제가 계속되면 팬미팅을 나간 뒤 장비 점검을 다시 진행해 주세요.'
-    : captureError
+  // 방금 누른 조작의 결과(사진 저장 실패)를 다른 안내보다 먼저 알린다.
+  // 통화를 막는 오류가 아니므로 배너가 아니라 같은 자리의 보조 문구로 둔다.
+  const footNote = captureError
     ? captureError
+    : mediaError
+    ? t('connectedCallRoom.t39')
     : isReconnecting
-      ? '통화 시간은 연결이 복구된 뒤부터 다시 계산됩니다.'
+      ? t('connectedCallRoom.t40')
       : authSession?.role === 'FAN' && recordingEnabled
-        ? '통화가 끝나면 녹화 영상이 저장되고, 남긴 말과 함께 기록에 보관됩니다.'
+        ? t('connectedCallRoom.t41')
         : undefined
 
   const remoteVideo = remoteCameraTrack ? (
@@ -652,14 +751,14 @@ export function ConnectedCallRoom({
     <div className="flex size-full flex-col items-center justify-center gap-3 bg-[#23242a] px-6 text-center text-white/70">
       <UserCircleIcon aria-hidden="true" size={64} weight="thin" />
       <p className="font-semibold text-white">{remoteName}</p>
-      <p className="text-sm">상대방의 입장 또는 카메라 연결을 기다리고 있습니다.</p>
+      <p className="text-sm">{t('connectedCallRoom.t1')}</p>
     </div>
   )
 
   const localVideo =
     localCameraTrack && isCameraEnabled ? (
       <VideoTrack
-        aria-label="내 카메라"
+        aria-label={t('connectedCallRoom.t2')}
         className="size-full -scale-x-100 object-cover"
         trackRef={localCameraTrack}
       />
@@ -681,25 +780,41 @@ export function ConnectedCallRoom({
         cameraEnabled={isCameraEnabled}
         captionEnabled={captionEnabled}
         captionLines={subtitleLines}
+        captureDisabled={!canCapture || capturing}
+        captureLabel={
+          capturing
+            ? t('connectedCallRoom.capturing')
+            : t('connectedCallRoom.captureCount', { p0: photoCount, p1: maxPhotoCount })
+        }
         connected={isConnected}
         connectionLabel={connectionLabel}
         deviceAlert={deviceAlert}
+        floatingReactions={floatingReactions}
         localVideo={localVideo}
         mediaAction={mediaAction}
         microphoneEnabled={isMicrophoneEnabled}
-        captureDisabled={!canCapture || capturing}
-        captureLabel={capturing ? '사진 저장 중' : `사진 ${photoCount}/${maxPhotoCount}`}
         onCameraToggle={() => void toggleCamera()}
-        onCapture={photoCaptureVisible ? () => void capture() : undefined}
         onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
+        onCapture={photoCaptureVisible ? () => void capture() : undefined}
         onLeave={() => setEndDialogOpen(true)}
         onMicrophoneToggle={() => void toggleMicrophone()}
+        onReactionSend={sendReaction}
         overlay={overlay}
         participantLabel={participantLabel}
+        reactionEmojis={REACTION_EMOJIS}
         remoteName={remoteName}
         remoteVideo={remoteVideo}
         // 통화 시작 전에는 아직 줄어들 남은 시간이 없으므로 설정된 통화 시간임을 밝힌다.
-        timeLabel={remaining.counting ? '남은 시간' : '통화 시간'}
+        timeLabel={remaining.counting ? t('connectedCallRoom.t42') : t('connectedCallRoom.t43')}
+        /*
+          남은 시간 게이지 — 카운트다운이 실제로 진행 중일 때만 그린다.
+          시작 전에는 줄어들 남은 시간이 없어 게이지가 항상 꽉 찬 채로 오해를 만든다.
+        */
+        timeRatio={
+          remaining.counting && timeRatioBase > 0
+            ? remaining.seconds / timeRatioBase
+            : undefined
+        }
         // 종료 직전에는 타이머가 경고색으로 바뀌어 마무리를 준비하게 한다.
         timeUrgent={remaining.counting && remaining.label <= '00:05'}
         timeValue={remaining.label}
@@ -716,22 +831,21 @@ export function ConnectedCallRoom({
         AI 대화 요약을 여기에 모아 마무리 단계를 만든다.
       */}
       {waitingForNextFan ? (
-        <section aria-label="통화 마무리" className="grid gap-4">
+        <section aria-label={t('connectedCallRoom.t3')} className="grid gap-4">
           <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1.5">
             <h2 className="text-[22px] font-black tracking-[-0.032em] text-white">
               {lastRemoteName
-                ? `${lastRemoteName}님과의 통화가 끝났어요`
-                : '통화가 끝났어요'}
+                ? t('connectedCallRoom.t49', { p0: lastRemoteName })
+                : t('connectedCallRoom.t44')}
             </h2>
             {finishedDurationLabel ? (
               <p className="text-[15px] font-bold tabular-nums text-white/70">
-                함께한 시간 {finishedDurationLabel}
+                {t('connectedCallRoom.t4')} {finishedDurationLabel}
               </p>
             ) : null}
           </div>
           <p className="text-[15px] font-medium leading-[1.6] text-white/65">
-            통화방 연결은 그대로 유지됩니다. 대기실에서 다음 팬을 호출하면 이 화면에서 바로 이어서
-            통화할 수 있어요.
+            {t('connectedCallRoom.t5')}
           </p>
 
           {/*
@@ -742,9 +856,9 @@ export function ConnectedCallRoom({
           {callSessionId && authSession?.role !== 'FAN' ? (
             <div className="overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-surface-panel)]">
               <div className="flex items-baseline justify-between gap-4 border-b border-[var(--color-divider)] px-6 py-4">
-                <h3 className="text-[17px] font-extrabold tracking-[-0.03em]">대화 요약</h3>
+                <h3 className="text-[17px] font-extrabold tracking-[-0.03em]">{t('connectedCallRoom.t6')}</h3>
                 <span className="text-sm font-semibold text-[var(--color-text-muted)]">
-                  AI가 정리한 내용
+                  {t('connectedCallRoom.t7')}
                 </span>
               </div>
               <CallSummaryPanel callSessionId={callSessionId} />
@@ -754,39 +868,39 @@ export function ConnectedCallRoom({
       ) : null}
 
       {authSession?.role === 'FAN' && recordingPolicyError ? (
-        <AlertBanner title="녹화 설정 확인 실패" variant="warning">
+        <AlertBanner title={t('connectedCallRoom.t8')} variant="warning">
           {recordingPolicyError}
         </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && !recordingPolicyError && !recordingEnabled ? (
-        <AlertBanner title="녹화하지 않는 팬미팅" variant="info">
-          이 통화는 팬미팅 운영 설정에 따라 녹화되지 않습니다.
+        <AlertBanner title={t('connectedCallRoom.t9')} variant="info">
+          {t('connectedCallRoom.t10')}
         </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'recording' ? (
-        <AlertBanner title="통화 녹화 중" variant="info">
-          팬미팅 설정에 따라 이 통화가 녹화되고 있습니다.
+        <AlertBanner title={t('connectedCallRoom.t11')} variant="info">
+          {t('connectedCallRoom.t12')}
         </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'uploading' ? (
-        <AlertBanner title="녹화 영상 저장 중" variant="info">
-          업로드가 끝날 때까지 이 화면을 닫지 말아 주세요.
+        <AlertBanner title={t('connectedCallRoom.t13')} variant="info">
+          {t('connectedCallRoom.t14')}
         </AlertBanner>
       ) : null}
 
       {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'failed' ? (
-        <AlertBanner title="녹화 영상을 아직 저장하지 못했습니다" variant="error">
-          <p>{recordingError ?? '브라우저에 임시 보관했으며 다시 업로드할 수 있습니다.'}</p>
+        <AlertBanner title={t('connectedCallRoom.t15')} variant="error">
+          <p>{recordingError ?? t('connectedCallRoom.t45')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               className="rounded-[var(--radius-control)] border border-current px-3 py-2 font-semibold"
               onClick={() => void handleRecordingRetry()}
               type="button"
             >
-              업로드 다시 시도
+              {t('connectedCallRoom.t16')}
             </button>
             {departurePending && pendingRecordingPersisted ? (
               <button
@@ -794,7 +908,7 @@ export function ConnectedCallRoom({
                 onClick={continueWithPendingRecording}
                 type="button"
               >
-                완료 화면에서 재시도
+                {t('connectedCallRoom.t17')}
               </button>
             ) : null}
           </div>

@@ -4,6 +4,7 @@ import {
   saveCapturedPhotos,
   MAX_CAPTURED_PHOTOS,
 } from '../api/capturedPhotos'
+import { translate } from '../i18n'
 
 export type UseCallPhotoCaptureOptions = {
   /** 사진을 묶어 둘 통화 세션 식별자 */
@@ -119,18 +120,18 @@ export function useCallPhotoCapture({
    */
   const capture = useCallback(async () => {
     if (!callSessionId) {
-      setCaptureError('통화 정보를 확인할 수 없어 사진을 찍지 못했습니다.')
+      setCaptureError(translate('useCallPhotoCapture.t1'))
       return
     }
     if (photosRef.current.length >= MAX_CAPTURED_PHOTOS) {
-      setCaptureError(`사진은 ${MAX_CAPTURED_PHOTOS}장까지 남길 수 있습니다.`)
+      setCaptureError(translate('useCallPhotoCapture.t2', { p0: MAX_CAPTURED_PHOTOS }))
       return
     }
 
     const video = videoRef.current
     // readyState가 HAVE_CURRENT_DATA 미만이면 그릴 프레임이 아직 없어 빈 사진이 나온다.
     if (!video || video.readyState < 2) {
-      setCaptureError('상대방 화면이 아직 도착하지 않았습니다. 잠시 후 다시 눌러 주세요.')
+      setCaptureError(translate('useCallPhotoCapture.t3'))
       return
     }
 
@@ -138,7 +139,7 @@ export function useCallPhotoCapture({
     const width = settings?.width ?? video.videoWidth
     const height = settings?.height ?? video.videoHeight
     if (!width || !height) {
-      setCaptureError('상대방 화면 크기를 확인하지 못했습니다.')
+      setCaptureError(translate('useCallPhotoCapture.t4'))
       return
     }
 
@@ -153,7 +154,7 @@ export function useCallPhotoCapture({
 
       const ctx = canvas.getContext('2d')
       if (!ctx) {
-        throw new Error('이 브라우저는 사진 촬영을 지원하지 않습니다.')
+        throw new Error(translate('useCallPhotoCapture.t5'))
       }
       ctx.drawImage(video, 0, 0, width, height)
 
@@ -161,7 +162,7 @@ export function useCallPhotoCapture({
         canvas.toBlob(resolve, 'image/png')
       })
       if (!blob) {
-        throw new Error('사진을 만들지 못했습니다.')
+        throw new Error(translate('useCallPhotoCapture.t6'))
       }
 
       const photos = [...photosRef.current, blob]
@@ -176,7 +177,7 @@ export function useCallPhotoCapture({
     } catch (error: unknown) {
       if (mountedRef.current) {
         setCaptureError(
-          error instanceof Error ? error.message : '사진을 저장하지 못했습니다.',
+          error instanceof Error ? error.message : translate('useCallPhotoCapture.t7'),
         )
       }
     } finally {

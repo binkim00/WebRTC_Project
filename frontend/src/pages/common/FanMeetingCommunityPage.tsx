@@ -22,6 +22,7 @@ import {
   TextField,
 } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { useTranslation } from '../../i18n'
 
 const PAGE_SIZE = 10
 
@@ -38,6 +39,7 @@ function formatDateTime(iso: string): string {
 }
 
 export function FanMeetingCommunityPage() {
+  const { t } = useTranslation()
   const { fanMeetingId } = useParams()
   const [session] = useState(() => getAuthSession())
   const canWrite = session?.role === 'MANAGER' || session?.role === 'SOLO_INFLUENCER'
@@ -79,7 +81,7 @@ export function FanMeetingCommunityPage() {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : '커뮤니티 게시글을 불러오지 못했습니다.',
+            : t('fanMeetingCommunityPage.t17'),
         )
       })
       .finally(() => {
@@ -89,6 +91,8 @@ export function FanMeetingCommunityPage() {
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId, keyword, currentPage, reloadCount])
 
   async function handleCreatePost(event: FormEvent<HTMLFormElement>) {
@@ -103,7 +107,7 @@ export function FanMeetingCommunityPage() {
     const content = String(formData.get('content') ?? '').trim()
 
     if (!title || !content) {
-      setWriteError('제목과 내용을 모두 입력해 주세요.')
+      setWriteError(t('fanMeetingCommunityPage.t18'))
       return
     }
 
@@ -117,7 +121,7 @@ export function FanMeetingCommunityPage() {
       setReloadCount((count) => count + 1)
     } catch (createError: unknown) {
       setWriteError(
-        createError instanceof Error ? createError.message : '게시글 작성에 실패했습니다.',
+        createError instanceof Error ? createError.message : t('fanMeetingCommunityPage.t19'),
       )
     } finally {
       setSubmitting(false)
@@ -127,8 +131,8 @@ export function FanMeetingCommunityPage() {
   if (!fanMeetingId?.trim()) {
     return (
       <InvalidRouteState
-        message="URL에 필요한 fanMeetingId 값이 없습니다."
-        title="필수 URL 파라미터가 없습니다."
+        message={t('fanMeetingCommunityPage.t1')}
+        title={t('fanMeetingCommunityPage.t2')}
       />
     )
   }
@@ -140,9 +144,9 @@ export function FanMeetingCommunityPage() {
     <div className="mx-auto grid w-full max-w-5xl gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black tracking-[-0.045em]">커뮤니티</h1>
+          <h1 className="text-4xl font-black tracking-[-0.045em]">{t('fanMeetingCommunityPage.t3')}</h1>
           <p className="mt-3 text-[var(--color-text-secondary)]">
-            팬미팅 소식과 이야기를 나누는 공간입니다.
+            {t('fanMeetingCommunityPage.t4')}
           </p>
         </div>
         {canWrite ? (
@@ -154,7 +158,7 @@ export function FanMeetingCommunityPage() {
             }}
             variant={writeOpen ? 'secondary' : 'primary'}
           >
-            {writeOpen ? '작성 취소' : '글쓰기'}
+            {writeOpen ? t('fanMeetingCommunityPage.t20') : t('fanMeetingCommunityPage.t21')}
           </Button>
         ) : null}
       </header>
@@ -164,26 +168,26 @@ export function FanMeetingCommunityPage() {
           <CardContent>
             <form className="grid gap-4" onSubmit={(event) => void handleCreatePost(event)}>
               <TextField
-                label="제목"
+                label={t('fanMeetingCommunityPage.t5')}
                 name="title"
-                placeholder="게시글 제목을 입력하세요"
+                placeholder={t('fanMeetingCommunityPage.t6')}
                 required
               />
               <Textarea
-                label="내용"
+                label={t('fanMeetingCommunityPage.t7')}
                 name="content"
-                placeholder="게시글 내용을 입력하세요"
+                placeholder={t('fanMeetingCommunityPage.t8')}
                 required
                 rows={6}
               />
               {writeError ? (
-                <AlertBanner title="게시글을 등록하지 못했습니다" variant="error">
+                <AlertBanner title={t('fanMeetingCommunityPage.t9')} variant="error">
                   {writeError}
                 </AlertBanner>
               ) : null}
               <div className="flex justify-end">
                 <Button loading={submitting} type="submit">
-                  등록
+                  {t('fanMeetingCommunityPage.t10')}
                 </Button>
               </div>
             </form>
@@ -192,33 +196,33 @@ export function FanMeetingCommunityPage() {
       ) : null}
 
       <SearchField
-        buttonLabel="검색"
-        label="게시글 검색"
+        buttonLabel={t('fanMeetingCommunityPage.t22')}
+        label={t('fanMeetingCommunityPage.t11')}
         onSearch={(query) => {
           setKeyword(query.trim())
           setCurrentPage(1)
         }}
-        placeholder="제목 또는 내용 키워드 입력"
+        placeholder={t('fanMeetingCommunityPage.t12')}
       />
 
       {error ? (
-        <AlertBanner title="게시글을 불러오지 못했습니다" variant="error">
+        <AlertBanner title={t('fanMeetingCommunityPage.t13')} variant="error">
           {error}
         </AlertBanner>
       ) : null}
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <Spinner label="게시글을 불러오는 중" />
+          <Spinner label={t('fanMeetingCommunityPage.t14')} />
         </div>
       ) : posts.length === 0 ? (
         <EmptyState
           description={
             keyword
-              ? '검색어를 변경해 다시 시도해 주세요.'
-              : '아직 등록된 게시글이 없습니다.'
+              ? t('fanMeetingCommunityPage.t23')
+              : t('fanMeetingCommunityPage.t24')
           }
-          title="게시글이 없습니다"
+          title={t('fanMeetingCommunityPage.t15')}
         />
       ) : (
         <Card>
@@ -231,7 +235,7 @@ export function FanMeetingCommunityPage() {
                     to={`/community/posts/${post.postId}`}
                   >
                     <span className="flex flex-wrap items-center gap-2">
-                      {post.pinned ? <Badge variant="primary">고정</Badge> : null}
+                      {post.pinned ? <Badge variant="primary">{t('fanMeetingCommunityPage.t16')}</Badge> : null}
                       <span className="text-base font-bold text-[var(--color-text-primary)]">
                         {post.title}
                       </span>

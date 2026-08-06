@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { translate } from '../i18n'
 
 export type QueueStatus =
   | 'WAITING'
@@ -127,7 +128,7 @@ function unwrapData(value: unknown): unknown {
 function readString(value: unknown, fieldName: string): string {
   if (typeof value === 'string' && value.trim()) return value
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-  throw new TypeError(`${fieldName} 응답 형식이 올바르지 않습니다.`)
+  throw new TypeError(translate('fanMeetingParticipants.t1', { p0: fieldName }))
 }
 
 function readOptionalString(value: unknown): string | undefined {
@@ -156,7 +157,7 @@ function isQueueStatus(value: unknown): value is QueueStatus {
 
 function parseParticipant(value: unknown): FanMeetingParticipant {
   const record = asRecord(value)
-  if (!record) throw new TypeError('참가자 응답 형식이 올바르지 않습니다.')
+  if (!record) throw new TypeError(translate('fanMeetingParticipants.t2'))
 
   return {
     participantId: readString(record.participantId, 'participantId'),
@@ -191,7 +192,7 @@ function parsePage<T>(
       ? record.content
       : null
 
-  if (!rawContent) throw new TypeError('목록 응답 형식이 올바르지 않습니다.')
+  if (!rawContent) throw new TypeError(translate('fanMeetingParticipants.t3'))
 
   const content = rawContent.map(parseItem)
   const size = record ? readNumber(record.size, defaultSize) : defaultSize
@@ -228,7 +229,7 @@ export async function fetchMeetingDetail(
   const operation = asRecord(record?.operation)
 
   if (!record || !influencer) {
-    throw new TypeError('팬미팅 상세 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetingParticipants.t4'))
   }
 
   return {
@@ -297,7 +298,7 @@ export async function fetchParticipantDetail(
 function parseQueueEntry(value: unknown): QueueEntry {
   const record = asRecord(value)
   if (!record || !isQueueStatus(record.status)) {
-    throw new TypeError('대기열 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetingParticipants.t5'))
   }
 
   return {
@@ -326,7 +327,7 @@ export async function fetchMeetingQueue(
   )
   const record = asRecord(data)
   if (!record || !Array.isArray(record.entries)) {
-    throw new TypeError('운영 대기열 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetingParticipants.t6'))
   }
 
   const currentCall = asRecord(record.currentCall)
@@ -363,7 +364,7 @@ export async function callQueueEntry(
     record.status !== 'CALLED' ||
     typeof record.notificationSent !== 'boolean'
   ) {
-    throw new TypeError('팬 호출 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetingParticipants.t7'))
   }
 
   return {
@@ -390,7 +391,7 @@ export async function markQueueEntryNoShow(
   const record = asRecord(data)
 
   if (!record || record.status !== 'NO_SHOW') {
-    throw new TypeError('노쇼 처리 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanMeetingParticipants.t8'))
   }
 
   return {
@@ -406,7 +407,7 @@ export async function markQueueEntryNoShow(
 
 function parseMemo(value: unknown): FanMemo {
   const record = asRecord(value)
-  if (!record) throw new TypeError('팬 메모 응답 형식이 올바르지 않습니다.')
+  if (!record) throw new TypeError(translate('fanMeetingParticipants.t9'))
 
   return {
     memoId: readString(record.memoId, 'memoId'),
@@ -455,7 +456,7 @@ export type ParticipantFanPage = {
 
 function parseParticipantFan(value: unknown): ParticipantFanSummary {
   const record = asRecord(value)
-  if (!record) throw new TypeError('참가 팬 응답 형식이 올바르지 않습니다.')
+  if (!record) throw new TypeError(translate('fanMeetingParticipants.t10'))
 
   return {
     fanId: readString(record.fanId, 'fanId'),

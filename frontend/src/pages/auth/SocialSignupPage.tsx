@@ -1,7 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
-import { saveAuthSession, type PreferredLanguage } from '../../api/auth'
+import {
+  PREFERRED_LANGUAGE_OPTIONS,
+  isPreferredLanguage,
+  saveAuthSession,
+} from '../../api/auth'
 import {
   socialSignup,
   toProviderPath,
@@ -9,15 +13,9 @@ import {
   type SocialLoginResult,
 } from '../../api/socialAuth'
 import { AlertBanner, Button, Card, CardContent, Select, TextField } from '../../components'
+import { useTranslation } from '../../i18n'
+import { landingPathForRole } from '../../router/roleCapabilities'
 
-const languageOptions = [
-  { label: '한국어', value: 'KOREAN' },
-  { label: 'English', value: 'ENGLISH' },
-]
-
-function isPreferredLanguage(value: string): value is PreferredLanguage {
-  return value === 'KOREAN' || value === 'ENGLISH'
-}
 
 /**
  * 소셜 신규 가입 추가정보 화면이다. (`/signup/social`)
@@ -28,6 +26,7 @@ function isPreferredLanguage(value: string): value is PreferredLanguage {
  * 역할과 비밀번호는 받지 않는다. 서버가 역할을 FAN으로 고정하고 소셜 계정은 비밀번호가 없다.
  */
 export function SocialSignupPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   // 콜백에서 넘겨받은 값이며 새로고침하면 사라진다. 그때는 처음부터 다시 시작해야 한다.
@@ -47,16 +46,16 @@ export function SocialSignupPage() {
   // 공급자가 이메일을 주지 않은 경우에만 입력칸을 띄운다. (emailProvided는 이 분기에서만 의미가 있다)
   const needsEmail = result ? !result.emailProvided : false
 
-  const nicknameError = nickname.trim() ? '' : '닉네임을 입력해 주세요.'
+  const nicknameError = nickname.trim() ? '' : t('socialSignupPage.t1')
   const emailError = !needsEmail
     ? ''
     : !email.trim()
-      ? '이메일을 입력해 주세요.'
+      ? t('socialSignupPage.t2')
       : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
         ? ''
-        : '올바른 이메일 형식을 입력해 주세요.'
-  const languageError = isPreferredLanguage(language) ? '' : '선호 언어를 선택해 주세요.'
-  const termsError = termsAgreed && privacyAgreed ? '' : '필수 약관에 동의해 주세요.'
+        : t('socialSignupPage.t3')
+  const languageError = isPreferredLanguage(language) ? '' : t('socialSignupPage.t4')
+  const termsError = termsAgreed && privacyAgreed ? '' : t('socialSignupPage.t5')
   const canSubmit =
     !nicknameError && !emailError && !languageError && !termsError && !submitting
 
@@ -78,19 +77,21 @@ export function SocialSignupPage() {
       })
 
       saveAuthSession(login, false)
-      navigate('/fan/mypage/fan-meetings?status=upcoming', { replace: true })
+      // 일반 로그인·소셜 로그인과 같은 규칙으로 첫 화면을 정한다. 예전에는 팬 마이페이지로
+      // 곧장 보냈는데, 역할 경로가 한곳에 모이지 않아 "로그인 후 메인" 규칙이 새어 나갔다.
+      navigate(landingPathForRole(login.role), { replace: true })
     } catch (reason) {
       if (reason instanceof ApiError && reason.code === 'SOCIAL_TOKEN_INVALID') {
         // 5분이 지나 임시 토큰이 만료된 경우다. 같은 화면에서 재시도할 방법이 없다.
         setSubmitError(
-          '입력 시간이 초과되어 처음부터 다시 진행해야 합니다. 로그인 화면에서 다시 시도해 주세요.',
+          t('socialSignupPage.t6'),
         )
         return
       }
       setSubmitError(
         reason instanceof ApiError
           ? reason.message
-          : '가입을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('socialSignupPage.t7'),
       )
     } finally {
       setSubmitting(false)
@@ -100,20 +101,18 @@ export function SocialSignupPage() {
   // state 없이 직접 들어오거나 새로고침한 경우다. 임시 토큰이 없어 진행할 수 없다.
   if (!result) return <Navigate replace to="/login" />
 
-  const providerLabel = SOCIAL_PROVIDER_LABELS[toProviderPath(result.provider)]
+  const providerLabel = SOCIAL_PROVIDER_LABELS()[toProviderPath(result.provider)]
 
   return (
     <main className="mx-auto grid w-full max-w-xl gap-6 py-12">
       <div>
         <p className="text-[13px] font-extrabold tracking-[0.08em] text-[var(--color-primary-coral)]">
-          {providerLabel} 계정으로 시작
-        </p>
+          {providerLabel}  {t('socialSignupPage.t15')} </p>
         <h1 className="mt-3.5 text-[32px] font-black tracking-[-0.045em] [text-wrap:balance]">
-          거의 다 됐어요
-        </h1>
+           {t('socialSignupPage.t16')} </h1>
         {/* 서버가 상황에 맞는 안내 문구를 내려 준다. 이메일 미제공 안내도 여기에 담겨 온다. */}
         <p className="mt-3 text-[17px] font-medium leading-[1.7] text-[var(--color-text-body)]">
-          {result.message ?? '닉네임과 사용할 언어만 정하면 바로 시작할 수 있어요.'}
+          {result.message ?? t('socialSignupPage.t8')}
         </p>
       </div>
 
@@ -121,15 +120,15 @@ export function SocialSignupPage() {
         <CardContent className="p-7">
           <form className="grid gap-[18px]" onSubmit={(event) => void handleSubmit(event)}>
             <TextField
-              label="닉네임"
+              label={t('socialSignupPage.t9')}
               onChange={(event) => setNickname(event.currentTarget.value)}
-              placeholder="닉네임을 입력해 주세요"
+              placeholder={t('socialSignupPage.t10')}
               value={nickname}
             />
 
             {needsEmail ? (
               <TextField
-                label="이메일"
+                label={t('socialSignupPage.t11')}
                 onChange={(event) => setEmail(event.currentTarget.value)}
                 placeholder="example@email.com"
                 type="email"
@@ -138,7 +137,7 @@ export function SocialSignupPage() {
             ) : (
               // 공급자에게 받은 이메일은 수정할 수 없으므로 확인용으로만 보여 준다.
               <div>
-                <p className="text-sm font-bold text-[var(--color-text-primary)]">이메일</p>
+                <p className="text-sm font-bold text-[var(--color-text-primary)]">{t('socialSignupPage.t17')}</p>
                 <p className="mt-2 text-base font-semibold text-[var(--color-text-secondary)]">
                   {result.email ?? '-'}
                 </p>
@@ -146,9 +145,9 @@ export function SocialSignupPage() {
             )}
 
             <Select
-              label="선호 언어"
+              label={t('socialSignupPage.t12')}
               onChange={(event) => setLanguage(event.currentTarget.value)}
-              options={[{ label: '언어를 선택해 주세요', value: '' }, ...languageOptions]}
+              options={[{ label: t('socialSignupPage.t13'), value: '' }, ...PREFERRED_LANGUAGE_OPTIONS]}
               value={language}
             />
 
@@ -161,7 +160,7 @@ export function SocialSignupPage() {
                   type="checkbox"
                 />
                 <span className="text-[15px] font-semibold">
-                  이용약관에 동의합니다.{' '}
+                   {t('socialSignupPage.t18')}{' '}
                   <span className="text-[var(--color-primary-coral)]">*</span>
                 </span>
               </label>
@@ -173,21 +172,20 @@ export function SocialSignupPage() {
                   type="checkbox"
                 />
                 <span className="text-[15px] font-semibold">
-                  개인정보 처리방침에 동의합니다.{' '}
+                   {t('socialSignupPage.t19')}{' '}
                   <span className="text-[var(--color-primary-coral)]">*</span>
                 </span>
               </label>
             </div>
 
             {submitError ? (
-              <AlertBanner title="가입을 완료하지 못했습니다" variant="error">
+              <AlertBanner title={t('socialSignupPage.t14')} variant="error">
                 {submitError}
               </AlertBanner>
             ) : null}
 
             <Button disabled={!canSubmit} loading={submitting} size="lg" type="submit">
-              시작하기
-            </Button>
+               {t('socialSignupPage.t20')} </Button>
           </form>
         </CardContent>
       </Card>

@@ -77,6 +77,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        // 기념 카드 만들기 전용 화면. 주소에 통화 세션을 담아 새로고침해도 그대로 열린다.
         path: 'fan/fan-meetings/:fanMeetingId/cards/:callSessionId',
         lazy: lazyPage(() => import('../pages/fan/FanCardPage'), 'FanCardPage'),
       },
@@ -162,6 +163,15 @@ export const router = createBrowserRouter([
         lazy: lazyPage(
           () => import('../pages/common/ServiceNoticesPage'),
           'ServiceNoticeDetailPage',
+        ),
+      },
+      // 서비스 운영자(ADMIN) 전용 영역이다. 접근 제어는 /admin/* 경로에 걸린
+      // MANAGE_SERVICE_NOTICES 권한이 담당한다. (router/roleCapabilities.ts)
+      {
+        path: 'admin/service-notices',
+        lazy: lazyPage(
+          () => import('../pages/admin/AdminServiceNoticesPage'),
+          'AdminServiceNoticesPage',
         ),
       },
       {

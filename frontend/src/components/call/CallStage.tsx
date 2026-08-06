@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '../ui/cn'
+import { useTranslation } from '../../i18n'
 
 /** 화자 이름이 붙은 자막 한 줄이다. */
 export type CaptionLine = {
@@ -20,6 +21,15 @@ export type CallStageOverlay = {
   /** 연결 종료처럼 사용자가 직접 복구해야 하는 상태의 행동 버튼이다. */
   actionLabel?: string
   onAction?: () => void
+}
+
+/** 화면에 떠오르는 리액션 한 개다. 표시가 끝나면 목록에서 사라진다. */
+export type FloatingReaction = {
+  /** React key이며 같은 이모지를 연속으로 눌러도 겹치지 않게 한다. */
+  id: string
+  emoji: string
+  /** 가로 위치(%)다. 여러 개가 한 줄에 겹치지 않도록 보낼 때 흩뿌린다. */
+  leftPercent: number
 }
 
 /** 통화를 유지한 채 상단에 띄우는 장치 이상 배너다. (device-error 상태) */
@@ -43,6 +53,18 @@ export type CallStageProps = {
   timeValue: string
   /** 종료가 임박하면 타이머를 경고색으로 바꾼다. */
   timeUrgent?: boolean
+  /**
+   * 남은 시간의 비율(0~1)이며 카운트다운 테두리를 따라 줄어드는 게이지로 그린다.
+   *
+   * 숫자만 있으면 "얼마나 남았는지"가 감각으로 오지 않는다. 다만 통화 화면을 가리면 안 되므로
+   * 별도 영역을 만들지 않고 **기존 카운트다운 자리의 테두리**만 쓴다. 값이 없으면 게이지를 숨긴다.
+   */
+  timeRatio?: number
+  /** 보낼 수 있는 리액션 목록이며 비어 있으면 리액션 UI를 숨긴다. */
+  reactionEmojis?: readonly string[]
+  /** 화면에 떠오르는 중인 리액션들이다. */
+  floatingReactions?: readonly FloatingReaction[]
+  onReactionSend?: (emoji: string) => void
   cameraEnabled: boolean
   microphoneEnabled: boolean
   captionEnabled: boolean
@@ -73,12 +95,16 @@ export function CallStage({
   localVideo,
   participantLabel,
   remoteName,
-  localParticipantLabel = '나',
+  localParticipantLabel,
   connectionLabel,
   connected,
   timeLabel,
   timeValue,
   timeUrgent,
+  timeRatio,
+  reactionEmojis,
+  floatingReactions,
+  onReactionSend,
   cameraEnabled,
   microphoneEnabled,
   captionEnabled,
@@ -94,12 +120,15 @@ export function CallStage({
   captureLabel,
   captureDisabled,
 }: CallStageProps) {
+  const { t } = useTranslation()
+  // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
+  const localParticipantLabelResolved = localParticipantLabel ?? t('callStage.t8')
   const deviceButtonClass =
     'min-h-9 whitespace-nowrap rounded-md px-1.5 text-[13px] font-bold transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-60'
 
   return (
     <section
-      aria-label="영상통화 화면"
+      aria-label={t('callStage.t1')}
       className="relative overflow-hidden rounded-xl bg-[var(--color-surface-dark-media)] max-lg:min-h-[520px] lg:aspect-video"
     >
       <div className="absolute inset-0">{remoteVideo}</div>
@@ -120,7 +149,40 @@ export function CallStage({
           </span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
-          <p className="flex items-baseline gap-2">
+          {/*
+            남은 시간 — 숫자 그대로 두고 그 **테두리**만 게이지로 쓴다.
+            통화 화면을 가리지 않아야 하므로 링이나 배너를 따로 두지 않고, 기존 카운트다운이
+            차지하던 자리 안에서만 표현한다. SVG는 absolute라 레이아웃 크기를 늘리지 않는다.
+          */}
+          <p className="relative flex items-baseline gap-2 px-2 py-1">
+            {timeRatio === undefined ? null : (
+              <svg
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 size-full"
+                preserveAspectRatio="none"
+                viewBox="0 0 100 100"
+              >
+                {/* 남은 양이 줄어드는 것을 보여 준다. pathLength=1로 두면 비율을 그대로 쓸 수 있다. */}
+                <rect
+                  className={cn(
+                    'transition-[stroke-dashoffset] duration-500 ease-linear',
+                    timeUrgent
+                      ? 'stroke-[var(--color-warning-on-dark)]'
+                      : 'stroke-white/45',
+                  )}
+                  fill="none"
+                  height="96"
+                  pathLength={1}
+                  rx="12"
+                  strokeDasharray={1}
+                  strokeDashoffset={1 - Math.min(1, Math.max(0, timeRatio))}
+                  strokeWidth="4"
+                  width="96"
+                  x="2"
+                  y="2"
+                />
+              </svg>
+            )}
             <span className="whitespace-nowrap text-[13px] font-semibold text-white/75">
               {timeLabel}
             </span>
@@ -135,7 +197,7 @@ export function CallStage({
           </p>
           <p className="flex items-center gap-3 whitespace-nowrap">
             <button
-              aria-label={`마이크 ${microphoneEnabled ? '끄기' : '켜기'}`}
+              aria-label={t('callStage.t19', { p0: microphoneEnabled ? t('callStage.t9') : t('callStage.t10') })}
               className={cn(
                 deviceButtonClass,
                 microphoneEnabled ? 'text-white/75' : 'text-[var(--color-error-on-dark)]',
@@ -144,10 +206,10 @@ export function CallStage({
               onClick={onMicrophoneToggle}
               type="button"
             >
-              마이크 {microphoneEnabled ? '정상' : '꺼짐'}
+              {t('callStage.t2')} {microphoneEnabled ? t('callStage.t11') : t('callStage.t12')}
             </button>
             <button
-              aria-label={`카메라 ${cameraEnabled ? '끄기' : '켜기'}`}
+              aria-label={t('callStage.t20', { p0: cameraEnabled ? t('callStage.t13') : t('callStage.t14') })}
               className={cn(
                 deviceButtonClass,
                 cameraEnabled ? 'text-white/75' : 'text-[var(--color-error-on-dark)]',
@@ -156,18 +218,18 @@ export function CallStage({
               onClick={onCameraToggle}
               type="button"
             >
-              카메라 {cameraEnabled ? '정상' : '꺼짐'}
+              {t('callStage.t3')} {cameraEnabled ? t('callStage.t15') : t('callStage.t16')}
             </button>
             {/* 기념 사진 셔터 — 통화가 끝난 뒤 완료 화면에서 카드로 만들 사진을 남긴다. */}
             {onCapture ? (
               <button
-                aria-label="기념 사진 찍기"
+                aria-label={t('callStage.captureAria')}
                 className={cn(deviceButtonClass, 'text-white/75')}
                 disabled={captureDisabled}
                 onClick={onCapture}
                 type="button"
               >
-                {captureLabel ?? '사진'}
+                {captureLabel ?? t('callStage.capture')}
               </button>
             ) : null}
             <button
@@ -175,7 +237,7 @@ export function CallStage({
               onClick={onLeave}
               type="button"
             >
-              통화 종료
+              {t('callStage.t4')}
             </button>
           </p>
         </div>
@@ -207,64 +269,96 @@ export function CallStage({
 
       {/* 내 화면 PIP */}
       <figure
-        aria-label={`${localParticipantLabel} 영상`}
+        aria-label={t('callStage.t21', { p0: localParticipantLabelResolved })}
         className="absolute bottom-[74px] right-[18px] z-10 m-0 w-[clamp(140px,17%,216px)] overflow-hidden rounded-lg bg-[var(--color-surface-dark-media)] shadow-[0_6px_24px_rgb(0_0_0/42%)]"
       >
         <div className="relative aspect-[4/3] w-full">{localVideo}</div>
         <figcaption className="absolute bottom-2 left-2 flex items-center gap-[7px] rounded-[5px] bg-[rgb(15_17_21/82%)] px-[9px] py-[5px]">
-          <span className="text-xs font-extrabold text-white">{localParticipantLabel}</span>
-          <span className="text-xs font-bold text-[var(--color-success-on-dark)]">연결됨</span>
+          <span className="text-xs font-extrabold text-white">{localParticipantLabelResolved}</span>
+          <span className="text-xs font-bold text-[var(--color-success-on-dark)]">{t('callStage.t5')}</span>
         </figcaption>
       </figure>
 
-      {/* 실시간 자막 — 켜져 있을 때만 중앙 하단에 표시한다. */}
+      {/*
+        실시간 자막 — 켜져 있을 때만 중앙 하단에 표시한다.
+        상대가 말한 **가장 최근 한 문장**만 온다(subtitleChannel이 내 발화를 걸러내고 1줄만 남긴다).
+        그래도 map으로 그리는 이유는 유지 줄 수를 늘리고 싶을 때 이 컴포넌트를 고치지 않아도 되게 하려는 것이다.
+      */}
       {captionEnabled && captionLines?.length ? (
         <div
           aria-live="polite"
           className="absolute bottom-[18px] left-1/2 z-10 max-w-[min(70%,620px)] -translate-x-1/2 rounded-lg bg-[rgb(15_17_21/84%)] px-4 py-[11px] text-center"
         >
-          {captionLines.map((line, index) => {
-            const isCurrent = index === captionLines.length - 1
-            return (
-              <p
-                className={index ? 'mt-1.5' : ''}
-                // 자막 식별자를 우선 쓴다. 발화 내용으로만 식별하면 같은 말("네")이 반복될 때
-                // key가 겹쳐 React가 다른 줄로 인식하지 못한다.
-                key={line.id ?? `${line.speaker}:${line.text}`}
-              >
-                <strong className="text-sm font-extrabold text-white/75">{line.speaker}</strong>
-                <span
-                  className={cn(
-                    'mt-[3px] block text-lg font-semibold leading-[1.45]',
-                    // 지나간 대사는 흐리게 남겨 현재 발화가 어느 줄인지 위치와 명도로 함께 구분한다.
-                    isCurrent ? 'text-white' : 'text-white/55',
-                  )}
-                >
-                  {line.text}
+          {captionLines.map((line, index) => (
+            <p
+              className={index ? 'mt-1.5' : ''}
+              // 자막 식별자를 우선 쓴다. 발화 내용으로만 식별하면 같은 말("네")이 반복될 때
+              // key가 겹쳐 React가 다른 줄로 인식하지 못한다.
+              key={line.id ?? `${line.speaker}:${line.text}`}
+            >
+              <strong className="text-sm font-extrabold text-white/75">{line.speaker}</strong>
+              <span className="mt-[3px] block text-lg font-semibold leading-[1.45] text-white">
+                {line.text}
+              </span>
+              {/* 번역문은 원문을 대체하지 않고 아래에 덧붙인다. 원문과 구분되게 한 단계 흐리게 둔다. */}
+              {line.translatedText ? (
+                <span className="mt-[3px] block text-base font-semibold leading-[1.45] text-white/80">
+                  {line.translatedText}
                 </span>
-                {/* 번역문은 원문을 대체하지 않고 아래에 덧붙인다. 원문과 구분되게 한 단계 흐리게 둔다. */}
-                {line.translatedText ? (
-                  <span
-                    className={cn(
-                      'mt-[3px] block text-base font-semibold leading-[1.45]',
-                      isCurrent ? 'text-white/80' : 'text-white/45',
-                    )}
-                  >
-                    {line.translatedText}
-                  </span>
-                ) : null}
-              </p>
-            )
-          })}
+              ) : null}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {/*
+        떠오르는 리액션 — 화면 전체를 덮지만 `pointer-events-none`이라 아래 조작을 가리지 않는다.
+        영상 위에 잠깐 떴다 사라지는 표현이므로 레이아웃을 차지하지 않게 absolute로 둔다.
+      */}
+      {floatingReactions?.length ? (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
+          {floatingReactions.map((reaction) => (
+            <span
+              className="absolute bottom-[120px] text-[38px] leading-none motion-safe:animate-[mj-reaction-float_2200ms_cubic-bezier(0.2,0.6,0.3,1)_forwards] motion-reduce:opacity-80"
+              key={reaction.id}
+              style={{ left: `${reaction.leftPercent}%` }}
+            >
+              {reaction.emoji}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {/*
+        리액션 — 2분 통화에서 고민 없이 누를 수 있도록 고정된 소수의 이모지만 둔다.
+        자막 토글 바로 위에 놓아 내 화면 PIP(우측)와 자막(중앙)을 가리지 않는다.
+      */}
+      {reactionEmojis?.length && onReactionSend ? (
+        <div
+          aria-label={t('callStage.reactionGroup')}
+          className="absolute bottom-[70px] left-[18px] z-10 flex items-center gap-1 rounded-lg bg-[rgb(15_17_21/78%)] px-2 py-1.5"
+          role="group"
+        >
+          {reactionEmojis.map((emoji) => (
+            <button
+              aria-label={t('callStage.reactionSend', { p0: emoji })}
+              className="min-h-9 rounded-md px-2 text-xl leading-none transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:hover:scale-100"
+              key={emoji}
+              onClick={() => onReactionSend(emoji)}
+              type="button"
+            >
+              {emoji}
+            </button>
+          ))}
         </div>
       ) : null}
 
       {/* 자막 토글 */}
       <div className="absolute bottom-[18px] left-[18px] z-10 flex items-center gap-2.5 rounded-lg bg-[rgb(15_17_21/78%)] px-3 py-2">
-        <span className="text-sm font-bold text-white/90">자막</span>
+        <span className="text-sm font-bold text-white/90">{t('callStage.t6')}</span>
         <button
           aria-checked={captionEnabled}
-          aria-label={`자막 ${captionEnabled ? '끄기' : '켜기'}`}
+          aria-label={t('callStage.t22', { p0: captionEnabled ? t('callStage.t17') : t('callStage.t18') })}
           className={cn(
             'relative h-[26px] w-[46px] rounded-full border p-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
             captionEnabled ? 'border-white/90 bg-white/90' : 'border-white/40 bg-transparent',
@@ -297,7 +391,7 @@ export function CallStage({
             </p>
             {overlay.showLink ? (
               <div
-                aria-label="연결을 준비하고 있습니다"
+                aria-label={t('callStage.t7')}
                 className="relative mx-auto mt-[22px] h-4 w-[220px]"
                 role="img"
               >
