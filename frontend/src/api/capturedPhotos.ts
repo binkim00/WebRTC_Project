@@ -33,6 +33,12 @@ export type FanCardDraft = {
   photoAdjustments?: PhotoAdjustment[]
   /** 문구 크기 배율이며 예전 초안에는 없다. */
   quoteScale?: number
+  /** 팬미팅 이름 크기 배율이며 예전 초안에는 없다. */
+  titleScale?: number
+  /** 팬이 고른 팬미팅 이름 색이며 고르지 않았으면 없다. */
+  titleColor?: string
+  /** 팬이 고른 문구 색이며 고르지 않았으면 없다. */
+  quoteColor?: string
   /** 고른 카드 도안이며 예전 초안에는 없다. */
   themeKey?: FanCardThemeKey
   /** 마지막으로 저장한 시각 (ISO) */

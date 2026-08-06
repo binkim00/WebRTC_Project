@@ -30,6 +30,7 @@ import {
   type PhotoAdjustment,
   type PhotoSlotRect,
 } from './fanCardCanvas'
+import { FanCardColorPicker } from './FanCardColorPicker'
 import { FanCardQuotePicker } from './FanCardQuotePicker'
 import { FanCardLayoutPicker } from './FanCardLayoutPicker'
 import { photoCountOf } from './fanCardLayoutOptions'
@@ -281,8 +282,32 @@ export function FanCardSection({
   /** 지금 고른 사진 칸이며 없으면 아무 칸도 고르지 않은 상태다. */
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>()
 
+  /** 팬미팅 이름 크기 배율이다. */
+  const [titleScale, setTitleScale] = useState(1)
+  /** 팬미팅 이름 색이며 없으면 도안 색을 쓴다. */
+  const [titleColor, setTitleColor] = useState<string>()
+  /** 문구 색이며 없으면 도안 색을 쓴다. */
+  const [quoteColor, setQuoteColor] = useState<string>()
+
   const selectedDecoration = decorations.find(
     (decoration) => decoration.id === selectedDecorationId,
+  )
+
+  /**
+   * 고른 글자 요소의 색을 바꾼다.
+   *
+   * @param color 칠할 색이며 없으면 흰색으로 돌아간다
+   */
+  const changeSelectedDecorationColor = useCallback(
+    (color?: string) => {
+      if (!selectedDecorationId) return
+      setDecorations((current) =>
+        current.map((decoration) =>
+          decoration.id === selectedDecorationId ? { ...decoration, color } : decoration,
+        ),
+      )
+    },
+    [selectedDecorationId],
   )
 
   /**
@@ -525,6 +550,9 @@ export function FanCardSection({
           setSelectedPhotoIndexes(draft.selectedPhotoIndexes)
           setPhotoAdjustments(draft.photoAdjustments ?? [])
           setQuoteScale(draft.quoteScale ?? 1)
+          setTitleScale(draft.titleScale ?? 1)
+          setTitleColor(draft.titleColor)
+          setQuoteColor(draft.quoteColor)
           setThemeKey(draft.themeKey ?? DEFAULT_FAN_CARD_THEME)
           setDecorations(draft.decorations)
           // 이어 붙일 식별자가 겹치지 않게 이미 쓴 번호 뒤에서 시작한다.
@@ -564,6 +592,9 @@ export function FanCardSection({
         selectedPhotoIndexes: [...selectedPhotoIndexes],
         photoAdjustments: [...photoAdjustments],
         quoteScale,
+        titleScale,
+        titleColor,
+        quoteColor,
         themeKey,
         decorations: [...decorations],
         savedAt: new Date().toISOString(),
@@ -577,9 +608,12 @@ export function FanCardSection({
     fontKey,
     layout,
     photoAdjustments,
+    quoteColor,
     quoteScale,
     selectedPhotoIndexes,
     themeKey,
+    titleColor,
+    titleScale,
   ])
 
   useEffect(() => {
@@ -678,6 +712,9 @@ export function FanCardSection({
           decorations,
           photoAdjustments,
           quoteScale,
+          titleScale,
+          titleColor,
+          quoteColor,
           themeKey,
         })
       })
@@ -787,9 +824,12 @@ export function FanCardSection({
   }, [
     canCompose,
     photoAdjustments,
+    quoteColor,
     quoteScale,
     selectedPhotoIndex,
     themeKey,
+    titleColor,
+    titleScale,
     dateLabel,
     decorations,
     fanNickname,
@@ -902,6 +942,9 @@ export function FanCardSection({
       await drawFanCard(canvas, {
         photoAdjustments,
         quoteScale,
+        titleScale,
+        titleColor,
+        quoteColor,
         themeKey,
         text: selectedText ?? '',
         meetingTitle,
@@ -1011,6 +1054,47 @@ export function FanCardSection({
                 </div>
               ) : null}
 
+              {selectedText ? (
+                <FanCardColorPicker
+                  label={t('fanCardSection.t27')}
+                  onChange={setQuoteColor}
+                  value={quoteColor}
+                />
+              ) : null}
+
+              {/* 팬미팅 이름은 문구를 고르지 않아도 카드에 늘 들어가므로 언제나 조절할 수 있다. */}
+              <div className="mt-3 flex items-center gap-3">
+                <label
+                  className="text-xs font-bold text-[var(--color-text-secondary)]"
+                  htmlFor="fan-card-title-scale"
+                >
+                  {t('fanCardSection.t25')}
+                </label>
+                <input
+                  className="h-1.5 flex-1 cursor-pointer accent-[var(--color-primary-coral)]"
+                  id="fan-card-title-scale"
+                  max={1.4}
+                  min={0.7}
+                  onChange={(event) => setTitleScale(Number(event.target.value))}
+                  step={0.05}
+                  type="range"
+                  value={titleScale}
+                />
+                <button
+                  className="mj-font-label whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface-panel)]"
+                  onClick={() => setTitleScale(1)}
+                  type="button"
+                >
+                  {t('fanCardSection.t22')}
+                </button>
+              </div>
+
+              <FanCardColorPicker
+                label={t('fanCardSection.t26')}
+                onChange={setTitleColor}
+                value={titleColor}
+              />
+
               <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
                  {t('fanCardSection.t9')} </h3>
               <canvas
@@ -1079,6 +1163,14 @@ export function FanCardSection({
                     </div>
                   ) : null}
                 </div>
+              ) : null}
+
+              {selectedDecoration?.kind === 'TEXT' ? (
+                <FanCardColorPicker
+                  label={t('fanCardSection.t28')}
+                  onChange={changeSelectedDecorationColor}
+                  value={selectedDecoration.color}
+                />
               ) : null}
 
               <FanCardStickerPanel

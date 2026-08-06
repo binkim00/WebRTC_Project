@@ -26,7 +26,6 @@ export const LAYOUT_OPTIONS = (): readonly LayoutOption[] => [
   { key: 'FILM', label: translate('fanCardLayoutOptions.t8'), photoCount: 4 },
   { key: 'SIXCUT', label: translate('fanCardLayoutOptions.t9'), photoCount: MAX_PHOTOS_PER_CARD },
   { key: 'HEART', label: translate('fanCardLayoutOptions.t10'), photoCount: 1 },
-  { key: 'CIRCLE', label: translate('fanCardLayoutOptions.t11'), photoCount: 3 },
   { key: 'SCATTER', label: translate('fanCardLayoutOptions.t12'), photoCount: 3 },
   { key: undefined, label: translate('fanCardLayoutOptions.t6'), photoCount: 0 },
 ]

@@ -449,7 +449,6 @@ export type FanCardLayout =
   | 'FILM'
   | 'SIXCUT'
   | 'HEART'
-  | 'CIRCLE'
   | 'SCATTER'
 
 /** FOURCUT이 채우는 칸 수다. */
@@ -461,8 +460,6 @@ const TWO_CUT_SLOTS = 2
 /** SIXCUT이 채우는 칸 수다. */
 const SIX_CUT_SLOTS = 6
 
-/** CIRCLE이 채우는 칸 수다. */
-const CIRCLE_SLOTS = 3
 
 /** SCATTER가 채우는 칸 수다. */
 const SCATTER_SLOTS = 3
@@ -603,6 +600,22 @@ export type FanCardArtwork = {
    * 보이거나 답답해진다. 자동 맞춤 결과를 이 값으로 키우거나 줄일 수 있게 열어 둔다.
    */
   quoteScale?: number
+  /**
+   * 팬미팅 이름 크기 배율이며 없으면 1이다.
+   *
+   * <p>이름이 짧으면 카드가 헐렁해 보이고 길면 줄임표로 잘린다. 문구와 같은 방식으로 팬이
+   * 직접 키우거나 줄일 수 있게 열어 둔다.
+   */
+  titleScale?: number
+  /**
+   * 팬미팅 이름 색이며 없으면 도안 잉크색을 쓴다.
+   *
+   * <p>도안 색은 배경과 어울리도록 고른 값이라 대비가 낮다. 이름을 눈에 띄게 하고 싶은 팬이
+   * 직접 색을 고를 수 있게 한다.
+   */
+  titleColor?: string
+  /** 문구 색이며 없으면 도안 잉크색을 쓴다. */
+  quoteColor?: string
   /** 팬이 카드 위에 올린 스티커와 글자다. 목록 순서대로 위에 쌓인다. */
   decorations?: readonly CardDecoration[]
 }
@@ -628,6 +641,70 @@ export type CardDecoration = {
   size: number
   /** 라디안 단위 회전각 */
   rotation: number
+  /**
+   * TEXT 의 글자 색이며 없으면 흰색이다. STICKER 는 쓰지 않는다.
+   *
+   * <p>밝은 도안에 흰 글자만 얹을 수 있으면 테두리에 의지해 겨우 읽힌다. 색을 고를 수 있게 하고,
+   * 테두리는 고른 색의 밝기를 보고 반대쪽으로 잡는다.
+   */
+  color?: string
+}
+
+/**
+ * 색이 밝은 쪽인지 가린다.
+ *
+ * <p>글자 테두리를 색의 반대쪽으로 두려면 밝기를 알아야 한다. 사람 눈이 초록에 가장 민감한 점을
+ * 반영한 가중 평균을 쓴다. 팔레트가 `#rrggbb` 로만 이루어져 있어 그 형태만 읽고, 읽지 못한 값은
+ * 밝은 쪽으로 보아 지금까지와 같은 어두운 테두리를 두른다.
+ *
+ * @param color 판정할 색
+ * @returns 밝은 색이면 true
+ */
+function isLightColor(color: string): boolean {
+  const hex = color.trim()
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return true
+
+  const value = Number.parseInt(hex.slice(1), 16)
+  const red = (value >> 16) & 0xff
+  const green = (value >> 8) & 0xff
+  const blue = value & 0xff
+  return (red * 299 + green * 587 + blue * 114) / 1000 > 150
+}
+
+/**
+ * 팬미팅 이름에 쓸 색을 고른다.
+ *
+ * @param artwork 카드에 담을 정보
+ * @param fallback 팬이 색을 고르지 않았을 때 쓸 도안 색
+ * @returns 실제로 칠할 색
+ */
+function titleFill(artwork: FanCardArtwork, fallback: string): string {
+  return artwork.titleColor ?? fallback
+}
+
+/**
+ * 팬미팅 이름 글자 크기를 배율만큼 키운다.
+ *
+ * <p>도안마다 기본 크기가 달라 절대값을 받지 않고 배율을 곱한다. 그래야 어느 도안을 골라도
+ * 같은 정도로 커진다.
+ *
+ * @param artwork 카드에 담을 정보
+ * @param base 도안이 정한 기본 글자 크기
+ * @returns 배율을 곱한 글자 크기
+ */
+function titleSize(artwork: FanCardArtwork, base: number): number {
+  return Math.round(base * (artwork.titleScale ?? 1))
+}
+
+/**
+ * 문구에 쓸 색을 고른다.
+ *
+ * @param artwork 카드에 담을 정보
+ * @param fallback 팬이 색을 고르지 않았을 때 쓸 도안 색
+ * @returns 실제로 칠할 색
+ */
+function quoteFill(artwork: FanCardArtwork, fallback: string): string {
+  return artwork.quoteColor ?? fallback
 }
 
 /**
@@ -892,11 +969,7 @@ function drawSignatureForLayout(
     }
     case 'HEART':
       // 하트 아래 오른쪽이다. 곡선을 침범하지 않게 조금 안쪽에 둔다.
-      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 260, 940, 48)
-      return
-    case 'CIRCLE':
-      // 마지막 동그라미 오른쪽 아래다.
-      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 220, 1090, 42)
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 240, 1042, 48)
       return
     case 'SCATTER':
       // 흩어 놓은 사진 사이 오른쪽 아래 빈 자리다.
@@ -980,9 +1053,6 @@ export async function drawFanCard(
       case 'HEART':
         slots = drawHeartCard(ctx, artwork, photos, fontFamily)
         break
-      case 'CIRCLE':
-        slots = drawCircleCard(ctx, artwork, photos, fontFamily)
-        break
       case 'SCATTER':
         slots = drawScatterCard(ctx, artwork, photos, fontFamily)
         break
@@ -1033,8 +1103,8 @@ function drawQuoteOnlyCard(
   // 팬미팅 제목
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = themeInk(theme, 0.72)
-  ctx.font = `600 34px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.72))
+  ctx.font = `600 ${titleSize(artwork, 34)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), CARD_WIDTH / 2, 168)
 
   // 문구 — 카드의 주인공이라 남은 공간을 최대한 쓴다. 문구를 고르지 않았으면 비워 둔다.
@@ -1048,11 +1118,13 @@ function drawQuoteOnlyCard(
     const quoteBlockHeight = quote.lines.length * lineHeight
     let quoteY = (CARD_HEIGHT - quoteBlockHeight) / 2 + quote.fontSize * 0.34
 
+    // 여는 따옴표는 문구를 감싸는 장식이라 옅은 도안 색으로 둔다. 팬이 고른 색을 그대로 쓰면
+    // 132px 글자가 문구보다 튄다.
     ctx.fillStyle = themeInk(theme, 0.26)
     ctx.font = `700 132px ${fontFamily}`
     ctx.fillText('“', CARD_WIDTH / 2, quoteY - quote.fontSize * 0.9)
 
-    ctx.fillStyle = themeInk(theme, 1)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 1))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     for (const line of quote.lines) {
       ctx.fillText(line, CARD_WIDTH / 2, quoteY)
@@ -1781,7 +1853,7 @@ function drawInstaCard(
 
     ctx.textAlign = 'left'
     ctx.textBaseline = 'alphabetic'
-    ctx.fillStyle = ink
+    ctx.fillStyle = quoteFill(artwork, ink)
     ctx.font = `500 ${quote.fontSize}px ${fontFamily}`
     let captionY = captionTop + 34
     const captionLineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
@@ -1904,7 +1976,7 @@ function drawPolaroidCard(
     ctx.save()
     ctx.translate(CARD_WIDTH / 2, captionTop + 74)
     ctx.rotate(-0.022)
-    ctx.fillStyle = '#2a1547'
+    ctx.fillStyle = quoteFill(artwork, '#2a1547')
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     let quoteY = 0
     const lineHeight = quote.fontSize * QUOTE_LINE_HEIGHT_RATIO
@@ -1931,8 +2003,8 @@ function drawPolaroidCard(
     frameY + frameHeight - 52,
   )
 
-  ctx.fillStyle = themeInk(theme, 0.5)
-  ctx.font = `500 24px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.5))
+  ctx.font = `500 ${titleSize(artwork, 24)}px ${fontFamily}`
   ctx.fillText(
     truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 160),
     CARD_WIDTH / 2,
@@ -1967,8 +2039,8 @@ function drawFourCutCard(
   // 상단 제목
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = themeInk(theme, 0.72)
-  ctx.font = `600 30px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.72))
+  ctx.font = `600 ${titleSize(artwork, 30)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 104)
 
   // 2×2 그리드
@@ -1999,7 +2071,7 @@ function drawFourCutCard(
     const quote = fitQuote(
       ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 110, [40, 35, 31, 27, 24], artwork.quoteScale,
     )
-    ctx.fillStyle = themeInk(theme, 1)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 1))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     drawQuoteLines(ctx, quote.lines, quote.fontSize, gridBottom + 62)
   }
@@ -2085,8 +2157,8 @@ function drawFourCutVerticalCard(
   ctx.textBaseline = 'alphabetic'
 
   // 상단 — 제목과 문구만 둔다.
-  ctx.fillStyle = themeInk(theme, 0.7)
-  ctx.font = `600 24px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.7))
+  ctx.font = `600 ${titleSize(artwork, 24)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), centerX, 58)
 
   // 문구를 고르지 않았으면 스트립 위를 비운다. 칸 위치는 그대로라 사진 배치는 달라지지 않는다.
@@ -2095,7 +2167,7 @@ function drawFourCutVerticalCard(
     const quote = fitQuote(
       ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [30, 27, 24, 21, 19], artwork.quoteScale,
     )
-    ctx.fillStyle = themeInk(theme, 1)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 1))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     drawQuoteLines(ctx, quote.lines, quote.fontSize, 104, centerX)
   }
@@ -2171,8 +2243,8 @@ function drawFourCutHorizontalCard(
   ctx.textBaseline = 'alphabetic'
 
   // 상단 — 제목과 문구만 둔다.
-  ctx.fillStyle = themeInk(theme, 0.7)
-  ctx.font = `600 24px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.7))
+  ctx.font = `600 ${titleSize(artwork, 24)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), centerX, 56)
 
   // 문구를 고르지 않았으면 스트립 위를 비운다. 칸 위치는 그대로라 사진 배치는 달라지지 않는다.
@@ -2181,7 +2253,7 @@ function drawFourCutHorizontalCard(
     const quote = fitQuote(
       ctx, `“${quoteText}”`, fontFamily, contentWidth, 96, [34, 30, 27, 24, 21], artwork.quoteScale,
     )
-    ctx.fillStyle = themeInk(theme, 1)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 1))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     drawQuoteLines(ctx, quote.lines, quote.fontSize, 102, centerX)
   }
@@ -2298,12 +2370,14 @@ async function drawDecorations(
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.font = `700 ${decoration.size}px ${fontFamily}`
-      // 밝은 프레임과 어두운 네컷 어디에 올려도 읽히도록 테두리를 함께 그린다.
+      // 밝은 프레임과 어두운 네컷 어디에 올려도 읽히도록 테두리를 함께 그린다. 글자가 밝으면
+      // 어두운 테두리, 어두우면 밝은 테두리를 둘러야 어느 쪽에서도 윤곽이 남는다.
+      const color = decoration.color ?? '#ffffff'
       ctx.lineJoin = 'round'
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)'
+      ctx.strokeStyle = isLightColor(color) ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.6)'
       ctx.lineWidth = Math.max(2, decoration.size * 0.14)
       ctx.strokeText(decoration.content, 0, 0)
-      ctx.fillStyle = '#ffffff'
+      ctx.fillStyle = color
       ctx.fillText(decoration.content, 0, 0)
     } else {
       const image = images[index]
@@ -2360,8 +2434,8 @@ function drawSixCutCard(
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = themeInk(theme, 0.72)
-  ctx.font = `600 30px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.72))
+  ctx.font = `600 ${titleSize(artwork, 30)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 96)
 
   const gridX = 66
@@ -2392,7 +2466,7 @@ function drawSixCutCard(
       ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 96, [36, 32, 28, 25, 22],
       artwork.quoteScale,
     )
-    ctx.fillStyle = themeInk(theme, 1)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 1))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     drawQuoteLines(ctx, quote.lines, quote.fontSize, gridBottom + 54)
   }
@@ -2464,8 +2538,8 @@ function drawFilmCard(
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = themeInk(theme, 0.62)
-  ctx.font = `600 24px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.62))
+  ctx.font = `600 ${titleSize(artwork, 24)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), width / 2, 74)
 
   for (let index = 0; index < FOUR_CUT_SLOTS; index += 1) {
@@ -2487,7 +2561,7 @@ function drawFilmCard(
     const quote = fitQuote(
       ctx, quoteText, fontFamily, contentWidth, 92, [30, 27, 24, 21, 19], artwork.quoteScale,
     )
-    ctx.fillStyle = themeInk(theme, 0.94)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 0.94))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     drawQuoteLines(ctx, quote.lines, quote.fontSize, stripBottom + 48, width / 2)
   }
@@ -2531,8 +2605,8 @@ function drawTwoCutCard(
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = themeInk(theme, 0.72)
-  ctx.font = `600 32px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.72))
+  ctx.font = `600 ${titleSize(artwork, 32)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 112)
 
   const padding = 70
@@ -2561,7 +2635,7 @@ function drawTwoCutCard(
       ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 150, [48, 42, 37, 32, 28],
       artwork.quoteScale,
     )
-    ctx.fillStyle = themeInk(theme, 1)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 1))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     drawQuoteLines(ctx, quote.lines, quote.fontSize, stripBottom + 76)
   }
@@ -2609,13 +2683,15 @@ function drawHeartCard(
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = themeInk(theme, 0.72)
-  ctx.font = `600 32px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.72))
+  ctx.font = `600 ${titleSize(artwork, 32)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 132)
 
-  const size = 720
+  // 사진 한 장이 주역인 도안이라 하트를 카드 폭 가까이 키운다. 아래에는 싸인·문구·이름이
+  // 차례로 놓이므로, 하트 아래끝이 1012 를 넘으면 문구가 이름을 침범한다.
+  const size = 850
   const x = (CARD_WIDTH - size) / 2
-  const y = 190
+  const y = 162
   const photo = photos[0]
   slots.push({ index: 0, x, y, width: size, height: size })
 
@@ -2646,9 +2722,9 @@ function drawHeartCard(
   const quoteText = cardQuoteText(artwork)
   if (quoteText) {
     const quote = fitQuote(
-      ctx, quoteText, fontFamily, CARD_WIDTH - 220, 130, [44, 39, 34, 30, 26], artwork.quoteScale,
+      ctx, quoteText, fontFamily, CARD_WIDTH - 220, 96, [40, 36, 32, 28, 24], artwork.quoteScale,
     )
-    ctx.fillStyle = themeInk(theme, 1)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 1))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     drawQuoteLines(ctx, quote.lines, quote.fontSize, y + size + 96)
   }
@@ -2666,90 +2742,6 @@ function drawHeartCard(
     CARD_HEIGHT - 74,
   )
   drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 40, themeInk(theme, 0.42))
-
-  return slots
-}
-
-/**
- * 사진 세 장을 동그랗게 오려 세로로 잇는 카드를 그린다.
- *
- * <p>스티커를 붙여 놓은 듯한 도안이다. 원은 사각형보다 얼굴 주변만 남으므로 표정이 도드라진다.
- *
- * @param ctx 그릴 대상 컨텍스트
- * @param artwork 카드에 담을 정보
- * @param photos 담을 사진 목록
- * @param fontFamily 사용할 폰트 패밀리
- * @returns 사진이 놓인 칸 목록
- */
-function drawCircleCard(
-  ctx: CanvasRenderingContext2D,
-  artwork: FanCardArtwork,
-  photos: readonly ImageBitmap[],
-  fontFamily: string,
-): PhotoSlotRect[] {
-  const theme = themeOf(artwork.themeKey)
-  const slots: PhotoSlotRect[] = []
-  drawFourCutBackground(ctx, theme)
-
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = themeInk(theme, 0.72)
-  ctx.font = `600 30px ${fontFamily}`
-  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 116)
-
-  const size = 300
-  const gap = 26
-  const startY = 168
-  // 가운데를 살짝 비껴 놓아 일부러 붙인 스티커처럼 보이게 한다.
-  const offsets = [-70, 60, -40]
-
-  for (let index = 0; index < CIRCLE_SLOTS; index += 1) {
-    const x = (CARD_WIDTH - size) / 2 + (offsets[index] ?? 0)
-    const y = startY + index * (size + gap)
-    const photo = photos[index]
-    slots.push({ index, x, y, width: size, height: size })
-
-    const circle = () => {
-      ctx.beginPath()
-      ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2)
-      ctx.closePath()
-    }
-
-    if (photo) {
-      drawPhotoInShape(ctx, photo, x, y, size, size, circle, artwork.photoAdjustments?.[index])
-    } else {
-      circle()
-      ctx.fillStyle = themeInk(theme, 0.06)
-      ctx.fill()
-    }
-    circle()
-    ctx.strokeStyle = themeInk(theme, 0.55)
-    ctx.lineWidth = 6
-    ctx.stroke()
-  }
-
-  const stripBottom = startY + CIRCLE_SLOTS * size + (CIRCLE_SLOTS - 1) * gap
-  const quoteText = cardQuoteText(artwork)
-  if (quoteText) {
-    const quote = fitQuote(
-      ctx, quoteText, fontFamily, CARD_WIDTH - 240, 96, [36, 32, 28, 25, 22], artwork.quoteScale,
-    )
-    ctx.fillStyle = themeInk(theme, 1)
-    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
-    drawQuoteLines(ctx, quote.lines, quote.fontSize, stripBottom + 58)
-  }
-
-  ctx.fillStyle = themeInk(theme, 0.86)
-  ctx.font = `700 28px ${fontFamily}`
-  ctx.fillText(
-    truncate(ctx, `${artwork.influencerName} · ${artwork.fanNickname}`, CARD_WIDTH - 200),
-    CARD_WIDTH / 2,
-    CARD_HEIGHT - 96,
-  )
-  ctx.fillStyle = themeInk(theme, 0.58)
-  ctx.font = `500 24px ${fontFamily}`
-  ctx.fillText(artwork.dateLabel, CARD_WIDTH / 2, CARD_HEIGHT - 62)
-  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 32, themeInk(theme, 0.42))
 
   return slots
 }
@@ -2778,8 +2770,8 @@ function drawScatterCard(
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = themeInk(theme, 0.72)
-  ctx.font = `600 30px ${fontFamily}`
+  ctx.fillStyle = titleFill(artwork, themeInk(theme, 0.72))
+  ctx.font = `600 ${titleSize(artwork, 30)}px ${fontFamily}`
   ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 108)
 
   const photoWidth = 620
@@ -2833,7 +2825,7 @@ function drawScatterCard(
     const quote = fitQuote(
       ctx, quoteText, fontFamily, CARD_WIDTH - 240, 84, [34, 30, 27, 24, 21], artwork.quoteScale,
     )
-    ctx.fillStyle = themeInk(theme, 1)
+    ctx.fillStyle = quoteFill(artwork, themeInk(theme, 1))
     ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
     drawQuoteLines(ctx, quote.lines, quote.fontSize, CARD_HEIGHT - 176)
   }
