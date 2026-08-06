@@ -11,6 +11,8 @@ export type UseCallPhotoCaptureOptions = {
   callSessionId?: string
   /** 상대방(인플루언서) 카메라 MediaStreamTrack */
   remoteVideoTrack?: MediaStreamTrack
+  /** 내(팬) 카메라 MediaStreamTrack이며 있으면 상대와 나란히 함께 찍힌다 */
+  localVideoTrack?: MediaStreamTrack
 }
 
 export type UseCallPhotoCaptureResult = {
@@ -29,7 +31,47 @@ export type UseCallPhotoCaptureResult = {
 }
 
 /**
- * 통화 화면에서 팬이 누른 셔터로 상대 영상의 정지 프레임을 남기는 훅이다.
+ * 지정한 영역을 꽉 채우도록 영상을 잘라 그린다. (CSS object-fit: cover와 같은 규칙)
+ *
+ * <p>두 사람의 카메라 비율이 제각각이라 그대로 이어 붙이면 찌그러진다. 넘치는 쪽을
+ * 가운데 기준으로 잘라 비율을 지킨다.
+ */
+function drawVideoCover(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+  mirrored: boolean,
+) {
+  const sourceWidth = video.videoWidth
+  const sourceHeight = video.videoHeight
+  if (!sourceWidth || !sourceHeight) return
+
+  const scale = Math.max(dw / sourceWidth, dh / sourceHeight)
+  const cropWidth = dw / scale
+  const cropHeight = dh / scale
+  const sx = (sourceWidth - cropWidth) / 2
+  const sy = (sourceHeight - cropHeight) / 2
+
+  ctx.save()
+  if (mirrored) {
+    // 내 화면의 셀프뷰와 같은 방향으로 남긴다. (통화 화면은 내 영상을 거울상으로 보여 준다)
+    ctx.translate(dx + dw, dy)
+    ctx.scale(-1, 1)
+    ctx.drawImage(video, sx, sy, cropWidth, cropHeight, 0, 0, dw, dh)
+  } else {
+    ctx.drawImage(video, sx, sy, cropWidth, cropHeight, dx, dy, dw, dh)
+  }
+  ctx.restore()
+}
+
+/**
+ * 통화 화면에서 팬이 누른 셔터로 정지 프레임을 남기는 훅이다.
+ *
+ * <p>상대(인플루언서) 영상만 찍지 않고, 내(팬) 카메라가 켜져 있으면 두 영상을 나란히
+ * 합성해 **함께 찍힌 사진**을 만든다. 내 카메라가 꺼져 있으면 상대 영상만 남긴다.
  *
  * <p>LiveKit이 준 MediaStreamTrack은 같은 출처의 스트림이라 canvas가 오염되지 않는다.
  * 그래서 그린 프레임을 그대로 PNG로 뽑을 수 있고, 기념 카드에 합성할 때도 제약이 없다.
@@ -37,14 +79,16 @@ export type UseCallPhotoCaptureResult = {
  * <p>사진은 서버에 올리지 않고 IndexedDB에만 둔다. 통화 화면을 떠난 뒤 완료 화면에서
  * 같은 통화 세션 식별자로 다시 찾아 카드로 만든다.
  *
- * @param options 통화 세션 식별자와 상대 영상 트랙
+ * @param options 통화 세션 식별자와 상대·내 영상 트랙
  * @returns 셔터 동작과 촬영 상태
  */
 export function useCallPhotoCapture({
   callSessionId,
   remoteVideoTrack,
+  localVideoTrack,
 }: UseCallPhotoCaptureOptions): UseCallPhotoCaptureResult {
   const videoRef = useRef<HTMLVideoElement | undefined>(undefined)
+  const localVideoRef = useRef<HTMLVideoElement | undefined>(undefined)
   const canvasRef = useRef<HTMLCanvasElement | undefined>(undefined)
   const photosRef = useRef<Blob[]>([])
   const mountedRef = useRef(true)
@@ -109,6 +153,28 @@ export function useCallPhotoCapture({
     }
   }, [remoteVideoTrack])
 
+  // 내 영상도 같은 방식으로 메모리 video에 재생해 두고 셔터 시점에 프레임을 읽는다.
+  useEffect(() => {
+    if (!localVideoTrack) {
+      localVideoRef.current?.pause()
+      localVideoRef.current = undefined
+      return
+    }
+
+    const video = document.createElement('video')
+    video.muted = true
+    video.playsInline = true
+    video.srcObject = new MediaStream([localVideoTrack])
+    void video.play().catch(() => undefined)
+    localVideoRef.current = video
+
+    return () => {
+      video.pause()
+      video.srcObject = null
+      if (localVideoRef.current === video) localVideoRef.current = undefined
+    }
+  }, [localVideoTrack])
+
   const canCapture = Boolean(
     callSessionId && remoteVideoTrack && photoCount < MAX_CAPTURED_PHOTOS,
   )
@@ -147,8 +213,13 @@ export function useCallPhotoCapture({
     setCaptureError(undefined)
 
     try {
+      // 내 카메라가 켜져 있고 프레임이 준비됐으면 상대와 나란히 함께 찍는다.
+      const localVideo = localVideoRef.current
+      const includeLocal = Boolean(localVideo && localVideo.readyState >= 2)
+
       const canvas = canvasRef.current ?? document.createElement('canvas')
       canvasRef.current = canvas
+      // 함께 찍을 때는 상대 프레임 크기의 반쪽 두 칸을 이어 붙인 가로 사진이 된다.
       canvas.width = width
       canvas.height = height
 
@@ -156,7 +227,14 @@ export function useCallPhotoCapture({
       if (!ctx) {
         throw new Error(translate('useCallPhotoCapture.t5'))
       }
-      ctx.drawImage(video, 0, 0, width, height)
+
+      if (includeLocal && localVideo) {
+        const halfWidth = Math.floor(width / 2)
+        drawVideoCover(ctx, video, 0, 0, halfWidth, height, false)
+        drawVideoCover(ctx, localVideo, halfWidth, 0, width - halfWidth, height, true)
+      } else {
+        ctx.drawImage(video, 0, 0, width, height)
+      }
 
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob(resolve, 'image/png')

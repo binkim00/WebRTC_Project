@@ -28,10 +28,19 @@ export function FanCardQuotePicker({
   onSelect,
   onRetry,
 }: FanCardQuotePickerProps) {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const aiSuggestions = candidates?.aiSuggestions ?? []
   const quotes = candidates?.influencerQuotes ?? []
   const hasAnyCandidate = aiSuggestions.length > 0 || quotes.length > 0
+
+  // 화면 언어가 한국어가 아니면 팬 언어로 번역된 문장을 카드 문구로 쓴다.
+  // 원문(주로 한국어)을 그대로 고르게 하면 영어 사용자 카드에 읽지 못하는 문장이 박힌다.
+  const cardTextOf = (quote: { text: string; translatedText: string | null }) =>
+    locale !== 'ko' && quote.translatedText ? quote.translatedText : quote.text
+  const subTextOf = (quote: { text: string; translatedText: string | null }) => {
+    if (!quote.translatedText) return undefined
+    return locale !== 'ko' ? quote.text : quote.translatedText
+  }
 
   return (
     <>
@@ -88,10 +97,10 @@ export function FanCardQuotePicker({
             {quotes.map((quote) => (
               <li key={quote.subtitleId}>
                 <CandidateButton
-                  onSelect={() => onSelect(quote.text)}
-                  selected={selectedText === quote.text}
-                  subText={quote.translatedText ?? undefined}
-                  text={quote.text}
+                  onSelect={() => onSelect(cardTextOf(quote))}
+                  selected={selectedText === cardTextOf(quote)}
+                  subText={subTextOf(quote)}
+                  text={cardTextOf(quote)}
                 />
               </li>
             ))}

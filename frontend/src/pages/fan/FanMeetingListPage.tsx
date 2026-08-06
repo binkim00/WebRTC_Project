@@ -520,8 +520,10 @@ export function FanMeetingListPage() {
               // LIVE 상태만으로 입장을 허용하지 않는다. 대기열 오픈 시각이 지나고
               // 서버가 참가자 입장을 허용한 경우에만 대기실로 이동한다.
               const queueIsOpen = isWaitingRoomOpen(item.detail?.meeting.operation.queueOpenAt)
+              // 종료·취소된 팬미팅은 목록 갱신이 늦어 예정 탭에 남아 있어도 입장을 막는다.
               const canEnter = Boolean(
                 queueIsOpen &&
+                  !isCompletedStatus(item.detail?.meeting.status) &&
                   (item.detail?.viewer.canEnter || item.detail?.meeting.status === 'READY'),
               )
 

@@ -180,6 +180,9 @@ export function FanCardSection({
     (decoration) => decoration.id === selectedDecorationId,
   )
 
+  // 문구를 고르지 않아도 사진이 있으면 카드를 만들 수 있다. 문구는 선택 사항이다.
+  const hasCardContent = Boolean(selectedText) || photoBlobs.length > 0
+
   /**
    * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
    *
@@ -426,7 +429,7 @@ export function FanCardSection({
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !selectedText) return
+    if (!canvas || !hasCardContent) return
 
     let active = true
 
@@ -434,7 +437,7 @@ export function FanCardSection({
       .then((photos) => {
         if (!active) return undefined
         return drawFanCard(canvas, {
-          text: selectedText,
+          text: selectedText ?? '',
           meetingTitle,
           influencerName,
           fanNickname,
@@ -480,6 +483,7 @@ export function FanCardSection({
     decorations,
     fanNickname,
     fontKey,
+    hasCardContent,
     influencerName,
     layout,
     meetingTitle,
@@ -570,14 +574,14 @@ export function FanCardSection({
    * 없는 캔버스에 같은 내용을 다시 그려 점선이 파일에 남지 않게 한다.
    */
   async function handleDownload() {
-    if (!selectedText) return
+    if (!hasCardContent) return
 
     const canvas = document.createElement('canvas')
 
     try {
       const photos = await resolveSelectedPhotos()
       await drawFanCard(canvas, {
-        text: selectedText,
+        text: selectedText ?? '',
         meetingTitle,
         influencerName,
         fanNickname,
@@ -640,7 +644,7 @@ export function FanCardSection({
             selectedText={selectedText}
           />
 
-          {selectedText && photoBlobs.length > 0 ? (
+          {photoBlobs.length > 0 ? (
             <FanCardLayoutPicker
               layout={layout}
               onLayoutChange={changeLayout}
@@ -650,14 +654,14 @@ export function FanCardSection({
             />
           ) : null}
 
-          {selectedText ? (
+          {hasCardContent ? (
             <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
               <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
 
               <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
                  {t('fanCardSection.t9')} </h3>
               <canvas
-                aria-label={t('fanCardSection.t10', { p0: selectedText })}
+                aria-label={t('fanCardSection.t10', { p0: selectedText ?? '' })}
                 // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
                 className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
                   decorations.length > 0 ? 'cursor-grab' : ''
@@ -686,15 +690,18 @@ export function FanCardSection({
               ) : null}
 
               {/* 저장 완료도 오류와 같은 배너 체계로 알린다. 초록 문장 한 줄만 두면 눈에 띄지 않는다. */}
-              {savedText === selectedText ? (
+              {selectedText && savedText === selectedText ? (
                 <AlertBanner className="mt-4" title={t('fanCardSection.t12')} variant="success">
                    {t('fanCardSection.t13')} </AlertBanner>
               ) : null}
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <Button loading={saving} onClick={() => void handleSave()} size="lg">
-                  {savedText ? t('fanCardSection.t14') : t('fanCardSection.t15')}
-                </Button>
+              <div className={`mt-6 grid gap-3 ${selectedText ? 'sm:grid-cols-2' : ''}`}>
+                {/* 문구 저장 API는 문구가 있어야 하므로, 문구 없이 만든 카드는 내려받기만 제공한다. */}
+                {selectedText ? (
+                  <Button loading={saving} onClick={() => void handleSave()} size="lg">
+                    {savedText ? t('fanCardSection.t14') : t('fanCardSection.t15')}
+                  </Button>
+                ) : null}
                 <Button onClick={() => void handleDownload()} size="lg" variant="secondary">
                    {t('fanCardSection.t16')} </Button>
               </div>

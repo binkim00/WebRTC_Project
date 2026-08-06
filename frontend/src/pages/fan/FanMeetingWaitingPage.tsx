@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AlertBanner, Button, Dialog, Textarea } from '../../components'
-import { useTranslation } from '../../i18n'
+import { localizeQueueChangeNotice, useTranslation } from '../../i18n'
 import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
 import {
@@ -362,6 +362,28 @@ export function FanMeetingWaitingPage() {
     return null
   }
 
+  // 종료·취소된 팬미팅의 대기실은 닫는다. 대기열 입장과 재등록을 막고,
+  // 녹화 영상·기념 카드가 있는 완료 화면으로만 안내한다.
+  if (detail?.meeting.status === 'ENDED' || detail?.meeting.status === 'CANCELED') {
+    return (
+      <div className="mx-auto w-[min(100%-40px,720px)] py-16">
+        <AlertBanner title={t('wait.ended.title')} variant="warning">
+          <p>{t('wait.ended.desc')}</p>
+          <Button
+            className="mt-3"
+            onClick={() =>
+              navigate(`/fan/fan-meetings/${fanMeetingId}/complete`, { replace: true })
+            }
+            size="sm"
+            variant="secondary"
+          >
+            {t('wait.ended.cta')}
+          </Button>
+        </AlertBanner>
+      </div>
+    )
+  }
+
   const influencerName = detail?.influencer.name ?? t('wait.fallbackInfluencer')
   const position = queueSnapshot?.position
   const ahead = queueSnapshot?.aheadCount ?? 0
@@ -649,7 +671,7 @@ export function FanMeetingWaitingPage() {
           {/* backend가 순번 변경 대상별로 저장한 안내 문구를 대기 화면에도 표시한다. */}
           {queueSnapshot?.lastChangeReason ? (
             <AlertBanner className="mt-5" title={t('wait.positionChanged.title')} variant="info">
-              <p>{queueSnapshot.lastChangeReason}</p>
+              <p>{localizeQueueChangeNotice(queueSnapshot.lastChangeReason)}</p>
               {queueSnapshot.lastChangedAt ? (
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                   {t('wait.positionChanged.at', {

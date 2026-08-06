@@ -156,6 +156,7 @@ export function DeviceCheckPage() {
   }, [selectedSpeakerId])
 
   const [meetingTitle, setMeetingTitle] = useState<string>()
+  const [meetingStatus, setMeetingStatus] = useState<string>()
   // 훅은 조기 return(잘못된 라우트) 앞에서 항상 같은 순서로 호출되어야 한다.
   const micLevel = useMicDisplayLevel(audioLevel)
 
@@ -167,7 +168,10 @@ export function DeviceCheckPage() {
     if (!session) return () => controller.abort()
 
     void fetchMeetingDetail(fanMeetingId, session.accessToken, controller.signal)
-      .then((meeting) => setMeetingTitle(meeting.title))
+      .then((meeting) => {
+        setMeetingTitle(meeting.title)
+        setMeetingStatus(meeting.status)
+      })
       .catch(() => undefined)
 
     return () => controller.abort()
@@ -184,6 +188,8 @@ export function DeviceCheckPage() {
 
   const meetingId = fanMeetingId
   const session = getAuthSession()
+  // 종료·취소된 팬미팅은 점검해도 입장할 수 없으므로 CTA를 막고 안내만 남긴다.
+  const meetingClosed = meetingStatus === 'ENDED' || meetingStatus === 'CANCELED'
   const currentStatus = statusContent()[status]
   const isRequesting = status === 'requesting'
   const isReady = status === 'ready'
@@ -285,7 +291,7 @@ export function DeviceCheckPage() {
 
   /** 장비 점검 결과를 저장한 뒤 역할에 따라 준비실(인플루언서) 또는 대기실(팬)로 이동한다. */
   async function handleEnterQueue() {
-    if (isEnteringQueue) return
+    if (isEnteringQueue || meetingClosed) return
 
     if (!session) {
       setQueueError(t('deviceCheckPage.t35'))
@@ -594,13 +600,18 @@ export function DeviceCheckPage() {
           ) : null}
 
           <div className="mt-6 border-t border-[var(--color-divider)] pt-5">
+            {meetingClosed ? (
+              <AlertBanner className="mb-4" title={t('deviceCheckPage.ended.title')} variant="warning">
+                {t('deviceCheckPage.ended.message')}
+              </AlertBanner>
+            ) : null}
             <button
               className={`mj-font-emphasis min-h-14 w-full rounded-[10px] border text-[17px] transition-colors ${
-                !allReady || isEnteringQueue
+                !allReady || isEnteringQueue || meetingClosed
                   ? 'cursor-not-allowed border-[var(--color-border-control)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)]'
                   : 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] text-white shadow-[var(--shadow-final-cta)] hover:bg-[var(--color-primary-coral-hover)]'
               }`}
-              disabled={!allReady || isEnteringQueue}
+              disabled={!allReady || isEnteringQueue || meetingClosed}
               onClick={() => void handleEnterQueue()}
               type="button"
             >
@@ -610,9 +621,11 @@ export function DeviceCheckPage() {
               aria-live="polite"
               className="mt-[11px] text-sm font-medium leading-[1.6] text-[var(--color-text-muted)]"
             >
-              {allReady
-                ? t('deviceCheckPage.t63')
-                : t('deviceCheckPage.t77', { p0: missingItems.join(', ') })}
+              {meetingClosed
+                ? t('deviceCheckPage.ended.message')
+                : allReady
+                  ? t('deviceCheckPage.t63')
+                  : t('deviceCheckPage.t77', { p0: missingItems.join(', ') })}
             </p>
             {!isReady ? (
               <Button

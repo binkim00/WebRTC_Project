@@ -555,6 +555,12 @@ export function SignupPage() {
               />
             </label>
             {show('nickname', nicknameError) ? <FieldError>{nicknameError}</FieldError> : null}
+            {/* 인플루언서 닉네임은 팬미팅 이름과 함께 해외 팬에게 그대로 노출되므로 영어 이름을 권장한다. */}
+            {role === 'INFLUENCER' || role === 'SOLO_INFLUENCER' ? (
+              <p className="mt-1.5 text-[13px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
+                {t('signup.nicknameEnglishHint')}
+              </p>
+            ) : null}
           </div>
         </div>
 

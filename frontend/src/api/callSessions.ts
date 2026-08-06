@@ -192,6 +192,17 @@ export async function getCallSessionStatus(
   return data
 }
 
+/**
+ * 서버가 세션을 마감했는지 판단한다.
+ *
+ * status 문자열이 'ENDED'가 아니어도(예: 서버가 TIMEOUT 같은 별도 상태로 마감) `endedAt`이
+ * 채워져 있으면 끝난 세션으로 본다. 종료 감지가 문자열 하나에 묶여 있으면 서버가 상태 값을
+ * 다르게 마감했을 때 팬이 통화 방에서 나가지 못한다.
+ */
+export function isCallSessionEnded(status: CallSessionStatusResponse): boolean {
+  return status.status === 'ENDED' || status.endedAt !== null
+}
+
 export async function forceEndCallSession(
   callSessionId: string,
   request: ForceEndCallSessionRequest,
