@@ -1,5 +1,7 @@
 import type { FanCardLayout } from './fanCardCanvas'
+import { selectableChipClass } from './fanCardChipClass'
 import { LAYOUT_OPTIONS, photoCountOf } from './fanCardLayoutOptions'
+import { useTranslation } from '../../i18n'
 
 type FanCardLayoutPickerProps = {
   /** 팬이 찍어 둔 사진의 미리보기 주소 */
@@ -27,26 +29,21 @@ export function FanCardLayoutPicker({
   onLayoutChange,
   onTogglePhoto,
 }: FanCardLayoutPickerProps) {
+  const { t } = useTranslation()
   const needed = photoCountOf(layout)
 
   return (
     <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
-      <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-        카드 모양 고르기
-      </h3>
-      <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
-        통화 중에 남긴 사진 {photoUrls.length}장으로 카드를 만들 수 있어요.
-      </p>
+      <h3 className="text-[15px] font-extrabold text-[var(--color-text-primary)]">
+         {t('fanCardLayoutPicker.t1')} </h3>
+      <p className="mt-1.5 text-[13px] font-medium leading-6 text-[var(--color-text-muted)]">
+         {t('fanCardLayoutPicker.t2')} {photoUrls.length}{t('fanCardLayoutPicker.t3')} </p>
       <ul className="mt-3 flex flex-wrap gap-2">
-        {LAYOUT_OPTIONS.map((option) => (
+        {LAYOUT_OPTIONS().map((option) => (
           <li key={option.label}>
             <button
               aria-pressed={layout === option.key}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 motion-reduce:transition-none ${
-                layout === option.key
-                  ? 'border-[var(--color-primary-coral)] bg-[var(--color-primary-coral-soft)] text-[var(--color-primary-coral)]'
-                  : 'border-[var(--color-border-control)] bg-[var(--color-surface-panel)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-page)]'
-              }`}
+              className={selectableChipClass(layout === option.key)}
               onClick={() => onLayoutChange(option.key)}
               type="button"
             >
@@ -58,11 +55,9 @@ export function FanCardLayoutPicker({
 
       {needed > 0 ? (
         <div className="mt-5">
-          <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
-            사진 고르기
-            <span className="ml-2 font-normal text-[var(--color-text-secondary)]">
-              {selectedPhotoIndexes.length}/{needed}장 선택
-            </span>
+          <h4 className="text-[15px] font-extrabold text-[var(--color-text-primary)]">
+             {t('fanCardLayoutPicker.t4')} <span className="ml-2 text-[13px] font-semibold text-[var(--color-text-muted)]">
+              {selectedPhotoIndexes.length}/{needed}{t('fanCardLayoutPicker.t5')} </span>
           </h4>
           <ul className="mt-3 grid grid-cols-4 gap-2">
             {photoUrls.map((url, index) => {
@@ -71,12 +66,17 @@ export function FanCardLayoutPicker({
               return (
                 <li key={url}>
                   <button
-                    aria-label={`${index + 1}번째 사진${chosen ? ' 선택 해제' : ' 선택'}`}
+                    aria-label={t('fanCardLayoutPicker.t6', {
+                      p0: index + 1,
+                      p1: chosen
+                        ? t('fanCardLayoutPicker.t7')
+                        : t('fanCardLayoutPicker.t8'),
+                    })}
                     aria-pressed={chosen}
-                    className={`relative block w-full overflow-hidden rounded-[var(--radius-control)] border-2 transition-colors duration-200 motion-reduce:transition-none ${
+                    className={`relative block w-full overflow-hidden rounded-[var(--radius-control)] border-2 transition-colors focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)] ${
                       chosen
                         ? 'border-[var(--color-primary-coral)]'
-                        : 'border-transparent hover:border-[var(--color-border-control)]'
+                        : 'border-[var(--color-divider)] hover:border-[var(--color-text-tertiary)]'
                     }`}
                     onClick={() => onTogglePhoto(index)}
                     type="button"
@@ -84,7 +84,7 @@ export function FanCardLayoutPicker({
                     <img alt="" className="block aspect-video w-full object-cover" src={url} />
                     {/* 네컷은 고른 차례가 곧 칸 순서라 번호를 보여 준다. */}
                     {chosen && needed > 1 ? (
-                      <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-[var(--color-primary-coral)] text-[11px] font-bold text-white">
+                      <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-[var(--color-primary-coral)] text-[11px] font-extrabold text-white">
                         {order + 1}
                       </span>
                     ) : null}
@@ -94,9 +94,8 @@ export function FanCardLayoutPicker({
             })}
           </ul>
           {selectedPhotoIndexes.length < needed ? (
-            <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
-              남은 칸은 빈 자리로 나옵니다. 원하는 사진을 더 골라 주세요.
-            </p>
+            <p className="mt-2.5 text-[13px] font-medium leading-6 text-[var(--color-text-muted)]">
+               {t('fanCardLayoutPicker.t9')} </p>
           ) : null}
         </div>
       ) : null}

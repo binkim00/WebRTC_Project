@@ -1,3 +1,4 @@
+import { ArrowLeft } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -5,9 +6,10 @@ import { getAuthSession } from '../../api/auth'
 import { getCallSessionStatus } from '../../api/callSessions'
 import { CARD_DATA_TTL_MS, deleteFanCardData } from '../../api/capturedPhotos'
 import { fetchPublicFanMeetingDetail } from '../../api/fanMeetings'
-import { AlertBanner, Card, Spinner } from '../../components'
+import { AlertBanner, Card, CardContent, Spinner } from '../../components'
 import { FanCardSection } from '../../components/fanCard/FanCardSection'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
+import { translate, useTranslation } from '../../i18n'
 
 /** 2026.08.05 형식으로 표시한다. */
 function formatCardDate(iso: string | null | undefined): string {
@@ -25,12 +27,12 @@ function formatCardDate(iso: string | null | undefined): string {
  */
 function formatRemaining(remainingMs: number): string {
   const totalMinutes = Math.floor(remainingMs / 60_000)
-  if (totalMinutes < 1) return '곧 사라져요'
+  if (totalMinutes < 1) return translate('fanCardPage.t1')
 
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
-  if (hours > 0) return `${hours}시간 ${minutes}분`
-  return `${minutes}분`
+  if (hours > 0) return translate('fanCardPage.t2', { p0: hours, p1: minutes })
+  return translate('fanCardPage.t3', { p0: minutes })
 }
 
 /** 보관 기간을 확인하는 동안의 상태다. */
@@ -52,6 +54,7 @@ type ExpiryState =
  * 않는다.
  */
 export function FanCardPage() {
+  const { t } = useTranslation()
   const { fanMeetingId, callSessionId } = useParams()
   const [session] = useState(() => getAuthSession())
   const [expiry, setExpiry] = useState<ExpiryState>({ kind: 'LOADING' })
@@ -94,11 +97,13 @@ export function FanCardPage() {
           kind: 'ERROR',
           message: error instanceof Error
             ? error.message
-            : '카드를 만들 수 있는 통화인지 확인하지 못했습니다.',
+            : t('fanCardPage.t4'),
         })
       })
 
     return () => abortController.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callSessionId, session])
 
   useEffect(() => {
@@ -125,8 +130,8 @@ export function FanCardPage() {
   if (!fanMeetingId?.trim() || !callSessionId?.trim()) {
     return (
       <InvalidRouteState
-        message="주소가 올바르지 않아 기념 카드를 열 수 없습니다."
-        title="기념 카드"
+        message={t('fanCardPage.t5')}
+        title={t('fanCardPage.t6')}
       />
     )
   }
@@ -134,82 +139,88 @@ export function FanCardPage() {
   if (!session) {
     return (
       <InvalidRouteState
-        message="기념 카드를 만들려면 먼저 로그인해 주세요."
-        title="기념 카드"
+        message={t('fanCardPage.t7')}
+        title={t('fanCardPage.t8')}
       />
     )
   }
 
   const backTo = `/fan/fan-meetings/${fanMeetingId}/complete`
 
+  /**
+   * 팬미팅 기록으로 돌아가는 버튼이다.
+   *
+   * 만료 화면과 카드 화면 두 곳에 같은 버튼이 필요해 한 번만 정의한다. 서비스의 보조 버튼과
+   * 같은 높이·모서리·포커스 링을 쓴다.
+   */
+  function BackToRecordsLink({ className = '', to }: { className?: string; to: string }) {
+    return (
+      <Link
+        className={`mj-font-label inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-5 text-[15px] font-bold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)] ${className}`}
+        to={to}
+      >
+         {t('fanCardPage.t9')} </Link>
+    )
+  }
+
   return (
     // 바깥 main 이 이미 좌우 여백과 위아래 여백을 주므로 여기서는 폭만 좁힌다.
     <div className="mx-auto w-full max-w-3xl">
       <header>
-        <h1 className="text-[25px] font-black tracking-[-0.035em]">기념 카드 만들기</h1>
-        <p className="mt-[7px] text-[15px] font-medium text-[var(--color-text-secondary)]">
-          통화에서 인상 깊었던 한마디와 남긴 사진으로 카드를 만들어 보세요.
-        </p>
+        {/* 다른 팬 하위 화면과 같은 되돌아가기 위치·모양을 쓴다. */}
+        <Link
+          className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-primary-coral)]"
+          to={backTo}
+        >
+          <ArrowLeft aria-hidden size={18} weight="bold" />
+           {t('fanCardPage.t10')} </Link>
+        <h1 className="mt-5 text-4xl font-black tracking-[-0.045em]">{t('fanCardPage.t11')}</h1>
+        <p className="mt-3 text-[var(--color-text-secondary)]">
+           {t('fanCardPage.t12')} </p>
       </header>
 
       {expiry.kind === 'LOADING' ? (
         <div className="mt-8 flex items-center gap-3">
           <Spinner />
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            카드를 만들 수 있는지 확인하고 있습니다.
-          </p>
+          <p className="text-[15px] font-medium text-[var(--color-text-muted)]">
+             {t('fanCardPage.t13')} </p>
         </div>
       ) : null}
 
       {expiry.kind === 'ERROR' ? (
-        <AlertBanner className="mt-8" title="확인하지 못했습니다" variant="error">
+        <AlertBanner className="mt-8" title={t('fanCardPage.t14')} variant="error">
           {expiry.message}
         </AlertBanner>
       ) : null}
 
       {expiry.kind === 'EXPIRED' ? (
-        <Card className="mt-8 p-8 text-center">
-          <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
-            카드를 만들 수 있는 기간이 지났어요
-          </h2>
-          <p className="mt-3 text-sm leading-[1.7] text-[var(--color-text-secondary)]">
-            통화 화면 사진은 통화가 끝나고 하루 동안만 이 기기에 보관합니다.
-            <br />
-            보관 기간이 지나 사진과 꾸미던 내용을 모두 지웠습니다.
-          </p>
-          <Link
-            className="mj-font-label mt-6 inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-5 text-[15px] font-bold text-[var(--color-text-primary)] hover:bg-[var(--color-surface-page)]"
-            to={backTo}
-          >
-            팬미팅 기록으로 돌아가기
-          </Link>
+        <Card className="mt-8">
+          <CardContent className="py-12 text-center">
+            <h2 className="text-xl font-extrabold tracking-[-0.03em] text-[var(--color-text-primary)]">
+               {t('fanCardPage.t15')} </h2>
+            <p className="mt-3 text-[15px] font-medium leading-[1.7] text-[var(--color-text-muted)]">
+               {t('fanCardPage.t16')} <br />
+               {t('fanCardPage.t17')} </p>
+            <BackToRecordsLink className="mt-6" to={backTo} />
+          </CardContent>
         </Card>
       ) : null}
 
       {expiry.kind === 'AVAILABLE' ? (
         <>
-          <AlertBanner className="mt-6" title="사진은 하루만 보관해요" variant="warning">
-            남은 시간 {formatRemaining(expiry.remainingMs)}. 시간이 지나면 사진과 꾸미던
-            내용이 사라지니, 마음에 드는 카드는 잊지 말고 내려받아 주세요.
-          </AlertBanner>
+          <AlertBanner className="mt-6" title={t('fanCardPage.t18')} variant="warning">
+             {t('fanCardPage.t19')} {formatRemaining(expiry.remainingMs)}{t('fanCardPage.t20')} </AlertBanner>
 
           <FanCardSection
             authToken={session.accessToken}
             callSessionId={callSessionId}
             dateLabel={formatCardDate(expiry.endedAt)}
             fanNickname={session.nickname}
-            influencerName={influencerName ?? '인플루언서'}
-            meetingTitle={meetingTitle ?? '팬미팅'}
+            influencerName={influencerName ?? t('fanCardPage.t21')}
+            meetingTitle={meetingTitle ?? t('fanCardPage.t22')}
           />
 
-          <div className="mt-8">
-            <Link
-              className="mj-font-label inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-5 text-[15px] font-bold text-[var(--color-text-primary)] hover:bg-[var(--color-surface-page)]"
-              to={backTo}
-            >
-              팬미팅 기록으로 돌아가기
-            </Link>
-          </div>
+          <BackToRecordsLink className="mt-8" to={backTo} />
         </>
       ) : null}
     </div>

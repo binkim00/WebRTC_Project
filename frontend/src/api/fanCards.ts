@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 import { unwrapEnvelope } from './envelope'
+import { translate } from '../i18n'
 
 /** 백엔드 FanCardSuggestionStatus enum과 같은 값이다. */
 export type FanCardSuggestionStatus = 'GENERATING' | 'COMPLETED' | 'UNAVAILABLE'
@@ -95,7 +96,7 @@ export async function getFanCardCandidates(
 
   const data = unwrapEnvelope<unknown>(response)
   if (!isRecord(data)) {
-    throw new TypeError('카드 문구 후보 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanCards.t1'))
   }
 
   return {
@@ -130,7 +131,7 @@ export async function saveFanCard(
 
   const saved = readFanCard(unwrapEnvelope<unknown>(response))
   if (!saved) {
-    throw new TypeError('기념 카드 저장 응답 형식이 올바르지 않습니다.')
+    throw new TypeError(translate('fanCards.t2'))
   }
   return saved
 }

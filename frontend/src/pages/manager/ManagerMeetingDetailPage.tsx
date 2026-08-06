@@ -140,7 +140,6 @@ const ACTION_CONFIRMATION = (): Record<
     description: translate('managerMeetingDetailPage.t162'),
     confirmLabel: translate('managerMeetingDetailPage.t163'),
   },
-  // 아래 셋은 예약해 둔 일정을 앞당기는 명령이라, 무엇이 바뀌는지와 되돌리는 방법을 함께 알린다.
   openApplicationsNow: {
     title: translate('managerMeetingDetailPage.t164'),
     description: translate('managerMeetingDetailPage.t165'),
@@ -482,7 +481,11 @@ export function ManagerMeetingDetailPage() {
           : action === 'closeApplicationsNow'
             ? 'APPLICATION_CLOSED'
             : 'LIVE'
-        await transitionFanMeetingImmediately(meetingId, currentStatus, targetStatus, token)
+        // 응모 열기·마감은 서버가 일정을 계산한다. "지금 시작"만 예정 시각이 필요하다
+        // (그 시각 전에 시작하려면 조기 시작 폭을 넓혀야 서버가 허용한다).
+        await transitionFanMeetingImmediately(meetingId, currentStatus, targetStatus, token, {
+          scheduledStartAt: detail.meeting.scheduledStartAt,
+        })
         setMessage(
           action === 'openApplicationsNow'
             ? t('managerMeetingDetailPage.t88')
@@ -707,14 +710,7 @@ function OverviewPanel({
     primaryActions.push({ action: 'openApplicationsNow', label: t('managerMeetingDetailPage.t107') })
   }
   if (actions.canCloseApplicationsNow) {
-    // 아직 열리지 않은 팬미팅에서는 "마감"이 아니라 응모 기간을 접는 동작이므로 라벨을 달리 쓴다.
-    primaryActions.push({
-      action: 'closeApplicationsNow',
-      label:
-        meeting.status === 'PUBLISHED'
-          ? t('managerMeetingDetailPage.collapseApplicationWindow')
-          : t('managerMeetingDetailPage.t108'),
-    })
+    primaryActions.push({ action: 'closeApplicationsNow', label: t('managerMeetingDetailPage.t108') })
   }
   if (actions.canStartNow && !actions.canStart) {
     primaryActions.push({ action: 'startNow', label: t('managerMeetingDetailPage.t109') })

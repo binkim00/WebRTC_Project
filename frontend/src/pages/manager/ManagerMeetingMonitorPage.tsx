@@ -408,12 +408,10 @@ export function ManagerMeetingMonitorPage() {
         // 시작만 하면 오픈 예정 시각까지 팬이 입장할 수 없다. 오픈을 함께 처리한다.
         ? await startFanMeetingWithOpenWaitingRoom(fanMeetingId, token)
         : action === 'startNow'
-          ? await transitionFanMeetingImmediately(
-              fanMeetingId,
-              'READY',
-              'LIVE',
-              token,
-            )
+          ? await transitionFanMeetingImmediately(fanMeetingId, 'READY', 'LIVE', token, {
+              // 예정 시각 전에 시작하려면 조기 시작 폭을 넓혀야 서버가 허용한다.
+              scheduledStartAt,
+            })
           : await endFanMeeting(fanMeetingId, token)
       setMeetingStatus(updated.status)
       // 시작했는데 대기열이 아직 닫혀 있으면 팬은 입장 시 409로 막힌다. 조용히 넘기지 않고 알린다.

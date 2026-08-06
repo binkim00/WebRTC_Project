@@ -714,6 +714,28 @@ export function FanMeetingCompletePage() {
             </>
           )}
         </section>
+
+        {/*
+          기념 카드는 녹화와 무관하므로 녹화가 없거나 실패해도 제공한다.
+          만들기 화면은 스티커를 끌어 옮길 자리가 필요해 따로 두고, 여기서는 들어가는
+          입구만 보여 준다.
+        */}
+        {session && routeState?.callSessionId ? (
+          <section className="mt-10 rounded-[var(--radius-panel)] border border-[var(--color-divider)] p-6">
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">
+              {t('fanCard.entry.title')}
+            </h2>
+            <p className="mt-2 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
+              {t('fanCard.entry.description')}
+            </p>
+            <Link
+              className="mj-font-label mt-4 inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] font-bold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+              to={`/fan/fan-meetings/${fanMeetingId}/cards/${routeState.callSessionId}`}
+            >
+              {t('fanCard.entry.action')}
+            </Link>
+          </section>
+        ) : null}
       </div>
     </div>
   )

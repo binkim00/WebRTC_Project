@@ -7,6 +7,7 @@
  */
 
 import { cardStickerUrl } from './cardStickers'
+import { translate } from '../../i18n'
 
 /** 카드 이미지 크기이며 세로형 포토카드 비율(4:5)이다. */
 export const CARD_WIDTH = 1080
@@ -266,7 +267,7 @@ export async function drawFanCard(
 
   const ctx = canvas.getContext('2d')
   if (!ctx) {
-    throw new Error('카드를 그릴 수 없습니다. 브라우저가 canvas를 지원하지 않습니다.')
+    throw new Error(translate('fanCardCanvas.t1'))
   }
 
   await document.fonts?.ready
@@ -354,7 +355,7 @@ function drawQuoteOnlyCard(
   ctx.fillStyle = 'rgba(255, 255, 255, 0.66)'
   ctx.font = `500 30px ${fontFamily}`
   ctx.fillText(
-    truncate(ctx, `${artwork.fanNickname} 님과의 팬미팅`, contentWidth),
+    truncate(ctx, translate('fanCardCanvas.t2', { p0: artwork.fanNickname }), contentWidth),
     CARD_WIDTH / 2,
     CARD_HEIGHT - 178,
   )
@@ -1347,7 +1348,7 @@ function loadStickerImage(code: string): Promise<HTMLImageElement> {
     image.addEventListener('load', () => resolve(image), { once: true })
     image.addEventListener(
       'error',
-      () => reject(new Error('스티커 그림을 불러오지 못했습니다.')),
+      () => reject(new Error(translate('fanCardCanvas.t3'))),
       { once: true },
     )
     image.src = cardStickerUrl(code)

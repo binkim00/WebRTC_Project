@@ -36,7 +36,10 @@ function pageTitleForPath(pathname: string): string {
   if (pathname.startsWith('/manager/fan-meetings')) return translate('app.t17')
   if (pathname.startsWith('/influencer/fan-meetings')) return translate('app.t18')
   if (pathname.startsWith('/fan/events')) return translate('app.t19')
-  if (/^\/fan\/fan-meetings\/[^/]+\/cards\//.test(pathname)) return '기념 카드 | MELLY'
+  // 기념 카드는 팬 마이페이지보다 먼저 확인한다. 아래 `/fan/` 규칙에 먼저 걸리면 안 된다.
+  if (/^\/fan\/fan-meetings\/[^/]+\/cards\//.test(pathname)) {
+    return translate('app.title.fanCard')
+  }
   if (pathname.startsWith('/fan/')) return translate('app.t20')
   if (pathname.startsWith('/notifications')) return translate('app.t21')
   if (pathname.startsWith('/service-notices')) return translate('app.t22')
