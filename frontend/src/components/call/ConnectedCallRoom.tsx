@@ -902,7 +902,12 @@ export function ConnectedCallRoom({
       <div
         className={`mx-auto grid w-full items-start gap-[22px] ${sidePanel ? 'max-w-[1320px] min-[941px]:grid-cols-[minmax(0,1fr)_260px]' : 'max-w-[1240px]'}`}
       >
-      <div className="grid min-w-0 gap-4">
+      {/*
+        무대와 그 아래 요소를 flex 세로 축으로 묶고, 최소 높이를 "뷰포트 - 헤더 - 콘솔 여백"에
+        맞춘다. 무대(flex-1)가 남는 공간을 채우므로 메모·안내가 붙어도 그만큼 무대가 줄어들
+        뿐 화면이 뷰포트를 넘지 않는다. 마무리 화면처럼 내용이 정말 길 때만 페이지가 스크롤된다.
+      */}
+      <div className="flex min-h-[calc(100dvh-var(--service-header-height)-54px)] min-w-0 flex-col gap-4">
       <RoomAudioRenderer />
       <CallStage
         cameraEnabled={isCameraEnabled}
@@ -933,6 +938,7 @@ export function ConnectedCallRoom({
         overlay={overlay}
         participantLabel={participantLabel}
         reactionEmojis={REACTION_EMOJIS}
+        recordingActive={recordingState === 'recording'}
         remoteName={remoteName}
         remoteVideo={remoteVideo}
         // 통화 시작 전에는 아직 줄어들 남은 시간이 없으므로 설정된 통화 시간임을 밝힌다.
@@ -1028,12 +1034,10 @@ export function ConnectedCallRoom({
         </AlertBanner>
       ) : null}
 
-      {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'recording' ? (
-        <AlertBanner title={t('connectedCallRoom.t11')} variant="info">
-          {t('connectedCallRoom.t12')}
-        </AlertBanner>
-      ) : null}
-
+      {/*
+        "녹화 중" 상시 배너는 두지 않는다. 무대의 REC 표시(recordingActive)가 대신 알리고,
+        아래 공간은 업로드 중·실패처럼 행동이 필요한 상태에만 쓴다.
+      */}
       {authSession?.role === 'FAN' && recordingEnabled && recordingState === 'uploading' ? (
         <AlertBanner title={t('connectedCallRoom.t13')} variant="info">
           {t('connectedCallRoom.t14')}
