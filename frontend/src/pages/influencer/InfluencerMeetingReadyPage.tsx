@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertBanner, Button, Dialog, MediaDevicePreview } from '../../components'
 import { getAuthSession } from '../../api/authSession'
@@ -67,7 +68,7 @@ function pad(value: number) {
 /** 2026.07.28 20:00 — L0 날짜·시간 표기다. */
 function formatScheduledAt(value?: string) {
   if (!value) return translate('influencerMeetingReadyPage.t77')
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
@@ -431,7 +432,7 @@ export function InfluencerMeetingReadyPage() {
     if (callDurationSec === undefined) return undefined
     const currentStartedAt = queue?.currentCall?.startedAt
     const currentElapsed = currentStartedAt
-      ? Math.max(0, (now - new Date(currentStartedAt).getTime()) / 1000)
+      ? Math.max(0, (now - parseServerDate(currentStartedAt).getTime()) / 1000)
       : 0
     return completedFanCount * callDurationSec + Math.min(currentElapsed, callDurationSec)
   }, [callDurationSec, completedFanCount, now, queue?.currentCall?.startedAt])

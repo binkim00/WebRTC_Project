@@ -1,4 +1,5 @@
 import { ArrowLeft, ArrowRight, CalendarBlank } from '@phosphor-icons/react'
+import { parseServerDate } from '../../api/serverTime'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
@@ -97,7 +98,7 @@ function toCardStatus(
 }
 
 function formatDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString('ko-KR', {
     year: 'numeric',

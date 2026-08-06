@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getCallSummary } from '../../api/aiSummaries'
@@ -38,7 +39,7 @@ type NoteSession = {
 
 function dateParts(value?: string) {
   if (!value) return undefined
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return undefined
 
   const pad = (part: number) => String(part).padStart(2, '0')

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
@@ -22,21 +23,21 @@ function pad(part: number) {
 
 /** 2026.07.27 18:00 */
 function formatDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /** 2026.07.18 */
 function formatDate(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
 
 /** 08.02 18:30 — 같은 해 안의 가까운 기한에 쓰는 짧은 표기다. */
 function formatShortDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
@@ -49,7 +50,7 @@ function formatCallDuration(seconds: number): string {
 
 /** 결과 발표까지 남은 시간을 "N일 N시간"으로 계산한다. 지났으면 0으로 고정한다. */
 function formatRemaining(announceAt: string): string {
-  const diff = Math.max(0, new Date(announceAt).getTime() - Date.now())
+  const diff = Math.max(0, parseServerDate(announceAt).getTime() - Date.now())
   const days = Math.floor(diff / 86_400_000)
   const hours = Math.floor((diff % 86_400_000) / 3_600_000)
   return translate('fanApplicationResultPage.t42', { p0: days, p1: hours })

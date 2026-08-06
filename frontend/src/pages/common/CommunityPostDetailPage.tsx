@@ -1,4 +1,5 @@
 import { ArrowLeft } from '@phosphor-icons/react'
+import { parseServerDate } from '../../api/serverTime'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
@@ -34,7 +35,7 @@ import { translate, useTranslation } from '../../i18n'
 const COMMENT_PAGE_SIZE = 10
 
 function formatDateTime(iso: string): string {
-  const date = new Date(iso)
+  const date = parseServerDate(iso)
 
   if (Number.isNaN(date.getTime())) {
     return iso

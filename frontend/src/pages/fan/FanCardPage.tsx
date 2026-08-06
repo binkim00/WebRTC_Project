@@ -1,4 +1,5 @@
 import { ArrowLeft } from '@phosphor-icons/react'
+import { parseServerDate } from '../../api/serverTime'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -79,8 +80,8 @@ export function FanCardPage() {
           return
         }
 
-        const elapsed = new Date(status.serverNow).getTime()
-          - new Date(status.endedAt).getTime()
+        const elapsed = parseServerDate(status.serverNow).getTime()
+          - parseServerDate(status.endedAt).getTime()
         const remainingMs = CARD_DATA_TTL_MS - elapsed
 
         if (remainingMs <= 0) {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertBanner, Button, Dialog, Textarea } from '../../components'
 import { localizeQueueChangeNotice, useTranslation } from '../../i18n'
@@ -70,7 +71,7 @@ function formatCountdown(totalSec: number): string {
  * 모듈 함수라 훅을 쓸 수 없어 "게시"에 해당하는 문구를 인자로 받는다.
  */
 function formatNoticeAt(value: string, postedLabel: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())} ${postedLabel}`
 }
@@ -316,7 +317,7 @@ export function FanMeetingWaitingPage() {
     return () => window.clearInterval(timer)
   }, [calledAt])
 
-  const calledAtSec = calledAt ? Math.floor(new Date(calledAt).getTime() / 1000) : null
+  const calledAtSec = calledAt ? Math.floor(parseServerDate(calledAt).getTime() / 1000) : null
   const callRemainSec =
     calledAtSec !== null ? calledAtSec + CALL_WINDOW_SEC - nowSec : null
   const canEnter = Boolean(queueSnapshot?.canEnterCall && queueSnapshot.callSessionId)
@@ -695,7 +696,7 @@ export function FanMeetingWaitingPage() {
               {queueSnapshot.lastChangedAt ? (
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                   {t('wait.positionChanged.at', {
-                    time: new Date(queueSnapshot.lastChangedAt).toLocaleString(
+                    time: parseServerDate(queueSnapshot.lastChangedAt).toLocaleString(
                       locale === 'en' ? 'en-US' : 'ko-KR',
                     ),
                   })}

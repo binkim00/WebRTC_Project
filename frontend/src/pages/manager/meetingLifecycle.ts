@@ -6,6 +6,7 @@
  */
 
 import type { FanMeetingStatus } from '../../api/meetingManagement'
+import { parseServerDate } from '../../api/serverTime'
 import { translate } from '../../i18n'
 
 /** API와 화면이 서로 다른 상태 유니온을 만들지 않도록 백엔드 응답 타입을 그대로 재사용한다. */
@@ -114,7 +115,7 @@ export type MeetingActions = {
 /** 백엔드 LocalDateTime 문자열을 Date로 바꾸고, 값이 없거나 잘못되면 null을 준다. */
 function toDate(value?: string | null): Date | null {
   if (!value) return null
-  const date = new Date(value)
+  const date = parseServerDate(value)
   return Number.isNaN(date.getTime()) ? null : date
 }
 
@@ -200,7 +201,7 @@ export function getAvailableActions(context: MeetingActionContext): MeetingActio
 /** LocalDateTime 문자열을 읽기 쉬운 한국어 일시로 표시한다. */
 export function formatDateTime(value?: string | null): string {
   if (!value) return '-'
-  const date = new Date(value)
+  const date = parseServerDate(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR')
 }
 

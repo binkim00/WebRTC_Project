@@ -1,4 +1,5 @@
 import { ArrowRight, Check, MagnifyingGlass, UsersThree } from '@phosphor-icons/react'
+import { parseServerDate } from '../../api/serverTime'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
@@ -38,7 +39,7 @@ function toTabValue(value: string | null): TabValue {
 
 /** 백엔드 LocalDateTime 문자열을 한국어 날짜 표기로 바꾼다. */
 function formatDate(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
 
   return new Intl.DateTimeFormat('ko-KR', {

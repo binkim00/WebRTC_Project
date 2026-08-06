@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
@@ -31,7 +32,7 @@ function pad(value: number) {
 
 /** 2026.07.26 — 참여일 표기다. */
 function formatDate(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }

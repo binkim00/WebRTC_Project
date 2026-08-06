@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import type { PageResponse } from '../../api/envelope'
@@ -64,7 +65,7 @@ function getNotificationLink(
 }
 
 function formatDateTime(iso: string): string {
-  const date = new Date(iso)
+  const date = parseServerDate(iso)
 
   if (Number.isNaN(date.getTime())) {
     return iso

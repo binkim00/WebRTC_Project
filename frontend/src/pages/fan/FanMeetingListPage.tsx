@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
@@ -45,7 +46,7 @@ function pad(value: number) {
 /** 2026.08.02 19:00 — L0 날짜·시간 표기다. */
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '-'
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
@@ -53,7 +54,7 @@ function formatDateTime(value: string | null | undefined): string {
 /** 2026.07.30 */
 function formatDate(value: string | null | undefined): string {
   if (!value) return '-'
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
@@ -71,7 +72,7 @@ function startOfDay(date: Date): Date {
  */
 function daysUntil(value: string | null | undefined): number | null {
   if (!value) return null
-  const target = new Date(value)
+  const target = parseServerDate(value)
   if (Number.isNaN(target.getTime())) return null
   return Math.round((startOfDay(target).getTime() - startOfDay(new Date()).getTime()) / DAY_MS)
 }
@@ -90,7 +91,7 @@ function isToday(value: string): boolean {
 function remainingDays(availableUntil: string | null | undefined): number | null {
   if (!availableUntil) return null
 
-  const until = new Date(availableUntil).getTime()
+  const until = parseServerDate(availableUntil).getTime()
   if (Number.isNaN(until)) return null
 
   return Math.max(0, Math.ceil((until - Date.now()) / DAY_MS))
@@ -342,8 +343,8 @@ export function FanMeetingListPage() {
     return items
       .filter((item) => item.listStatus === status)
       .sort((first, second) => {
-        const firstTime = new Date(first.application.scheduledStartAt).getTime()
-        const secondTime = new Date(second.application.scheduledStartAt).getTime()
+        const firstTime = parseServerDate(first.application.scheduledStartAt).getTime()
+        const secondTime = parseServerDate(second.application.scheduledStartAt).getTime()
         return status === 'upcoming' ? firstTime - secondTime : secondTime - firstTime
       })
   }, [items, status])

@@ -44,6 +44,7 @@ import { AlertBanner, Badge, Button, Card, Spinner } from '../../components'
 import { MeetingWrapUp } from '../../components/call/MeetingWrapUp'
 import { getAvailableActions } from './meetingLifecycle'
 import { translate, useTranslation } from '../../i18n'
+import { parseServerDate } from '../../api/serverTime'
 
 const previewQueue: MeetingQueue = {
   currentCall: {
@@ -752,7 +753,7 @@ export function ManagerMeetingMonitorPage() {
                   <div className="min-w-0">
                     <strong>{request.nickname}</strong>
                     <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{request.requestReason}</p>
-                    <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t('managerMeetingMonitorPage.t31')} {new Date(request.requestedAt).toLocaleString('ko-KR')}{request.previousPosition !== null ? t('managerMeetingMonitorPage.t99', { p0: request.previousPosition }) : ''}</p>
+                    <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t('managerMeetingMonitorPage.t31')} {parseServerDate(request.requestedAt).toLocaleString('ko-KR')}{request.previousPosition !== null ? t('managerMeetingMonitorPage.t99', { p0: request.previousPosition }) : ''}</p>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">

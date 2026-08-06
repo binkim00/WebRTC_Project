@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link } from 'react-router-dom'
 import { AlertBanner, Button, Pagination, Spinner, TextField } from '../../components'
 import { ApiError } from '../../api/ApiError'
@@ -27,7 +28,7 @@ const PAGE_SIZE = 5
 const NEW_MEETING_PATH = '/manager/fan-meetings/new'
 
 function formatSchedule(value: string) {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
 
   const pad = (part: number) => String(part).padStart(2, '0')

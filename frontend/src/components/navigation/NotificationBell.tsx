@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate } from 'react-router-dom'
 import moldEmptyImage from '../../assets/jelly-mold-empty.png'
 import { getAuthSession } from '../../api/authSession'
@@ -84,7 +85,7 @@ const toneClass = {
 
 /** 방금 · N분 전 · N시간 전 · 어제 · 07.24 순으로 짧게 표기한다. */
 function formatWhen(iso: string): string {
-  const date = new Date(iso)
+  const date = parseServerDate(iso)
   if (Number.isNaN(date.getTime())) return iso
 
   const diffMs = Date.now() - date.getTime()

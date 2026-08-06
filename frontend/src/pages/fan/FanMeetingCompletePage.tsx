@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import moldEmptyImage from '../../assets/jelly-mold-empty.png'
 import { getAuthSession } from '../../api/auth'
@@ -31,7 +32,7 @@ function pad(value: number) {
 /** 2026.08.02 */
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '-'
-  const date = new Date(iso)
+  const date = parseServerDate(iso)
   if (Number.isNaN(date.getTime())) return iso
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
@@ -74,7 +75,7 @@ function formatSpokenDuration(
 function remainingDays(availableUntil: string | null | undefined): number | null {
   if (!availableUntil) return null
 
-  const until = new Date(availableUntil).getTime()
+  const until = parseServerDate(availableUntil).getTime()
   if (Number.isNaN(until)) return null
 
   return Math.max(0, Math.ceil((until - Date.now()) / DAY_MS))
@@ -89,7 +90,7 @@ function remainingDays(availableUntil: string | null | undefined): number | null
 function completedTime(completedAt: string | null | undefined): number {
   if (!completedAt) return 0
 
-  const time = new Date(completedAt).getTime()
+  const time = parseServerDate(completedAt).getTime()
   return Number.isNaN(time) ? 0 : time
 }
 
