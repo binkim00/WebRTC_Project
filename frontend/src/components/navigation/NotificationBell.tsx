@@ -68,6 +68,12 @@ const typeContent = (): Record<
     action: translate('notificationBell.t20'),
     to: (meetingId) => (meetingId === null ? '/notifications' : `/fan/events/${meetingId}`),
   },
+  MEETING_PUBLISHED: {
+    tag: translate('notificationBell.t26'),
+    tone: 'coral',
+    action: translate('notificationBell.t27'),
+    to: (meetingId) => (meetingId === null ? '/notifications' : `/fan/events/${meetingId}`),
+  },
 })
 
 const toneClass = {

@@ -38,6 +38,7 @@ const notificationTypeContent = (): Record<
   ENTER_NOW: { label: translate('notificationsPage.t21'), variant: 'success' },
   MEETING_CHANGED: { label: translate('notificationsPage.t22'), variant: 'warning' },
   MEETING_CANCELED: { label: translate('notificationsPage.t23'), variant: 'danger' },
+  MEETING_PUBLISHED: { label: translate('notificationsPage.t24'), variant: 'info' },
 })
 
 function getNotificationLink(
@@ -57,6 +58,7 @@ function getNotificationLink(
       return `/fan/fan-meetings/${meetingId}/waiting`
     case 'MEETING_CHANGED':
     case 'MEETING_CANCELED':
+    case 'MEETING_PUBLISHED':
       return `/fan/events/${meetingId}`
   }
 }

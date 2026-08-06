@@ -18,11 +18,15 @@ import {
 } from '../../api/capturedPhotos'
 import { AlertBanner, Button, Card, CardContent } from '..'
 import {
+  DEFAULT_PHOTO_ADJUSTMENT,
   drawFanCard,
   fanCardSizeOf,
+  minPhotoScale,
   type CardDecoration,
   type FanCardFont,
   type FanCardLayout,
+  type PhotoAdjustment,
+  type PhotoSlotRect,
 } from './fanCardCanvas'
 import { FanCardQuotePicker } from './FanCardQuotePicker'
 import { FanCardLayoutPicker } from './FanCardLayoutPicker'
@@ -119,6 +123,17 @@ function findDecorationAt(
   return undefined
 }
 
+/**
+ * 값을 -limit ~ limit 사이로 붙잡아 둔다.
+ *
+ * @param value 붙잡을 값
+ * @param limit 0 이상의 한계값
+ * @returns 한계 안으로 들어온 값
+ */
+function clamp(value: number, limit: number): number {
+  return Math.min(Math.max(value, -limit), limit)
+}
+
 type FanCardSectionProps = {
   /** 카드를 만들 통화 세션 식별자 */
   callSessionId: string
@@ -176,9 +191,33 @@ export function FanCardSection({
   const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
   const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
   const decorationCounterRef = useRef(0)
-  const draggingRef = useRef<{ id: string; offsetX: number; offsetY: number }>(undefined)
+  /**
+   * 지금 끌고 있는 대상이다.
+   *
+   * <p>꾸미기 요소와 사진은 끄는 방식이 다르다. 요소는 카드 좌표로 중심을 옮기지만, 사진은
+   * 칸 안에서 보이는 부분을 비율로 밀기 때문에 집은 시점의 값을 기준으로 누적해야 한다.
+   */
+  const draggingRef = useRef<
+    | { kind: 'DECORATION'; id: string; offsetX: number; offsetY: number }
+    | {
+        kind: 'PHOTO'
+        index: number
+        slot: PhotoSlotRect
+        startX: number
+        startY: number
+        base: PhotoAdjustment
+      }
+  >(undefined)
   /** 보관해 둔 상태를 다 불러왔는지. 불러오기 전에 저장하면 초기값이 덮어쓴다. */
   const draftLoadedRef = useRef(false)
+  /** 사진별 배치다. 손대지 않은 사진은 목록에 없고 기본 배치로 그려진다. */
+  const [photoAdjustments, setPhotoAdjustments] = useState<readonly PhotoAdjustment[]>([])
+  /** 방금 그린 카드에서 사진이 놓인 자리다. 어느 칸을 눌렀는지 판단하는 데 쓴다. */
+  const [photoSlots, setPhotoSlots] = useState<readonly PhotoSlotRect[]>([])
+  /** 칸에 들어간 사진의 원본 크기이며 줄일 수 있는 한계를 구하는 데 쓴다. */
+  const [photoSizes, setPhotoSizes] = useState<readonly { width: number; height: number }[]>([])
+  /** 지금 고른 사진 칸이며 없으면 아무 칸도 고르지 않은 상태다. */
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>()
 
   const selectedDecoration = decorations.find(
     (decoration) => decoration.id === selectedDecorationId,
@@ -191,6 +230,41 @@ export function FanCardSection({
    * 없으면 빈 도안만 남으므로 그때는 미리보기와 내려받기를 열지 않는다.
    */
   const canCompose = Boolean(selectedText) || selectedPhotoIndexes.length > 0
+
+  /**
+   * 고른 사진을 줄일 수 있는 한계다.
+   *
+   * <p>사진 전체가 칸 안에 들어오는 지점까지만 허용한다. 그보다 작게 두면 칸 안에서 사진이
+   * 떠다니기만 하고 얻는 것이 없다.
+   */
+  const selectedPhotoScaleRange = (() => {
+    if (selectedPhotoIndex === undefined) return { min: 1 }
+    const slot = photoSlots.find((candidate) => candidate.index === selectedPhotoIndex)
+    const size = photoSizes[selectedPhotoIndex]
+    if (!slot || !size) return { min: 1 }
+    return { min: minPhotoScale(slot.width, slot.height, size.width, size.height) }
+  })()
+
+  /**
+   * 사진 한 장의 배치를 바꾼다.
+   *
+   * <p>목록은 사진 순번과 나란히 두고, 아직 손대지 않은 앞자리는 기본 배치로 메운다. 배열을
+   * 성기게 두면 저장·복원에서 구멍이 생긴다.
+   *
+   * @param index 사진 순번
+   * @param patch 바꿀 값만 담은 배치
+   */
+  const updatePhotoAdjustment = useCallback(
+    (index: number, patch: Partial<PhotoAdjustment>) => {
+      setPhotoAdjustments((current) => {
+        const next = [...current]
+        while (next.length <= index) next.push({ ...DEFAULT_PHOTO_ADJUSTMENT })
+        next[index] = { ...(next[index] ?? DEFAULT_PHOTO_ADJUSTMENT), ...patch }
+        return next
+      })
+    },
+    [],
+  )
 
   /**
    * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
@@ -255,13 +329,41 @@ export function FanCardSection({
       const hit = findDecorationAt(decorations, point)
 
       setSelectedDecorationId(hit?.id)
-      if (!hit) return
+      if (hit) {
+        // 꾸미기 요소가 사진 위에 얹혀 있으므로 요소를 먼저 집는다.
+        setSelectedPhotoIndex(undefined)
+        // 집은 지점과 요소 중심의 차이를 기억해야 끌 때 요소가 튀지 않는다.
+        draggingRef.current = {
+          kind: 'DECORATION',
+          id: hit.id,
+          offsetX: point.x - hit.x,
+          offsetY: point.y - hit.y,
+        }
+        canvas.setPointerCapture(event.pointerId)
+        return
+      }
 
-      // 집은 지점과 요소 중심의 차이를 기억해야 끌 때 요소가 튀지 않는다.
-      draggingRef.current = { id: hit.id, offsetX: point.x - hit.x, offsetY: point.y - hit.y }
+      const slot = photoSlots.find(
+        (candidate) =>
+          point.x >= candidate.x
+          && point.x <= candidate.x + candidate.width
+          && point.y >= candidate.y
+          && point.y <= candidate.y + candidate.height,
+      )
+      setSelectedPhotoIndex(slot?.index)
+      if (!slot) return
+
+      draggingRef.current = {
+        kind: 'PHOTO',
+        index: slot.index,
+        slot,
+        startX: point.x,
+        startY: point.y,
+        base: photoAdjustments[slot.index] ?? DEFAULT_PHOTO_ADJUSTMENT,
+      }
       canvas.setPointerCapture(event.pointerId)
     },
-    [decorations],
+    [decorations, photoAdjustments, photoSlots],
   )
 
   /**
@@ -276,6 +378,25 @@ export function FanCardSection({
 
       const canvas = event.currentTarget
       const point = toCardPoint(canvas, event.clientX, event.clientY)
+
+      if (dragging.kind === 'PHOTO') {
+        const size = photoSizes[dragging.index]
+        if (!size) return
+
+        const { slot, base } = dragging
+        // 사진이 칸보다 큰 만큼만 밀 수 있다. 더 밀면 칸 안에 빈 곳이 생겨 도안이 비친다.
+        const cover = Math.max(slot.width / size.width, slot.height / size.height)
+        const drawWidth = size.width * cover * base.scale
+        const drawHeight = size.height * cover * base.scale
+        const limitX = Math.abs(drawWidth - slot.width) / 2 / slot.width
+        const limitY = Math.abs(drawHeight - slot.height) / 2 / slot.height
+
+        const offsetX = clamp(base.offsetX + (point.x - dragging.startX) / slot.width, limitX)
+        const offsetY = clamp(base.offsetY + (point.y - dragging.startY) / slot.height, limitY)
+        updatePhotoAdjustment(dragging.index, { offsetX, offsetY })
+        return
+      }
+
       // 카드 밖으로 완전히 나가 다시 집지 못하는 일이 없게 안쪽으로 붙잡아 둔다.
       const x = Math.min(Math.max(point.x - dragging.offsetX, 0), canvas.width)
       const y = Math.min(Math.max(point.y - dragging.offsetY, 0), canvas.height)
@@ -286,7 +407,7 @@ export function FanCardSection({
         ),
       )
     },
-    [],
+    [photoSizes, updatePhotoAdjustment],
   )
 
   /** 끌기를 마친다. */
@@ -319,6 +440,7 @@ export function FanCardSection({
           setFontKey(draft.fontKey)
           setSelectedPhotoIndexes(draft.selectedPhotoIndexes)
           setDecorations(draft.decorations)
+          setPhotoAdjustments(draft.photoAdjustments ?? [])
           // 이어 붙일 식별자가 겹치지 않게 이미 쓴 번호 뒤에서 시작한다.
           decorationCounterRef.current = draft.decorations.length
         } else if (stored && stored.photos.length > 0) {
@@ -355,12 +477,13 @@ export function FanCardSection({
         fontKey,
         selectedPhotoIndexes: [...selectedPhotoIndexes],
         decorations: [...decorations],
+        photoAdjustments: [...photoAdjustments],
         savedAt: new Date().toISOString(),
       }).catch(() => undefined)
     }, DRAFT_SAVE_DELAY_MS)
 
     return () => window.clearTimeout(timer)
-  }, [callSessionId, decorations, fontKey, layout, selectedPhotoIndexes])
+  }, [callSessionId, decorations, fontKey, layout, photoAdjustments, selectedPhotoIndexes])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -445,6 +568,7 @@ export function FanCardSection({
     void resolveSelectedPhotos()
       .then((photos) => {
         if (!active) return undefined
+        setPhotoSizes(photos.map((photo) => ({ width: photo.width, height: photo.height })))
         return drawFanCard(canvas, {
           text: selectedText ?? '',
           meetingTitle,
@@ -455,7 +579,32 @@ export function FanCardSection({
           photos,
           fontKey,
           decorations,
+          photoAdjustments,
         })
+      })
+      .then((slots) => {
+        if (!active) return
+        // 칸 위치는 레이아웃이 정하므로 그린 쪽이 알려 준 값을 그대로 쓴다.
+        setPhotoSlots(slots ?? [])
+
+        // 고른 사진 칸도 점선으로 알려 준다. 저장본에는 남지 않는다.
+        const selectedSlot = slots?.find((slot) => slot.index === selectedPhotoIndex)
+        if (selectedSlot) {
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.save()
+            ctx.setLineDash([14, 10])
+            ctx.lineWidth = 4
+            ctx.strokeStyle = resolveSelectionColor()
+            ctx.strokeRect(
+              selectedSlot.x + 2,
+              selectedSlot.y + 2,
+              selectedSlot.width - 4,
+              selectedSlot.height - 4,
+            )
+            ctx.restore()
+          }
+        }
       })
       .then(() => {
         // 고른 요소를 알아볼 수 있게 점선을 두른다. 이 표시는 미리보기에만 그리고
@@ -496,8 +645,10 @@ export function FanCardSection({
     influencerName,
     layout,
     meetingTitle,
+    photoAdjustments,
     resolveSelectedPhotos,
     selectedDecoration,
+    selectedPhotoIndex,
     selectedText,
   ])
 
@@ -547,6 +698,9 @@ export function FanCardSection({
       const need = photoCountOf(layout)
       if (need === 0) return
 
+      // 사진을 빼거나 더하면 칸 순번이 밀려 남아 있던 배치가 엉뚱한 사진에 붙는다.
+      setPhotoAdjustments([])
+      setSelectedPhotoIndex(undefined)
       setSelectedPhotoIndexes((current) => {
         if (need === 1) return [index]
         if (current.includes(index)) return current.filter((item) => item !== index)
@@ -596,6 +750,7 @@ export function FanCardSection({
     try {
       const photos = await resolveSelectedPhotos()
       await drawFanCard(canvas, {
+        photoAdjustments,
         text: selectedText ?? '',
         meetingTitle,
         influencerName,
@@ -684,7 +839,7 @@ export function FanCardSection({
                 }
                 // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
                 className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
-                  decorations.length > 0 ? 'cursor-grab' : ''
+                  decorations.length > 0 || photoSlots.length > 0 ? 'cursor-grab' : ''
                 }`}
                 onPointerCancel={handleCanvasPointerUp}
                 onPointerDown={handleCanvasPointerDown}
@@ -693,6 +848,56 @@ export function FanCardSection({
                 ref={canvasRef}
                 role="img"
               />
+
+              {photoSlots.length > 0 ? (
+                <div className="mt-5 rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] p-4">
+                  <h4 className="text-[13px] font-extrabold text-[var(--color-text-primary)]">
+                    {t('fanCardSection.t19')}
+                  </h4>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                    {selectedPhotoIndex === undefined
+                      ? t('fanCardSection.t20')
+                      : t('fanCardSection.t23', { p0: selectedPhotoIndex + 1 })}
+                  </p>
+
+                  {selectedPhotoIndex !== undefined ? (
+                    <div className="mt-3 flex items-center gap-3">
+                      <label
+                        className="text-xs font-bold text-[var(--color-text-secondary)]"
+                        htmlFor="fan-card-photo-scale"
+                      >
+                        {t('fanCardSection.t21')}
+                      </label>
+                      <input
+                        className="h-1.5 flex-1 cursor-pointer accent-[var(--color-primary-coral)]"
+                        id="fan-card-photo-scale"
+                        max={3}
+                        min={selectedPhotoScaleRange.min}
+                        onChange={(event) =>
+                          updatePhotoAdjustment(selectedPhotoIndex, {
+                            scale: Number(event.target.value),
+                          })
+                        }
+                        step={0.01}
+                        type="range"
+                        value={
+                          photoAdjustments[selectedPhotoIndex]?.scale
+                          ?? DEFAULT_PHOTO_ADJUSTMENT.scale
+                        }
+                      />
+                      <button
+                        className="mj-font-label whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface-panel)]"
+                        onClick={() =>
+                          updatePhotoAdjustment(selectedPhotoIndex, DEFAULT_PHOTO_ADJUSTMENT)
+                        }
+                        type="button"
+                      >
+                        {t('fanCardSection.t22')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               <FanCardStickerPanel
                 decorationCount={decorations.length}

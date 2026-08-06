@@ -61,6 +61,8 @@ export function localizeNotificationTitle(type: NotificationType, title: string)
       return translate('serverText.notif.meetingChanged.title')
     case 'MEETING_CANCELED':
       return translate('serverText.notif.meetingCanceled.title')
+    case 'MEETING_PUBLISHED':
+      return translate('serverText.notif.meetingPublished.title')
   }
 }
 
@@ -100,6 +102,8 @@ export function localizeNotificationMessage(
       return translate('serverText.notif.meetingChanged.message')
     case 'MEETING_CANCELED':
       return translate('serverText.notif.meetingCanceled.message')
+    case 'MEETING_PUBLISHED':
+      return translate('serverText.notif.meetingPublished.message')
   }
 }
 

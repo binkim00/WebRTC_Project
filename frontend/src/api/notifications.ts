@@ -8,6 +8,7 @@ export type NotificationType =
   | 'ENTER_NOW'
   | 'MEETING_CHANGED'
   | 'MEETING_CANCELED'
+  | 'MEETING_PUBLISHED'
 
 export type NotificationResponse = {
   notificationId: number

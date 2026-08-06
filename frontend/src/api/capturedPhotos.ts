@@ -4,6 +4,7 @@ import type {
   CardDecoration,
   FanCardFont,
   FanCardLayout,
+  PhotoAdjustment,
 } from '../components/fanCard/fanCardCanvas'
 import { translate } from '../i18n'
 
@@ -27,6 +28,8 @@ export type FanCardDraft = {
   selectedPhotoIndexes: number[]
   /** 얹어 둔 스티커와 글자 */
   decorations: CardDecoration[]
+  /** 사진을 칸 안에서 옮기고 키운 값이며 예전 초안에는 없다. */
+  photoAdjustments?: PhotoAdjustment[]
   /** 마지막으로 저장한 시각 (ISO) */
   savedAt: string
 }

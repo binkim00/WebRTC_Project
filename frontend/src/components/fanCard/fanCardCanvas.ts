@@ -83,6 +83,73 @@ const FONT_FAMILY_BY_KEY: Record<FanCardFont, string | undefined> = {
   HEADLINE: '"Do Hyeon"',
 }
 
+/**
+ * 사진 한 장을 칸 안에서 어떻게 놓을지다.
+ *
+ * <p>칸 비율과 사진 비율이 다르면 기본 배치(cover)는 가운데만 남기고 잘라 낸다. 통화 화면은
+ * 가로로 긴데 정사각·세로 칸도 있어서, 팬이 직접 보여 줄 부분을 정할 수 있어야 한다.
+ *
+ * <p>이동량을 칸 크기에 대한 비율로 두는 이유는 레이아웃마다 칸 크기가 다르기 때문이다.
+ * 픽셀로 저장하면 레이아웃을 바꾸는 순간 사진이 엉뚱한 곳으로 밀린다.
+ */
+export type PhotoAdjustment = {
+  /** 칸 너비에 대한 가로 이동 비율이며 0이면 가운데다. */
+  offsetX: number
+  /** 칸 높이에 대한 세로 이동 비율이며 0이면 가운데다. */
+  offsetY: number
+  /** 칸을 꽉 채우는 배율을 1로 본 확대율이다. 1보다 작으면 칸 안에 여백이 생긴다. */
+  scale: number
+}
+
+/** 손대지 않은 사진의 기본 배치다. 지금까지와 같은 결과를 낸다. */
+export const DEFAULT_PHOTO_ADJUSTMENT: PhotoAdjustment = {
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+}
+
+/**
+ * 카드에서 사진 한 장이 차지하는 자리다.
+ *
+ * <p>어느 칸을 눌렀는지 판단하려면 화면 쪽에서도 칸 위치를 알아야 하는데, 그 계산은 레이아웃
+ * 그리기 함수 안에 있다. 같은 계산을 두 곳에 두면 반드시 어긋나므로 그린 쪽이 알려 준다.
+ */
+export type PhotoSlotRect = {
+  /** 사진 목록에서의 순번 */
+  index: number
+  /** 칸 왼쪽 좌표 */
+  x: number
+  /** 칸 위쪽 좌표 */
+  y: number
+  /** 칸 너비 */
+  width: number
+  /** 칸 높이 */
+  height: number
+}
+
+/**
+ * 사진을 칸 안에서 얼마까지 줄일 수 있는지 구한다.
+ *
+ * <p>사진 전체가 보이는 지점(contain)이 하한이다. 그보다 더 줄이면 칸 안에서 사진이 떠다니기만
+ * 하고 얻는 것이 없다.
+ *
+ * @param slotWidth 칸 너비
+ * @param slotHeight 칸 높이
+ * @param photoWidth 사진 너비
+ * @param photoHeight 사진 높이
+ * @returns 최소 확대율이며 칸과 사진 비율이 같으면 1이다
+ */
+export function minPhotoScale(
+  slotWidth: number,
+  slotHeight: number,
+  photoWidth: number,
+  photoHeight: number,
+): number {
+  const cover = Math.max(slotWidth / photoWidth, slotHeight / photoHeight)
+  const contain = Math.min(slotWidth / photoWidth, slotHeight / photoHeight)
+  return cover > 0 ? contain / cover : 1
+}
+
 /** 카드에 담을 정보다. */
 export type FanCardArtwork = {
   /** 팬이 고른 문구다. 문구 고르기는 선택 사항이라 없을 수 있다. */
@@ -99,6 +166,8 @@ export type FanCardArtwork = {
   layout?: FanCardLayout
   /** 합성할 사진이다. INSTA·POLAROID는 첫 장만, FOURCUT은 앞 네 장을 쓴다. */
   photos?: readonly ImageBitmap[]
+  /** 사진별 배치이며 photos와 같은 순번으로 맞춘다. 없으면 기본 배치로 그린다. */
+  photoAdjustments?: readonly PhotoAdjustment[]
   /** 팬이 고른 글꼴이다. 없거나 내려받지 못하면 서비스 기본 글꼴로 그린다. */
   fontKey?: FanCardFont
   /** 팬이 카드 위에 올린 스티커와 글자다. 목록 순서대로 위에 쌓인다. */
@@ -393,7 +462,7 @@ function drawSignatureForLayout(
 export async function drawFanCard(
   canvas: HTMLCanvasElement,
   artwork: FanCardArtwork,
-): Promise<void> {
+): Promise<PhotoSlotRect[]> {
   const photos = artwork.photos ?? []
   // 사진이 없으면 문구 전용으로 그리므로 크기도 기본 카드에 맞춘다.
   const size = fanCardSizeOf(photos.length > 0 ? artwork.layout : undefined)
@@ -408,24 +477,25 @@ export async function drawFanCard(
   await document.fonts?.ready
   const fontFamily = await resolveCardFontFamily(artwork.fontKey)
 
+  let slots: PhotoSlotRect[] = []
   if (photos.length === 0) {
     drawQuoteOnlyCard(ctx, artwork, fontFamily)
   } else {
     switch (artwork.layout) {
       case 'INSTA':
-        drawInstaCard(ctx, artwork, photos, fontFamily)
+        slots = drawInstaCard(ctx, artwork, photos, fontFamily)
         break
       case 'POLAROID':
-        drawPolaroidCard(ctx, artwork, photos, fontFamily)
+        slots = drawPolaroidCard(ctx, artwork, photos, fontFamily)
         break
       case 'FOURCUT':
-        drawFourCutCard(ctx, artwork, photos, fontFamily)
+        slots = drawFourCutCard(ctx, artwork, photos, fontFamily)
         break
       case 'FOURCUT_VERTICAL':
-        drawFourCutVerticalCard(ctx, artwork, photos, fontFamily)
+        slots = drawFourCutVerticalCard(ctx, artwork, photos, fontFamily)
         break
       case 'FOURCUT_HORIZONTAL':
-        drawFourCutHorizontalCard(ctx, artwork, photos, fontFamily)
+        slots = drawFourCutHorizontalCard(ctx, artwork, photos, fontFamily)
         break
       default:
         drawQuoteOnlyCard(ctx, artwork, fontFamily)
@@ -445,6 +515,9 @@ export async function drawFanCard(
   if (artwork.decorations?.length) {
     await drawDecorations(ctx, artwork.decorations, fontFamily)
   }
+
+  // 사진이 실제로 들어간 칸만 돌려준다. 빈 칸은 누를 대상이 아니다.
+  return slots.filter((slot) => Boolean(photos[slot.index]))
 }
 
 /**
@@ -612,6 +685,7 @@ function drawPhotoCover(
   width: number,
   height: number,
   radius = 0,
+  adjustment?: PhotoAdjustment,
 ): void {
   ctx.save()
   if (radius > 0) {
@@ -622,13 +696,26 @@ function drawPhotoCover(
   }
   ctx.clip()
 
-  const scale = Math.max(width / photo.width, height / photo.height)
+  const zoom = adjustment?.scale ?? 1
+  // 줄여서 여백이 생기면 그 자리에 카드 도안이 그대로 비친다. 옅게 깔아 사진 칸임을 남긴다.
+  if (zoom < 1) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.06)'
+    ctx.fillRect(x, y, width, height)
+  }
+
+  const scale = Math.max(width / photo.width, height / photo.height) * zoom
   const drawWidth = photo.width * scale
   const drawHeight = photo.height * scale
+  // 레이아웃을 바꾸면 칸 비율이 달라져 예전 이동량이 한계를 넘을 수 있다. 그대로 두면 칸 한쪽에
+  // 빈 자리가 생기므로 그릴 때 다시 붙잡아 둔다.
+  const limitX = Math.abs(drawWidth - width) / 2 / width
+  const limitY = Math.abs(drawHeight - height) / 2 / height
+  const offsetX = Math.min(Math.max(adjustment?.offsetX ?? 0, -limitX), limitX)
+  const offsetY = Math.min(Math.max(adjustment?.offsetY ?? 0, -limitY), limitY)
   ctx.drawImage(
     photo,
-    x + (width - drawWidth) / 2,
-    y + (height - drawHeight) / 2,
+    x + (width - drawWidth) / 2 + offsetX * width,
+    y + (height - drawHeight) / 2 + offsetY * height,
     drawWidth,
     drawHeight,
   )
@@ -966,7 +1053,8 @@ function drawInstaCard(
   artwork: FanCardArtwork,
   photos: readonly ImageBitmap[],
   fontFamily: string,
-): void {
+): PhotoSlotRect[] {
+  const slots: PhotoSlotRect[] = []
   // 파스텔 배경
   const background = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT)
   background.addColorStop(0, '#ffe3f1')
@@ -1047,8 +1135,11 @@ function drawInstaCard(
   const photoTop = accountTop + accountHeight
   const photoHeight = 860
   const photo = photos[0]
+  slots.push({ index: 0, x: frameX, y: photoTop, width: frameWidth, height: photoHeight })
   if (photo) {
-    drawPhotoCover(ctx, photo, frameX, photoTop, frameWidth, photoHeight)
+    drawPhotoCover(
+      ctx, photo, frameX, photoTop, frameWidth, photoHeight, 0, artwork.photoAdjustments?.[0],
+    )
   } else {
     drawEmptySlot(ctx, frameX, photoTop, frameWidth, photoHeight, 0)
   }
@@ -1123,6 +1214,8 @@ function drawInstaCard(
     const centerX = frameX + navInset + (navSpan / (navIcons.length - 1)) * index
     drawIcon(ctx, centerX - navIconSize / 2, navIconY, navIconSize)
   })
+
+  return slots
 }
 
 /**
@@ -1140,7 +1233,8 @@ function drawPolaroidCard(
   artwork: FanCardArtwork,
   photos: readonly ImageBitmap[],
   fontFamily: string,
-): void {
+): PhotoSlotRect[] {
+  const slots: PhotoSlotRect[] = []
   // 어두운 배경이라야 흰 폴라로이드가 떠 보인다.
   const background = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT)
   background.addColorStop(0, '#2a1547')
@@ -1167,9 +1261,17 @@ function drawPolaroidCard(
   ctx.restore()
 
   const photo = photos[0]
+  slots.push({
+    index: 0,
+    x: frameX + photoInset,
+    y: frameY + photoInset,
+    width: photoSize,
+    height: photoSize,
+  })
   if (photo) {
     drawPhotoCover(
-      ctx, photo, frameX + photoInset, frameY + photoInset, photoSize, photoSize,
+      ctx, photo, frameX + photoInset, frameY + photoInset, photoSize, photoSize, 0,
+      artwork.photoAdjustments?.[0],
     )
   } else {
     drawEmptySlot(
@@ -1228,6 +1330,8 @@ function drawPolaroidCard(
   )
 
   drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 34)
+
+  return slots
 }
 
 /**
@@ -1245,7 +1349,8 @@ function drawFourCutCard(
   artwork: FanCardArtwork,
   photos: readonly ImageBitmap[],
   fontFamily: string,
-): void {
+): PhotoSlotRect[] {
+  const slots: PhotoSlotRect[] = []
   drawFourCutBackground(ctx)
 
   // 상단 제목
@@ -1268,8 +1373,9 @@ function drawFourCutCard(
     const y = gridY + row * (slotSize + gap)
     const photo = photos[index]
 
+    slots.push({ index, x, y, width: slotSize, height: slotSize })
     if (photo) {
-      drawPhotoCover(ctx, photo, x, y, slotSize, slotSize, 16)
+      drawPhotoCover(ctx, photo, x, y, slotSize, slotSize, 16, artwork.photoAdjustments?.[index])
     } else {
       drawEmptySlot(ctx, x, y, slotSize, slotSize, 16)
     }
@@ -1305,6 +1411,8 @@ function drawFourCutCard(
   )
 
   drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 40)
+
+  return slots
 }
 
 /**
@@ -1349,7 +1457,8 @@ function drawFourCutVerticalCard(
   artwork: FanCardArtwork,
   photos: readonly ImageBitmap[],
   fontFamily: string,
-): void {
+): PhotoSlotRect[] {
+  const slots: PhotoSlotRect[] = []
   const { width, height } = FOURCUT_VERTICAL_SIZE
   const centerX = width / 2
   const padding = 24
@@ -1385,8 +1494,11 @@ function drawFourCutVerticalCard(
   for (let index = 0; index < FOUR_CUT_SLOTS; index += 1) {
     const y = stripTop + index * (slotHeight + gap)
     const photo = photos[index]
+    slots.push({ index, x: padding, y, width: slotWidth, height: slotHeight })
     if (photo) {
-      drawPhotoCover(ctx, photo, padding, y, slotWidth, slotHeight, 10)
+      drawPhotoCover(
+        ctx, photo, padding, y, slotWidth, slotHeight, 10, artwork.photoAdjustments?.[index],
+      )
     } else {
       drawEmptySlot(ctx, padding, y, slotWidth, slotHeight, 10)
     }
@@ -1410,6 +1522,8 @@ function drawFourCutVerticalCard(
   )
 
   drawFooterMark(ctx, fontFamily, stripBottom + 122, 'rgba(255, 255, 255, 0.42)', centerX)
+
+  return slots
 }
 
 /**
@@ -1428,7 +1542,8 @@ function drawFourCutHorizontalCard(
   artwork: FanCardArtwork,
   photos: readonly ImageBitmap[],
   fontFamily: string,
-): void {
+): PhotoSlotRect[] {
+  const slots: PhotoSlotRect[] = []
   const { width, height } = FOURCUT_HORIZONTAL_SIZE
   const centerX = width / 2
   const padding = 24
@@ -1464,8 +1579,11 @@ function drawFourCutHorizontalCard(
   for (let index = 0; index < FOUR_CUT_SLOTS; index += 1) {
     const x = padding + index * (slotWidth + gap)
     const photo = photos[index]
+    slots.push({ index, x, y: stripTop, width: slotWidth, height: slotHeight })
     if (photo) {
-      drawPhotoCover(ctx, photo, x, stripTop, slotWidth, slotHeight, 10)
+      drawPhotoCover(
+        ctx, photo, x, stripTop, slotWidth, slotHeight, 10, artwork.photoAdjustments?.[index],
+      )
     } else {
       drawEmptySlot(ctx, x, stripTop, slotWidth, slotHeight, 10)
     }
@@ -1489,6 +1607,8 @@ function drawFourCutHorizontalCard(
   )
 
   drawFooterMark(ctx, fontFamily, stripBottom + 122, 'rgba(255, 255, 255, 0.42)', centerX)
+
+  return slots
 }
 
 /**

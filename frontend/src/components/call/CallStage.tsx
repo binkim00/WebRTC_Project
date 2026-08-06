@@ -83,6 +83,13 @@ export type CallStageProps = {
   captureLabel?: string
   /** 저장 중이거나 장수를 다 채워 셔터를 누를 수 없는 상태인지 */
   captureDisabled?: boolean
+  /**
+   * 같이 찍기 카운트다운의 현재 숫자다. 값이 없으면 표시하지 않는다.
+   *
+   * 팬·인플루언서 양쪽 화면에 같은 숫자가 뜬다. 상단의 통화 남은 시간과 헷갈리지 않도록
+   * 화면 한가운데에 크게 따로 띄운다.
+   */
+  captureCountdown?: number
 }
 
 /**
@@ -119,6 +126,7 @@ export function CallStage({
   onCapture,
   captureLabel,
   captureDisabled,
+  captureCountdown,
 }: CallStageProps) {
   const { t } = useTranslation()
   // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
@@ -328,6 +336,40 @@ export function CallStage({
           ))}
         </div>
       ) : null}
+
+      {/*
+        같이 찍기 카운트다운 — 셔터를 누른 쪽과 상대 화면에 같은 숫자가 뜬다.
+        상단 우측의 통화 남은 시간과 섞이지 않도록 화면 한가운데에 크게 따로 띄우고,
+        영상 위에 잠깐 떴다 사라지는 표현이라 `pointer-events-none`으로 조작을 가리지 않는다.
+      */}
+      {captureCountdown === undefined ? null : (
+        <div
+          aria-atomic="true"
+          aria-live="assertive"
+          className="pointer-events-none absolute inset-0 z-20 grid place-items-center"
+          role="status"
+        >
+          {/* 읽어 주는 문장은 숫자만 있으면 무엇의 카운트다운인지 알 수 없어 따로 둔다. */}
+          <span className="sr-only">
+            {t('callStage.captureCountdownAria', { p0: captureCountdown })}
+          </span>
+          <div
+            aria-hidden="true"
+            className="grid justify-items-center gap-2 rounded-2xl bg-[rgb(15_17_21/72%)] px-11 py-7"
+          >
+            {/* key를 숫자로 두면 칸이 바뀔 때마다 등장 모션이 다시 재생된다. */}
+            <strong
+              className="text-[76px] font-black leading-none tabular-nums text-white motion-safe:animate-[mj-lift_240ms_cubic-bezier(0.2,0.7,0.3,1)_both]"
+              key={captureCountdown}
+            >
+              {captureCountdown}
+            </strong>
+            <span className="text-[15px] font-bold text-white/85">
+              {t('callStage.captureCountdownLabel')}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/*
         리액션 — 2분 통화에서 고민 없이 누를 수 있도록 고정된 소수의 이모지만 둔다.

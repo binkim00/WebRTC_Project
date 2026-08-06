@@ -34,6 +34,12 @@ public enum NotificationMessage {
             "팬미팅 취소 안내",
             "Fan meeting canceled"),
 
+    /** 팔로우한 인플루언서의 새 팬미팅 공개 알림 제목이다. */
+    MEETING_PUBLISHED_TITLE(
+            "notification.title.meetingPublished",
+            "새 팬미팅 공개 안내",
+            "New fan meeting announced"),
+
     /** 응모에 당첨된 팬에게 보내는 본문이다. */
     APPLICATION_RESULT_SELECTED(
             "notification.applicationResult.selected",
@@ -51,6 +57,12 @@ public enum NotificationMessage {
             "notification.meetingCanceled.body",
             "{meetingTitle} 팬미팅이 취소되었습니다.",
             "The {meetingTitle} fan meeting has been canceled."),
+
+    /** 팔로우한 인플루언서가 새 팬미팅을 공개했음을 알리는 본문이다. */
+    MEETING_PUBLISHED(
+            "notification.meetingPublished.body",
+            "팔로우한 {influencerName} 님의 {meetingTitle} 팬미팅이 공개되었습니다.",
+            "{influencerName}, whom you follow, announced the {meetingTitle} fan meeting."),
 
     /** 매니저가 직접 옮긴 팬에게 보내는 순번 변경 본문이다. */
     QUEUE_CHANGE_MOVED(

@@ -11,6 +11,7 @@ import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
+import com.ssafy.backend.influencer.repository.FollowingRepository;
 import com.ssafy.backend.livekit.service.LiveKitRoomParticipantService;
 import com.ssafy.backend.livekit.support.LiveKitRoomNames;
 import com.ssafy.backend.meeting.domain.FanMeeting;
@@ -64,6 +65,9 @@ public class FanMeetingManagementService {
             FanMeetingStatus.READY
     );
 
+    /** 팔로워 알림을 한 번에 저장하는 건수다. 커질수록 왕복은 줄지만 메모리에 오래 쌓인다. */
+    private static final int NOTIFICATION_CHUNK_SIZE = 500;
+
     private final CurrentUserService currentUserService;
     private final FanMeetingRepository fanMeetingRepository;
     private final MeetingApplicationSettingRepository applicationSettingRepository;
@@ -75,6 +79,7 @@ public class FanMeetingManagementService {
     private final QueueEntryRepository queueEntryRepository;
     private final CallSessionRepository callSessionRepository;
     private final NotificationRepository notificationRepository;
+    private final FollowingRepository followingRepository;
     private final LiveKitRoomParticipantService roomParticipantService;
     private final QueueRealtimeStore realtimeStore;
     private final Clock clock;
@@ -92,6 +97,7 @@ public class FanMeetingManagementService {
             QueueEntryRepository queueEntryRepository,
             CallSessionRepository callSessionRepository,
             NotificationRepository notificationRepository,
+            FollowingRepository followingRepository,
             LiveKitRoomParticipantService roomParticipantService,
             QueueRealtimeStore realtimeStore,
             Clock clock
@@ -107,6 +113,7 @@ public class FanMeetingManagementService {
         this.queueEntryRepository = queueEntryRepository;
         this.callSessionRepository = callSessionRepository;
         this.notificationRepository = notificationRepository;
+        this.followingRepository = followingRepository;
         this.roomParticipantService = roomParticipantService;
         this.realtimeStore = realtimeStore;
         this.clock = clock;
@@ -205,7 +212,18 @@ public class FanMeetingManagementService {
                 setting.getEarlyStartMinutes(), setting.getMaxRecallCount());
     }
 
-    /** 초안 팬미팅을 공개한다. */
+    /**
+     * 초안 팬미팅을 공개하고 진행 인플루언서를 팔로우한 팬에게 새 팬미팅 알림을 만든다.
+     *
+     * <p>알림을 초안 생성이 아니라 공개 시점에 보내는 이유는, 초안은 팬에게 보이지 않아 알림을
+     * 눌러도 볼 것이 없고 그대로 삭제될 수도 있기 때문이다. 공개는 초안 상태에서 한 번만
+     * 성공하므로 같은 팬미팅으로 알림이 두 번 만들어지지 않는다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param principal JWT 인증 사용자 정보
+     * @return 공개된 팬미팅 관리 정보
+     * @throws BusinessException 초안 상태가 아니거나 권한이 없는 경우
+     */
     @Transactional
     public FanMeetingManagementResponse publish(Long meetingId, AuthenticatedUser principal) {
         User actor = currentUserService.requireActiveUser(principal);
@@ -215,7 +233,50 @@ public class FanMeetingManagementService {
             throw new BusinessException(ErrorCode.FAN_MEETING_STATE_CONFLICT);
         }
         meeting.publish(LocalDateTime.now(clock));
+        notifyFollowers(meeting);
         return response(meeting);
+    }
+
+    /**
+     * 방금 공개된 팬미팅의 인플루언서를 팔로우한 팬에게 공개 알림을 만든다.
+     *
+     * <p>공개와 같은 트랜잭션에서 만든다. 공개는 됐는데 알림만 빠지면 어떤 팬이 못 받았는지
+     * 나중에 알아낼 방법이 없어, 알림 저장이 실패하면 공개도 함께 되돌리는 편이 안전하다.
+     * 대신 팔로워가 많을수록 공개 응답이 그만큼 길어지므로, 일정 건수마다 저장을 내보내
+     * 영속성 컨텍스트가 팔로워 수만큼 끝없이 커지지는 않게 한다.
+     *
+     * @param meeting 공개된 팬미팅
+     */
+    private void notifyFollowers(FanMeeting meeting) {
+        List<User> followers = followingRepository
+                .findActiveFollowers(meeting.getInfluencer().getId());
+        for (int start = 0; start < followers.size(); start += NOTIFICATION_CHUNK_SIZE) {
+            int end = Math.min(start + NOTIFICATION_CHUNK_SIZE, followers.size());
+            notificationRepository.saveAll(followers.subList(start, end).stream()
+                    .map(fan -> Notification.create(fan, meeting,
+                            NotificationType.MEETING_PUBLISHED, publishedContent(meeting, fan)))
+                    .toList());
+            notificationRepository.flush();
+        }
+    }
+
+    /**
+     * 새 팬미팅 공개 알림 문구를 받는 팬의 선호 언어로 만든다.
+     *
+     * <p>팔로워마다 선호 언어가 다르므로 문구를 한 번만 만들어 돌려쓰지 않고 팬마다 만든다.
+     *
+     * @param meeting 공개된 팬미팅
+     * @param fan 알림을 받을 팔로워
+     * @return 공개 알림 제목·본문과 번역 재료
+     */
+    private NotificationContent publishedContent(FanMeeting meeting, User fan) {
+        return NotificationContent.of(
+                NotificationMessage.MEETING_PUBLISHED_TITLE,
+                NotificationMessage.MEETING_PUBLISHED,
+                NotificationLanguage.from(fan.getPreferredLanguage()),
+                Map.of("influencerName", meeting.getInfluencer().getNickname(),
+                        "meetingTitle", meeting.getTitle())
+        );
     }
 
     /**

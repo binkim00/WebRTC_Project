@@ -88,3 +88,29 @@ describe('CallStage 리액션·남은 시간 게이지', () => {
     expect(screen.getByRole('button', { name: '기념 사진 찍기' })).toBeTruthy()
   })
 })
+
+describe('CallStage 같이 찍기 카운트다운', () => {
+  /** 양쪽 화면에 같은 숫자가 떠야 하므로 셔터 버튼이 없는 인플루언서 화면 조합으로 확인한다. */
+  it('captureCountdown을 주면 숫자와 안내 문구를 띄운다', () => {
+    renderStage({ captureCountdown: 3 })
+
+    const countdown = screen.getByRole('status')
+    expect(countdown.textContent).toContain('3')
+    expect(countdown.textContent).toContain('같이 찍어요')
+    // 숫자만 읽어 주면 무엇의 카운트다운인지 알 수 없어 읽기용 문장을 따로 둔다.
+    expect(countdown.textContent).toContain('사진 촬영까지 3')
+  })
+
+  /** 통화 남은 시간과 헷갈리지 않도록 별도 표시로 두었는지 확인한다. */
+  it('통화 남은 시간과 별개의 영역으로 그린다', () => {
+    renderStage({ captureCountdown: 1, timeValue: '01:30' })
+
+    expect(screen.getByRole('status').textContent).not.toContain('01:30')
+  })
+
+  it('captureCountdown이 없으면 카운트다운을 숨긴다', () => {
+    renderStage()
+
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+})

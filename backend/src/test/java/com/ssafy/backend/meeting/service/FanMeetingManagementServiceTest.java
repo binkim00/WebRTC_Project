@@ -10,6 +10,7 @@ import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
+import com.ssafy.backend.influencer.repository.FollowingRepository;
 import com.ssafy.backend.livekit.service.LiveKitRoomParticipantService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.FanMeetingStatus;
@@ -68,6 +69,7 @@ class FanMeetingManagementServiceTest {
     private QueueEntryRepository queueEntryRepository;
     private CallSessionRepository callSessionRepository;
     private NotificationRepository notificationRepository;
+    private FollowingRepository followingRepository;
     private LiveKitRoomParticipantService roomParticipantService;
     private QueueRealtimeStore realtimeStore;
     private FanMeetingManagementService service;
@@ -84,6 +86,7 @@ class FanMeetingManagementServiceTest {
         queueEntryRepository = mock(QueueEntryRepository.class);
         callSessionRepository = mock(CallSessionRepository.class);
         notificationRepository = mock(NotificationRepository.class);
+        followingRepository = mock(FollowingRepository.class);
         roomParticipantService = mock(LiveKitRoomParticipantService.class);
         realtimeStore = mock(QueueRealtimeStore.class);
         service = new FanMeetingManagementService(
@@ -98,6 +101,7 @@ class FanMeetingManagementServiceTest {
                 queueEntryRepository,
                 callSessionRepository,
                 notificationRepository,
+                followingRepository,
                 roomParticipantService,
                 realtimeStore,
                 Clock.fixed(NOW, SEOUL)
@@ -224,6 +228,62 @@ class FanMeetingManagementServiceTest {
         assertThat(meeting.getPublishedAt()).isEqualTo(now());
     }
 
+    /** 공개 시 인플루언서를 팔로우한 팬마다 자기 계정 선호 언어로 공개 알림을 만드는지 검증한다. */
+    @SuppressWarnings("unchecked")
+    @Test
+    void notifiesFollowersWhenDraftMeetingIsPublished() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        when(solo.getNickname()).thenReturn("멜리");
+        FanMeeting meeting = draftMeeting(null, solo);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        User koreanFan = user(20L, UserRole.FAN);
+        when(koreanFan.getPreferredLanguage()).thenReturn(PreferredLanguage.KOREAN);
+        User japaneseFan = user(21L, UserRole.FAN);
+        when(japaneseFan.getPreferredLanguage()).thenReturn(PreferredLanguage.JAPANESE);
+        stubMeetingWithSettings(meeting);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+        when(followingRepository.findActiveFollowers(10L))
+                .thenReturn(List.of(koreanFan, japaneseFan));
+
+        service.publish(1L, principal);
+
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).extracting(Notification::getUser)
+                .containsExactly(koreanFan, japaneseFan);
+        assertThat(captor.getValue()).extracting(Notification::getType)
+                .containsOnly(NotificationType.MEETING_PUBLISHED);
+        assertThat(captor.getValue()).extracting(Notification::getTitle)
+                .containsExactly("새 팬미팅 공개 안내", "New fan meeting announced");
+        assertThat(captor.getValue()).extracting(Notification::getMessage)
+                .containsExactly(
+                        "팔로우한 멜리 님의 " + meeting.getTitle() + " 팬미팅이 공개되었습니다.",
+                        "멜리, whom you follow, announced the " + meeting.getTitle()
+                                + " fan meeting."
+                );
+        assertThat(captor.getValue()).extracting(Notification::getMessageKey)
+                .containsOnly("notification.meetingPublished.body");
+        assertThat(captor.getValue().get(0).getMessageArguments())
+                .containsOnly(entry("influencerName", "멜리"),
+                        entry("meetingTitle", meeting.getTitle()));
+    }
+
+    /** 팔로워가 한 명도 없으면 공개만 하고 알림은 만들지 않는지 검증한다. */
+    @Test
+    void publishesWithoutNotificationsWhenInfluencerHasNoFollower() {
+        User solo = user(10L, UserRole.SOLO_INFLUENCER);
+        FanMeeting meeting = draftMeeting(null, solo);
+        AuthenticatedUser principal = new AuthenticatedUser(10L, UserRole.SOLO_INFLUENCER);
+        stubMeetingWithSettings(meeting);
+        when(currentUserService.requireActiveUser(principal)).thenReturn(solo);
+        when(followingRepository.findActiveFollowers(10L)).thenReturn(List.of());
+
+        service.publish(1L, principal);
+
+        assertThat(meeting.getStatus()).isEqualTo(FanMeetingStatus.PUBLISHED);
+        verify(notificationRepository, never()).saveAll(anyList());
+    }
+
     /** 담당 매니저가 조직 소속 인플루언서의 초안 팬미팅을 공개할 수 있는지 검증한다. */
     @Test
     void publishesDraftMeetingByOwningManager() {
@@ -253,6 +313,7 @@ class FanMeetingManagementServiceTest {
                         exception -> assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.FAN_MEETING_STATE_CONFLICT));
         assertThat(meeting.getStatus()).isEqualTo(FanMeetingStatus.PUBLISHED);
+        verify(notificationRepository, never()).saveAll(anyList());
     }
 
     /** 담당자가 아닌 매니저의 공개 요청을 권한 오류로 거부하는지 검증한다. */
