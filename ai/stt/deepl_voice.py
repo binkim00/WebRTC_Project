@@ -43,6 +43,9 @@ class DeepLVoiceAdapter(STTAdapter):
         self._target_lang = target_lang
         self._ws = None
         self._stop = asyncio.Event()  # close() 시 set → 오디오 입력 종료 신호
+        # 문장 번호. 통화 중 STT 가 다시 시작돼도 이어서 세야 화면이 새 문장을 이전 문장으로
+        # 착각하지 않는다. 어댑터는 통화 하나마다 새로 만들어지므로 통화 단위로 이어진다.
+        self._segment_seq = 0
 
     async def transcribe(
         self,
@@ -211,7 +214,8 @@ class DeepLVoiceAdapter(STTAdapter):
         target_buffer: list[str] = []
 
         # 문장(발화) 식별자. 새 문장이 시작될 때 채번하고, 그 문장의 interim들과 final이 공유한다.
-        segment_seq = 0
+        # 번호는 어댑터가 들고 있다. 여기서 0 부터 다시 세면 통화 중 STT 가 다시 시작될 때 번호가
+        # 겹쳐, 화면이 이미 확정한 줄로 보고 새 문장의 부분 자막을 버린다.
         current_segment_id: int | None = None
 
         # 침묵 타이머
@@ -219,10 +223,10 @@ class DeepLVoiceAdapter(STTAdapter):
 
         def ensure_segment() -> None:
             """버퍼가 비어 있던 상태에서 첫 조각이 오면 새 문장 id를 채번한다."""
-            nonlocal segment_seq, current_segment_id
+            nonlocal current_segment_id
             if current_segment_id is None:
-                segment_seq += 1
-                current_segment_id = segment_seq
+                self._segment_seq += 1
+                current_segment_id = self._segment_seq
 
         async def emit_final() -> None:
             """버퍼에 모인 텍스트를 하나의 문장으로 on_final에 전달하고 버퍼·문장 id를 비운다."""
@@ -246,13 +250,28 @@ class DeepLVoiceAdapter(STTAdapter):
             current_segment_id = None
 
         async def push_interim() -> None:
-            """지금까지 누적된 부분 자막을 현재 문장 id로 전달(원문이 아직 없으면 생략)."""
+            """
+            지금까지 누적된 부분 자막을 현재 문장 id로 전달한다.
+
+            번역이 아직 붙지 않았으면 보내지 않는다. 원문만 보내면 화면이 번역문 대신 원문을
+            띄우는데, DeepL 을 쓰는 통화는 양쪽 언어가 다른 경우뿐이라 상대가 읽지 못하는 글이
+            문장마다 먼저 깜빡인다. 번역이 붙은 뒤부터 자막이 자라기 시작해도 충분히 빠르다.
+
+            예외는 여기서 삼킨다. 이 함수는 WebSocket 수신 루프 안에서 불리므로 예외가 새어
+            나가면 그 화자의 자막과 DB 저장이 통화 내내 멈춘다. 상위 transcribe 가
+            gather(return_exceptions=True) 로 결과를 버려서 로그조차 남지 않는다. 부분 자막은
+            놓쳐도 다음 조각과 확정 자막이 정정하므로 실패를 기록하고 넘어가는 편이 안전하다.
+            """
             if on_interim is None:
                 return
             source_text = "".join(source_buffer).strip()
-            target_text = "".join(target_buffer).strip() or None
-            if source_text:
+            target_text = "".join(target_buffer).strip()
+            if not source_text or not target_text:
+                return
+            try:
                 await on_interim(source_text, target_text, current_segment_id or 0)
+            except Exception:
+                logger.warning("부분 자막 전달 실패 — 다음 조각에서 다시 시도한다", exc_info=True)
 
         async def flush_sentence() -> None:
             """타이머 만료 시 호출 — 버퍼에 모인 텍스트로 on_final 호출."""

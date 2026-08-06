@@ -114,7 +114,9 @@ class SubtitleProcessor:
         확정 전 부분 자막을 Data Channel로만 push (DB 저장 안 함).
 
         같은 segment_id의 확정본이 handle_final로 나오면 프론트가 이 줄을 교체한다.
-        interim은 자주 갱신되고 유실돼도 다음 interim/final이 정정하므로 lossy로 보낸다.
+        순서가 보장되는 방식으로 보낸다. lossy로 보내면 조각들이 뒤바뀌어 도착할 수 있고, 그때
+        짧은 조각이 나중에 도착해 자막 글자가 거꾸로 줄어든다. payload에는 어느 쪽이 최신인지
+        가릴 정보가 없어 화면이 판단할 수 없다. 자막 한 건은 작아서 비용 차이가 거의 없다.
         """
         payload = json.dumps({
             "subtitle_id": None,
@@ -129,7 +131,7 @@ class SubtitleProcessor:
 
         await self.local_participant.publish_data(
             payload,
-            reliable=False,   # lossy: 유실돼도 다음 interim/final이 덮어씀
+            reliable=True,   # 순서 보장 — 뒤바뀌면 자막이 거꾸로 줄어든다
             topic="subtitle",
         )
 
