@@ -42,12 +42,24 @@ public class CallSessionExpirationScheduler {
         this.connectTimeoutSec = connectTimeoutSec;
     }
 
-    /** 통화 제한 시간 또는 재접속 유예가 지난 활성 세션을 순차적으로 종료한다. */
+    /**
+     * 통화 제한 시간 또는 재접속 유예가 지난 활성 세션을 순차적으로 종료한다.
+     *
+     * <p>한 건이 실패해도 나머지 건을 계속 처리하고, 다음 주기에 같은 건을 다시 시도한다.
+     * 예외를 그대로 올리면 루프가 그 자리에서 끊기는데, 조회에 정렬이 없어 다음 주기에도 같은
+     * 목록을 같은 순서로 받을 수 있다. 그러면 문제가 된 한 건 때문에 뒤에 있던 통화가 계속
+     * 마감되지 못하고, 통화가 끝나지 않은 팬미팅은 대기열이 막혀 다음 팬을 호출할 수 없다.
+     */
     @Scheduled(fixedDelayString = "${app.call.expiration-check-delay-ms:1000}")
     public void endExpiredCalls() {
         for (Long callSessionId : callSessionRepository.findExpiredActiveIds(
                 LocalDateTime.now(clock))) {
-            expirationService.endIfExpired(callSessionId);
+            try {
+                expirationService.endIfExpired(callSessionId);
+            } catch (RuntimeException exception) {
+                log.warn("통화 마감에 실패했습니다. 다음 주기에 다시 시도합니다. callSessionId={}",
+                        callSessionId, exception);
+            }
         }
     }
 

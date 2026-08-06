@@ -36,6 +36,28 @@ class CallSessionExpirationSchedulerTest {
         verify(expirationService).endIfExpired(101L);
     }
 
+    /**
+     * 한 건이 실패해도 남은 만료 후보를 계속 마감하는지 검증한다.
+     *
+     * <p>여기서 루프가 끊기면 뒤에 있던 통화가 마감되지 않고, 통화가 끝나지 않은 팬미팅은
+     * 대기열이 막혀 다음 팬을 호출할 수 없다.
+     */
+    @Test
+    void continuesExpirationSweepAfterFailure() {
+        LocalDateTime now = LocalDateTime.ofInstant(INSTANT, ZONE);
+        CallSessionRepository repository = mock(CallSessionRepository.class);
+        CallSessionExpirationService expirationService =
+                mock(CallSessionExpirationService.class);
+        when(repository.findExpiredActiveIds(now)).thenReturn(List.of(100L, 101L));
+        doThrow(new IllegalStateException("대기열 상태 충돌"))
+                .when(expirationService).endIfExpired(100L);
+        CallSessionExpirationScheduler scheduler = scheduler(repository, expirationService);
+
+        scheduler.endExpiredCalls();
+
+        verify(expirationService).endIfExpired(101L);
+    }
+
     /** 연결 대기 시간이 지난 후보를 기준 시각으로 조회해 각각 위임하는지 검증한다. */
     @Test
     void delegatesEveryConnectTimeoutCandidate() {
