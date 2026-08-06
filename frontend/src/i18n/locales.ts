@@ -43,6 +43,9 @@ const ko = {
   'nav.notifications': '알림',
   'nav.admin.serviceNotices': '전체 공지 관리',
   'notificationsPage.markAllRead': '{count}개 모두 읽음',
+  'notificationsPage.unknownType': '알림',
+  'notificationBell.unknownTag': '알림',
+  'notificationBell.unknownAction': '자세히 보기 →',
 
   'app.nav.serviceNotices': '공지사항',
   'app.nav.login': '로그인',
@@ -3465,6 +3468,9 @@ const en: Partial<Record<TranslationKey, string>> = {
   'nav.notifications': 'Notifications',
   'nav.admin.serviceNotices': 'Service notices',
   'notificationsPage.markAllRead': 'Mark all {count} as read',
+  'notificationsPage.unknownType': 'Notification',
+  'notificationBell.unknownTag': 'Notification',
+  'notificationBell.unknownAction': 'View details →',
 
   'app.nav.serviceNotices': 'Notices',
   'app.nav.login': 'Log in',

@@ -293,7 +293,12 @@ export function NotificationsPage() {
             <ul className="divide-y divide-[var(--color-divider)]">
               {notifications.map((notification) => {
                 const isUnread = notification.readAt === null
-                const typeContent = notificationTypeContent()[notification.type]
+                // 백엔드가 프론트보다 먼저 새 알림 유형을 내보내도 목록이 죽지 않아야 한다.
+                const typeContent: { label: string; variant: BadgeVariant } =
+                  notificationTypeContent()[notification.type] ?? {
+                    label: translate('notificationsPage.unknownType'),
+                    variant: 'info',
+                  }
 
                 return (
                   <li key={notification.notificationId}>

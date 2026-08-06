@@ -328,6 +328,59 @@ textarea {
   }
 }
 
+/* 통화 화면 사진 셔터의 찰칵 플래시다. 흰 화면이 잠깐 번쩍이고 사라진다. */
+@keyframes mj-shutter-flash {
+  0% {
+    opacity: 0.85;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 촬영 카운트다운 숫자다. 크게 나타났다가 제자리를 잡는다. */
+@keyframes mj-shutter-count {
+  0% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 통화 종료 임박 타이머의 떨림이다. 경고색 전환과 함께 시선을 끈다. */
+@keyframes mj-timer-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20% {
+    transform: translateX(-1.5px) rotate(-1.2deg);
+  }
+
+  40% {
+    transform: translateX(1.5px) rotate(1.2deg);
+  }
+
+  60% {
+    transform: translateX(-1px);
+  }
+
+  80% {
+    transform: translateX(1px);
+  }
+}
+
 @keyframes jelly-soft {
   0% {
     transform: scale(1);

@@ -179,7 +179,8 @@ export function NotificationBell() {
       setUnreadCount((count) => Math.max(0, count - 1))
       void markRead(notification.notificationId)
     }
-    navigate(typeContent()[notification.type].to(notification.meetingId))
+    // 모르는 알림 유형이어도 이동이 죽지 않게 전체 목록으로 보낸다.
+    navigate(typeContent()[notification.type]?.to(notification.meetingId) ?? '/notifications')
   }
 
   async function readAll() {
@@ -244,7 +245,18 @@ export function NotificationBell() {
             <>
               <ul className="m-0 list-none p-0">
                 {items.map((notification) => {
-                  const content = typeContent()[notification.type]
+                  // 백엔드가 프론트보다 먼저 새 알림 유형을 내보내도 패널이 죽지 않아야 한다.
+                  const content: {
+                    tag: string
+                    tone: keyof typeof toneClass
+                    action: string
+                    to: (meetingId: number | null) => string
+                  } = typeContent()[notification.type] ?? {
+                    tag: translate('notificationBell.unknownTag'),
+                    tone: 'muted',
+                    action: translate('notificationBell.unknownAction'),
+                    to: () => '/notifications',
+                  }
                   const unread = !notification.readAt
 
                   return (

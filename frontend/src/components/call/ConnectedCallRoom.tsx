@@ -931,6 +931,7 @@ export function ConnectedCallRoom({
         microphoneEnabled={isMicrophoneEnabled}
         onCameraToggle={() => void toggleCamera()}
         onCaptionToggle={() => setCaptionEnabled((enabled) => !enabled)}
+        // 셔터는 바로 찍지 않고 양쪽에 3·2·1 카운트다운을 띄운 뒤 0에서 촬영한다.
         onCapture={photoCaptureVisible ? handleShutterPress : undefined}
         onLeave={() => setEndDialogOpen(true)}
         onMicrophoneToggle={() => void toggleMicrophone()}
@@ -951,8 +952,16 @@ export function ConnectedCallRoom({
             ? remaining.seconds / timeRatioBase
             : undefined
         }
-        // 종료 직전에는 타이머가 경고색으로 바뀌어 마무리를 준비하게 한다.
-        timeUrgent={remaining.counting && remaining.label <= '00:05'}
+        // 종료 임박 2단계 — 10초 이하 주황, 5초 이하 빨강+떨림으로 마무리를 준비하게 한다.
+        timeUrgency={
+          !remaining.counting
+            ? undefined
+            : remaining.seconds <= 5
+              ? 'critical'
+              : remaining.seconds <= 10
+                ? 'warning'
+                : undefined
+        }
         timeValue={remaining.label}
       />
 

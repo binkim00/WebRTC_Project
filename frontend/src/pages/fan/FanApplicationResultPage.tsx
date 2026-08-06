@@ -228,18 +228,7 @@ export function FanApplicationResultPage() {
 
     return (
       <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
-        {/* 히어로는 축하 배경일 뿐 정보가 아니므로 본문을 밀어내지 않는 높이로 제한하고,
-            이미지가 없으면 아예 그리지 않는다. */}
-        {application.coverImageUrl ? (
-          <figure className="relative m-0 h-[min(34vw,320px)] overflow-hidden bg-[var(--color-surface-muted)]">
-            <img
-              alt={t('fanApplicationResultPage.t44', { p0: application.influencerName })}
-              className="absolute inset-0 size-full object-cover"
-              src={application.coverImageUrl}
-            />
-          </figure>
-        ) : null}
-
+        {/* 커버 이미지는 두지 않는다. 젤리 축하 연출과 겹쳐 화면만 무거워지고 정보가 아니다. */}
         <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] pt-11 min-[1081px]:w-[min(100%-88px,1240px)]">
           {/* 당첨 문구 위에 배치하는 장식형 축하 연출 — 버튼·정보를 가리지 않는다. */}
           <JellyCelebration className="mb-2 h-[clamp(225px,27vw,315px)]" />
