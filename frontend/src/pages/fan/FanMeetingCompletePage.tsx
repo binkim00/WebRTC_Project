@@ -596,16 +596,15 @@ export function FanMeetingCompletePage() {
         */}
         {session && fanCardSessionId ? (
           <section className="mt-10 rounded-[var(--radius-panel)] border border-[var(--color-divider)] p-6">
-            <h2 className="text-base font-extrabold tracking-[-0.025em]">기념 카드 만들기</h2>
+            <h2 className="text-base font-extrabold tracking-[-0.025em]">{t('fanCard.entry.title')}</h2>
             <p className="mt-2 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
-              통화에서 인상 깊었던 한마디와 남긴 사진으로 카드를 만들어 보세요.
-              사진은 통화가 끝나고 하루 동안만 이 기기에 보관합니다.
+              {t('fanCard.entry.description')}
             </p>
             <Link
               className="mj-font-label mt-4 inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] font-bold text-white hover:opacity-90"
               to={`/fan/fan-meetings/${fanMeetingId}/cards/${fanCardSessionId}`}
             >
-              기념 카드 만들러 가기
+              {t('fanCard.entry.action')}
             </Link>
           </section>
         ) : null}
