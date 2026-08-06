@@ -24,6 +24,7 @@ import {
   type FanCardFont,
   type FanCardLayout,
 } from './fanCardCanvas'
+import { cardStickerUrl } from './cardStickers'
 import { FanCardQuotePicker } from './FanCardQuotePicker'
 import { FanCardLayoutPicker } from './FanCardLayoutPicker'
 import { photoCountOf } from './fanCardLayoutOptions'
@@ -250,6 +251,22 @@ export function FanCardSection({
   const canCompose = Boolean(selectedText) || selectedPhotoIndexes.length > 0
 
   /**
+   * 방금 올린 스티커의 바운스 연출 정보다. 카드 중앙에 크게 나타나 통통 자리 잡는다.
+   *
+   * 캔버스에는 스티커가 즉시 그려지므로, 같은 그림을 같은 자리·같은 크기로 끝나는
+   * DOM 오버레이로 잠깐 덧그려 애니메이션만 얹는다. 끝나면 흔적 없이 사라진다.
+   */
+  const [stickerPop, setStickerPop] = useState<{ code: string; id: number; widthPercent: number }>()
+  useEffect(() => {
+    if (!stickerPop) return
+    const timer = window.setTimeout(() => setStickerPop(undefined), 560)
+    return () => window.clearTimeout(timer)
+  }, [stickerPop])
+
+  /** 내려받기 순간 카드 위를 쓸고 지나가는 광택의 재생 횟수다. */
+  const [shineCount, setShineCount] = useState(0)
+
+  /**
    * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
    *
    * @param kind 스티커인지 글자인지
@@ -270,6 +287,15 @@ export function FanCardSection({
       }
       setDecorations((current) => [...current, created])
       setSelectedDecorationId(created.id)
+
+      // 글자는 글꼴 렌더링이 캔버스와 어긋날 수 있어 스티커에만 바운스를 얹는다.
+      if (kind === 'STICKER') {
+        setStickerPop((previous) => ({
+          code: content,
+          id: (previous?.id ?? 0) + 1,
+          widthPercent: (NEW_STICKER_SIZE / size.width) * 100,
+        }))
+      }
     },
     [layout],
   )
@@ -735,6 +761,9 @@ export function FanCardSection({
   async function handleDownload() {
     if (!canCompose) return
 
+    // 실물 포토카드 코팅처럼 광택이 한 번 쓸고 지나가며 "저장했다"는 반응을 준다.
+    setShineCount((count) => count + 1)
+
     const canvas = document.createElement('canvas')
 
     try {
@@ -820,23 +849,47 @@ export function FanCardSection({
 
               <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
                  {t('fanCardSection.t9')} </h3>
-              <canvas
-                aria-label={
-                  selectedText
-                    ? t('fanCardSection.t10', { p0: selectedText })
-                    : t('fanCardSection.t17')
-                }
-                // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
-                className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
-                  decorations.length > 0 ? 'cursor-grab' : ''
-                }`}
-                onPointerCancel={handleCanvasPointerUp}
-                onPointerDown={handleCanvasPointerDown}
-                onPointerMove={handleCanvasPointerMove}
-                onPointerUp={handleCanvasPointerUp}
-                ref={canvasRef}
-                role="img"
-              />
+              {/* 연출 오버레이(스티커 바운스·내려받기 광택)를 얹기 위해 캔버스를 감싼다. */}
+              <div className="relative mx-auto mt-3 w-full max-w-sm">
+                <canvas
+                  aria-label={
+                    selectedText
+                      ? t('fanCardSection.t10', { p0: selectedText })
+                      : t('fanCardSection.t17')
+                  }
+                  // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
+                  className={`h-auto w-full touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
+                    decorations.length > 0 ? 'cursor-grab' : ''
+                  }`}
+                  onPointerCancel={handleCanvasPointerUp}
+                  onPointerDown={handleCanvasPointerDown}
+                  onPointerMove={handleCanvasPointerMove}
+                  onPointerUp={handleCanvasPointerUp}
+                  ref={canvasRef}
+                  role="img"
+                />
+                {/* 방금 올린 스티커의 바운스 — 캔버스의 최종 위치·크기로 착지해 흔적 없이 사라진다. */}
+                {stickerPop ? (
+                  <img
+                    alt=""
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-1/2 top-1/2 hidden motion-safe:block motion-safe:animate-[mj-sticker-pop_520ms_cubic-bezier(0.16,1,0.3,1)_both]"
+                    key={stickerPop.id}
+                    src={cardStickerUrl(stickerPop.code)}
+                    style={{ width: `${stickerPop.widthPercent}%` }}
+                  />
+                ) : null}
+                {/* 내려받기 광택 — 저장하는 순간 카드 위를 한 번 쓸고 지나간다. */}
+                {shineCount > 0 ? (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 overflow-hidden rounded-[var(--radius-panel)]"
+                    key={shineCount}
+                  >
+                    <span className="absolute -top-[10%] left-0 h-[120%] w-1/3 -translate-x-[160%] bg-white/45 motion-safe:animate-[mj-card-shine_750ms_ease-in-out_both]" />
+                  </span>
+                ) : null}
+              </div>
 
               <FanCardStickerPanel
                 decorationCount={decorations.length}

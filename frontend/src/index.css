@@ -333,6 +333,130 @@ textarea {
   }
 }
 
+/* 대기실 순번 롤링이다. 이전 숫자가 위로 밀려나가고 새 숫자가 올라온다. */
+@keyframes mj-roll-up {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+/* 호출 순간 코랄 펄스다. 내 차례가 됐음을 화면 한가운데서 한 번 알린다. */
+@keyframes mj-call-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0.9;
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(2.8);
+    opacity: 0;
+  }
+}
+
+/* 새 알림 도착 시 알림 버튼의 딸랑 흔들림이다. */
+@keyframes mj-bell-shake {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+
+  20% {
+    transform: rotate(-10deg);
+  }
+
+  40% {
+    transform: rotate(8deg);
+  }
+
+  60% {
+    transform: rotate(-5deg);
+  }
+
+  80% {
+    transform: rotate(3deg);
+  }
+}
+
+/* 새 알림 수 배지가 통 튀어오르는 팝이다. */
+@keyframes mj-badge-pop {
+  0% {
+    transform: scale(0.4);
+  }
+
+  55% {
+    transform: scale(1.35);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 찰칵 직후 찍힌 사진이 셔터 버튼 쪽으로 날아가 흡수되는 모션이다. */
+@keyframes mj-photo-fly {
+  0% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    left: calc(100% - 140px);
+    top: 14px;
+    transform: translate(0, 0) scale(0.1);
+    opacity: 0;
+  }
+}
+
+/* 포토카드에 스티커를 올릴 때의 바운스다. 크게 나타나 통통 자리 잡는다. */
+@keyframes mj-sticker-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(2) rotate(-12deg);
+    opacity: 0;
+  }
+
+  55% {
+    transform: translate(-50%, -50%) scale(0.94) rotate(3deg);
+    opacity: 1;
+  }
+
+  78% {
+    transform: translate(-50%, -50%) scale(1.05) rotate(-1deg);
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+
+/* 포토카드 내려받기 순간 카드 위를 쓸고 지나가는 광택이다. */
+@keyframes mj-card-shine {
+  0% {
+    transform: translateX(-160%) skewX(-18deg);
+  }
+
+  100% {
+    transform: translateX(420%) skewX(-18deg);
+  }
+}
+
+/* 운영 모니터에서 상태가 바뀐 행이 잠깐 물들었다 돌아오는 하이라이트다. */
+@keyframes mj-row-flash {
+  0% {
+    background-color: var(--color-warning-soft);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
 /* 통화 종료 임박 타이머의 떨림이다. 경고색 전환과 함께 시선을 끈다. */
 @keyframes mj-timer-shake {
   0%,

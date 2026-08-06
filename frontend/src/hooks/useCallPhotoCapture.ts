@@ -28,6 +28,13 @@ export type UseCallPhotoCaptureResult = {
   canCapture: boolean
   /** 저장 중이라 셔터가 잠깐 잠긴 상태인지 */
   capturing: boolean
+  /**
+   * 방금 찍힌 사진의 미리보기다. 찰칵 직후 썸네일이 셔터로 날아가는 연출에 쓴다.
+   *
+   * `id`는 찍을 때마다 증가해 같은 연출이 매번 처음부터 다시 돌게 하고,
+   * `url`은 다음 촬영 때 폐기되는 일회용 objectURL이다.
+   */
+  lastShot?: { url: string; id: number }
 }
 
 /** 모서리가 둥근 사각형 경로를 만든다. 셀프뷰 창의 둥근 모서리에 쓴다. */
@@ -119,11 +126,15 @@ export function useCallPhotoCapture({
   const [photoCount, setPhotoCount] = useState(0)
   const [captureError, setCaptureError] = useState<string>()
   const [capturing, setCapturing] = useState(false)
+  const [lastShot, setLastShot] = useState<{ url: string; id: number }>()
+  const lastShotUrlRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      // 연출용 미리보기 주소는 화면을 떠날 때 정리한다. 사진 원본(IndexedDB)과는 무관하다.
+      if (lastShotUrlRef.current) URL.revokeObjectURL(lastShotUrlRef.current)
     }
   }, [])
 
@@ -297,7 +308,14 @@ export function useCallPhotoCapture({
       })
 
       photosRef.current = photos
-      if (mountedRef.current) setPhotoCount(photos.length)
+      if (mountedRef.current) {
+        setPhotoCount(photos.length)
+        // 방금 찍힌 사진을 셔터로 날려 보내는 연출용 미리보기다. 이전 주소는 폐기한다.
+        if (lastShotUrlRef.current) URL.revokeObjectURL(lastShotUrlRef.current)
+        const previewUrl = URL.createObjectURL(blob)
+        lastShotUrlRef.current = previewUrl
+        setLastShot((previous) => ({ url: previewUrl, id: (previous?.id ?? 0) + 1 }))
+      }
     } catch (error: unknown) {
       if (mountedRef.current) {
         setCaptureError(
@@ -316,5 +334,6 @@ export function useCallPhotoCapture({
     captureError,
     canCapture,
     capturing,
+    lastShot,
   }
 }

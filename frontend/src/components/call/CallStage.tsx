@@ -8,9 +8,36 @@ import {
   VideoCameraIcon,
   VideoCameraSlashIcon,
 } from '@phosphor-icons/react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react'
 import { cn } from '../ui/cn'
 import { useTranslation } from '../../i18n'
+
+/** 셀프뷰가 붙을 수 있는 모서리다. 자유 배치 대신 모서리에 붙여 자막·조작을 가리지 않게 한다. */
+type PipCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
+/** 모서리별 배치 클래스다. 위쪽은 이름 칩·조작 줄 아래로 내려 겹치지 않게 한다. */
+const PIP_CORNER_CLASS: Record<PipCorner, string> = {
+  'top-left': 'left-3.5 top-[52px]',
+  'top-right': 'right-3.5 top-[52px]',
+  'bottom-left': 'bottom-3.5 left-3.5',
+  'bottom-right': 'bottom-3.5 right-3.5',
+}
+
+/** 두 번 눌러 순환하는 셀프뷰 크기 3단계다. */
+const PIP_WIDTH_CLASSES = [
+  'w-[clamp(96px,12%,150px)]',
+  'w-[clamp(120px,15%,200px)]',
+  'w-[clamp(150px,21%,280px)]',
+] as const
+
+/** 이 거리(px)보다 적게 움직이면 끌기가 아니라 누르기(더블클릭 크기 변경)로 본다. */
+const PIP_DRAG_THRESHOLD = 6
 
 /** 화자 이름이 붙은 자막 한 줄이다. */
 export type CaptionLine = {
@@ -105,6 +132,11 @@ export type CallStageProps = {
    * 포즈를 잡는다. 카운트가 끝나는 순간(값이 사라지는 순간) 찰칵 플래시가 터진다.
    */
   captureCountdown?: number
+  /**
+   * 방금 찍힌 사진의 미리보기다. 찰칵 직후 썸네일이 셔터 버튼 쪽으로 날아가 흡수되어
+   * "찍혔고, 저기에 쌓인다"를 한 번에 알린다. id가 바뀔 때마다 연출이 다시 돈다.
+   */
+  captureFlight?: { url: string; id: number }
 }
 
 /**
@@ -145,6 +177,7 @@ export function CallStage({
   captureLabel,
   captureDisabled,
   captureCountdown,
+  captureFlight,
 }: CallStageProps) {
   const { t } = useTranslation()
   // 파라미터 기본값은 훅보다 먼저 평가되므로 기본 문구는 본문에서 정한다.
@@ -153,6 +186,90 @@ export function CallStage({
   const [reactionsOpen, setReactionsOpen] = useState(false)
   // 찰칵 플래시를 켠 횟수다. 값이 바뀔 때마다 key가 갈려 애니메이션이 처음부터 다시 돈다.
   const [shutterFlashCount, setShutterFlashCount] = useState(0)
+
+  /**
+   * 셀프뷰 배치·크기 조작이다. 끌면 놓은 지점에서 가장 가까운 모서리에 붙고,
+   * 두 번 누르면 크기가 3단계로 순환한다. 상태는 이 셸만 알며 통화 로직과 무관하다.
+   */
+  const [pipCorner, setPipCorner] = useState<PipCorner>('bottom-right')
+  const [pipSizeIndex, setPipSizeIndex] = useState(1)
+  /** 끌기 진행 중의 위치(px, 무대 기준)다. 값이 없으면 모서리에 붙어 있다. */
+  const [pipPosition, setPipPosition] = useState<{ x: number; y: number }>()
+  const pipDragRef = useRef<{
+    pointerId: number
+    offsetX: number
+    offsetY: number
+    startClientX: number
+    startClientY: number
+    moved: boolean
+  } | null>(null)
+
+  const handlePipPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    const figure = event.currentTarget
+    const rect = figure.getBoundingClientRect()
+    pipDragRef.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      moved: false,
+    }
+    figure.setPointerCapture(event.pointerId)
+  }
+
+  const handlePipPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = pipDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    // 살짝 눌렀다 뗀 것(더블클릭 크기 변경)까지 끌기로 처리하지 않는다.
+    if (
+      !drag.moved &&
+      Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY) <
+        PIP_DRAG_THRESHOLD
+    ) {
+      return
+    }
+    drag.moved = true
+
+    const figure = event.currentTarget
+    const parent = figure.parentElement
+    if (!parent) return
+    const parentRect = parent.getBoundingClientRect()
+    const figureRect = figure.getBoundingClientRect()
+
+    setPipPosition({
+      x: Math.min(
+        Math.max(event.clientX - parentRect.left - drag.offsetX, 0),
+        parentRect.width - figureRect.width,
+      ),
+      y: Math.min(
+        Math.max(event.clientY - parentRect.top - drag.offsetY, 0),
+        parentRect.height - figureRect.height,
+      ),
+    })
+  }
+
+  const handlePipPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = pipDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    pipDragRef.current = null
+    if (!drag.moved) return
+
+    // 놓은 지점의 중심이 무대의 어느 사분면에 있는지로 붙을 모서리를 정한다.
+    const figure = event.currentTarget
+    const parent = figure.parentElement
+    if (parent) {
+      const parentRect = parent.getBoundingClientRect()
+      const figureRect = figure.getBoundingClientRect()
+      const centerX = figureRect.left + figureRect.width / 2 - parentRect.left
+      const centerY = figureRect.top + figureRect.height / 2 - parentRect.top
+      const vertical = centerY < parentRect.height / 2 ? 'top' : 'bottom'
+      const horizontal = centerX < parentRect.width / 2 ? 'left' : 'right'
+      setPipCorner(`${vertical}-${horizontal}` as PipCorner)
+    }
+    setPipPosition(undefined)
+  }
 
   /**
    * 카운트다운이 1에서 사라지는 순간(=촬영 순간) 찰칵 플래시를 터뜨린다.
@@ -175,7 +292,10 @@ export function CallStage({
   return (
     <section
       aria-label={t('callStage.t1')}
-      className="relative overflow-hidden rounded-xl bg-[var(--color-surface-dark-media)] max-lg:min-h-[520px] lg:aspect-video"
+      // 폭 기준 16:9로 그리면 넓은 화면에서 세로가 뷰포트를 넘어 스크롤이 생긴다.
+      // 항상 "뷰포트 높이 - 헤더 - 아래 안내 여유"만큼만 차지해 어떤 기기에서도 화면 안에
+      // 들어오게 하고, 영상은 object-cover라 비율이 달라져도 잘리기만 할 뿐 찌그러지지 않는다.
+      className="relative h-[calc(100dvh-var(--service-header-height)-150px)] min-h-[320px] overflow-hidden rounded-xl bg-[var(--color-surface-dark-media)]"
     >
       <div className="absolute inset-0">{remoteVideo}</div>
 
@@ -189,6 +309,20 @@ export function CallStage({
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 z-30 bg-white opacity-0 motion-safe:animate-[mj-shutter-flash_360ms_ease-out]"
           key={shutterFlashCount}
+        />
+      ) : null}
+
+      {/*
+        찰칵 직후 썸네일 — 찍힌 프레임이 셔터 버튼 쪽으로 날아가 흡수된다.
+        연출용이라 pointer-events가 없고, 모션 최소화 설정에서는 그리지 않는다.
+      */}
+      {captureFlight ? (
+        <img
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute z-30 hidden w-[26%] rounded-lg border-2 border-white motion-safe:block motion-safe:animate-[mj-photo-fly_650ms_cubic-bezier(0.5,0,0.8,0.4)_120ms_both]"
+          key={captureFlight.id}
+          src={captureFlight.url}
         />
       ) : null}
 
@@ -275,17 +409,18 @@ export function CallStage({
         <p className="mr-2 flex items-baseline gap-1.5">
           <span className="sr-only">{timeLabel}</span>
           {/*
-            10초 이하 주황 → 5초 이하 빨강+떨림 두 단계로 임박을 알린다.
+            10초 이하부터 글자가 커지고 떨리기 시작한다(주황). 5초 이하에서는 빨강으로
+            바뀌고 떨림이 빨라져 마지막임이 확실해진다.
             transform 애니메이션이 걸리도록 inline-block으로 둔다(인라인 요소에는 transform이 듣지 않는다).
           */}
           <strong
             className={cn(
-              'inline-block text-lg font-black leading-none tracking-[-0.03em] tabular-nums',
+              'inline-block font-black leading-none tracking-[-0.03em] tabular-nums transition-[font-size] duration-300',
               timeUrgency === 'critical'
-                ? 'text-[var(--color-error-on-dark)] motion-safe:animate-[mj-timer-shake_420ms_ease-in-out_infinite]'
+                ? 'text-2xl text-[var(--color-error-on-dark)] motion-safe:animate-[mj-timer-shake_380ms_ease-in-out_infinite]'
                 : timeUrgency === 'warning'
-                  ? 'text-[var(--color-warning-on-dark)]'
-                  : 'text-white',
+                  ? 'text-xl text-[var(--color-warning-on-dark)] motion-safe:animate-[mj-timer-shake_560ms_ease-in-out_infinite]'
+                  : 'text-lg text-white',
             )}
             title={timeLabel}
           >
@@ -428,14 +563,25 @@ export function CallStage({
       ) : null}
 
       {/*
-        내 화면 PIP — 라벨·캡션 없이 창만 남긴다. 내 얼굴이 보이는 창이 무엇인지는 설명이
-        필요 없고, 접근성 이름은 figure의 aria-label이 유지한다.
+        내 화면 PIP — 라벨·캡션 없이 창만 남긴다. 접근성 이름은 figure의 aria-label이 유지한다.
+        끌면 가장 가까운 모서리에 붙고, 두 번 누르면 크기가 3단계로 순환한다.
       */}
       <figure
         aria-label={t('callStage.t21', { p0: localParticipantLabelResolved })}
-        className="absolute bottom-3.5 right-3.5 z-10 m-0 w-[clamp(120px,15%,200px)] overflow-hidden rounded-[10px] border border-white/15 bg-[var(--color-surface-dark-media)] shadow-[0_6px_24px_rgb(0_0_0/42%)]"
+        className={cn(
+          'absolute z-10 m-0 cursor-grab touch-none select-none overflow-hidden rounded-[10px] border border-white/15 bg-[var(--color-surface-dark-media)] shadow-[0_6px_24px_rgb(0_0_0/42%)] active:cursor-grabbing',
+          PIP_WIDTH_CLASSES[pipSizeIndex],
+          pipPosition ? '' : PIP_CORNER_CLASS[pipCorner],
+        )}
+        onDoubleClick={() => setPipSizeIndex((index) => (index + 1) % PIP_WIDTH_CLASSES.length)}
+        onPointerCancel={handlePipPointerUp}
+        onPointerDown={handlePipPointerDown}
+        onPointerMove={handlePipPointerMove}
+        onPointerUp={handlePipPointerUp}
+        style={pipPosition ? { left: pipPosition.x, top: pipPosition.y } : undefined}
+        title={t('callStage.pipHint')}
       >
-        <div className="relative aspect-[4/3] w-full">{localVideo}</div>
+        <div className="pointer-events-none relative aspect-[4/3] w-full">{localVideo}</div>
       </figure>
 
       {/*
