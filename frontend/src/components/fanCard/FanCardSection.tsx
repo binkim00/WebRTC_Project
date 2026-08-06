@@ -59,6 +59,21 @@ const DRAFT_SAVE_DELAY_MS = 600
 const OBJECT_URL_RELEASE_DELAY_MS = 1_000
 
 /**
+ * 내려받는 파일 이름에 붙일 시각을 만든다.
+ *
+ * <p>`20260806_2143` 처럼 날짜와 시·분만 남긴다. 초까지 넣으면 이름이 길어지고, 날짜만 두면 같은
+ * 날 여러 장을 저장할 때 브라우저가 뒤에 (1)(2) 를 붙인다.
+ *
+ * @returns 파일 이름에 넣을 시각 문자열
+ */
+function downloadStamp(): string {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+    + `_${pad(now.getHours())}${pad(now.getMinutes())}`
+}
+
+/**
  * 고른 요소를 감싸는 점선 색을 디자인 토큰에서 읽어 온다.
  *
  * <p>캔버스에는 CSS 변수를 그대로 넣을 수 없어 값을 꺼내 쓴다. 이렇게 해 두면 토큰만
@@ -970,8 +985,9 @@ export function FanCardSection({
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      // 여러 모양으로 내려받아도 파일이 덮이지 않게 레이아웃을 파일명에 남긴다.
-      anchor.download = `melly-card-${callSessionId}${layout ? `-${layout.toLowerCase()}` : ''}.png`
+      // 통화 식별자를 파일명에 쓰면 팬에게 아무 뜻도 없는 긴 문자열이 남는다. 갤러리에서 알아볼 수
+      // 있게 서비스 이름을 앞에 두고, 내려받은 시각을 붙여 여러 장을 저장해도 덮이지 않게 한다.
+      anchor.download = `Melly_Photo_Card_${downloadStamp()}.png`
       anchor.rel = 'noopener'
       document.body.append(anchor)
       anchor.click()
