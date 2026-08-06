@@ -62,6 +62,7 @@ const QUOTE_LINE_HEIGHT_RATIO = 1.45
  * 크림색으로도 뽑을 수 있어야 고르는 재미가 생긴다.
  */
 export type FanCardThemeKey =
+  | 'PLAIN'
   | 'NIGHT'
   | 'LAVENDER'
   | 'SKY'
@@ -100,6 +101,16 @@ export type FanCardTheme = {
 
 /** 도안별 색 묶음이다. NIGHT 는 지금까지 쓰던 색이라 기본값으로 둔다. */
 export const FAN_CARD_THEMES: Record<FanCardThemeKey, FanCardTheme> = {
+  PLAIN: {
+    // 아무것도 얹지 않는 흰 바탕이다. 사진과 글자만 남기고 싶을 때, 그리고 SNS 게시물처럼 카드
+    // 위에 자기 프레임을 덮는 배치에서 바탕이 겉테두리로만 보일 때 쓴다.
+    background: ['#ffffff', '#ffffff', '#ffffff'],
+    ink: [31, 36, 48],
+    slot: 'rgba(31, 36, 48, 0.16)',
+    accent: 'rgba(31, 36, 48, 0.24)',
+    ornament: 'NONE',
+    corners: [],
+  },
   NIGHT: {
     background: ['#1b1030', '#3b1d63', '#6d2d6b'],
     ink: [255, 255, 255],
@@ -1755,7 +1766,9 @@ function drawInstaCard(
   ctx.shadowBlur = 34
   ctx.shadowOffsetY = 12
   roundedRectPath(ctx, frameX, frameY, frameWidth, frameHeight, 14)
-  ctx.fillStyle = themeInk(theme, 1)
+  // 게시물 카드는 도안과 무관하게 흰 종이다. 아래에서 검은 아이콘과 글자를 그리므로 도안
+  // 잉크색을 칠하면 밤하늘(잉크가 흰색) 말고는 프레임이 어두워져 내용이 묻힌다.
+  ctx.fillStyle = '#ffffff'
   ctx.fill()
   ctx.restore()
 

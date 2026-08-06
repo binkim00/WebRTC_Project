@@ -9,6 +9,7 @@ import { translate, useTranslation } from '../../i18n'
  * fanCardCanvas 의 표에서 그대로 읽으므로 카드와 버튼이 어긋나지 않는다.
  */
 const THEME_OPTIONS = (): readonly { key: FanCardThemeKey; label: string }[] => [
+  { key: 'PLAIN', label: translate('fanCardThemePicker.t10') },
   { key: 'NIGHT', label: translate('fanCardThemePicker.t1') },
   { key: 'LAVENDER', label: translate('fanCardThemePicker.t2') },
   { key: 'SKY', label: translate('fanCardThemePicker.t3') },
