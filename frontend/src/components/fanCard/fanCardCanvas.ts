@@ -27,6 +27,9 @@ const FOURCUT_VERTICAL_SIZE: FanCardSize = { width: 600, height: 1620 }
 /** 네컷 가로 스트립의 크기다. 칸을 한 줄로 늘어놓아 기본 카드보다 넓고 낮다. */
 const FOURCUT_HORIZONTAL_SIZE: FanCardSize = { width: 1056, height: 782 }
 
+/** 필름 한 롤처럼 길게 뽑는 카드 크기다. 세로 스트립보다 좌우 구멍 자리가 더 필요하다. */
+const FILM_SIZE: FanCardSize = { width: 640, height: 1680 }
+
 /**
  * 레이아웃에 맞는 카드 크기를 알려 준다.
  *
@@ -36,6 +39,7 @@ const FOURCUT_HORIZONTAL_SIZE: FanCardSize = { width: 1056, height: 782 }
 export function fanCardSizeOf(layout: FanCardLayout | undefined): FanCardSize {
   if (layout === 'FOURCUT_VERTICAL') return FOURCUT_VERTICAL_SIZE
   if (layout === 'FOURCUT_HORIZONTAL') return FOURCUT_HORIZONTAL_SIZE
+  if (layout === 'FILM') return FILM_SIZE
   return { width: CARD_WIDTH, height: CARD_HEIGHT }
 }
 
@@ -60,12 +64,21 @@ const QUOTE_LINE_HEIGHT_RATIO = 1.45
 export type FanCardLayout =
   | 'INSTA'
   | 'POLAROID'
+  | 'TWOCUT'
   | 'FOURCUT'
   | 'FOURCUT_VERTICAL'
   | 'FOURCUT_HORIZONTAL'
+  | 'FILM'
+  | 'SIXCUT'
 
 /** FOURCUT이 채우는 칸 수다. */
 const FOUR_CUT_SLOTS = 4
+
+/** TWOCUT이 채우는 칸 수다. */
+const TWO_CUT_SLOTS = 2
+
+/** SIXCUT이 채우는 칸 수다. */
+const SIX_CUT_SLOTS = 6
 
 /**
  * 팬이 고를 수 있는 카드 글꼴이다.
@@ -474,6 +487,28 @@ function drawSignatureForLayout(
       drawSignature(ctx, name, signatureFont, width - 170, stripBottom - 30, 42)
       return
     }
+    case 'TWOCUT': {
+      // 두 칸 중 아래 칸의 오른쪽 아래다. 칸이 커서 서명도 조금 크게 둔다.
+      const slotHeight = Math.round(((CARD_WIDTH - 140) * 9) / 16)
+      const stripBottom = 168 + slotHeight * TWO_CUT_SLOTS + 26
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 250, stripBottom - 30, 48)
+      return
+    }
+    case 'FILM': {
+      const { width } = FILM_SIZE
+      const slotHeight = Math.round(((width - 132) * 9) / 16)
+      const stripBottom = 112 + slotHeight * FOUR_CUT_SLOTS + 12 * (FOUR_CUT_SLOTS - 1)
+      drawSignature(ctx, name, signatureFont, width - 150, stripBottom - 26, 40)
+      return
+    }
+    case 'SIXCUT': {
+      // 격자가 세 줄이라 아래 여백이 좁다. 마지막 줄 오른쪽 아래에 겹쳐 그린다.
+      const slotWidth = (CARD_WIDTH - 66 * 2 - 18) / 2
+      const slotHeight = Math.round((slotWidth * 9) / 16)
+      const gridBottom = 132 + slotHeight * 3 + 18 * 2
+      drawSignature(ctx, name, signatureFont, CARD_WIDTH - 230, gridBottom - 22, 44)
+      return
+    }
     default:
       // 문구 전용 카드 — 하단 정보 블록 위 오른쪽이다.
       drawSignature(ctx, name, signatureFont, CARD_WIDTH - 300, CARD_HEIGHT - 320, 60)
@@ -531,6 +566,15 @@ export async function drawFanCard(
         break
       case 'FOURCUT_HORIZONTAL':
         slots = drawFourCutHorizontalCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'TWOCUT':
+        slots = drawTwoCutCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'FILM':
+        slots = drawFilmCard(ctx, artwork, photos, fontFamily)
+        break
+      case 'SIXCUT':
+        slots = drawSixCutCard(ctx, artwork, photos, fontFamily)
         break
       default:
         drawQuoteOnlyCard(ctx, artwork, fontFamily)
@@ -1775,3 +1819,250 @@ function truncate(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   }
   return `${result}…`
 }
+
+/**
+ * 사진 여섯 장을 2×3 격자로 담는 카드를 그린다.
+ *
+ * <p>네컷보다 한 통화의 장면을 더 많이 남길 수 있다. 칸을 가로로 눕혀 통화 캡처(가로 영상)와
+ * 비율이 가까우므로, 기본 배치에서 위아래 띠가 얇게 남는다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 담을 사진 목록
+ * @param fontFamily 사용할 폰트 패밀리
+ * @returns 사진이 놓인 칸 목록
+ */
+function drawSixCutCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): PhotoSlotRect[] {
+  const slots: PhotoSlotRect[] = []
+  drawFourCutBackground(ctx)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.font = `600 30px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 96)
+
+  const gridX = 66
+  const gridY = 132
+  const gap = 18
+  const slotWidth = (CARD_WIDTH - gridX * 2 - gap) / 2
+  const slotHeight = Math.round((slotWidth * 9) / 16)
+
+  for (let index = 0; index < SIX_CUT_SLOTS; index += 1) {
+    const column = index % 2
+    const row = Math.floor(index / 2)
+    const x = gridX + column * (slotWidth + gap)
+    const y = gridY + row * (slotHeight + gap)
+    const photo = photos[index]
+
+    slots.push({ index, x, y, width: slotWidth, height: slotHeight })
+    if (photo) {
+      drawPhotoCover(ctx, photo, x, y, slotWidth, slotHeight, 14, artwork.photoAdjustments?.[index])
+    } else {
+      drawEmptySlot(ctx, x, y, slotWidth, slotHeight, 14)
+    }
+  }
+
+  const gridBottom = gridY + slotHeight * 3 + gap * 2
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 96, [36, 32, 28, 25, 22],
+      artwork.quoteScale,
+    )
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, gridBottom + 54)
+  }
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+  ctx.font = `700 30px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, artwork.influencerName, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 108,
+  )
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.font = `500 25px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.fanNickname} · ${artwork.dateLabel}`, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 70,
+  )
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 38)
+
+  return slots
+}
+
+/**
+ * 사진 네 장을 필름 한 롤처럼 담는 카드를 그린다.
+ *
+ * <p>세로 스트립과 칸 배치는 같지만, 좌우에 필름 구멍을 그려 잘라 낸 필름 조각처럼 보이게 한다.
+ * 즉석 사진 부스에서 뽑은 느낌을 살리려는 도안이다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 담을 사진 목록
+ * @param fontFamily 사용할 폰트 패밀리
+ * @returns 사진이 놓인 칸 목록
+ */
+function drawFilmCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): PhotoSlotRect[] {
+  const slots: PhotoSlotRect[] = []
+  const { width, height } = FILM_SIZE
+
+  // 필름 베이스 — 사진 인화지가 아니라 필름이므로 거의 검게 둔다.
+  ctx.fillStyle = '#151517'
+  ctx.fillRect(0, 0, width, height)
+
+  // 좌우 구멍(퍼포레이션) — 같은 간격으로 위에서 아래까지 낸다.
+  const holeWidth = 26
+  const holeHeight = 34
+  const holeGap = 26
+  const margin = 22
+  ctx.fillStyle = 'rgba(245, 245, 240, 0.92)'
+  for (let y = margin; y + holeHeight <= height - margin; y += holeHeight + holeGap) {
+    roundedRectPath(ctx, margin, y, holeWidth, holeHeight, 6)
+    ctx.fill()
+    roundedRectPath(ctx, width - margin - holeWidth, y, holeWidth, holeHeight, 6)
+    ctx.fill()
+  }
+
+  const padding = margin + holeWidth + 18
+  const contentWidth = width - padding * 2
+  const gap = 12
+  const slotWidth = contentWidth
+  const slotHeight = Math.round((slotWidth * 9) / 16)
+  const stripTop = 112
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.62)'
+  ctx.font = `600 24px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, contentWidth), width / 2, 74)
+
+  for (let index = 0; index < FOUR_CUT_SLOTS; index += 1) {
+    const y = stripTop + index * (slotHeight + gap)
+    const photo = photos[index]
+    slots.push({ index, x: padding, y, width: slotWidth, height: slotHeight })
+    if (photo) {
+      drawPhotoCover(
+        ctx, photo, padding, y, slotWidth, slotHeight, 4, artwork.photoAdjustments?.[index],
+      )
+    } else {
+      drawEmptySlot(ctx, padding, y, slotWidth, slotHeight, 4)
+    }
+  }
+
+  const stripBottom = stripTop + FOUR_CUT_SLOTS * slotHeight + (FOUR_CUT_SLOTS - 1) * gap
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, quoteText, fontFamily, contentWidth, 92, [30, 27, 24, 21, 19], artwork.quoteScale,
+    )
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, stripBottom + 48, width / 2)
+  }
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
+  ctx.font = `700 24px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.influencerName, contentWidth), width / 2, height - 84)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.52)'
+  ctx.font = `500 20px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.fanNickname} · ${artwork.dateLabel}`, contentWidth),
+    width / 2,
+    height - 54,
+  )
+  drawFooterMark(ctx, fontFamily, height - 26)
+
+  return slots
+}
+
+/**
+ * 사진 두 장을 위아래로 크게 담는 카드를 그린다.
+ *
+ * <p>네컷은 한 칸이 작아 표정이 잘 안 보인다. 장면을 두 개만 고르는 대신 크게 남기고 싶을 때
+ * 쓴다. 칸을 가로로 눕혀 통화 캡처 비율과 가깝게 뒀다.
+ *
+ * @param ctx 그릴 대상 컨텍스트
+ * @param artwork 카드에 담을 정보
+ * @param photos 담을 사진 목록
+ * @param fontFamily 사용할 폰트 패밀리
+ * @returns 사진이 놓인 칸 목록
+ */
+function drawTwoCutCard(
+  ctx: CanvasRenderingContext2D,
+  artwork: FanCardArtwork,
+  photos: readonly ImageBitmap[],
+  fontFamily: string,
+): PhotoSlotRect[] {
+  const slots: PhotoSlotRect[] = []
+  drawFourCutBackground(ctx)
+
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)'
+  ctx.font = `600 32px ${fontFamily}`
+  ctx.fillText(truncate(ctx, artwork.meetingTitle, CARD_WIDTH - 200), CARD_WIDTH / 2, 112)
+
+  const padding = 70
+  const gap = 26
+  const slotWidth = CARD_WIDTH - padding * 2
+  const slotHeight = Math.round((slotWidth * 9) / 16)
+  const stripTop = 168
+
+  for (let index = 0; index < TWO_CUT_SLOTS; index += 1) {
+    const y = stripTop + index * (slotHeight + gap)
+    const photo = photos[index]
+    slots.push({ index, x: padding, y, width: slotWidth, height: slotHeight })
+    if (photo) {
+      drawPhotoCover(
+        ctx, photo, padding, y, slotWidth, slotHeight, 18, artwork.photoAdjustments?.[index],
+      )
+    } else {
+      drawEmptySlot(ctx, padding, y, slotWidth, slotHeight, 18)
+    }
+  }
+
+  const stripBottom = stripTop + TWO_CUT_SLOTS * slotHeight + gap
+  const quoteText = cardQuoteText(artwork)
+  if (quoteText) {
+    const quote = fitQuote(
+      ctx, `“${quoteText}”`, fontFamily, CARD_WIDTH - 200, 150, [48, 42, 37, 32, 28],
+      artwork.quoteScale,
+    )
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 ${quote.fontSize}px ${fontFamily}`
+    drawQuoteLines(ctx, quote.lines, quote.fontSize, stripBottom + 76)
+  }
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+  ctx.font = `700 32px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, artwork.influencerName, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 116,
+  )
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.font = `500 26px ${fontFamily}`
+  ctx.fillText(
+    truncate(ctx, `${artwork.fanNickname} · ${artwork.dateLabel}`, CARD_WIDTH - 200),
+    CARD_WIDTH / 2,
+    CARD_HEIGHT - 74,
+  )
+  drawFooterMark(ctx, fontFamily, CARD_HEIGHT - 40)
+
+  return slots
+}
+

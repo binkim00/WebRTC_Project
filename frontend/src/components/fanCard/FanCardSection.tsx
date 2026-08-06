@@ -226,7 +226,7 @@ export function FanCardSection({
    * 카드에 넣기로 한 사진만 풀어 둔다.
    *
    * <p>PNG를 ImageBitmap 으로 풀면 장당 4MB 가까이 차지해, 찍은 것을 모두 풀면 휴대폰에서
-   * 버겁다. 고른 것만 남기고 빠진 것은 곧바로 닫아 최대 네 장만 메모리에 둔다.
+   * 버겁다. 고른 것만 남기고 빠진 것은 곧바로 닫아 여섯 장까지만 메모리에 둔다.
    */
   const bitmapCacheRef = useRef(new Map<number, ImageBitmap>())
   const [layout, setLayout] = useState<FanCardLayout>()

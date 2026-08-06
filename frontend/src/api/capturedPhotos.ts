@@ -48,8 +48,8 @@ export type FanCardDraft = {
  */
 export const MAX_CAPTURED_PHOTOS = 20
 
-/** 카드 한 장에 들어가는 사진 수의 상한이다. 네컷 계열이 이만큼 쓴다. */
-export const MAX_PHOTOS_PER_CARD = 4
+/** 카드 한 장에 들어가는 사진 수의 상한이다. 여섯컷이 이만큼 쓴다. */
+export const MAX_PHOTOS_PER_CARD = 6
 
 /**
  * 사진과 꾸미던 상태를 브라우저에 두는 기간이다.
