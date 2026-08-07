@@ -57,6 +57,9 @@ USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 �
     - 팬의 관심사, 좋아하는 것
     - 팬이 인플루언서에게 바라는 것, 다음에 하고 싶은 것
     - 인플루언서가 기억하면 좋을 특이사항
+    - 대화에서 확인되는 내용만 적습니다. 나오지 않은 사실을 지어내지 않습니다.
+    - 대화가 거의 없거나 알아들을 수 없어 적을 내용이 없으면, 문장 수를 채우려 하지 말고
+      특별한 이야기가 없었다는 사실만 한 문장으로 적습니다.
 
     2) 팬이 기념 카드에 새길 문구 후보 3개 (팬용)
     - 대화 문장을 그대로 옮기지 않습니다. 카드 한 줄에 새길 **기념 문구**를 새로 씁니다.
@@ -75,12 +78,12 @@ USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 �
 {language_rules}
     반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:
     {{
-    "summary": "2~4문장의 메모 초안",
+    "summary": "2~4문장의 메모 초안. 적을 내용이 없으면 특별한 이야기가 없었다는 한 문장",
     "keywords": ["핵심키워드1", "핵심키워드2"],
     "card_candidates": ["문구1", "문구2", "문구3"]
     }}
 
-    대화 내용이 너무 짧거나 특별한 내용이 없으면:
+    대화 내용이 너무 짧거나, 알아들을 수 없거나, 특별한 내용이 없으면:
     {{
     "summary": "특별한 내용 없음",
     "keywords": [],
@@ -215,12 +218,42 @@ def _build_system_prompt(fan_lang: str, influencer_lang: str) -> str:
     )
 
 
+def _subtitle_text(subtitle: dict) -> str:
+    """
+    자막 한 줄에서 프롬프트에 넣을 원문을 꺼낸다.
+
+    original_text가 없거나 문자열이 아닌 행(컬럼이 NULL인 경우 등)을 만나도 요약 전체가
+    죽지 않도록 빈 문자열로 돌려준다.
+
+    :param subtitle: 자막 한 줄
+    :return: 앞뒤 공백을 없앤 원문이며 쓸 내용이 없으면 빈 문자열
+    """
+    text = subtitle.get("original_text")
+    return text.strip() if isinstance(text, str) else ""
+
+
+def _has_meaningful_speech(subtitles: list[dict] | None) -> bool:
+    """
+    모델에 넘길 만한 발화가 실제로 있는지 본다.
+
+    자막 행 개수만으로는 판단할 수 없다. STT가 무음이나 잡음만 받으면 원문이 빈 행만
+    쌓이는데, 그때 _format_subtitles는 "(대화 내용 없음)"을 돌려주고 모델은 소재가
+    하나도 없는 상태에서 요약을 지어낸다.
+
+    :param subtitles: 통화의 자막 목록
+    :return: 원문이 비어 있지 않은 행이 하나라도 있으면 True
+    """
+    if not subtitles:
+        return False
+    return any(_subtitle_text(s) for s in subtitles)
+
+
 #추후 db호출 구조에 따라 수정
 def _format_subtitles(subtitles: list[dict]) -> str:
     lines = []
     for s in subtitles:
         role = "인플루언서" if s.get("speaker_role") == "INFLUENCER" else "팬"
-        text = s.get("original_text", "").strip()
+        text = _subtitle_text(s)
         if text:
             lines.append(f"{role}: {text}")
     return "\n".join(lines) if lines else "(대화 내용 없음)"
@@ -500,8 +533,10 @@ async def generate_summary(
     :param influencer_lang: 메모 초안을 적을 언어 코드이며 없으면 기본 언어로 본다
     :return: 모델 응답을 파싱한 dict이며 실패하면 None
     """
-    if not subtitles:
-        logger.info("자막 없음 — 요약 생략")
+    # 행 개수가 아니라 실제 발화 유무로 막는다. 원문이 전부 빈 행이면 프롬프트에
+    # "(대화 내용 없음)"만 들어가 모델이 없는 이야기를 지어낸다.
+    if not _has_meaningful_speech(subtitles):
+        logger.info("의미 있는 발화 없음 — 요약 생략 rows=%s", len(subtitles or []))
         return None
 
     if not GMS_API_KEY:
@@ -576,6 +611,18 @@ async def generate_and_save_summary(
     :param influencer_lang: 인플루언서 언어 코드이며 없으면 기본 언어로 본다
     """
     logger.info("요약 생성 시작 call_session_id=%s", call_session_id)
+
+    # 자막 행이 있어도 원문이 전부 비어 있으면 모델에 넘길 소재가 없다. 몇 번을 다시
+    # 물어도 결과가 달라지지 않으므로 재시도 없이 곧바로 실패로 확정한다. 조용히 끝내면
+    # 행이 GENERATING으로 남아 조회 API가 계속 202를 돌려준다.
+    # (자막 행 자체가 없는 경우는 agent.py가 먼저 NO_SUBTITLE로 기록한다)
+    if not _has_meaningful_speech(subtitles):
+        logger.warning(
+            "의미 있는 발화 없음 — 요약 생략 call_session_id=%s rows=%s",
+            call_session_id, len(subtitles or []),
+        )
+        await queries.fail_call_summary(pool, call_session_id, "NO_SPEECH")
+        return
 
     if fan_lang is None:
         fan_lang = await _load_fan_lang(pool, call_session_id)
