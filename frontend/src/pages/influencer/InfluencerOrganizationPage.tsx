@@ -149,6 +149,7 @@ export function InfluencerOrganizationPage() {
               <img
                 alt={t('influencerOrganizationPage.t32')}
                 className="size-16 shrink-0 rounded-[14px] border border-[var(--color-divider)] object-cover"
+                decoding="async"
                 src={data.organization.logoUrl}
               />
             ) : null}
@@ -351,6 +352,8 @@ function MemberRow({
           <img
             alt=""
             className="size-10 shrink-0 rounded-full border border-[var(--color-divider)] object-cover"
+            decoding="async"
+            loading="lazy"
             src={member.profileImageUrl}
           />
         ) : (

@@ -88,7 +88,7 @@ export function FanCardLayoutPicker({
                     onClick={() => onTogglePhoto(index)}
                     type="button"
                   >
-                    <img alt="" className="block aspect-video w-full object-cover" src={url} />
+                    <img alt="" className="block aspect-video w-full object-cover" decoding="async" loading="lazy" src={url} />
                     {/* 네컷은 고른 차례가 곧 칸 순서라 번호를 보여 준다. 한 사진이 여러 칸에
                         들어가면 번호를 함께 적어 어디에 놓였는지 알 수 있게 한다. */}
                     {chosen && needed > 1 ? (

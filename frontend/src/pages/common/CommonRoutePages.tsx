@@ -143,6 +143,7 @@ export function HomePage() {
           <img
             alt={t('commonRoutePages.t4')}
             className="h-full max-h-[510px] w-full object-cover object-center mix-blend-multiply"
+            decoding="async"
             src={heroJellies}
           />
         </div>
@@ -212,6 +213,7 @@ export function HomePage() {
             <img
               alt={t('commonRoutePages.t65', { p0: activeMeeting.influencer })}
               className="aspect-[16/5] w-full object-cover"
+              decoding="async"
               src={activeMeeting.image}
             />
             <IconButton

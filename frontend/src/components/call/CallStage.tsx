@@ -328,6 +328,7 @@ export function CallStage({
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-30 hidden w-[26%] rounded-lg border-2 border-white motion-safe:block motion-safe:animate-[mj-photo-fly_650ms_cubic-bezier(0.5,0,0.8,0.4)_120ms_both]"
+          decoding="async"
           key={captureFlight.id}
           src={captureFlight.url}
         />

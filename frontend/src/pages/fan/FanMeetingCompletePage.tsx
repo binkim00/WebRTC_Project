@@ -452,6 +452,8 @@ export function FanMeetingCompletePage() {
                     <img
                       alt=""
                       className="size-[104px] object-contain opacity-60"
+                      decoding="async"
+                      loading="lazy"
                       src={moldEmptyImage}
                     />
                     <div>
@@ -628,7 +630,7 @@ export function FanMeetingCompletePage() {
 
           {archive.length === 0 ? (
             <div className="mt-6 grid place-items-center px-6 py-16 text-center">
-              <img alt="" className="size-[104px] object-contain opacity-60" src={moldEmptyImage} />
+              <img alt="" className="size-[104px] object-contain opacity-60" decoding="async" loading="lazy" src={moldEmptyImage} />
               <strong className="mt-4 text-[19px] font-extrabold tracking-[-0.03em]">
                 {t('done.archive.emptyTitle')}
               </strong>

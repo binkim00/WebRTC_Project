@@ -103,6 +103,7 @@ export function ServiceNoticesPage() {
                         <img
                           alt=""
                           className="h-14 w-14 flex-none rounded-lg object-cover"
+                          decoding="async"
                           loading="lazy"
                           src={resolveAttachmentUrl(notice.thumbnailUrl)}
                         />
@@ -223,6 +224,7 @@ export function ServiceNoticeDetailPage() {
                   <img
                     alt={attachment.originalFileName}
                     className="w-full rounded-lg"
+                    decoding="async"
                     key={attachment.attachmentId}
                     loading="lazy"
                     src={attachmentContentUrl(attachment.attachmentId)}

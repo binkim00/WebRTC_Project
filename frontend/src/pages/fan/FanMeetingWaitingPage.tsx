@@ -637,6 +637,7 @@ export function FanMeetingWaitingPage() {
             <img
               alt={t('wait.coverAlt', { influencer: influencerName })}
               className="absolute inset-0 size-full object-cover"
+              decoding="async"
               src={detail.meeting.coverImageUrl}
             />
           ) : (

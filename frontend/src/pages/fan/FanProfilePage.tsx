@@ -291,6 +291,7 @@ export function FanProfilePage() {
                 <img
                   alt={t('fanProfilePage.t29', { p0: profile.nickname })}
                   className="size-24 shrink-0 rounded-[var(--radius-panel)] border border-[var(--color-border-panel)] object-cover p-1"
+                  decoding="async"
                   src={profile.profileImageUrl}
                 />
               ) : (

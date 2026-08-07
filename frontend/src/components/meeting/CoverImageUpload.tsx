@@ -102,6 +102,7 @@ export function CoverImageUpload({ value, onChange, disabled = false }: CoverIma
           alt={t('coverImageUpload.s6PreviewAlt')}
           className="h-32 w-full max-w-sm rounded-lg object-cover"
           // 주소를 손으로 잘못 적었을 때 미리보기가 깨진 아이콘으로 남지 않게 숨긴다.
+          decoding="async"
           onError={(event) => {
             event.currentTarget.style.display = 'none'
           }}

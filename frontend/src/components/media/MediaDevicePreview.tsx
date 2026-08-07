@@ -47,7 +47,7 @@ export function MediaDevicePreview({
         ref={videoRef}
       />
       {!stream && previewImage ? (
-        <img alt={t('mediaDevicePreview.t2')} className="size-full object-cover" src={previewImage} />
+        <img alt={t('mediaDevicePreview.t2')} className="size-full object-cover" decoding="async" src={previewImage} />
       ) : null}
       {!stream && !previewImage ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-slate-300">

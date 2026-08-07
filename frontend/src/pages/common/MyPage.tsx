@@ -336,6 +336,7 @@ export function MyPage() {
                 <img
                   alt={t('myPage.t63', { p0: profile.nickname })}
                   className="size-[104px] rounded-[10px] bg-[var(--color-surface-muted)] object-cover"
+                  decoding="async"
                   src={profile.profileImageUrl ?? undefined}
                 />
               ) : (

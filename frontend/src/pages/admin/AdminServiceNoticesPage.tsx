@@ -355,6 +355,7 @@ export function AdminServiceNoticesPage() {
                   <img
                     alt=""
                     className="h-12 w-12 flex-none rounded-md object-cover"
+                    decoding="async"
                     loading="lazy"
                     src={resolveAttachmentUrl(item.thumbnailUrl)}
                   />

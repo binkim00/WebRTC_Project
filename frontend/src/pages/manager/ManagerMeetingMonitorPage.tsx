@@ -773,7 +773,7 @@ export function ManagerMeetingMonitorPage() {
               <div className="grid gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" key={request.requestId}>
                 <div className="flex min-w-0 items-start gap-3">
                   {request.profileImageUrl ? (
-                    <img alt="" className="size-10 shrink-0 rounded-full object-cover" src={request.profileImageUrl} />
+                    <img alt="" className="size-10 shrink-0 rounded-full object-cover" decoding="async" loading="lazy" src={request.profileImageUrl} />
                   ) : (
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-coral-soft)] font-bold text-[var(--color-primary-coral)]">{request.nickname.slice(0, 1)}</span>
                   )}

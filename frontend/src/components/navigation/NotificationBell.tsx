@@ -348,7 +348,7 @@ export function NotificationBell() {
 
           {items.length === 0 ? (
             <div className="grid place-items-center px-6 py-14 text-center" role="status">
-              <img alt="" className="size-[72px] object-contain opacity-55" src={moldEmptyImage} />
+              <img alt="" className="size-[72px] object-contain opacity-55" decoding="async" loading="lazy" src={moldEmptyImage} />
               <strong className="mt-3.5 text-base font-extrabold">{t('notificationBell.t5')}</strong>
               <span className="mt-[7px] text-[15px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
                 {t('notificationBell.t6')}

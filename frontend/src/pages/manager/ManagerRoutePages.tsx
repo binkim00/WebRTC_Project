@@ -1543,6 +1543,7 @@ export function ManagerMeetingCreatePage() {
                       <img
                         alt={t('managerRoutePages.t311', { p0: form.title })}
                         className="mt-3 aspect-[16/10] w-full rounded-[var(--radius-panel)] border-b-2 border-[var(--color-primary-coral)] object-cover"
+                        decoding="async"
                         src={form.coverImageUrl}
                       />
                     ) : null}

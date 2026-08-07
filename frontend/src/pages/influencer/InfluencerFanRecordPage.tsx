@@ -433,6 +433,8 @@ export function InfluencerFanRecordPage() {
           <img
             alt={t('influencerFanRecordPage.t33', { p0: fanName })}
             className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+            decoding="async"
+            loading="lazy"
             src={participant.profileImageUrl}
           />
         ) : (

@@ -563,6 +563,7 @@ export function CommunityPostDetailPage() {
                   <img
                     alt={attachment.originalFileName}
                     className="mt-4 w-full rounded-lg"
+                    decoding="async"
                     key={attachment.attachmentId}
                     loading="lazy"
                     src={attachmentContentUrl(attachment.attachmentId)}

@@ -358,6 +358,7 @@ export function FanMeetingCommunityPage() {
                       <img
                         alt=""
                         className="h-14 w-14 flex-none rounded-lg object-cover"
+                        decoding="async"
                         loading="lazy"
                         src={resolveAttachmentUrl(post.thumbnailUrl)}
                       />

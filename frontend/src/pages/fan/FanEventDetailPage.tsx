@@ -556,6 +556,7 @@ export function FanEventDetailPage() {
             <img
               alt={t('fanEvent.coverAlt', { title: meeting.title })}
               className={`absolute inset-0 size-full object-cover ${panel === 'closed' ? 'saturate-[0.68] brightness-[1.03]' : ''}`}
+              decoding="async"
               src={meeting.coverImageUrl}
             />
           ) : (

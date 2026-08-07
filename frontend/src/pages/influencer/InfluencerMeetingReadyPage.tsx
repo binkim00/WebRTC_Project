@@ -680,6 +680,7 @@ export function InfluencerMeetingReadyPage() {
                   <img
                     alt={t('influencerMeetingReadyPage.t88', { p0: currentFanName })}
                     className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+                    decoding="async"
                     src={currentEntry.profileImageUrl}
                   />
                 ) : (
