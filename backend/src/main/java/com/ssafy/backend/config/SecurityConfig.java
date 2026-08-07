@@ -277,6 +277,23 @@ public class SecurityConfig {
                                 .hasRole("FAN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/call-sessions/*/fan-card")
                                 .hasRole("FAN")
+
+                        // ── S5: 계정·인증 ──
+                        // 가입 중복 확인 (AUTH-013)
+                        // 가입 화면은 로그인 전 상태이므로 열어 둔다. 이메일은 확인 대상이 아니어서
+                        // 이 경로로 특정 주소의 가입 여부를 확인할 수는 없다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/availability").permitAll()
+                        // 비밀번호 재설정 (AUTH-014, AUTH-015)
+                        // 비밀번호를 잊은 사용자는 로그인할 수 없으므로 두 단계 모두 열어 두고,
+                        // 신원은 메일함으로 전달된 1회용 토큰으로 PasswordResetService 가 확인한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/password-reset",
+                                "/api/v1/auth/password-reset/confirm").permitAll()
+                        // 비밀번호 변경 (USER-007)
+                        // 본인 계정의 비밀번호만 바꾸므로 역할 제한 없이 로그인만 요구하고,
+                        // 본인 확인은 UserPasswordService 가 현재 비밀번호로 다시 수행한다.
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/users/me/password")
+                                .authenticated()
+
                         .anyRequest().authenticated()
                 )
                 .formLogin(AbstractHttpConfigurer::disable)
