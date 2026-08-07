@@ -5,6 +5,22 @@ import { translate } from '../i18n'
 /** 백엔드 FanCardSuggestionStatus enum과 같은 값이다. */
 export type FanCardSuggestionStatus = 'GENERATING' | 'COMPLETED' | 'UNAVAILABLE'
 
+/**
+ * 카드 문구의 최대 글자 수이며 백엔드 `FanCard.MAX_TEXT_LENGTH`와 같은 값이다.
+ *
+ * 서버가 이 길이를 넘는 문구를 거절한다.
+ */
+export const FAN_CARD_TEXT_MAX_LENGTH = 200
+
+/**
+ * 팬이 직접 써 넣을 때의 글자 수 상한이다.
+ *
+ * 서버 한도보다 짧게 잡는다. 사진이 들어가는 레이아웃은 문구 자리가 100px 남짓이라 가장 작은
+ * 글씨로도 서너 줄이 한계다. 한국어로 서버 한도를 꽉 채우면 그 자리를 넘어 사진 위로 흐른다.
+ * 카드에 새기는 한 줄 문구라 이 정도면 넉넉하다.
+ */
+export const FAN_CARD_TEXT_INPUT_LIMIT = 100
+
 /** 팬이 카드 문구로 고를 수 있는 인플루언서 발화 한 건이다. */
 export type InfluencerQuote = {
   subtitleId: number

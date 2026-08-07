@@ -974,12 +974,15 @@ export function FanCardSection({
    * 저장 자체를 시도하지 않는다. 사진과 꾸미기는 내려받은 이미지에만 담긴다.
    */
   const handleSave = useCallback(async () => {
-    if (!selectedText) return
+    // 직접 써 넣은 문구는 앞뒤 공백이 섞이기 쉽다. 서버가 빈 문구를 거절하므로 다듬은 값으로
+    // 판단하고 보낸다.
+    const text = selectedText?.trim()
+    if (!text) return
 
     setSaving(true)
     setSaveError(undefined)
     try {
-      const saved = await saveFanCard(callSessionId, selectedText, authToken)
+      const saved = await saveFanCard(callSessionId, text, authToken)
       setSavedText(saved.text)
     } catch (error: unknown) {
       setSaveError(
