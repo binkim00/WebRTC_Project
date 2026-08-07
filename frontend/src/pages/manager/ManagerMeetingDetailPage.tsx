@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   drawApplicationWinners,
   getApplicationStatistics,
@@ -342,6 +342,7 @@ function toSettingsForm(detail: PublicFanMeetingDetail): SettingsForm {
 export function ManagerMeetingDetailPage() {
   const { t } = useTranslation()
   const meetingId = useParams<{ fanMeetingId: string }>().fanMeetingId ?? ''
+  const navigate = useNavigate()
   const isSolo = getAuthSession()?.role === 'SOLO_INFLUENCER'
   const meetingListPath = isSolo ? '/influencer/fan-meetings' : '/manager/fan-meetings'
   const [searchParams, setSearchParams] = useSearchParams()
@@ -457,6 +458,12 @@ export function ManagerMeetingDetailPage() {
         setMessage(t('managerMeetingDetailPage.t84'))
       } else if (action === 'start') {
         await startFanMeeting(meetingId, token)
+        // 시작 직후 해야 할 일(대기열 확인·통화 배정)은 운영 모니터에 있으므로 바로 이동한다.
+        // 솔로 인플루언서에게는 모니터 화면이 없어 상세에 남는다.
+        if (!isSolo) {
+          navigate(`/manager/fan-meetings/${encodeURIComponent(meetingId)}/monitor`)
+          return
+        }
         setMessage(t('managerMeetingDetailPage.t85'))
       } else if (action === 'end') {
         await endFanMeeting(meetingId, token)
@@ -485,6 +492,11 @@ export function ManagerMeetingDetailPage() {
         await transitionFanMeetingImmediately(meetingId, currentStatus, targetStatus, token, {
           scheduledStartAt: detail.meeting.scheduledStartAt,
         })
+        // "지금 시작"으로 LIVE가 됐다면 시작 버튼과 같은 이유로 운영 모니터로 바로 넘어간다.
+        if (targetStatus === 'LIVE' && !isSolo) {
+          navigate(`/manager/fan-meetings/${encodeURIComponent(meetingId)}/monitor`)
+          return
+        }
         setMessage(
           action === 'openApplicationsNow'
             ? t('managerMeetingDetailPage.t88')

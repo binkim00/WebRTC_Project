@@ -1,70 +1,68 @@
-# Design QA
+# Role dashboard design QA
 
-- source visual truth path: `C:\Users\SSAFY\.codex\visualizations\2026\07\23\019f8cfe-7be8-7e41-9bcb-cf8e2e08d0d7\source-desktop.png`
-- implementation screenshot path: `C:\Users\SSAFY\.codex\visualizations\2026\07\23\019f8cfe-7be8-7e41-9bcb-cf8e2e08d0d7\implementation-desktop-final.png`
-- combined comparison path: `C:\Users\SSAFY\.codex\visualizations\2026\07\23\019f8cfe-7be8-7e41-9bcb-cf8e2e08d0d7\design-qa-comparison-final.png`
-- mobile screenshots:
-  - `C:\Users\SSAFY\.codex\visualizations\2026\07\23\019f8cfe-7be8-7e41-9bcb-cf8e2e08d0d7\implementation-mobile-hero.png`
-  - `C:\Users\SSAFY\.codex\visualizations\2026\07\23\019f8cfe-7be8-7e41-9bcb-cf8e2e08d0d7\implementation-mobile-menu.png`
-  - `C:\Users\SSAFY\.codex\visualizations\2026\07\23\019f8cfe-7be8-7e41-9bcb-cf8e2e08d0d7\implementation-mobile-family.png`
-- desktop viewport: 1440 × 900 CSS px
-- mobile viewport: 390 × 844 CSS px
-- source pixels: 1440 × 900
-- implementation pixels: 1440 × 900
-- density normalization: 동일 CSS viewport와 동일 캡처 픽셀 크기로 비교
-- state: 고정 헤더가 보이는 핑크색 선언문 섹션, 모바일 메뉴 열림 상태, 모바일 팬 스토리 상태
+## Comparison target
 
-## Full-view comparison evidence
-
-원본과 구현 화면을 한 장에 좌우로 배치해 비교했다. 두 화면 모두 고정형 상단 메뉴, 핑크색 전체 화면 배경, 중앙의 매우 큰 응축 영문 타이포그래피, 비스듬히 겹친 이미지, 라임색 강조 요소를 사용한다. 원본 자산과 브랜드 문구는 복사하지 않고 MELLY의 로컬 이미지와 팬미팅 콘텐츠로 대체했다.
-
-## Focused region comparison evidence
-
-핵심 시각 요소인 헤더, 대형 타이포그래피, 콜라주 이미지와 강조 배지가 1440 × 900 비교 화면에서 충분히 크게 확인되어 별도 확대 비교는 필요하지 않았다. 모바일에서는 히어로, 전체 메뉴, 캐러셀을 각각 별도로 캡처했다.
-
-## Required fidelity surfaces
-
-- Fonts and typography: 첫 구현의 Arial 기반 대형 문자가 원본보다 넓어 보인 문제를 확인해 영문 디스플레이 텍스트를 `Impact`, `Arial Narrow` 순서로 변경했다. 작은 UI 문구와 한국어는 가독성 높은 시스템 폰트를 유지했다.
-- Spacing and layout rhythm: 긴 전체 화면 섹션, 넓은 여백, 이미지 겹침과 대형 제목의 밀도를 원본 흐름에 맞췄다. 모바일은 가로 오버플로 없이 375px 콘텐츠 폭 안에 정리된다.
-- Colors and visual tokens: 원본의 핑크·라임·검정·연보라 대비를 MELLY용 로컬 CSS 변수로 재구성했다. 텍스트와 컨트롤 대비는 충분하다.
-- Image quality and asset fidelity: 외부 이미지를 핫링크하거나 복사하지 않았다. 프로젝트에 이미 포함된 고해상도 MELLY 이미지 4개만 사용했으며 각 슬롯에 맞춰 `object-fit`과 비율을 조정했다.
-- Copy and content: 원본 상품·아티스트 문구를 복제하지 않고 MELLY 팬미팅 탐색, 인플루언서 소개, 팬의 기억, 이벤트 참여 흐름으로 전환했다.
-
-## Comparison history
-
-### Iteration 1
-
-- [P2] 모바일 메뉴 오버레이가 본문 아래에 합성되는 문제
-  - Fix: 페이지에 독립 stacking context를 만들고, 본문·드로어·헤더의 z-index 계층을 명시했다.
-  - Post-fix evidence: `implementation-mobile-menu.png`에서 라임색 전체 화면 메뉴와 네 개 링크가 본문을 완전히 덮는다.
-- [P2] 대형 영문 제목이 원본보다 넓어 구조적 밀도가 떨어지는 문제
-  - Fix: 디스플레이 제목에 응축형 시스템 폰트 스택을 적용했다.
-  - Post-fix evidence: `design-qa-comparison-final.png`에서 제목 폭과 행간이 원본의 압축된 리듬에 가까워졌다.
+- Source visual truth:
+  - `design-concepts/role-main-pages/fan-main-dashboard.png`
+  - `design-concepts/role-main-pages/influencer-main-dashboard.png`
+  - `design-concepts/role-main-pages/solo-influencer-main-dashboard.png`
+  - `design-concepts/role-main-pages/manager-main-dashboard.png`
+  - `design-concepts/role-main-pages/admin-main-dashboard.png`
+- Browser-rendered implementation:
+  - `design-qa-artifacts/fan-dashboard-implementation.png`
+  - `design-qa-artifacts/influencer-dashboard-implementation.png`
+  - `design-qa-artifacts/solo-influencer-dashboard-implementation.png`
+  - `design-qa-artifacts/manager-dashboard-implementation.png`
+  - `design-qa-artifacts/admin-dashboard-implementation.png`
+- Full-view side-by-side evidence: the five `design-qa-artifacts/*-dashboard-comparison.png` files.
+- Focused evidence:
+  - `design-qa-artifacts/fan-top-focused-comparison.png`
+  - `design-qa-artifacts/manager-table-focused-comparison.png`
+- Source pixels: 1680 x 945 for every role reference.
+- Implementation screenshot pixels: 1665 x 937, captured from a 1680 x 945 CSS viewport at device scale factor 1. The browser's scrollbar/chrome exclusion accounts for the pixel delta.
+- Density normalization: implementation captures were scaled to 1680 x 945 on the side-by-side boards; no high-density source downsampling was required.
+- State: Korean locale, desktop role preview with deterministic sample data. Mobile resilience was separately checked at a 390 x 844 viewport.
 
 ## Findings
 
-- P0/P1/P2: 남은 문제 없음.
-- [P3] 원본의 맞춤 일러스트 대신 MELLY 로컬 사진과 캐릭터를 사용해 콜라주 밀도는 더 단순하다. 저작권과 브랜드 구분을 위한 의도적 차이다.
+No actionable P0, P1, or P2 differences remain.
+
+- Fonts and typography: the implementation uses the project's Pretendard/Noto Sans KR system stack and reproduces the reference's heavy Korean display hierarchy, compact labels, and readable table text. Long role greetings wrap without collision.
+- Spacing and layout rhythm: hero, metric strip, primary work area, and secondary cards preserve the source hierarchy. Role dashboards use the expanded authenticated-home canvas while retaining the existing product header and route shell.
+- Colors and tokens: coral primary actions, muted borders, neutral panels, mint/violet/amber semantic accents, and restrained shadows map to the project's existing tokens. Contrast remains readable.
+- Image quality and asset fidelity: existing high-resolution MELLY jelly and influencer assets are used. Images are cropped with `object-fit: cover` and show no visible stretching or transparency halos. No custom SVG, div-art illustration, emoji, or placeholder box substitutes were used.
+- Copy and content: all five roles have coherent task-specific Korean copy. Production sessions load existing API data; only the development QA role query uses deterministic preview data.
+- Icons: all visible UI icons use the project's existing Phosphor icon library with consistent duotone/stroke treatment.
+- Responsive behavior: FAN and MANAGER were checked at 390 x 844. Both reported `scrollWidth === clientWidth` (375 CSS px after scrollbar reservation), with no horizontal overflow. Tables remain horizontally scrollable inside their own panels.
+- Accessibility and behavior: headings are semantic, links retain visible labels, images have appropriate alt text, focus behavior is inherited from existing global tokens, and mobile navigation remains available.
+
+## Comparison history
+
+### Pass 1
+
+- [P2] Authenticated home content was visibly narrower than the generated references.
+  - Fix: removed the additional 1280 px dashboard cap and expanded only authenticated/role-preview home content to the 1680 px shell.
+- [P2] The global MELLY wordmark rendered in black while every selected role reference used the coral brand treatment.
+  - Fix: mapped the text wordmark to `--color-primary-coral` in `TopNavigation`.
+
+### Pass 2
+
+- Post-fix evidence: the refreshed full-view comparison boards show the role dashboards occupying the same broad desktop canvas with the coral wordmark and matching module order.
+- Focused fan evidence confirms greeting, next-meeting card, application metrics, and CTA hierarchy.
+- Focused manager evidence confirms metric row, operations table, status badges, progress, and action placement.
+- No new P0/P1/P2 findings were found.
 
 ## Primary interactions tested
 
-- 전체 화면 메뉴 열기·닫기
-- 메뉴에서 페이지 내부 섹션 이동
-- 팬 이야기 이전·다음 버튼
-- 팬 이야기 인디케이터 상태 변경
-- 데스크톱 1440 × 900 반응형 렌더링
-- 모바일 390 × 844 반응형 렌더링
-- 브라우저 콘솔 오류 및 경고 없음
+- FAN primary CTA resolves to `/fan/events`.
+- FAN upcoming-meeting CTA resolves to `/fan/events/101` in preview data.
+- All role cards and CTAs use existing routes for events, fan meetings, fans, organization, notifications, notices, device checks, and monitoring.
+- Fresh browser tab console check: no errors.
+- Project verification: lint passed, 179 tests passed, and the production build passed.
 
-## Implementation checklist
+## Follow-up polish
 
-- [x] 기존 홈과 분리된 예시 라우트
-- [x] 고정 헤더와 전체 메뉴
-- [x] 장문 스크롤 내러티브
-- [x] 이벤트 카드와 내부 링크
-- [x] 팬 이야기 캐러셀
-- [x] 데스크톱·모바일 레이아웃
-- [x] 키보드 포커스가 가능한 버튼과 링크
-- [x] 린트·TypeScript·프로덕션 빌드
+- P3: exact portrait subjects and mascot poses differ from the generated concepts because the implementation intentionally reuses the project's approved MELLY assets and live profile/cover URLs.
+- P3: source concepts use illustrative sample counts; production counts are API-derived and will naturally differ.
 
 final result: passed

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { parseServerDate } from '../../api/serverTime'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { getCallSummary } from '../../api/aiSummaries'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession, type LoginRole } from '../../api/auth'
+import { recallFanCallSession } from '../../api/callSessionLog'
 import {
   fetchFanMemos,
   fetchMeetingDetail,
@@ -212,28 +213,6 @@ function meetingStatusContent(status?: string) {
     : { label: translate('influencerFanListPage.t78'), className: 'text-[var(--color-text-secondary)]' }
 }
 
-function equipmentContent(participant: FanMeetingParticipant) {
-  if (participant.cameraOk === true && participant.microphoneOk === true) {
-    return { label: translate('influencerFanListPage.t79'), className: 'text-[var(--color-success)]' }
-  }
-  if (participant.cameraOk === false || participant.microphoneOk === false) {
-    return { label: translate('influencerFanListPage.t80'), className: 'text-[var(--color-warning)]' }
-  }
-  return { label: translate('influencerFanListPage.t81'), className: 'text-[var(--color-text-secondary)]' }
-}
-
-function formatEnteredAt(value?: string) {
-  if (!value) return translate('influencerFanListPage.t82')
-  const date = parseServerDate(value)
-  if (Number.isNaN(date.getTime())) return translate('influencerFanListPage.t83')
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
 function errorMessage(error: unknown) {
   if (error instanceof ApiError || error instanceof TypeError) return error.message
   return translate('influencerFanListPage.t84')
@@ -310,6 +289,10 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
   /** fanId → 메모 유무. 확인하지 못한 팬은 키가 없다. 팬 단위 캐시라 페이지를 넘어도 유지한다. */
   const [memoPresence, setMemoPresence] = useState<Record<string, boolean>>({})
   const [memoScanning, setMemoScanning] = useState(false)
+  /** 정리 카드에서 "건너뛰기"한 팬. 다음 미작성 팬을 고를 때 제외한다. */
+  const [skippedFanIds, setSkippedFanIds] = useState<ReadonlySet<string>>(new Set())
+  const [focusSummaryLines, setFocusSummaryLines] = useState<string[]>([])
+  const [focusSummaryNotice, setFocusSummaryNotice] = useState<string>()
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [loadError, setLoadError] = useState<string>()
@@ -470,12 +453,18 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
    * 평소에는 표에 보이는 페이지만 확인하고, 메모 필터를 걸 때만 전체를 확인한다.
    * 두 경우 모두 memoPresence에 의존하지 않아야 조회 → 목록 변화 → 재조회로 돌지 않는다.
    */
+  /**
+   * 통화가 끝난 뒤 인플루언서가 AI 요약을 읽고 팬 메모를 하나씩 정리하는 모드다.
+   * 작성률 게이지와 "이어서 정리할 팬" 카드를 띄우려면 전체 팬의 메모 유무가 필요하다.
+   */
+  const reviewMode = canUseFanRecords && meeting?.status === 'ENDED'
+
   const memoScanScope = useMemo(() => {
     if (!canUseFanRecords || isPreview) return []
-    if (memoFilter !== 'ALL') return participantViews
+    if (memoFilter !== 'ALL' || reviewMode) return participantViews
     const pageStart = (Math.min(page, Math.max(1, Math.ceil(participantViews.length / PAGE_SIZE))) - 1) * PAGE_SIZE
     return participantViews.slice(pageStart, pageStart + PAGE_SIZE)
-  }, [canUseFanRecords, isPreview, memoFilter, page, participantViews])
+  }, [canUseFanRecords, isPreview, memoFilter, page, participantViews, reviewMode])
 
   const pendingMemoScan = memoScanScope
     .map((participant) => participant.fanId)
@@ -595,6 +584,79 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
     selectedQueueEntry?.status ?? selectedParticipant?.queueStatus
   const recentMemo = selectedMemos[0]
 
+  /** 정리 모드 진행 현황이다. 지금 불러와 있는 전체 참가자를 기준으로 센다. */
+  const memoDoneCount = reviewMode
+    ? participants.filter((participant) => memoPresence[participant.fanId] === true).length
+    : 0
+  const memoScanComplete =
+    reviewMode &&
+    participants.length > 0 &&
+    participants.every((participant) => memoPresence[participant.fanId] !== undefined)
+  /** 이어서 정리할 팬 — 통화 순서대로 메모가 없는 첫 팬이다. 건너뛴 팬은 제외한다. */
+  const focusFan = reviewMode
+    ? [...participants]
+        .sort((left, right) => left.callOrder - right.callOrder)
+        .find(
+          (participant) =>
+            memoPresence[participant.fanId] === false &&
+            !skippedFanIds.has(participant.fanId),
+        )
+    : undefined
+  /** 미작성 팬이 남아 있지만 전부 건너뛰어 카드가 비었는지. 되돌릴 버튼을 보여 준다. */
+  const hasSkippedRemaining =
+    reviewMode &&
+    !focusFan &&
+    participants.some(
+      (participant) =>
+        memoPresence[participant.fanId] === false && skippedFanIds.has(participant.fanId),
+    )
+
+  const focusFanId = focusFan?.fanId
+  useEffect(() => {
+    if (!reviewMode || !focusFanId || !fanMeetingId || !authToken) {
+      setFocusSummaryLines([])
+      setFocusSummaryNotice(undefined)
+      return
+    }
+
+    // 통화 세션 기록은 대기열을 지켜본 브라우저에만 남는다. 없으면 미리보기 대신 안내만 띄운다.
+    const sessionId = recallFanCallSession(fanMeetingId, focusFanId)
+    if (!sessionId) {
+      setFocusSummaryLines([])
+      setFocusSummaryNotice(t('influencerFanListPage.review.noSummaryRecord'))
+      return
+    }
+
+    const controller = new AbortController()
+    setFocusSummaryNotice(undefined)
+
+    void getCallSummary(sessionId, authToken, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return
+        if (result.state === 'COMPLETED') {
+          setFocusSummaryLines(
+            result.summary.summary
+              .split('\n')
+              .map((line) => line.trim())
+              .filter(Boolean),
+          )
+          setFocusSummaryNotice(undefined)
+          return
+        }
+        setFocusSummaryLines([])
+        setFocusSummaryNotice(t('influencerFanRecordPage.summary.generating'))
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return
+        setFocusSummaryLines([])
+        setFocusSummaryNotice(t('influencerFanRecordPage.summary.failed'))
+      })
+
+    return () => controller.abort()
+    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, fanMeetingId, focusFanId, reviewMode])
+
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setPage(1)
@@ -637,21 +699,50 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
 
   return (
     <div>
-      <header className="flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <p className="text-sm font-bold text-[var(--color-text-secondary)]">
-            {meeting?.title ?? t('influencerFanListPage.t36')}
+      {/* 시안의 페이지 머리: 상태 아이브로 + 팬미팅 제목 + (정리 모드) 큰 작성률 스탯. */}
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-[var(--color-divider)] pb-6">
+        <div className="min-w-0">
+          <p className={`text-[11px] font-extrabold uppercase tracking-[0.18em] ${currentMeetingStatus.className}`}>
+            {currentMeetingStatus.label}
+            {meeting?.influencer.influencerName ? ` · ${meeting.influencer.influencerName}` : ''}
           </p>
-          <h1 className="mt-2 text-2xl font-black tracking-[-0.035em]">
-            {t('influencerFanListPage.t1')}
+          <h1 className="mt-2 truncate text-[27px] font-black tracking-[-0.045em]">
+            {meeting?.title ?? t('influencerFanListPage.t36')}
           </h1>
-          <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
-            {t('influencerFanListPage.t2')}
+          <p className="mt-1.5 text-sm font-medium text-[var(--color-text-secondary)]">
+            {t('influencerFanListPage.t1')} · {t('influencerFanListPage.t85', { p0: participantTotal })} · {roleLabel}
           </p>
         </div>
-        <p className="whitespace-nowrap text-sm font-bold text-[var(--color-text-secondary)]">
-          {roleLabel}
-        </p>
+        {reviewMode ? (
+          <div className="text-right">
+            <p className="text-[32px] font-black leading-none tracking-[-0.04em] tabular-nums">
+              <span className="text-[var(--color-primary-coral)]">{memoDoneCount}</span>
+              <span className="text-[17px] font-extrabold text-[var(--color-text-muted)]">
+                {' '}/ {participants.length}
+              </span>
+            </p>
+            <p className="mt-2 text-[11px] font-bold tracking-[0.12em] text-[var(--color-text-secondary)]">
+              {t('influencerFanListPage.review.statCaption')}
+            </p>
+          </div>
+        ) : null}
+        {reviewMode ? (
+          // 참가자 한 명이 한 칸이다. 메모를 쓸 때마다 통화 순서 자리가 코랄로 채워진다.
+          <div aria-hidden className="flex w-full basis-full gap-[3px]">
+            {[...participants]
+              .sort((left, right) => left.callOrder - right.callOrder)
+              .map((participant) => (
+                <i
+                  className={`h-[5px] min-w-0 flex-1 rounded-full ${
+                    memoPresence[participant.fanId] === true
+                      ? 'bg-[var(--color-primary-coral)]'
+                      : 'bg-[var(--color-surface-muted)]'
+                  }`}
+                  key={participant.participantId}
+                />
+              ))}
+          </div>
+        ) : null}
       </header>
 
       {loadError ? (
@@ -660,44 +751,117 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
         </AlertBanner>
       ) : null}
 
-      <section
-        aria-label={t('influencerFanListPage.t4')}
-        className="mt-6 grid grid-cols-2 border-y border-[var(--color-divider)] lg:grid-cols-4"
-      >
-        {[
-          [t('influencerFanListPage.t37'), meeting?.title ?? t('influencerFanListPage.t38')],
-          [t('influencerFanListPage.t39'), meeting?.influencer.influencerName ?? t('influencerFanListPage.t40')],
-          [t('influencerFanListPage.t41'), currentMeetingStatus.label],
-          [t('influencerFanListPage.t42'), t('influencerFanListPage.t85', { p0: participantTotal })],
-        ].map(([label, value], index) => (
-          <dl
-            className={[
-              'min-w-0 py-4',
-              index % 2 ? 'border-l border-[var(--color-divider)] pl-5' : 'pr-5',
-              index >= 2 ? 'border-t border-[var(--color-divider)] lg:border-t-0' : '',
-              index ? 'lg:border-l lg:border-[var(--color-divider)] lg:px-5' : '',
-              index === 3 ? 'lg:pr-0' : '',
-            ].join(' ')}
-            key={label}
-          >
-            <dt className="text-xs font-bold text-[var(--color-text-secondary)]">{label}</dt>
-            <dd
-              className={[
-                'mt-2 truncate text-base font-extrabold',
-                // 세 번째 항목이 진행 상태다. 라벨 문자열로 비교하면 번역된 화면에서 색이 사라진다.
-                index === 2 ? currentMeetingStatus.className : '',
-              ].join(' ')}
-            >
-              {value}
-            </dd>
-          </dl>
-        ))}
-      </section>
+      {reviewMode ? (
+        <section aria-label={t('influencerFanListPage.review.title')} className="mt-6">
 
-      <div className="mt-7 grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
+          {focusFan ? (
+            <div className="relative overflow-hidden rounded-2xl border border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] p-6">
+              <span
+                aria-hidden
+                className="absolute inset-x-0 top-0 h-[3px]"
+                style={{
+                  background:
+                    'linear-gradient(90deg, var(--color-primary-coral), var(--color-primary-coral-highlight) 55%, transparent)',
+                }}
+              />
+              <p className="text-[11px] font-extrabold tracking-[0.18em] text-[var(--color-primary-coral)]">
+                {t('influencerFanListPage.review.focusTag')}
+              </p>
+              <div className="mt-3.5 flex flex-wrap items-center gap-3.5">
+                <span
+                  aria-hidden
+                  className="grid size-12 place-items-center rounded-full bg-[var(--color-primary-coral)] text-lg font-black text-white"
+                >
+                  {focusFan.nickname.slice(0, 1)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-black tracking-[-0.03em]">
+                    {focusFan.nickname}
+                  </p>
+                  <p className="text-sm font-semibold text-[var(--color-text-muted)]">
+                    @{focusFan.fanId} ·{' '}
+                    {t('influencerFanListPage.review.order', { p0: focusFan.callOrder })}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-[1.3fr_1fr]">
+                <div className="max-h-36 min-w-0 overflow-y-auto rounded-xl bg-[var(--color-surface-panel)] px-4 py-3 shadow-[inset_0_0_0_1px_var(--color-primary-coral-soft-border)]">
+                  <p className="text-[10px] font-extrabold tracking-[0.16em] text-[var(--color-primary-coral)]">
+                    {t('influencerFanListPage.review.summaryTitle')}
+                  </p>
+                  {focusSummaryNotice ? (
+                    <p className="mt-1.5 text-sm font-medium leading-6 text-[var(--color-text-muted)]">
+                      {focusSummaryNotice}
+                    </p>
+                  ) : null}
+                  {focusSummaryLines.map((line) => (
+                    <p className="mt-1.5 text-sm font-medium leading-[1.7] text-[var(--color-text-body)]" key={line}>
+                      {line}
+                    </p>
+                  ))}
+                </div>
+                <div className="grid place-items-center rounded-xl border border-dashed border-[var(--color-primary-coral-soft-border)] bg-[var(--color-surface-panel)] px-4 py-5 text-center">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">
+                      {t('influencerFanListPage.review.memoEmpty')}
+                    </p>
+                    <button
+                      className="mt-3 inline-flex min-h-10 items-center rounded-[10px] bg-[var(--color-primary-coral)] px-5 text-sm font-extrabold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                      onClick={() => navigate(recordsPath(focusFan))}
+                      type="button"
+                    >
+                      {t('influencerFanListPage.review.writeMemo')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between text-sm font-bold">
+                <button
+                  className="min-h-9 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)]"
+                  onClick={() =>
+                    setSkippedFanIds(new Set([...skippedFanIds, focusFan.fanId]))
+                  }
+                  type="button"
+                >
+                  {t('influencerFanListPage.review.skip')}
+                </button>
+                <button
+                  className="min-h-9 font-extrabold text-[var(--color-primary-coral)] hover:underline"
+                  onClick={() => navigate(recordsPath(focusFan))}
+                  type="button"
+                >
+                  {t('influencerFanListPage.review.viewRecords')}
+                </button>
+              </div>
+            </div>
+          ) : hasSkippedRemaining ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-divider)] px-5 py-4">
+              <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
+                {t('influencerFanListPage.review.skippedNotice')}
+              </p>
+              <Button onClick={() => setSkippedFanIds(new Set())} variant="outline">
+                {t('influencerFanListPage.review.showSkipped')}
+              </Button>
+            </div>
+          ) : memoScanComplete ? (
+            <p
+              className="mt-4 rounded-xl bg-[var(--color-success-soft)] px-5 py-4 text-sm font-extrabold text-[var(--color-success)]"
+              role="status"
+            >
+              {t('influencerFanListPage.review.allDone')}
+            </p>
+          ) : memoScanning ? (
+            <p className="mt-4 text-sm font-semibold text-[var(--color-text-secondary)]" role="status">
+              {t('influencerFanListPage.review.scanning')}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      <div className="mt-7">
         <div className="min-w-0">
           <form
-            className="grid grid-cols-2 items-end gap-3 md:grid-cols-[minmax(0,1fr)_140px_140px_auto]"
+            className="grid grid-cols-2 items-end gap-3 md:grid-cols-[minmax(0,1fr)_150px_auto]"
             onSubmit={handleSearch}
             role="search"
           >
@@ -720,44 +884,50 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
               }))}
               value={statusFilter}
             />
-            <Select
-              disabled={!canUseFanRecords}
-              label={t('influencerFanListPage.t8')}
-              onChange={(event) => {
-                setPage(1)
-                setMemoFilter(event.currentTarget.value)
-              }}
-              options={memoOptions.map((option) => ({
-                label: t(option.labelKey),
-                value: option.value,
-              }))}
-              value={memoFilter}
-            />
             <Button className="whitespace-nowrap" type="submit">
               {t('influencerFanListPage.t9')}
             </Button>
           </form>
 
-          {/*
-            * 비활성 사유는 필드 안(helperText)에 두면 그 칸만 높아져 bottom 정렬이 밀리므로
-            * 폼 아래 한 줄로 뺀다.
-            */}
           {!canUseFanRecords ? (
             <p className="mt-2 text-sm font-medium text-[var(--color-text-secondary)]">
               {t('influencerFanListPage.t10')}
             </p>
           ) : null}
 
-          <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-extrabold tracking-[-0.028em]">{t('influencerFanListPage.t11')}</h2>
-              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                {t('influencerFanListPage.t12')} {participantTotal}{t('influencerFanListPage.t13')}
-              </p>
-            </div>
-            <p className="whitespace-nowrap text-sm font-extrabold">
-              {visibleViews.length}{t('influencerFanListPage.t14')}
-            </p>
+          {/* 시안의 명단 머리: 제목·인원과 메모 필터 칩을 한 줄에 둔다. */}
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-[15px] font-extrabold tracking-[-0.02em]">
+              {t('influencerFanListPage.t11')}{' '}
+              <span className="font-bold text-[var(--color-text-muted)] tabular-nums">
+                {participantTotal}
+              </span>
+            </h2>
+            {canUseFanRecords ? (
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('influencerFanListPage.t8')}>
+                {memoOptions.map((option) => {
+                  const active = memoFilter === option.value
+                  return (
+                    <button
+                      aria-pressed={active}
+                      className={`min-h-8 rounded-full px-3.5 text-[12.5px] font-extrabold transition-colors ${
+                        active
+                          ? 'bg-[var(--color-text-primary)] text-[var(--color-text-on-dark)]'
+                          : 'bg-[var(--color-surface-subtle)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                      }`}
+                      key={option.value}
+                      onClick={() => {
+                        setPage(1)
+                        setMemoFilter(option.value)
+                      }}
+                      type="button"
+                    >
+                      {t(option.labelKey)}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
           </div>
 
           {loading ? (
@@ -770,41 +940,26 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
               <Spinner label={t('influencerFanListPage.t16')} />
             </div>
           ) : visibleViews.length ? (
-            <div className="mt-4" role="table" aria-label={t('influencerFanListPage.t17')}>
-              <div
-                className="hidden grid-cols-[52px_minmax(0,1fr)_84px_96px_66px_74px] gap-3 border-b border-[var(--color-border-control)] pb-3 md:grid"
-                role="row"
-              >
-                {[t('influencerFanListPage.t43'), t('influencerFanListPage.t44'), t('influencerFanListPage.t45'), t('influencerFanListPage.t46'), t('influencerFanListPage.t47'), t('influencerFanListPage.t48')].map((label, columnIndex) => (
-                  <span
-                    // 마지막 열(최근 접속)만 우측 정렬한다. 라벨 문자열로 비교하면 번역된 화면에서 정렬이 풀린다.
-                    className={`text-xs font-bold text-[var(--color-text-secondary)] ${columnIndex === 5 ? 'text-right' : ''}`}
-                    key={label}
-                    role="columnheader"
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
+            <div className="mt-2" aria-label={t('influencerFanListPage.t17')}>
               {visibleViews.map((participant) => {
                 const queueStatus = participant.queueEntry?.status ?? participant.queueStatus
                 const selected = participant.participantId === selectedParticipant?.participantId
-                const equipment = equipmentContent(participant)
                 const hasMemo = memoPresence[participant.fanId]
-                const memoLabel = !canUseFanRecords
-                  ? t('influencerFanListPage.t49')
+                const memoContent = !canUseFanRecords
+                  ? { label: t('influencerFanListPage.t49'), className: 'text-[var(--color-text-muted)]' }
                   : hasMemo === true
-                    ? t('influencerFanListPage.t50')
+                    ? { label: t('influencerFanListPage.review.memoDone'), className: 'text-[var(--color-success)]' }
                     : hasMemo === false
-                      ? t('influencerFanListPage.t51')
-                      : t('influencerFanListPage.t52')
+                      ? { label: t('influencerFanListPage.review.memoTodo'), className: 'text-[var(--color-primary-coral)]' }
+                      : { label: t('influencerFanListPage.t52'), className: 'text-[var(--color-text-muted)]' }
 
                 return (
+                  <div key={participant.participantId}>
                   <button
                     aria-current={selected ? 'true' : undefined}
+                    aria-expanded={selected}
                     aria-label={`${participant.nickname} ${selected ? t('influencerFanListPage.t53') : t('influencerFanListPage.t54')}`}
-                    className={`relative grid w-full grid-cols-2 items-center gap-2 border-b border-[var(--color-border-row)] px-2 py-3 text-left hover:bg-[var(--color-surface-subtle)] md:grid-cols-[52px_minmax(0,1fr)_84px_96px_66px_74px] md:gap-3 ${selected ? 'bg-[var(--color-surface-subtle)]' : ''}`}
-                    key={participant.participantId}
+                    className={`relative flex w-full items-center gap-3.5 rounded-xl border-b border-[var(--color-border-row)] px-3 py-3 text-left transition-colors last:border-0 hover:bg-[var(--color-surface-subtle)] ${selected ? 'bg-[var(--color-primary-coral-soft)] hover:bg-[var(--color-primary-coral-soft)]' : ''}`}
                     onClick={() => {
                       // 같은 행을 다시 누르면 선택을 해제해, 목록을 훑어보는 중 우연히 열린
                       // 요약 패널을 계속 닫아 두는 방법이 없던 문제를 없앤다.
@@ -815,40 +970,131 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
                       }
                       setSelectedParticipant(participant)
                     }}
-                    role="row"
                     type="button"
                   >
-                    {/* 배경 음영만으로는 선택 여부가 거의 보이지 않아, 앱 전역의 "선택 항목 = 코랄 좌측 바" 관례를 따른다. */}
-                    {selected ? (
-                      <span
-                        aria-hidden
-                        className="absolute inset-y-0 left-0 w-[3px] bg-[var(--color-primary-coral)]"
-                      />
-                    ) : null}
-                    <span className="text-sm font-extrabold tabular-nums text-[var(--color-text-secondary)]" role="cell">
+                    <span className="w-6 text-[12.5px] font-extrabold tabular-nums text-[var(--color-text-muted)]">
                       {String(participant.callOrder).padStart(2, '0')}
                     </span>
-                    <span className="min-w-0" role="cell">
-                      <span className={`block truncate text-base ${selected ? 'font-extrabold' : 'font-semibold'}`}>
+                    <span
+                      aria-hidden
+                      className={`grid size-9 flex-none place-items-center rounded-full text-[13px] font-extrabold ${
+                        selected
+                          ? 'bg-[var(--color-primary-coral)] text-white'
+                          : 'bg-[var(--color-surface-subtle)] text-[var(--color-text-body)] shadow-[inset_0_0_0_1px_var(--color-border-row)]'
+                      }`}
+                    >
+                      {participant.nickname.slice(0, 1)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate text-[14.5px] tracking-[-0.02em] ${selected ? 'font-extrabold' : 'font-bold'}`}>
                         {participant.nickname}
                       </span>
-                      <span className="mt-1 block truncate text-sm font-medium text-[var(--color-text-secondary)]">
+                      <span className="block truncate text-xs font-medium text-[var(--color-text-muted)]">
                         @{participant.fanId}
                       </span>
                     </span>
-                    <span className={`whitespace-nowrap text-sm font-extrabold ${queueStatusClass(queueStatus)}`} role="cell">
+                    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-extrabold ${queueStatusClass(queueStatus)}`}>
+                      <i aria-hidden className="size-1.5 rounded-full bg-current" />
                       {queueStatusLabel(queueStatus)}
                     </span>
-                    <span className={`whitespace-nowrap text-sm font-bold ${equipment.className}`} role="cell">
-                      {equipment.label}
+                    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-extrabold ${memoContent.className}`}>
+                      <i aria-hidden className="size-1.5 rounded-full bg-current" />
+                      {memoContent.label}
                     </span>
-                    <span className="whitespace-nowrap text-sm font-bold text-[var(--color-text-secondary)]" role="cell">
-                      {memoLabel}
-                    </span>
-                    <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-[var(--color-text-secondary)]" role="cell">
-                      {formatEnteredAt(participant.queueEntry?.enteredAt)}
+                    {/* 행이 눌린다는 것을 알리는 펼침 표시다. 선택되면 코랄로 바뀐다. */}
+                    <span
+                      aria-hidden
+                      className={`text-sm font-black ${selected ? 'text-[var(--color-primary-coral)]' : 'text-[var(--color-text-tertiary)]'}`}
+                    >
+                      {selected ? '⌄' : '⟩'}
                     </span>
                   </button>
+
+                  {/* 행을 누르면 바로 아래로 펼쳐지는 상세 카드다. 옆 패널 대신 손가락이 있던 자리에서 열린다. */}
+                  {selected && selectedParticipant ? (
+                    <div className="mb-3 mt-1.5 overflow-hidden rounded-2xl border border-[var(--color-primary-coral-soft-border)] bg-[var(--color-primary-coral-soft)] p-5 motion-safe:animate-[mj-settle-in_260ms_cubic-bezier(0.16,1,0.3,1)_both]">
+                      {/* 대기·장비 상태는 칩 한 줄로 요약한다. */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full bg-[var(--color-surface-panel)] px-3 py-1 text-[12px] font-extrabold shadow-[inset_0_0_0_1px_var(--color-border-row)] ${queueStatusClass(selectedQueueStatus)}`}>
+                          <i aria-hidden className="size-1.5 rounded-full bg-current" />
+                          {queueStatusLabel(selectedQueueStatus)}
+                        </span>
+                        {[
+                          // 대기열 접속만 상태 문구가 다르므로(접속/미접속) 라벨이 아니라 kind로 구분한다.
+                          { kind: 'device' as const, label: t('influencerFanListPage.t55'), ok: selectedParticipant.cameraOk },
+                          { kind: 'device' as const, label: t('influencerFanListPage.t56'), ok: selectedParticipant.microphoneOk },
+                          { kind: 'queueEntry' as const, label: t('influencerFanListPage.t57'), ok: Boolean(selectedQueueEntry?.enteredAt) },
+                        ].map((item) => (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full bg-[var(--color-surface-panel)] px-3 py-1 text-[12px] font-bold shadow-[inset_0_0_0_1px_var(--color-border-row)] ${
+                              item.ok === true
+                                ? 'text-[var(--color-success)]'
+                                : item.ok === false
+                                  ? 'text-[var(--color-warning)]'
+                                  : 'text-[var(--color-text-muted)]'
+                            }`}
+                            key={item.label}
+                          >
+                            {item.label}{' '}
+                            {item.ok === true
+                              ? item.kind === 'queueEntry' ? t('influencerFanListPage.t58') : t('influencerFanListPage.t59')
+                              : item.ok === false
+                                ? item.kind === 'queueEntry' ? t('influencerFanListPage.t60') : t('influencerFanListPage.t61')
+                                : t('influencerFanListPage.t62')}
+                          </span>
+                        ))}
+                      </div>
+
+                      {equipmentWarning ? (
+                        <p className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-warning-soft)] px-3 py-2 text-sm font-semibold leading-6 text-[var(--color-warning)]" role="status">
+                          {t('influencerFanListPage.t31')}
+                        </p>
+                      ) : null}
+
+                      {canUseFanRecords ? (
+                        <>
+                          <div className="mt-3.5 rounded-xl bg-[var(--color-surface-panel)] px-4 py-3.5 shadow-[inset_0_0_0_1px_var(--color-primary-coral-soft-border)]">
+                            <p className="text-[10.5px] font-extrabold tracking-[0.16em] text-[var(--color-primary-coral)]">
+                              {t('influencerFanListPage.t24')}
+                            </p>
+                            {detailLoading ? (
+                              <div className="mt-2">
+                                <Spinner label={t('influencerFanListPage.t26')} />
+                              </div>
+                            ) : recentMemo ? (
+                              // 긴 메모가 카드 레이아웃을 밀어내지 않도록 박스 안에서만 스크롤한다.
+                              <div className="mt-1.5 max-h-40 overflow-y-auto">
+                                <p className="whitespace-pre-line text-sm font-medium leading-7 text-[var(--color-text-body)]">
+                                  {recentMemo.content}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="mt-1.5 text-sm font-medium leading-6 text-[var(--color-text-muted)]">
+                                {t('influencerFanListPage.expand.noMemo')}
+                              </p>
+                            )}
+                          </div>
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-[12.5px] font-semibold text-[var(--color-text-muted)]">
+                              {t('influencerFanListPage.expand.hint')}
+                            </p>
+                            <button
+                              className="inline-flex min-h-10 items-center rounded-[10px] bg-[var(--color-primary-coral)] px-5 text-sm font-extrabold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                              onClick={openMemo}
+                              type="button"
+                            >
+                              {t('influencerFanListPage.expand.cta')}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="mt-3.5 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
+                          {t('influencerFanListPage.t25')}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                  </div>
                 )
               })}
             </div>
@@ -874,113 +1120,6 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
             </div>
           ) : null}
         </div>
-
-        <aside
-          aria-label={t('influencerFanListPage.t21')}
-          className="min-w-0 rounded-[var(--radius-control)] border border-[var(--color-divider)] p-5"
-        >
-          {selectedParticipant ? (
-            <>
-                <p className="text-xs font-bold text-[var(--color-text-secondary)]">{t('influencerFanListPage.t22')}</p>
-                <div className="mt-2 flex items-baseline justify-between gap-4">
-                  <div className="min-w-0">
-                    <h2 className="truncate text-xl font-black tracking-[-0.032em]">
-                      {selectedParticipant.nickname}
-                    </h2>
-                    <p className="mt-1 text-sm font-medium text-[var(--color-text-secondary)]">
-                      @{selectedParticipant.fanId} · {selectedParticipant.callOrder}{t('influencerFanListPage.t23')}
-                    </p>
-                  </div>
-                  <span className={`whitespace-nowrap text-sm font-extrabold ${queueStatusClass(selectedQueueStatus)}`}>
-                    {queueStatusLabel(selectedQueueStatus)}
-                  </span>
-                </div>
-
-                <section className="mt-5 border-t border-[var(--color-divider)] pt-4">
-                  <h3 className="text-sm font-extrabold">{t('influencerFanListPage.t24')}</h3>
-                  {!canUseFanRecords ? (
-                    <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
-                      {t('influencerFanListPage.t25')}
-                    </p>
-                  ) : detailLoading ? (
-                    <div className="mt-3">
-                      <Spinner label={t('influencerFanListPage.t26')} />
-                    </div>
-                  ) : recentMemo ? (
-                    <>
-                      <p className="mt-3 text-sm font-medium leading-7 text-[var(--color-text-body)]">
-                        {recentMemo.content}
-                      </p>
-                      <button className="mt-3 min-h-11 font-bold hover:text-[var(--color-primary-coral)]" onClick={openMemo} type="button">
-                        {t('influencerFanListPage.t27')}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-secondary)]">
-                        {t('influencerFanListPage.t28')}
-                      </p>
-                      <button className="mt-2 min-h-11 font-extrabold text-[var(--color-primary-coral)]" onClick={openMemo} type="button">
-                        {t('influencerFanListPage.t29')}
-                      </button>
-                    </>
-                  )}
-                </section>
-
-                <section className="mt-5 border-t border-[var(--color-divider)] pt-4">
-                  <h3 className="text-sm font-extrabold">{t('influencerFanListPage.t30')}</h3>
-                  <dl className="mt-3 grid gap-3">
-                    {[
-                      // 대기열 접속만 상태 문구가 다르므로(접속/미접속) 라벨이 아니라 kind로 구분한다.
-                      // 라벨 문자열 비교는 번역된 화면에서 항상 어긋난다.
-                      {
-                        kind: 'device' as const,
-                        label: t('influencerFanListPage.t55'),
-                        ok: selectedParticipant.cameraOk,
-                      },
-                      {
-                        kind: 'device' as const,
-                        label: t('influencerFanListPage.t56'),
-                        ok: selectedParticipant.microphoneOk,
-                      },
-                      {
-                        kind: 'queueEntry' as const,
-                        label: t('influencerFanListPage.t57'),
-                        ok: Boolean(selectedQueueEntry?.enteredAt),
-                      },
-                    ].map((item) => (
-                      <div className="flex items-center justify-between gap-4" key={item.label}>
-                        <dt className="text-sm font-semibold text-[var(--color-text-body)]">
-                          {item.label}
-                        </dt>
-                        <dd
-                          className={[
-                            'text-sm font-extrabold',
-                            item.ok === true
-                              ? 'text-[var(--color-success)]'
-                              : item.ok === false
-                                ? 'text-[var(--color-warning)]'
-                                : 'text-[var(--color-text-tertiary)]',
-                          ].join(' ')}
-                        >
-                          {item.ok === true
-                            ? item.kind === 'queueEntry' ? t('influencerFanListPage.t58') : t('influencerFanListPage.t59')
-                            : item.ok === false
-                              ? item.kind === 'queueEntry' ? t('influencerFanListPage.t60') : t('influencerFanListPage.t61')
-                              : t('influencerFanListPage.t62')}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                  {equipmentWarning ? (
-                    <p className="mt-4 rounded-[var(--radius-control)] bg-[var(--color-warning-soft)] px-3 py-2 text-sm font-semibold leading-6 text-[var(--color-warning)]" role="status">
-                      {t('influencerFanListPage.t31')}
-                    </p>
-                  ) : null}
-                </section>
-            </>
-          ) : null}
-        </aside>
       </div>
     </div>
   )
