@@ -3363,6 +3363,8 @@ const ko = {
   'fanCardQuotePicker.t9': '통화에서 나온 말 중에 고르기',
   'fanCardQuotePicker.t10': 'AI 추천을 기다리는 동안 먼저 고를 수 있어요',
   'fanCardQuotePicker.t11': '문구는 선택 사항이에요. 고른 문구를 다시 누르면 뺄 수 있습니다.',
+  'fanCardQuotePicker.t12': '카드에 넣을 문구',
+  'fanCardQuotePicker.t13': '직접 써도 되고, 아래에서 골라 다듬어도 돼요.',
   'fanCardSection.t1': '기념 카드 문구를 불러오지 못했습니다.',
   'fanCardSection.t2': '카드 이미지를 그리지 못했습니다.',
   'fanCardSection.t3': '기념 카드를 저장하지 못했습니다.',
@@ -3512,17 +3514,185 @@ const ko = {
   // ── S3: 알림 실시간화 ──
   // 서버가 알림과 함께 내려주는 사전 키다. 백엔드 NotificationMessage 의 키·문장 틀과
   // 자리표시자 이름이 같아야 하며, 한쪽만 고치면 문장이 어긋난다.
+  'notification.organizationInvited.body':
+    '{organizationName} 조직에서 초대를 보냈습니다. 24시간 안에 수락해 주세요.',
+  'notification.organizationInvitationAccepted.body':
+    '{influencerName} 님이 {organizationName} 조직 초대를 수락했습니다.',
+  'notification.organizationMemberRemoved.body': '{organizationName} 조직 소속이 해제되었습니다.',
   // 제목은 사전 키 없이 내려오므로 알림 유형으로 찾는다. (i18n/serverText.ts)
+  'serverText.notif.organizationInvited.title': '조직 초대가 도착했습니다',
+  'serverText.notif.organizationInvitationAccepted.title': '조직 초대가 수락되었습니다',
+  'serverText.notif.organizationMemberRemoved.title': '조직 소속이 해제되었습니다',
+  'notificationBell.orgInvited.tag': '조직 초대',
+  'notificationBell.orgInvited.action': '조직 확인하기 →',
+  'notificationBell.orgInvitationAccepted.tag': '초대 수락',
+  'notificationBell.orgInvitationAccepted.action': '구성원 확인하기 →',
+  'notificationBell.orgMemberRemoved.tag': '소속 해제',
+  'notificationBell.orgMemberRemoved.action': '조직 확인하기 →',
+  'notificationsPage.orgInvited': '조직 초대',
+  'notificationsPage.orgInvitationAccepted': '초대 수락',
+  'notificationsPage.orgMemberRemoved': '소속 해제',
 
   // ── S4: 응모 폼 ──
+  'fanEvent.form.chooseOne': '하나만 선택해 주세요',
+  'fanEvent.form.chooseMany': '해당하는 항목을 모두 선택해 주세요',
+  'fanEvent.form.noOptions': '선택지가 등록되지 않은 질문입니다.',
+  'fanEvent.helper.needAnswer': '필수 질문 {count}개에 답해야 응모할 수 있어요.',
+  'fanEvent.submit.needConsent': '필수 동의 항목을 모두 확인해 주세요.',
 
   // ── S5: 계정·인증 ──
+  // 가입 중복 확인
+  'signup.check': '중복확인',
+  'signup.checking': '확인 중',
+  'signup.checked': '확인 완료',
+  'signup.loginIdAvailable': '사용할 수 있는 아이디예요.',
+  'signup.loginIdTaken': '이미 사용 중인 아이디예요. 다른 아이디를 입력해 주세요.',
+  'signup.nicknameAvailable': '사용할 수 있는 닉네임이에요.',
+  'signup.nicknameTaken': '이미 사용 중인 닉네임이에요. 다른 닉네임을 입력해 주세요.',
+  'signup.error.loginIdCheck': '아이디 중복확인을 해 주세요.',
+  'signup.error.nicknameCheck': '닉네임 중복확인을 해 주세요.',
+  'signup.checkFailed': '중복 확인에 실패했어요. 잠시 후 다시 시도해 주세요.',
+  'signup.checkHint': '아이디와 닉네임은 중복확인을 통과해야 가입할 수 있어요.',
+  // 공통
+  'accountSecurity.invalidResponse': '서버 응답 형식이 올바르지 않습니다.',
+  'accountSecurity.errorTitle': '오류',
+  'accountSecurity.noticeTitle': '안내',
+  'accountSecurity.close': '닫기',
+  'accountSecurity.newPassword': '새 비밀번호',
+  'accountSecurity.newPasswordConfirm': '새 비밀번호 확인',
+  'accountSecurity.passwordHint': '8자 이상, 영문과 숫자를 함께 사용해 주세요.',
+  'accountSecurity.passwordRule': '비밀번호는 8자 이상이며 영문과 숫자를 함께 포함해야 해요.',
+  'accountSecurity.passwordMismatch': '비밀번호가 일치하지 않아요.',
+  // 비밀번호 찾기(로그인 화면)
+  'accountSecurity.forgotPassword': '비밀번호 찾기',
+  'accountSecurity.forgotTitle': '비밀번호 재설정 메일 보내기',
+  'accountSecurity.forgotDescription':
+    '가입할 때 등록한 이메일로 새 비밀번호를 설정할 수 있는 링크를 보내 드려요.',
+  'accountSecurity.emailLabel': '이메일',
+  'accountSecurity.emailRequired': '이메일을 입력해 주세요.',
+  'accountSecurity.sendLink': '재설정 메일 보내기',
+  'accountSecurity.sending': '보내는 중',
+  'accountSecurity.sent':
+    '메일을 보냈어요. 받은 편지함을 확인해 주세요. 가입되지 않은 주소라면 메일이 오지 않습니다.',
+  'accountSecurity.sendFailed': '재설정 메일을 보내지 못했어요.',
+  // 새 비밀번호 설정(메일 링크로 돌아온 화면)
+  'accountSecurity.resetTitle': '새 비밀번호 설정',
+  'accountSecurity.resetDescription': '새 비밀번호를 정하면 그 비밀번호로 바로 로그인할 수 있어요.',
+  'accountSecurity.resetSubmit': '비밀번호 변경하기',
+  'accountSecurity.resetting': '변경 중',
+  'accountSecurity.resetDone': '비밀번호를 바꿨어요. 새 비밀번호로 로그인해 주세요.',
+  'accountSecurity.resetFailed': '비밀번호를 바꾸지 못했어요. 링크가 만료되었을 수 있어요.',
+  'accountSecurity.resetCancel': '로그인 화면으로 돌아가기',
+  // 비밀번호 변경(마이페이지)
+  'accountSecurity.changeButton': '비밀번호 변경',
+  'accountSecurity.changeTitle': '비밀번호 변경',
+  'accountSecurity.changeDescription':
+    '비밀번호를 바꾸면 모든 기기에서 로그아웃되고, 새 비밀번호로 다시 로그인해야 해요.',
+  'accountSecurity.currentPassword': '현재 비밀번호',
+  'accountSecurity.currentPasswordRequired': '현재 비밀번호를 입력해 주세요.',
+  'accountSecurity.changeSubmit': '변경하기',
+  'accountSecurity.changing': '변경 중',
+  'accountSecurity.changeDone': '비밀번호를 바꿨어요. 새 비밀번호로 다시 로그인해 주세요.',
+  'accountSecurity.changeFailed': '비밀번호를 바꾸지 못했어요.',
 
   // ── S6: 첨부·이미지·공지 ──
+  'adminServiceNoticesPage.s6Attachments': '첨부파일',
+  'adminServiceNoticesPage.s6AttachmentHint':
+    'JPG, PNG, WEBP, PDF를 올릴 수 있어요. 첫 번째 이미지가 목록 썸네일이 됩니다.',
+  'adminServiceNoticesPage.s6Uploading': '올리는 중…',
+  'adminServiceNoticesPage.s6UploadFailed': '첨부파일을 올리지 못했습니다.',
+  'adminServiceNoticesPage.s6AttachmentFull': '첨부는 최대 {p0}개까지 올릴 수 있어요.',
+  'adminServiceNoticesPage.s6AttachmentTrimmed':
+    '최대 {p0}개까지만 올릴 수 있어 {p1}개는 제외했습니다.',
+  'adminServiceNoticesPage.s6Remove': '빼기',
+
+  'fanMeetingNoticesPage.s6Title': '공지',
+  'fanMeetingNoticesPage.s6Subtitle': '이 팬미팅에 올라온 공지를 모두 볼 수 있어요.',
+  'fanMeetingNoticesPage.s6BackToWaiting': '대기실로 돌아가기',
+  'fanMeetingNoticesPage.s6Loading': '공지를 불러오는 중',
+  'fanMeetingNoticesPage.s6DetailLoading': '공지 내용을 불러오는 중',
+  'fanMeetingNoticesPage.s6EmptyTitle': '아직 공지가 없어요',
+  'fanMeetingNoticesPage.s6EmptyDescription': '새 공지가 올라오면 여기에서 바로 볼 수 있어요.',
+  'fanMeetingNoticesPage.s6ErrorTitle': '공지를 불러오지 못했어요',
+  'fanMeetingNoticesPage.s6ListFailed': '공지 목록을 불러오지 못했습니다.',
+  'fanMeetingNoticesPage.s6DetailFailed': '공지 내용을 불러오지 못했습니다.',
+  'fanMeetingNoticesPage.s6NoMeeting': '팬미팅 정보를 찾을 수 없습니다.',
+  'fanMeetingNoticesPage.s6Pinned': '고정',
+
+  'wait.s6AllNotices': '전체 공지 보기',
+
+  'coverImageUpload.s6Label': '이미지 파일로 올리기',
+  'coverImageUpload.s6Uploading': '커버 이미지를 올리는 중…',
+  'coverImageUpload.s6Failed': '커버 이미지를 올리지 못했습니다.',
+  'coverImageUpload.s6LoginRequired': '로그인이 필요합니다.',
+  'coverImageUpload.s6Clear': '이미지 비우기',
+  'coverImageUpload.s6PreviewAlt': '커버 이미지 미리보기',
+
+  'fanMeetingCommunityPage.s6Attachments': '첨부파일',
+  'fanMeetingCommunityPage.s6AttachmentHint': 'JPG, PNG, WEBP, PDF를 올릴 수 있어요.',
+  'fanMeetingCommunityPage.s6Uploading': '올리는 중…',
+  'fanMeetingCommunityPage.s6UploadFailed': '첨부파일을 올리지 못했습니다.',
+  'fanMeetingCommunityPage.s6AttachmentFull': '첨부는 최대 {p0}개까지 올릴 수 있어요.',
+  'fanMeetingCommunityPage.s6AttachmentTrimmed':
+    '최대 {p0}개까지만 올릴 수 있어 {p1}개는 제외했습니다.',
+  'fanMeetingCommunityPage.s6Remove': '빼기',
+
+  'communityPostDetailPage.s6Attachments': '첨부파일',
+  'communityPostDetailPage.s6Uploading': '올리는 중…',
+  'communityPostDetailPage.s6UploadFailed': '첨부파일을 올리지 못했습니다.',
+  'communityPostDetailPage.s6AttachmentFull': '첨부는 최대 {p0}개까지 올릴 수 있어요.',
+  'communityPostDetailPage.s6AttachmentTrimmed':
+    '최대 {p0}개까지만 올릴 수 있어 {p1}개는 제외했습니다.',
+  'communityPostDetailPage.s6Remove': '빼기',
 
   // ── S7: 조직 ──
+  'nav.influencer.organization': '내 조직',
+  'influencerOrganizationPage.t1': '내 조직 정보를 불러오는 중입니다.',
+  'influencerOrganizationPage.t2': '조직 요청 실패',
+  'influencerOrganizationPage.t3': '내 조직 정보를 불러오지 못했습니다.',
+  'influencerOrganizationPage.t4': '다시 시도',
+  'influencerOrganizationPage.t5': '조직 정보를 조회하려면 먼저 로그인해 주세요.',
+  'influencerOrganizationPage.t6': '아직 소속된 조직이 없습니다',
+  'influencerOrganizationPage.t7':
+    '매니저가 보낸 초대 링크를 열어 수락하면 여기에 소속 조직과 담당 매니저가 표시됩니다. 초대 링크는 발급 후 24시간 동안 한 번만 쓸 수 있습니다.',
+  'influencerOrganizationPage.t8': '1인 인플루언서는 소속사 없이 활동합니다',
+  'influencerOrganizationPage.t9':
+    '조직 가입은 소속 인플루언서 계정에만 열려 있습니다. 지금 계정은 팬미팅을 직접 만들고 운영합니다.',
+  'influencerOrganizationPage.t10': '내 팬미팅 보기',
+  'influencerOrganizationPage.t11': '소속 조직',
+  'influencerOrganizationPage.t12': '내 합류일',
+  'influencerOrganizationPage.t13': '구성원',
+  'influencerOrganizationPage.t14': '매니저',
+  'influencerOrganizationPage.t15': '{p0}명',
+  'influencerOrganizationPage.t16': '내 매니저',
+  'influencerOrganizationPage.t17': '팬미팅 개설과 소속 변경은 매니저가 처리합니다.',
+  'influencerOrganizationPage.t18': '등록된 매니저가 없습니다. 조직 대표 연락처로 문의해 주세요.',
+  'influencerOrganizationPage.t19': '조직 정보',
+  'influencerOrganizationPage.t20': '대표자',
+  'influencerOrganizationPage.t21': '대표 이메일',
+  'influencerOrganizationPage.t22': '대표 전화',
+  'influencerOrganizationPage.t23': '조직 개설일',
+  'influencerOrganizationPage.t24': '조직 소개',
+  'influencerOrganizationPage.t25': '등록된 소개가 없습니다.',
+  'influencerOrganizationPage.t26': '함께 활동하는 인플루언서',
+  'influencerOrganizationPage.t27': '같은 조직에 소속된 다른 인플루언서가 아직 없습니다.',
+  'influencerOrganizationPage.t28': '회원번호',
+  'influencerOrganizationPage.t29': '합류',
+  'influencerOrganizationPage.t30': '나',
+  'influencerOrganizationPage.t31':
+    '소속 정보는 매니저만 바꿀 수 있습니다. 잘못된 내용이 있으면 매니저에게 알려 주세요.',
+  'influencerOrganizationPage.t32': '조직 로고',
+  'influencerOrganizationPage.t33': '조직 요약',
+  'managerOrganizationPage.t78': '아직 초대한 인플루언서가 없습니다',
+  'managerOrganizationPage.t79': '회원번호로 초대 링크를 발급해 인플루언서를 조직에 합류시키세요.',
+  'managerOrganizationPage.t80': '이미 이 조직의 구성원입니다.',
+  'managerOrganizationPage.t81':
+    '인플루언서를 조직에 바로 추가하는 것은 서비스 운영자만 할 수 있습니다. 매니저는 초대 링크로 합류시켜 주세요.',
 
   // ── S8: 출력물·죽은 UI 정리 ──
+  'fanApplicationResultPage.t51': '새 팬미팅이 열리면 알림을 보내 드립니다.',
+  'fanApplicationResultPage.t52': '체크하면 이 인플루언서의 새 팬미팅 소식을 알림으로 받습니다.',
+  'fanApplicationResultPage.t53': '알림 설정을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.',
 
 } as const
 
@@ -7017,6 +7187,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanCardQuotePicker.t9': 'Choose from what was said during the call',
   'fanCardQuotePicker.t10': 'You can choose one now while the AI suggestions load',
   'fanCardQuotePicker.t11': 'A quote is optional. Tap the one you picked again to remove it.',
+  'fanCardQuotePicker.t12': 'Words for your card',
+  'fanCardQuotePicker.t13': 'Write your own, or pick one below and edit it.',
   'fanCardSection.t1': 'Could not load the keepsake card quotes.',
   'fanCardSection.t2': 'Could not draw the card image.',
   'fanCardSection.t3': 'Could not save the keepsake card.',
@@ -7161,16 +7333,189 @@ const en: Partial<Record<TranslationKey, string>> = {
     'Deleting the note failed. Please try again in a moment.',
 
   // ── S3: 알림 실시간화 ──
+  'notification.organizationInvited.body':
+    '{organizationName} invited you to join. Please accept within 24 hours.',
+  'notification.organizationInvitationAccepted.body':
+    '{influencerName} accepted the invitation to join {organizationName}.',
+  'notification.organizationMemberRemoved.body':
+    'Your membership in {organizationName} has ended.',
+  'serverText.notif.organizationInvited.title': 'You have an organization invitation',
+  'serverText.notif.organizationInvitationAccepted.title': 'Your invitation was accepted',
+  'serverText.notif.organizationMemberRemoved.title': 'Your organization membership ended',
+  'notificationBell.orgInvited.tag': 'Invitation',
+  'notificationBell.orgInvited.action': 'View the organization →',
+  'notificationBell.orgInvitationAccepted.tag': 'Invitation accepted',
+  'notificationBell.orgInvitationAccepted.action': 'View the members →',
+  'notificationBell.orgMemberRemoved.tag': 'Membership ended',
+  'notificationBell.orgMemberRemoved.action': 'View the organization →',
+  'notificationsPage.orgInvited': 'Invitation',
+  'notificationsPage.orgInvitationAccepted': 'Invitation accepted',
+  'notificationsPage.orgMemberRemoved': 'Membership ended',
 
   // ── S4: 응모 폼 ──
+  'fanEvent.form.chooseOne': 'Choose one',
+  'fanEvent.form.chooseMany': 'Choose everything that applies',
+  'fanEvent.form.noOptions': 'This question has no choices registered.',
+  'fanEvent.helper.needAnswer': 'Answer all {count} required questions to apply.',
+  'fanEvent.submit.needConsent': 'Please check every required consent.',
 
   // ── S5: 계정·인증 ──
+  // 가입 중복 확인
+  'signup.check': 'Check',
+  'signup.checking': 'Checking',
+  'signup.checked': 'Checked',
+  'signup.loginIdAvailable': 'This ID is available.',
+  'signup.loginIdTaken': 'This ID is already taken. Please try another one.',
+  'signup.nicknameAvailable': 'This nickname is available.',
+  'signup.nicknameTaken': 'This nickname is already taken. Please try another one.',
+  'signup.error.loginIdCheck': 'Please check whether this ID is available.',
+  'signup.error.nicknameCheck': 'Please check whether this nickname is available.',
+  'signup.checkFailed': 'The availability check failed. Please try again in a moment.',
+  'signup.checkHint': 'Your ID and nickname must pass the availability check before you can sign up.',
+  // 공통
+  'accountSecurity.invalidResponse': 'The server response format is not valid.',
+  'accountSecurity.errorTitle': 'Error',
+  'accountSecurity.noticeTitle': 'Notice',
+  'accountSecurity.close': 'Close',
+  'accountSecurity.newPassword': 'New password',
+  'accountSecurity.newPasswordConfirm': 'Confirm new password',
+  'accountSecurity.passwordHint': 'Use at least 8 characters with both letters and numbers.',
+  'accountSecurity.passwordRule':
+    'Your password needs at least 8 characters with both letters and numbers.',
+  'accountSecurity.passwordMismatch': 'The passwords do not match.',
+  // 비밀번호 찾기(로그인 화면)
+  'accountSecurity.forgotPassword': 'Forgot password',
+  'accountSecurity.forgotTitle': 'Send a password reset email',
+  'accountSecurity.forgotDescription':
+    'We will email you a link to set a new password, using the address you signed up with.',
+  'accountSecurity.emailLabel': 'Email',
+  'accountSecurity.emailRequired': 'Please enter your email.',
+  'accountSecurity.sendLink': 'Send reset email',
+  'accountSecurity.sending': 'Sending',
+  'accountSecurity.sent':
+    'The email is on its way. Check your inbox. Nothing arrives if the address is not registered.',
+  'accountSecurity.sendFailed': 'We could not send the reset email.',
+  // 새 비밀번호 설정(메일 링크로 돌아온 화면)
+  'accountSecurity.resetTitle': 'Set a new password',
+  'accountSecurity.resetDescription': 'Choose a new password and sign in with it right away.',
+  'accountSecurity.resetSubmit': 'Change password',
+  'accountSecurity.resetting': 'Changing',
+  'accountSecurity.resetDone': 'Your password has been changed. Please sign in with it.',
+  'accountSecurity.resetFailed': 'We could not change your password. The link may have expired.',
+  'accountSecurity.resetCancel': 'Back to sign in',
+  // 비밀번호 변경(마이페이지)
+  'accountSecurity.changeButton': 'Change password',
+  'accountSecurity.changeTitle': 'Change password',
+  'accountSecurity.changeDescription':
+    'Changing your password signs you out on every device, so you will need to sign in again.',
+  'accountSecurity.currentPassword': 'Current password',
+  'accountSecurity.currentPasswordRequired': 'Please enter your current password.',
+  'accountSecurity.changeSubmit': 'Change',
+  'accountSecurity.changing': 'Changing',
+  'accountSecurity.changeDone': 'Your password has been changed. Please sign in again.',
+  'accountSecurity.changeFailed': 'We could not change your password.',
 
   // ── S6: 첨부·이미지·공지 ──
+  'adminServiceNoticesPage.s6Attachments': 'Attachments',
+  'adminServiceNoticesPage.s6AttachmentHint':
+    'JPG, PNG, WEBP and PDF files are allowed. The first image becomes the list thumbnail.',
+  'adminServiceNoticesPage.s6Uploading': 'Uploading…',
+  'adminServiceNoticesPage.s6UploadFailed': 'We could not upload the file.',
+  'adminServiceNoticesPage.s6AttachmentFull': 'You can attach up to {p0} files.',
+  'adminServiceNoticesPage.s6AttachmentTrimmed':
+    'Only {p0} files are allowed, so {p1} were skipped.',
+  'adminServiceNoticesPage.s6Remove': 'Remove',
+
+  'fanMeetingNoticesPage.s6Title': 'Notices',
+  'fanMeetingNoticesPage.s6Subtitle': 'Every notice posted for this fan meeting.',
+  'fanMeetingNoticesPage.s6BackToWaiting': 'Back to the waiting room',
+  'fanMeetingNoticesPage.s6Loading': 'Loading notices',
+  'fanMeetingNoticesPage.s6DetailLoading': 'Loading the notice',
+  'fanMeetingNoticesPage.s6EmptyTitle': 'No notices yet',
+  'fanMeetingNoticesPage.s6EmptyDescription': 'New notices will show up here right away.',
+  'fanMeetingNoticesPage.s6ErrorTitle': 'We could not load the notices',
+  'fanMeetingNoticesPage.s6ListFailed': 'We could not load the notice list.',
+  'fanMeetingNoticesPage.s6DetailFailed': 'We could not load the notice.',
+  'fanMeetingNoticesPage.s6NoMeeting': 'We could not find this fan meeting.',
+  'fanMeetingNoticesPage.s6Pinned': 'Pinned',
+
+  'wait.s6AllNotices': 'See all notices',
+
+  'coverImageUpload.s6Label': 'Upload an image file',
+  'coverImageUpload.s6Uploading': 'Uploading the cover image…',
+  'coverImageUpload.s6Failed': 'We could not upload the cover image.',
+  'coverImageUpload.s6LoginRequired': 'Please sign in first.',
+  'coverImageUpload.s6Clear': 'Clear image',
+  'coverImageUpload.s6PreviewAlt': 'Cover image preview',
+
+  'fanMeetingCommunityPage.s6Attachments': 'Attachments',
+  'fanMeetingCommunityPage.s6AttachmentHint': 'JPG, PNG, WEBP and PDF files are allowed.',
+  'fanMeetingCommunityPage.s6Uploading': 'Uploading…',
+  'fanMeetingCommunityPage.s6UploadFailed': 'We could not upload the file.',
+  'fanMeetingCommunityPage.s6AttachmentFull': 'You can attach up to {p0} files.',
+  'fanMeetingCommunityPage.s6AttachmentTrimmed':
+    'Only {p0} files are allowed, so {p1} were skipped.',
+  'fanMeetingCommunityPage.s6Remove': 'Remove',
+
+  'communityPostDetailPage.s6Attachments': 'Attachments',
+  'communityPostDetailPage.s6Uploading': 'Uploading…',
+  'communityPostDetailPage.s6UploadFailed': 'We could not upload the file.',
+  'communityPostDetailPage.s6AttachmentFull': 'You can attach up to {p0} files.',
+  'communityPostDetailPage.s6AttachmentTrimmed':
+    'Only {p0} files are allowed, so {p1} were skipped.',
+  'communityPostDetailPage.s6Remove': 'Remove',
 
   // ── S7: 조직 ──
+  'nav.influencer.organization': 'My organization',
+  'influencerOrganizationPage.t1': 'Loading your organization.',
+  'influencerOrganizationPage.t2': 'Organization request failed',
+  'influencerOrganizationPage.t3': 'Could not load your organization.',
+  'influencerOrganizationPage.t4': 'Try again',
+  'influencerOrganizationPage.t5': 'Please sign in to view your organization.',
+  'influencerOrganizationPage.t6': 'You have not joined an organization yet',
+  'influencerOrganizationPage.t7':
+    'Open the invitation link your manager sent and accept it — your organization and manager will appear here. An invitation link works once, within 24 hours of being issued.',
+  'influencerOrganizationPage.t8': 'Solo influencers work without an agency',
+  'influencerOrganizationPage.t9':
+    'Joining an organization is only open to agency influencer accounts. This account creates and runs its own fan meetings.',
+  'influencerOrganizationPage.t10': 'View my fan meetings',
+  'influencerOrganizationPage.t11': 'Organization',
+  'influencerOrganizationPage.t12': 'Joined on',
+  'influencerOrganizationPage.t13': 'Members',
+  'influencerOrganizationPage.t14': 'Managers',
+  'influencerOrganizationPage.t15': '{p0}',
+  'influencerOrganizationPage.t16': 'My managers',
+  'influencerOrganizationPage.t17':
+    'Managers create fan meetings and handle membership changes.',
+  'influencerOrganizationPage.t18':
+    'No manager is registered. Please use the organization contact details.',
+  'influencerOrganizationPage.t19': 'Organization details',
+  'influencerOrganizationPage.t20': 'Representative',
+  'influencerOrganizationPage.t21': 'Contact email',
+  'influencerOrganizationPage.t22': 'Contact phone',
+  'influencerOrganizationPage.t23': 'Created on',
+  'influencerOrganizationPage.t24': 'About',
+  'influencerOrganizationPage.t25': 'No description has been added.',
+  'influencerOrganizationPage.t26': 'Influencers in this organization',
+  'influencerOrganizationPage.t27': 'No other influencer has joined this organization yet.',
+  'influencerOrganizationPage.t28': 'Member no.',
+  'influencerOrganizationPage.t29': 'Joined',
+  'influencerOrganizationPage.t30': 'You',
+  'influencerOrganizationPage.t31':
+    'Only managers can change membership. Tell your manager if anything here looks wrong.',
+  'influencerOrganizationPage.t32': 'Organization logo',
+  'influencerOrganizationPage.t33': 'Organization summary',
+  'managerOrganizationPage.t78': 'No influencer has been invited yet',
+  'managerOrganizationPage.t79':
+    'Issue an invitation link with a member number to bring an influencer into the organization.',
+  'managerOrganizationPage.t80': 'Already a member of this organization.',
+  'managerOrganizationPage.t81':
+    'Only service administrators can add an influencer to an organization directly. Managers bring people in with an invitation link.',
 
   // ── S8: 출력물·죽은 UI 정리 ──
+  'fanApplicationResultPage.t51': 'We will let you know when a new fan meeting opens.',
+  'fanApplicationResultPage.t52': 'Check this to get notified about this influencer\'s new fan meetings.',
+  'fanApplicationResultPage.t53': 'Could not change the notification setting. Please try again in a moment.',
 
 }
 
