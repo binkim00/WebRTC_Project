@@ -40,6 +40,24 @@ public enum NotificationMessage {
             "새 팬미팅 공개 안내",
             "New fan meeting announced"),
 
+    /** 조직 초대 도착 알림 제목이다. */
+    ORGANIZATION_INVITED_TITLE(
+            "notification.title.organizationInvited",
+            "조직 초대 안내",
+            "Organization invitation"),
+
+    /** 조직 초대 수락 알림 제목이다. */
+    ORGANIZATION_INVITATION_ACCEPTED_TITLE(
+            "notification.title.organizationInvitationAccepted",
+            "조직 초대 수락 안내",
+            "Invitation accepted"),
+
+    /** 조직 소속 해제 알림 제목이다. */
+    ORGANIZATION_MEMBER_REMOVED_TITLE(
+            "notification.title.organizationMemberRemoved",
+            "조직 소속 해제 안내",
+            "Organization membership ended"),
+
     /** 응모에 당첨된 팬에게 보내는 본문이다. */
     APPLICATION_RESULT_SELECTED(
             "notification.applicationResult.selected",
@@ -76,6 +94,24 @@ public enum NotificationMessage {
             "대기 순번이 {previousPosition}번에서 {newPosition}번으로 변경되었습니다. 사유: {reason}",
             "Your queue position changed from {previousPosition} to {newPosition}."
                     + " Reason: {reason}"),
+
+    /** 초대받은 인플루언서에게 보내는 본문이다. 초대 유효 기간은 발급 시점부터 24시간이다. */
+    ORGANIZATION_INVITED(
+            "notification.organizationInvited.body",
+            "{organizationName} 조직에서 초대를 보냈습니다. 24시간 안에 수락해 주세요.",
+            "{organizationName} invited you to join. Please accept within 24 hours."),
+
+    /** 초대를 보낸 매니저에게 수락 사실을 알리는 본문이다. */
+    ORGANIZATION_INVITATION_ACCEPTED(
+            "notification.organizationInvitationAccepted.body",
+            "{influencerName} 님이 {organizationName} 조직 초대를 수락했습니다.",
+            "{influencerName} accepted the invitation to join {organizationName}."),
+
+    /** 소속이 해제된 구성원에게 보내는 본문이다. */
+    ORGANIZATION_MEMBER_REMOVED(
+            "notification.organizationMemberRemoved.body",
+            "{organizationName} 조직 소속이 해제되었습니다.",
+            "Your membership in {organizationName} has ended."),
 
     /** 다른 참가자의 이동에 밀려 순번이 바뀐 팬에게 보내는 본문이다. */
     QUEUE_CHANGE_SHIFTED(
