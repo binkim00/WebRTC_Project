@@ -212,7 +212,27 @@ export const router = createBrowserRouter([
               'MeetingStatisticsPage',
             ),
           },
+          // 팬이 보는 팬미팅 공지 목록이다. 공지 조회 API는 permitAll이고
+          // 이 경로는 roleCapabilities의 fans|statistics 규칙에 걸리지 않아 공개 화면으로 남는다.
+          // 화면 내용은 작업 세션 S6에서 채운다.
+          {
+            path: 'notices',
+            lazy: lazyPage(
+              () => import('../pages/fan/FanMeetingNoticesPage'),
+              'FanMeetingNoticesPage',
+            ),
+          },
         ],
+      },
+      // 인플루언서가 자기 조직·매니저를 확인하는 화면이다.
+      // `/influencer/*`는 USE_INFLUENCER_WORKSPACE로 보호되므로 별도 권한 설정이 필요 없다.
+      // 화면 내용은 작업 세션 S7에서 채운다.
+      {
+        path: 'influencer/organization',
+        lazy: lazyPage(
+          () => import('../pages/influencer/InfluencerOrganizationPage'),
+          'InfluencerOrganizationPage',
+        ),
       },
       {
         path: 'influencer/my-fan-meetings',
