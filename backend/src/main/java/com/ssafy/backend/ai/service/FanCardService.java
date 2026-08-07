@@ -47,6 +47,14 @@ public class FanCardService {
     private static final String INFLUENCER_SPEAKER_ROLE = "INFLUENCER";
 
     /**
+     * 직접 고르기 목록에 올릴 발화의 최소 글자 수이며 공백은 세지 않는다.
+     *
+     * <p>"네", "그쵸" 같은 맞장구와 잘린 조각까지 목록에 오르면 고를 만한 문장이 그 사이에
+     * 묻힌다. 인사말("안녕하세요")도 카드에 새길 문장은 아니라서 이 기준에 걸린다.
+     */
+    private static final int MIN_QUOTE_TEXT_LENGTH = 6;
+
+    /**
      * AI 추천이 이 시간 안에 도착하지 않으면 Agent가 중단된 것으로 보고 추천을 포기한다.
      *
      * <p>추천은 요약과 같은 모델 호출에서 만들어지므로
@@ -270,10 +278,19 @@ public class FanCardService {
     /**
      * 카드 문구로 노출할 만한 자막인지 확인한다.
      *
+     * <p>맞장구와 문장 조각까지 목록에 올리면 팬이 고를 만한 문장이 그 사이에 파묻힌다.
+     * 공백을 뺀 길이가 {@link #MIN_QUOTE_TEXT_LENGTH}자에 못 미치면 카드에 새길 문장이
+     * 아니라고 보고 제외한다. 잘못 알아들은 문장까지 걸러내지는 못하는데, 이 목록은
+     * "인플루언서가 실제로 한 말"을 그대로 보여주는 자리라 원문을 손대지 않는다.
+     *
      * @param subtitle 인플루언서가 말한 자막
-     * @return 원문이 비어 있지 않으면 true
+     * @return 카드 문구 후보로 쓸 만하면 true
      */
     private static boolean hasUsableText(AiSubtitle subtitle) {
-        return subtitle.getOriginalText() != null && !subtitle.getOriginalText().isBlank();
+        String text = subtitle.getOriginalText();
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        return text.replaceAll("\\s", "").length() >= MIN_QUOTE_TEXT_LENGTH;
     }
 }

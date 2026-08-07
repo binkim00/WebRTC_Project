@@ -43,7 +43,7 @@ MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """당신은 인플루언서의 팬미팅 보조 AI입니다.
     인플루언서와 팬의 대화 자막을 분석하여 인플루언서가 팬을 기억하는 데 도움이 되는 메모 초안을 작성하고,
-    팬이 기념 카드로 간직할 문구 후보를 골라 줍니다."""
+    팬이 기념 카드에 새길 짧은 기념 문구를 지어 줍니다."""
 
 USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 자막입니다.
 
@@ -58,14 +58,20 @@ USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 �
     - 팬이 인플루언서에게 바라는 것, 다음에 하고 싶은 것
     - 인플루언서가 기억하면 좋을 특이사항
 
-    2) 팬이 기념 카드로 간직할 문구 후보 3개 (팬용)
-    - 반드시 **인플루언서가 실제로 한 말**에서만 고릅니다. 팬의 발화는 쓰지 않습니다.
-    - 자막 문장을 거의 그대로 쓰고, 말끝이 잘렸으면 자연스럽게만 다듬습니다.
-      인플루언서가 하지 않은 말을 새로 만들어내지 않습니다.
-    - 팬이 나중에 다시 읽을 때 기분이 좋아지는 따뜻한 문장을 고릅니다.
-    - 각 문구는 {card_limit}자 이내로 합니다.
-    - 전화번호, 이메일, 주소, 계정 아이디, 실명처럼 개인정보가 담긴 문장은 제외합니다.
-    - 고를 만한 문장이 없으면 빈 배열로 둡니다.
+    2) 팬이 기념 카드에 새길 문구 후보 3개 (팬용)
+    - 대화 문장을 그대로 옮기지 않습니다. 카드 한 줄에 새길 **기념 문구**를 새로 씁니다.
+    - 이날 오간 이야기(장소, 계획, 함께 웃은 일, 팬의 사연)를 소재로, 팬이 나중에 다시
+      읽었을 때 그날이 떠오르는 짧은 문장을 만듭니다.
+    - 인플루언서가 한 말처럼 보이게 쓰지 않습니다. 따옴표를 붙이지 않고,
+      인플루언서를 화자로 삼는 말투("~할게요", "~드릴게요")도 쓰지 않습니다.
+    - 세 문구는 서로 다른 소재를 잡습니다.
+    - 마침표 없이 {card_limit}자 안팎으로 짧게 씁니다.
+    - 대화에 나오지 않은 사실을 지어내지 않습니다.
+    - 전화번호, 이메일, 주소, 계정 아이디, 실명처럼 개인정보가 담긴 내용은 넣지 않습니다.
+    - 카드에 남길 만한 소재가 없으면 빈 배열로 둡니다.
+
+    문구 예시입니다. 형식과 길이만 참고하고 내용은 반드시 위 대화에서 가져옵니다.
+    "겨울 제주에서 다시 만나요", "호주에서 온 첫 팬미팅", "한라산 눈꽃 이야기를 나눈 날"
 {language_rules}
     반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:
     {{
@@ -89,6 +95,12 @@ CARD_CANDIDATE_MAX_LENGTH = 60
 # 옮기면 70자를 넘기 일쑤라, 60자를 그대로 적용하면 옮긴 문구가 전부 잘려 후보가 빈 배열이
 # 된다. 백엔드 FanCard.MAX_TEXT_LENGTH가 200자라 100자까지는 저장에도 걸리지 않는다.
 CARD_CANDIDATE_MAX_LENGTH_BY_LANG = {"en": 100, "vi": 100}
+
+# 프롬프트에 적는 권장 길이다. 카드 한 줄에 새기는 기념 문구라 대화 문장보다 훨씬 짧아야
+# 하는데, 이 값을 저장 상한으로도 쓰면 모델이 조금만 넘겨도 후보가 통째로 버려져 목록이
+# 빈다. 그래서 "이 정도로 써 달라"는 권장값과 "이보다 길면 버린다"는 상한을 나눠 둔다.
+CARD_CANDIDATE_TARGET_LENGTH = 25
+CARD_CANDIDATE_TARGET_LENGTH_BY_LANG = {"en": 45, "vi": 45}
 
 # 백엔드(QueueCommandService.toLanguageCode)가 쓰는 언어 코드와 프롬프트에 넣을 이름.
 # 모델이 어떤 언어인지 확실히 알도록 해당 언어 표기를 함께 적는다.
@@ -144,6 +156,19 @@ def _card_candidate_max_length(fan_lang: str) -> int:
     return CARD_CANDIDATE_MAX_LENGTH_BY_LANG.get(fan_lang, CARD_CANDIDATE_MAX_LENGTH)
 
 
+def _card_candidate_target_length(fan_lang: str) -> int:
+    """
+    프롬프트에 적을 카드 문구 권장 길이를 고른다.
+
+    저장 상한과 달리 이 값을 넘겼다고 후보를 버리지는 않는다. 모델에게 짧게 쓰도록
+    안내하는 용도다.
+
+    :param fan_lang: 정규화된 팬 언어 코드
+    :return: 해당 언어의 권장 글자 수
+    """
+    return CARD_CANDIDATE_TARGET_LENGTH_BY_LANG.get(fan_lang, CARD_CANDIDATE_TARGET_LENGTH)
+
+
 def _build_language_rules(fan_lang: str, influencer_lang: str) -> str:
     """
     프롬프트에 끼워 넣을 출력 언어 규칙 블록을 만든다.
@@ -163,10 +188,9 @@ def _build_language_rules(fan_lang: str, influencer_lang: str) -> str:
     rules = [
         "    3) 출력 언어",
         f"    - 메모 초안(summary)과 핵심 키워드(keywords)는 {influencer_label}로 작성합니다.",
-        f"    - 팬 카드 문구 후보(card_candidates)는 {fan_label}로 제시합니다.",
-        f"    - 인플루언서가 {fan_label}로 말하지 않았다면, 실제로 한 말의 뜻을 그대로",
-        f"      {fan_label}로 옮겨 적습니다. 뜻을 바꾸거나 인플루언서가 하지 않은 말을",
-        "      덧붙이지 않으며, 원문은 함께 적지 않고 옮긴 문장만 남깁니다.",
+        f"    - 팬 카드 문구 후보(card_candidates)는 처음부터 {fan_label}로 씁니다.",
+        f"    - 대화가 {fan_label}가 아닌 언어로 오갔더라도 소재만 가져와 {fan_label}로",
+        "      쓰고, 원문은 함께 적지 않습니다.",
     ]
     return "\n" + "\n".join(rules) + "\n"
 
@@ -490,7 +514,7 @@ async def generate_summary(
     subtitle_text = _format_subtitles(subtitles)
     user_prompt = USER_PROMPT_TEMPLATE.format(
         subtitles=subtitle_text,
-        card_limit=_card_candidate_max_length(fan_lang),
+        card_limit=_card_candidate_target_length(fan_lang),
         language_rules=_build_language_rules(fan_lang, influencer_lang),
     )
 
