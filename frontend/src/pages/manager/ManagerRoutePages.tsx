@@ -38,6 +38,8 @@ import {
 } from '../../api/notices'
 import { getMyOrganization, type OrganizationMember } from '../../api/organizations'
 import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, Pagination, Select, Spinner, Switch, TextField, Textarea } from '../../components'
+// components/index.ts는 여러 세션이 함께 고치는 파일이라 배럴을 거치지 않고 직접 가져온다.
+import { CoverImageUpload } from '../../components/meeting/CoverImageUpload'
 import {
   formatDateTime,
   getScheduleErrors,
@@ -1058,16 +1060,22 @@ export function ManagerMeetingCreatePage() {
                   onChange={(event) => setForm({ ...form, description: event.target.value })}
                   placeholder={t('managerRoutePages.t26')}
                 />
-                <TextField
-                  containerClassName="sm:col-span-2"
-                  helperText={t('managerRoutePages.t27')}
-                  label={t('managerRoutePages.t28')}
-                  maxLength={2048}
-                  type="url"
-                  value={form.coverImageUrl ?? ''}
-                  onChange={(event) => setForm({ ...form, coverImageUrl: event.target.value })}
-                  placeholder="https://example.com/cover.jpg"
-                />
+                <div className="grid gap-3 sm:col-span-2">
+                  <TextField
+                    helperText={t('managerRoutePages.t27')}
+                    label={t('managerRoutePages.t28')}
+                    maxLength={2048}
+                    type="url"
+                    value={form.coverImageUrl ?? ''}
+                    onChange={(event) => setForm({ ...form, coverImageUrl: event.target.value })}
+                    placeholder="https://example.com/cover.jpg"
+                  />
+                  {/* 주소를 붙여 넣는 대신 파일을 올리면 위 칸이 업로드 주소로 채워진다. */}
+                  <CoverImageUpload
+                    onChange={(url) => setForm({ ...form, coverImageUrl: url })}
+                    value={form.coverImageUrl ?? ''}
+                  />
+                </div>
               </div>
             ) : null}
 

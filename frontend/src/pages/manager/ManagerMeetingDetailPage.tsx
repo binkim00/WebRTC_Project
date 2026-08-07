@@ -48,6 +48,8 @@ import {
   TextField,
   Textarea,
 } from '../../components'
+// components/index.ts는 여러 세션이 함께 고치는 파일이라 배럴을 거치지 않고 직접 가져온다.
+import { CoverImageUpload } from '../../components/meeting/CoverImageUpload'
 import { ManagerApplicantsPanel } from './ManagerApplicantsPanel'
 import { ManagerApplicationFormPanel } from './ManagerApplicationFormPanel'
 import {
@@ -1099,15 +1101,23 @@ function SettingsPanel({
             type="datetime-local"
             value={form.scheduledStartAt}
           />
-          <TextField
-            disabled={basicLocked}
-            label={t('managerMeetingDetailPage.t34')}
-            maxLength={2048}
-            onChange={(event) => setField('coverImageUrl', event.target.value)}
-            placeholder="https://example.com/cover.jpg"
-            type="url"
-            value={form.coverImageUrl}
-          />
+          <div className="grid gap-3">
+            <TextField
+              disabled={basicLocked}
+              label={t('managerMeetingDetailPage.t34')}
+              maxLength={2048}
+              onChange={(event) => setField('coverImageUrl', event.target.value)}
+              placeholder="https://example.com/cover.jpg"
+              type="url"
+              value={form.coverImageUrl}
+            />
+            {/* 주소를 붙여 넣는 대신 파일을 올리면 위 칸이 업로드 주소로 채워진다. */}
+            <CoverImageUpload
+              disabled={basicLocked}
+              onChange={(url) => setField('coverImageUrl', url)}
+              value={form.coverImageUrl}
+            />
+          </div>
           <Textarea
             containerClassName="sm:col-span-2"
             disabled={basicLocked}

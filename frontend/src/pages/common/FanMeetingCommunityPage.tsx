@@ -4,8 +4,15 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
 import {
+  attachmentContentUrl,
+  resolveAttachmentUrl,
+  uploadAttachment,
+  type AttachmentUploadResponse,
+} from '../../api/attachments'
+import {
   createCommunityPost,
   getCommunityPosts,
+  COMMUNITY_ATTACHMENT_MAX_COUNT,
   type CommunityPostSummaryResponse,
 } from '../../api/community'
 import type { PageResponse } from '../../api/envelope'
@@ -53,6 +60,8 @@ export function FanMeetingCommunityPage() {
   const [writeOpen, setWriteOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [writeError, setWriteError] = useState<string>()
+  const [attachments, setAttachments] = useState<AttachmentUploadResponse[]>([])
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     if (!fanMeetingId?.trim()) {
@@ -96,6 +105,46 @@ export function FanMeetingCommunityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId, keyword, currentPage, reloadCount])
 
+  /** 고른 파일을 순서대로 올리고 게시글에 연결할 첨부 목록에 담는다. */
+  async function uploadFiles(fileList: FileList | null) {
+    const files = fileList ? [...fileList] : []
+    if (!files.length || !session) return
+
+    const room = COMMUNITY_ATTACHMENT_MAX_COUNT - attachments.length
+    if (room <= 0) {
+      setWriteError(
+        t('fanMeetingCommunityPage.s6AttachmentFull', { p0: COMMUNITY_ATTACHMENT_MAX_COUNT }),
+      )
+      return
+    }
+
+    setUploading(true)
+    setWriteError(undefined)
+    try {
+      // 서버가 개수를 거절하지 않도록 남은 자리만큼만 올린다.
+      for (const file of files.slice(0, room)) {
+        const uploaded = await uploadAttachment(file, 'COMMUNITY', session.accessToken)
+        setAttachments((current) => [...current, uploaded])
+      }
+      if (files.length > room) {
+        setWriteError(
+          t('fanMeetingCommunityPage.s6AttachmentTrimmed', {
+            p0: COMMUNITY_ATTACHMENT_MAX_COUNT,
+            p1: files.length - room,
+          }),
+        )
+      }
+    } catch (uploadError: unknown) {
+      setWriteError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : t('fanMeetingCommunityPage.s6UploadFailed'),
+      )
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function handleCreatePost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -116,8 +165,17 @@ export function FanMeetingCommunityPage() {
     setWriteError(undefined)
 
     try {
-      await createCommunityPost(fanMeetingId, { title, content }, session.accessToken)
+      await createCommunityPost(
+        fanMeetingId,
+        {
+          title,
+          content,
+          attachmentIds: attachments.map((attachment) => attachment.attachmentId),
+        },
+        session.accessToken,
+      )
       setWriteOpen(false)
+      setAttachments([])
       setCurrentPage(1)
       setReloadCount((count) => count + 1)
     } catch (createError: unknown) {
@@ -181,13 +239,73 @@ export function FanMeetingCommunityPage() {
                 required
                 rows={6}
               />
+              <fieldset className="grid gap-2">
+                <legend className="text-sm font-bold text-[var(--color-text-secondary)]">
+                  {t('fanMeetingCommunityPage.s6Attachments')}{' '}
+                  <span className="font-medium tabular-nums">
+                    ({attachments.length}/{COMMUNITY_ATTACHMENT_MAX_COUNT})
+                  </span>
+                </legend>
+                <input
+                  accept="image/*,.pdf"
+                  className="block w-full text-sm"
+                  disabled={uploading || attachments.length >= COMMUNITY_ATTACHMENT_MAX_COUNT}
+                  multiple
+                  onChange={(event) => {
+                    void uploadFiles(event.target.files)
+                    event.target.value = ''
+                  }}
+                  type="file"
+                />
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  {t('fanMeetingCommunityPage.s6AttachmentHint')}
+                </p>
+                {uploading ? (
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    {t('fanMeetingCommunityPage.s6Uploading')}
+                  </p>
+                ) : null}
+                {attachments.length ? (
+                  <ul className="grid gap-2">
+                    {attachments.map((attachment) => (
+                      <li
+                        className="flex items-center justify-between gap-3 border-b border-[var(--color-divider)] py-2 text-sm"
+                        key={attachment.attachmentId}
+                      >
+                        <a
+                          className="min-w-0 flex-1 truncate font-semibold hover:underline"
+                          href={attachmentContentUrl(attachment.attachmentId)}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {attachment.originalFileName}
+                        </a>
+                        <Button
+                          onClick={() =>
+                            setAttachments((current) =>
+                              current.filter(
+                                (item) => item.attachmentId !== attachment.attachmentId,
+                              ),
+                            )
+                          }
+                          size="sm"
+                          variant="ghost"
+                        >
+                          {t('fanMeetingCommunityPage.s6Remove')}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </fieldset>
               {writeError ? (
                 <AlertBanner title={t('fanMeetingCommunityPage.t9')} variant="error">
                   {writeError}
                 </AlertBanner>
               ) : null}
               <div className="flex justify-end">
-                <Button loading={submitting} type="submit">
+                {/* 업로드가 끝나기 전에 저장하면 방금 고른 파일이 빠진 채 연결된다. */}
+                <Button disabled={uploading} loading={submitting} type="submit">
                   {t('fanMeetingCommunityPage.t10')}
                 </Button>
               </div>
@@ -232,9 +350,19 @@ export function FanMeetingCommunityPage() {
               {posts.map((post) => (
                 <li key={post.postId}>
                   <Link
-                    className="grid gap-1.5 px-6 py-5 transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:calc(var(--focus-ring-offset)*-1)]"
+                    className="flex items-center gap-3 px-6 py-5 transition-colors hover:bg-[var(--color-surface-page)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:calc(var(--focus-ring-offset)*-1)]"
                     to={`/community/posts/${post.postId}`}
                   >
+                    {/* 첨부한 첫 이미지를 대표로 보여 준다. 이미지 첨부가 없으면 null이다. */}
+                    {post.thumbnailUrl ? (
+                      <img
+                        alt=""
+                        className="h-14 w-14 flex-none rounded-lg object-cover"
+                        loading="lazy"
+                        src={resolveAttachmentUrl(post.thumbnailUrl)}
+                      />
+                    ) : null}
+                    <span className="grid min-w-0 flex-1 gap-1.5">
                     <span className="flex flex-wrap items-center gap-2">
                       {post.pinned ? <Badge variant="primary">{t('fanMeetingCommunityPage.t16')}</Badge> : null}
                       <span className="text-base font-bold text-[var(--color-text-primary)]">
@@ -244,6 +372,7 @@ export function FanMeetingCommunityPage() {
                     <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-text-secondary)]">
                       <span>{post.authorNickname}</span>
                       <time dateTime={post.createdAt}>{formatDateTime(post.createdAt)}</time>
+                    </span>
                     </span>
                   </Link>
                 </li>

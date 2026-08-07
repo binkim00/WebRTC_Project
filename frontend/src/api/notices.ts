@@ -29,6 +29,7 @@ export type NoticeDetailResponse = {
   content: string
   authorId: number
   authorNickname: string
+  /** 첨부한 이미지 중 표시 순서가 가장 앞선 것의 URL이고 이미지가 없으면 null이다. */
   thumbnailUrl: string | null
   /** 표시 순서대로 정렬된 첨부파일이며 없으면 빈 배열이다. */
   attachments: NoticeAttachmentResponse[]
@@ -48,7 +49,8 @@ export type NoticeCreateRequest = {
   /**
    * 연결할 첨부파일 식별자이며 보낸 순서가 표시 순서가 된다.
    *
-   * `POST /api/v1/attachments`로 먼저 업로드한 뒤 받은 식별자를 넘긴다.
+   * `POST /api/v1/attachments`에 **attachmentType=NOTICE**로 먼저 업로드한 뒤 받은 식별자를
+   * 넘긴다. 다른 용도로 올린 파일을 넘기면 `ATTACHMENT_TYPE_MISMATCH`로 거절된다.
    */
   attachmentIds?: number[]
 }

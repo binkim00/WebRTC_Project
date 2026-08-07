@@ -5,6 +5,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/auth'
 import {
+  attachmentContentUrl,
+  uploadAttachment,
+  type AttachmentUploadResponse,
+} from '../../api/attachments'
+import {
   createComment,
   deleteComment,
   deleteCommunityPost,
@@ -13,9 +18,11 @@ import {
   reportComment,
   updateComment,
   updateCommunityPost,
+  COMMUNITY_ATTACHMENT_MAX_COUNT,
   type CommentSummaryResponse,
   type CommunityPostDetailResponse,
 } from '../../api/community'
+import type { NoticeAttachmentResponse } from '../../api/notices'
 import type { PageResponse } from '../../api/envelope'
 import {
   AlertBanner,
@@ -72,6 +79,11 @@ export function CommunityPostDetailPage() {
   const [commentsReloadCount, setCommentsReloadCount] = useState(0)
 
   const [editing, setEditing] = useState(false)
+  /** 수정 화면에서 다루는 첨부 목록이다. 저장할 때 이 순서가 표시 순서가 된다. */
+  const [editAttachments, setEditAttachments] = useState<
+    (AttachmentUploadResponse | NoticeAttachmentResponse)[]
+  >([])
+  const [uploading, setUploading] = useState(false)
   const [postSaving, setPostSaving] = useState(false)
   const [postActionError, setPostActionError] = useState<string>()
 
@@ -154,6 +166,46 @@ export function CommunityPostDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, commentPage, commentsReloadCount])
 
+  /** 수정 화면에서 고른 파일을 올리고 첨부 목록에 담는다. */
+  async function uploadFiles(fileList: FileList | null) {
+    const files = fileList ? [...fileList] : []
+    if (!files.length || !session) return
+
+    const room = COMMUNITY_ATTACHMENT_MAX_COUNT - editAttachments.length
+    if (room <= 0) {
+      setPostActionError(
+        t('communityPostDetailPage.s6AttachmentFull', { p0: COMMUNITY_ATTACHMENT_MAX_COUNT }),
+      )
+      return
+    }
+
+    setUploading(true)
+    setPostActionError(undefined)
+    try {
+      // 서버가 개수를 거절하지 않도록 남은 자리만큼만 올린다.
+      for (const file of files.slice(0, room)) {
+        const uploaded = await uploadAttachment(file, 'COMMUNITY', session.accessToken)
+        setEditAttachments((current) => [...current, uploaded])
+      }
+      if (files.length > room) {
+        setPostActionError(
+          t('communityPostDetailPage.s6AttachmentTrimmed', {
+            p0: COMMUNITY_ATTACHMENT_MAX_COUNT,
+            p1: files.length - room,
+          }),
+        )
+      }
+    } catch (uploadError: unknown) {
+      setPostActionError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : t('communityPostDetailPage.s6UploadFailed'),
+      )
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function handleUpdatePost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -174,7 +226,16 @@ export function CommunityPostDetailPage() {
     setPostActionError(undefined)
 
     try {
-      await updateCommunityPost(postId, { title, content }, session.accessToken)
+      // 첨부는 목록 전체를 보낸다. 화면에서 뺀 첨부가 그대로 남지 않게 하려는 것이다.
+      await updateCommunityPost(
+        postId,
+        {
+          title,
+          content,
+          attachmentIds: editAttachments.map((attachment) => attachment.attachmentId),
+        },
+        session.accessToken,
+      )
       setEditing(false)
       setPostReloadCount((count) => count + 1)
     } catch (error: unknown) {
@@ -397,6 +458,65 @@ export function CommunityPostDetailPage() {
                 required
                 rows={8}
               />
+
+              <fieldset className="grid gap-2">
+                <legend className="text-sm font-bold text-[var(--color-text-secondary)]">
+                  {t('communityPostDetailPage.s6Attachments')}{' '}
+                  <span className="font-medium tabular-nums">
+                    ({editAttachments.length}/{COMMUNITY_ATTACHMENT_MAX_COUNT})
+                  </span>
+                </legend>
+                <input
+                  accept="image/*,.pdf"
+                  className="block w-full text-sm"
+                  disabled={uploading || editAttachments.length >= COMMUNITY_ATTACHMENT_MAX_COUNT}
+                  multiple
+                  onChange={(event) => {
+                    void uploadFiles(event.target.files)
+                    event.target.value = ''
+                  }}
+                  type="file"
+                />
+                {uploading ? (
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    {t('communityPostDetailPage.s6Uploading')}
+                  </p>
+                ) : null}
+                {editAttachments.length ? (
+                  <ul className="grid gap-2">
+                    {editAttachments.map((attachment) => (
+                      <li
+                        className="flex items-center justify-between gap-3 border-b border-[var(--color-divider)] py-2 text-sm"
+                        key={attachment.attachmentId}
+                      >
+                        <a
+                          className="min-w-0 flex-1 truncate font-semibold hover:underline"
+                          href={attachmentContentUrl(attachment.attachmentId)}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {attachment.originalFileName}
+                        </a>
+                        <Button
+                          onClick={() =>
+                            setEditAttachments((current) =>
+                              current.filter(
+                                (item) => item.attachmentId !== attachment.attachmentId,
+                              ),
+                            )
+                          }
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          {t('communityPostDetailPage.s6Remove')}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </fieldset>
+
               {postActionError ? (
                 <AlertBanner title={t('communityPostDetailPage.t9')} variant="error">
                   {postActionError}
@@ -413,7 +533,8 @@ export function CommunityPostDetailPage() {
                 >
                   {t('communityPostDetailPage.t10')}
                 </Button>
-                <Button loading={postSaving} type="submit">
+                {/* 업로드가 끝나기 전에 저장하면 방금 고른 파일이 빠진 채 연결된다. */}
+                <Button disabled={uploading} loading={postSaving} type="submit">
                   {t('communityPostDetailPage.t11')}
                 </Button>
               </div>
@@ -434,6 +555,42 @@ export function CommunityPostDetailPage() {
               <p className="mt-5 whitespace-pre-wrap leading-7 text-[var(--color-text-primary)]">
                 {post.content}
               </p>
+
+              {/* 이미지 첨부는 내려받기 전에 본문과 함께 바로 보이는 편이 낫다. */}
+              {post.attachments
+                .filter((attachment) => attachment.contentType.startsWith('image/'))
+                .map((attachment) => (
+                  <img
+                    alt={attachment.originalFileName}
+                    className="mt-4 w-full rounded-lg"
+                    key={attachment.attachmentId}
+                    loading="lazy"
+                    src={attachmentContentUrl(attachment.attachmentId)}
+                  />
+                ))}
+
+              {post.attachments.length ? (
+                <ul className="mt-6 grid gap-2 border-t border-[var(--color-divider)] pt-5">
+                  {post.attachments.map((attachment) => (
+                    <li key={attachment.attachmentId}>
+                      <a
+                        className="text-sm font-semibold hover:underline"
+                        // download=true로 새 탭에서 열리지 않고 저장되게 한다.
+                        href={attachmentContentUrl(attachment.attachmentId, true)}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {attachment.originalFileName}
+                      </a>
+                      <span className="ml-2 text-xs text-[var(--color-text-secondary)]">
+                        {Math.max(1, Math.round(attachment.fileSize / 1024)).toLocaleString('ko-KR')}{' '}
+                        KB
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
               {postActionError ? (
                 <div className="mt-4">
                   <AlertBanner title={t('communityPostDetailPage.t15')} variant="error">
@@ -447,6 +604,8 @@ export function CommunityPostDetailPage() {
                     <Button
                       onClick={() => {
                         setEditing(true)
+                        // 지금 붙어 있는 첨부에서 시작해야 저장할 때 통째로 사라지지 않는다.
+                        setEditAttachments(post.attachments)
                         setPostActionError(undefined)
                       }}
                       size="sm"
