@@ -901,11 +901,32 @@ export function ConnectedCallRoom({
       </div>
     )
 
+  /**
+   * 팬이 대기실에서 적어 둔 메모를 담는 옆 패널이다.
+   *
+   * 무대 아래에 두면 flex 레이아웃이 무대 높이를 그만큼 깎아 통화 화면이 위아래로
+   * 좁아진다. 인플루언서 화면의 사이드 패널과 같은 자리·같은 재질로 옆에 세운다.
+   */
+  const fanMemoPanel =
+    authSession?.role === 'FAN' && fanMemo ? (
+      <aside
+        aria-label={t('connectedCallRoom.memo.title')}
+        className="min-w-0 rounded-xl border border-white/10 bg-[var(--color-surface-dark-panel)] p-5"
+      >
+        <p className="text-[13px] font-bold text-white/60">{t('connectedCallRoom.memo.title')}</p>
+        <p className="mt-2 whitespace-pre-line text-[15px] font-medium leading-[1.75] text-white/90">
+          “{fanMemo}”
+        </p>
+      </aside>
+    ) : null
+  // 인플루언서는 운영 패널, 팬은 메모 패널이 옆자리를 쓴다. 양쪽 다 없으면 무대가 전체 폭을 쓴다.
+  const asidePanel = sidePanel ?? fanMemoPanel
+
   return (
     // 어두운 콘솔 — 헤더 아래를 통째로 다크 면으로 칠한다. (강도 1, 코랄 0회)
     <div className="-mx-3 -my-5 min-h-[calc(100dvh-var(--service-header-height))] bg-[var(--color-surface-dark)] px-4 pb-8 pt-[22px] sm:-mx-6 sm:px-6 lg:-mx-10 lg:-my-6 lg:px-10">
       <div
-        className={`mx-auto grid w-full items-start gap-[22px] ${sidePanel ? 'max-w-[1320px] min-[941px]:grid-cols-[minmax(0,1fr)_260px]' : 'max-w-[1240px]'}`}
+        className={`mx-auto grid w-full items-start gap-[22px] ${asidePanel ? 'max-w-[1320px] min-[941px]:grid-cols-[minmax(0,1fr)_260px]' : 'max-w-[1240px]'}`}
       >
       {/*
         무대와 그 아래 요소를 flex 세로 축으로 묶고, 최소 높이를 "뷰포트 - 헤더 - 콘솔 여백"에
@@ -972,16 +993,6 @@ export function ConnectedCallRoom({
         }
         timeValue={remaining.label}
       />
-
-      {/* 대기실에서 적어 둔 메모 — 통화 중 하고 싶은 말을 잊지 않게 화면에 함께 둔다. */}
-      {authSession?.role === 'FAN' && fanMemo ? (
-        <div className="rounded-[10px] bg-white/[0.08] px-[18px] py-3.5">
-          <p className="text-[13px] font-bold text-white/60">{t('connectedCallRoom.memo.title')}</p>
-          <p className="mt-1 whitespace-pre-line text-[15px] font-medium leading-[1.6] text-white/90">
-            “{fanMemo}”
-          </p>
-        </div>
-      ) : null}
 
       {footNote ? (
         <p className="text-[15px] font-medium leading-[1.6] text-white/65">{footNote}</p>
@@ -1087,7 +1098,7 @@ export function ConnectedCallRoom({
       />
       </div>
 
-      {sidePanel}
+      {asidePanel}
       </div>
     </div>
   )
