@@ -269,6 +269,81 @@ export function getScheduleErrors(input: MeetingScheduleInput): string[] {
   return errors
 }
 
+/** Date를 datetime-local 입력값(YYYY-MM-DDTHH:mm)으로 바꾼다. */
+function toDateTimeLocalInput(date: Date): string {
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** 예정 일시에서 역산한 나머지 일정 자동 입력값이다. datetime-local 문자열로 돌려준다. */
+export type ScheduleDefaults = {
+  applicationStartAt: string
+  applicationEndAt: string
+  resultAnnouncementAt: string
+  queueOpenAt: string
+}
+
+/**
+ * 팬미팅 예정 일시를 기준으로 나머지 일정(응모 시작·마감, 결과 발표, 대기열 오픈)의
+ * 추천값을 역산한다. 생성 화면이 비어 있는 필드를 자동으로 채울 때 쓴다.
+ *
+ * 표준 간격은 응모 시작 = max(지금+10분, 시작 7일 전), 마감 = 시작 24시간 전,
+ * 발표 = 마감 1시간 뒤, 대기열 오픈 = 시작 30분 전이다. 예정 일시가 임박해 표준 간격이
+ * 성립하지 않으면 지금+10분 ~ 예정 일시 구간을 비율로 압축해 순서를 지킨다.
+ *
+ * 모든 값이 `getScheduleErrors`의 선후 규칙을 만족하지 못할 만큼 임박했으면(분 단위 반올림
+ * 후 순서가 무너지는 경우 포함) null을 돌려주고 아무것도 채우지 않는다.
+ */
+export function deriveScheduleDefaults(
+  scheduledStartAtLocal: string,
+  now: Date = new Date(),
+): ScheduleDefaults | null {
+  if (!scheduledStartAtLocal) return null
+  const start = new Date(scheduledStartAtLocal)
+  if (Number.isNaN(start.getTime())) return null
+
+  const MINUTE = 60_000
+  const HOUR = 60 * MINUTE
+  const DAY = 24 * HOUR
+  // 정확히 현재 시각으로 채우면 남은 단계를 작성하는 사이 과거가 되므로 10분 뒤를 하한으로 둔다.
+  const floor = new Date(now.getTime() + 10 * MINUTE)
+
+  let applicationStart = new Date(Math.max(floor.getTime(), start.getTime() - 7 * DAY))
+  let applicationEnd = new Date(start.getTime() - 24 * HOUR)
+  let resultAnnouncement = new Date(start.getTime() - 23 * HOUR)
+  let queueOpen = new Date(start.getTime() - 30 * MINUTE)
+
+  const standardFits =
+    applicationStart < applicationEnd && resultAnnouncement < queueOpen && queueOpen < start
+  if (!standardFits) {
+    const total = start.getTime() - floor.getTime()
+    // 분 단위로 잘라도 네 시점의 선후가 유지되려면 최소 10분은 남아 있어야 한다.
+    if (total < 10 * MINUTE) return null
+    applicationStart = floor
+    applicationEnd = new Date(floor.getTime() + total * 0.5)
+    resultAnnouncement = new Date(floor.getTime() + total * 0.65)
+    queueOpen = new Date(floor.getTime() + total * 0.85)
+  }
+
+  const defaults: ScheduleDefaults = {
+    applicationStartAt: toDateTimeLocalInput(applicationStart),
+    applicationEndAt: toDateTimeLocalInput(applicationEnd),
+    resultAnnouncementAt: toDateTimeLocalInput(resultAnnouncement),
+    queueOpenAt: toDateTimeLocalInput(queueOpen),
+  }
+
+  // 분 단위로 자른 뒤에도 검증 규칙(응모시작 < 마감 ≤ 발표 < 오픈 < 시작)이 성립하는지 확인한다.
+  const errors = getScheduleErrors({
+    scheduledStartAt: scheduledStartAtLocal,
+    applicationEnabled: true,
+    applicationStartAt: defaults.applicationStartAt,
+    applicationEndAt: defaults.applicationEndAt,
+    resultAnnouncementAt: defaults.resultAnnouncementAt,
+    queueOpenAt: defaults.queueOpenAt,
+  })
+  return errors.length === 0 ? defaults : null
+}
+
 /** 팬미팅 상세 화면의 탭 식별자다. test-control은 시연·테스트 전용 탭이다. */
 export type MeetingDetailTab =
   | 'overview'

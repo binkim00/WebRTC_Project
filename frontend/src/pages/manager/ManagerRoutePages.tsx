@@ -39,6 +39,7 @@ import {
 import { getMyOrganization, type OrganizationMember } from '../../api/organizations'
 import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, Pagination, Select, Spinner, Switch, TextField, Textarea } from '../../components'
 import {
+  deriveScheduleDefaults,
   formatDateTime,
   getScheduleErrors,
   toApiLocalDateTime,
@@ -299,6 +300,48 @@ export function ManagerMeetingCreatePage() {
     const derived = new Date(scheduledStartDate.getTime() - ms)
     const floor = new Date(Date.now() + 10 * 60 * 1000)
     return toLocalInputValue(derived > floor ? derived : floor)
+  }
+
+  // 예정 일시를 입력하면 비어 있는 나머지 일정을 자동으로 채웠음을 알리는 안내다.
+  const [scheduleAutoFilled, setScheduleAutoFilled] = useState(false)
+
+  /**
+   * 예정 일시가 바뀔 때 아직 비어 있는 일정(응모 시작·마감, 발표, 대기열 오픈)을
+   * 추천값으로 채운다. 이미 값이 있는 필드는 절대 덮어쓰지 않으므로 직접 고른 시각은 유지된다.
+   * 응모 관련 시각은 응모를 받는 방식일 때만 채운다.
+   */
+  const handleScheduledStartChange = (value: string) => {
+    const defaults = deriveScheduleDefaults(value)
+    if (!defaults) {
+      setScheduleAutoFilled(false)
+      setForm({ ...form, scheduledStartAt: value })
+      return
+    }
+
+    let didFill = false
+    const application = { ...form.application }
+    if (form.application.enabled && selectionType === 'APPLICATION') {
+      if (!application.startAt) {
+        application.startAt = defaults.applicationStartAt
+        didFill = true
+      }
+      if (!application.endAt) {
+        application.endAt = defaults.applicationEndAt
+        didFill = true
+      }
+      if (!application.resultAnnouncementAt) {
+        application.resultAnnouncementAt = defaults.resultAnnouncementAt
+        didFill = true
+      }
+    }
+    const operation = { ...form.operation }
+    if (!operation.queueOpenAt) {
+      operation.queueOpenAt = defaults.queueOpenAt
+      didFill = true
+    }
+
+    setScheduleAutoFilled(didFill)
+    setForm({ ...form, scheduledStartAt: value, application, operation })
   }
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [templateDownloadError, setTemplateDownloadError] = useState<string>()
@@ -1012,13 +1055,20 @@ export function ManagerMeetingCreatePage() {
             {step === 0 ? (
               <div className="grid items-start gap-5 sm:grid-cols-2">
                 <TextField label={t('managerRoutePages.t17')} maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText={t('managerRoutePages.t18')} />
-                <TextField
-                  label={t('managerRoutePages.t19')}
-                  required
-                  type="datetime-local"
-                  value={form.scheduledStartAt}
-                  onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })}
-                />
+                <div>
+                  <TextField
+                    label={t('managerRoutePages.t19')}
+                    required
+                    type="datetime-local"
+                    value={form.scheduledStartAt}
+                    onChange={(event) => handleScheduledStartChange(event.target.value)}
+                  />
+                  {scheduleAutoFilled ? (
+                    <p className="mt-2 text-sm font-medium text-[var(--color-success)]" role="status">
+                      {t('managerCreate.autoFill.notice')}
+                    </p>
+                  ) : null}
+                </div>
                 <div>
                   {isInfluencerAccount ? (
                     <div className="grid gap-2">

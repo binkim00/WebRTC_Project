@@ -1487,6 +1487,8 @@ const ko = {
   'managerCreate.preset.hoursBefore': '시작 {p0}시간 전',
   'managerCreate.preset.daysBefore': '시작 {p0}일 전',
   'managerCreate.preset.needStart': '기본 정보에서 시작 일시를 먼저 정해 주세요.',
+  'managerCreate.autoFill.notice':
+    '예정 일시를 기준으로 비어 있던 응모·대기열 일정을 자동 입력했어요. 각 단계에서 수정할 수 있어요.',
   'connectedCallRoom.memo.title': '대기실에서 남긴 메모',
   'managerRoutePages.t46': '녹화 기능',
   'managerRoutePages.t47':
@@ -4662,6 +4664,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'managerCreate.preset.hoursBefore': '{p0} hr before start',
   'managerCreate.preset.daysBefore': '{p0} days before start',
   'managerCreate.preset.needStart': 'Set the start time in Basic info first.',
+  'managerCreate.autoFill.notice':
+    'Empty application and queue times were filled in based on the scheduled time. You can adjust them in each step.',
   'connectedCallRoom.memo.title': 'Note you left in the waiting room',
   'managerRoutePages.t46': 'Recording',
   'managerRoutePages.t47':
