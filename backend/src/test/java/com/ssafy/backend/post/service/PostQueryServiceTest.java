@@ -8,6 +8,8 @@ import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
+import com.ssafy.backend.post.domain.Attachment;
+import com.ssafy.backend.post.domain.AttachmentType;
 import com.ssafy.backend.post.domain.Post;
 import com.ssafy.backend.post.domain.PostStatus;
 import com.ssafy.backend.post.domain.PostType;
@@ -530,5 +532,73 @@ class PostQueryServiceTest {
         ReflectionTestUtils.setField(notice, "createdAt", LocalDateTime.of(2026, 7, 30, 10, 0));
         ReflectionTestUtils.setField(notice, "updatedAt", LocalDateTime.of(2026, 7, 30, 10, 0));
         return notice;
+    }
+
+    /**
+     * 공지 목록의 썸네일이 첨부 이미지에서 만들어지는지 검증한다.
+     *
+     * <p>PDF가 먼저 붙어 있어도 그릴 수 없으므로 건너뛰고 첫 이미지를 대표로 삼아야 한다.
+     */
+    @Test
+    void promotesFirstImageAttachmentToThumbnail() {
+        Post notice = serviceNotice(NOTICE_ID, "이미지 공지");
+        when(postRepository.findVisibleServiceNotices(
+                any(), any(), any(), any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(notice), PageRequest.of(0, 20), 1));
+        when(attachmentRepository.findAllByPost_IdInAndDeletedAtIsNullOrderByDisplayOrderAsc(
+                List.of(NOTICE_ID)
+        )).thenReturn(List.of(
+                attachedTo(notice, 30L, "guide.pdf", "application/pdf", 1),
+                attachedTo(notice, 31L, "cover.png", "image/png", 2)
+        ));
+
+        PageResponse<NoticeSummaryResponse> response = queryService.getServiceNotices(null, 0, 20);
+
+        assertThat(response.content().get(0).thumbnailUrl())
+                .isEqualTo("/api/v1/attachments/31/content");
+    }
+
+    /** 이미지가 아닌 첨부만 붙어 있으면 썸네일이 없는 상태로 남는지 검증한다. */
+    @Test
+    void keepsThumbnailNullWithoutImageAttachment() {
+        Post notice = serviceNotice(NOTICE_ID, "문서 공지");
+        when(postRepository.findVisibleServiceNotices(
+                any(), any(), any(), any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(notice), PageRequest.of(0, 20), 1));
+        when(attachmentRepository.findAllByPost_IdInAndDeletedAtIsNullOrderByDisplayOrderAsc(
+                List.of(NOTICE_ID)
+        )).thenReturn(List.of(attachedTo(notice, 30L, "guide.pdf", "application/pdf", 1)));
+
+        PageResponse<NoticeSummaryResponse> response = queryService.getServiceNotices(null, 0, 20);
+
+        assertThat(response.content().get(0).thumbnailUrl()).isNull();
+    }
+
+    /** 커뮤니티 게시글 상세가 연결된 첨부를 표시 순서대로 함께 반환하는지 검증한다. */
+    @Test
+    void returnsCommunityAttachmentsInDetail() {
+        Post post = communityPost(200L, MEETING_ID, 3L, "사진 글");
+        when(postRepository.findDetailById(200L)).thenReturn(Optional.of(post));
+        when(postCommentRepository.countVisibleByPost(200L)).thenReturn(0L);
+        when(attachmentRepository.findAllByPost_IdAndDeletedAtIsNullOrderByDisplayOrderAsc(200L))
+                .thenReturn(List.of(attachedTo(post, 41L, "photo.png", "image/png", 1)));
+
+        CommunityPostDetailResponse response = queryService.getCommunityPost(200L, null);
+
+        assertThat(response.attachments()).hasSize(1);
+        assertThat(response.attachments().get(0).attachmentId()).isEqualTo(41L);
+        assertThat(response.thumbnailUrl()).isEqualTo("/api/v1/attachments/41/content");
+    }
+
+    /** 게시글에 연결된 테스트용 첨부파일을 만든다. */
+    private Attachment attachedTo(Post post, Long attachmentId, String fileName,
+                                  String mimeType, int displayOrder) {
+        Attachment attachment = Attachment.createUploaded(
+                user(1L, UserRole.ADMIN), AttachmentType.NOTICE, fileName,
+                "2026/07/30/" + attachmentId, 1024L, mimeType
+        );
+        ReflectionTestUtils.setField(attachment, "id", attachmentId);
+        attachment.attachTo(post, displayOrder);
+        return attachment;
     }
 }

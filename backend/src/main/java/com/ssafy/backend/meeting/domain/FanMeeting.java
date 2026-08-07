@@ -53,6 +53,15 @@ public class FanMeeting extends BaseTimeEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    /**
+     * 팬 화면에 대표 이미지로 그려지는 커버 이미지 주소다.
+     *
+     * <p>운영자가 외부 주소를 직접 적을 수도 있고, 파일을 올렸다면
+     * {@code POST /api/v1/attachments}({@code attachmentType=MEETING_COVER})가 돌려준
+     * 콘텐츠 URL이 들어온다. 어느 쪽이든 저장하는 값은 URL 문자열 하나뿐이라 팬미팅에는
+     * 첨부 연결 컬럼을 두지 않는다. 업로드한 커버는 게시글에 붙지 않으므로 첨부 유형 자체를
+     * 공개로 두어 비로그인 팬에게도 보인다.
+     */
     @Column(name = "cover_image_url", length = 2048)
     private String coverImageUrl;
 

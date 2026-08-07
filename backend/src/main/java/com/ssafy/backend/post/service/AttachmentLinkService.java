@@ -17,17 +17,25 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 공지에 업로드된 첨부파일을 연결하고 해제한다(ATTACH-001).
+ * 게시글에 업로드된 첨부파일을 연결하고 해제한다(ATTACH-001).
  *
- * <p>공지 작성·수정이 받은 {@code attachmentIds}를 그대로 연결 상태로 만든다. 이 서비스는
- * 별도 트랜잭션을 열지 않고 호출한 공지 작성·수정 트랜잭션에 참여하므로, 첨부 연결이 실패하면
- * 공지 저장도 함께 롤백된다.
+ * <p>공지·커뮤니티 게시글 작성·수정이 받은 {@code attachmentIds}를 그대로 연결 상태로 만든다.
+ * 이 서비스는 별도 트랜잭션을 열지 않고 호출한 작성·수정 트랜잭션에 참여하므로, 첨부 연결이
+ * 실패하면 게시글 저장도 함께 롤백된다.
  */
 @Service
 public class AttachmentLinkService {
 
     /** 첨부파일 표시 순서의 시작 값이다. */
     private static final int FIRST_DISPLAY_ORDER = 1;
+
+    /**
+     * 게시글 한 건에 연결할 수 있는 첨부파일 최대 개수다.
+     *
+     * <p>프론트의 {@code NOTICE_ATTACHMENT_MAX_COUNT}와 같은 값이며, 화면 제한을 우회한 요청도
+     * 서버에서 막는다.
+     */
+    public static final int MAX_ATTACHMENT_COUNT = 10;
 
     private final AttachmentRepository attachmentRepository;
 
@@ -49,13 +57,17 @@ public class AttachmentLinkService {
      *
      * @param post 첨부를 연결할 게시글이며 이미 저장되어 식별자가 있어야 한다
      * @param requestedIds 연결할 첨부파일 식별자 목록이며 유지하려면 null
-     * @param actor 공지를 작성·수정하는 사용자
+     * @param actor 게시글을 작성·수정하는 사용자
      * @param now 해제된 첨부에 기록할 삭제 시각
-     * @throws BusinessException 첨부가 없거나 중복이거나 다른 게시글·다른 업로더의 첨부인 경우
+     * @throws BusinessException 첨부가 없거나 중복이거나 개수 제한을 넘었거나 용도가 게시글
+     *                           유형과 맞지 않거나 다른 게시글·다른 업로더의 첨부인 경우
      */
     public void replaceLinks(Post post, List<Long> requestedIds, User actor, LocalDateTime now) {
         if (requestedIds == null) {
             return;
+        }
+        if (requestedIds.size() > MAX_ATTACHMENT_COUNT) {
+            throw new BusinessException(ErrorCode.ATTACHMENT_TOO_MANY);
         }
 
         Set<Long> uniqueIds = requireUniqueIds(requestedIds);
@@ -131,11 +143,16 @@ public class AttachmentLinkService {
      *
      * @param post 대상 게시글
      * @param attachment 연결할 첨부파일
-     * @param actor 공지를 작성·수정하는 사용자
+     * @param actor 게시글을 작성·수정하는 사용자
      * @param displayOrder 지정할 표시 순서
-     * @throws BusinessException 다른 게시글에 연결되었거나 업로더 본인이 아닌 경우
+     * @throws BusinessException 용도가 게시글 유형과 맞지 않거나 다른 게시글에 연결되었거나
+     *                           업로더 본인이 아닌 경우
      */
     private void attach(Post post, Attachment attachment, User actor, int displayOrder) {
+        if (!attachment.getAttachmentType().canAttachTo(post.getType())) {
+            // 공지용으로 올린 파일을 커뮤니티 글에 붙이는 것처럼 용도가 어긋난 연결을 막는다.
+            throw new BusinessException(ErrorCode.ATTACHMENT_TYPE_MISMATCH);
+        }
         if (attachment.isAttached()) {
             if (!post.getId().equals(attachment.getPost().getId())) {
                 throw new BusinessException(ErrorCode.ATTACHMENT_ALREADY_ATTACHED);

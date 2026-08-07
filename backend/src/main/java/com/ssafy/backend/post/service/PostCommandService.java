@@ -136,11 +136,15 @@ public class PostCommandService {
      * <p>게시글은 요청 경로의 팬미팅에 연결한다. 공지 작성과 같은 기준으로 팬미팅 단위
      * 운영 권한을 다시 검증하고 삭제·취소된 팬미팅에는 작성을 허용하지 않는다.
      *
+     * <p>{@code attachmentIds}를 보내면 미리 업로드한 첨부파일(ATTACH-001)을 보낸 순서대로
+     * 이 게시글에 연결한다. 첨부 연결이 실패하면 게시글 저장도 함께 롤백된다.
+     *
      * @param meetingId 게시글을 등록할 팬미팅 식별자
-     * @param request 제목과 본문을 담은 작성 요청
+     * @param request 제목·본문과 연결할 첨부파일 식별자를 담은 작성 요청
      * @param principal 로그인 사용자 정보
      * @return 생성된 커뮤니티 게시글 정보
-     * @throws BusinessException 팬미팅이 없거나 삭제·취소되었거나 운영 권한이 없는 경우
+     * @throws BusinessException 팬미팅이 없거나 삭제·취소되었거나 운영 권한이 없거나
+     *                           첨부파일을 연결할 수 없는 경우
      */
     @Transactional
     public CommunityPostCreateResponse createCommunityPost(Long meetingId,
@@ -152,7 +156,11 @@ public class PostCommandService {
         Post post = Post.createCommunity(
                 author, meeting, request.title().trim(), request.content().trim()
         );
-        return CommunityPostCreateResponse.from(postRepository.save(post));
+        // 첨부 연결은 게시글 식별자를 사용하므로 저장 이후에 처리한다.
+        Post saved = postRepository.save(post);
+        attachmentLinkService.replaceLinks(
+                saved, request.attachmentIds(), author, LocalDateTime.now(clock));
+        return CommunityPostCreateResponse.from(saved);
     }
 
     /**
@@ -263,28 +271,30 @@ public class PostCommandService {
      * 작성자가 자신의 커뮤니티 게시글을 부분 수정한다(POST-004b).
      *
      * <p>운영자라도 다른 사람의 글 내용은 바꿀 수 없으므로 작성자 본인만 허용한다.
-     * 첨부파일은 MVP에서 공지에만 허용하므로 {@code attachmentIds}를 보내면 거부한다.
+     *
+     * <p>{@code attachmentIds}를 보내면 공지 수정과 같은 규칙으로 그 목록이 첨부 연결 상태
+     * 전체를 대신하므로, 목록에서 빠진 기존 첨부는 해제되고 빈 목록을 보내면 모든 첨부가
+     * 해제된다. 보내지 않으면 그대로 둔다.
      *
      * @param postId 커뮤니티 게시글 식별자
-     * @param request 수정할 제목·본문을 담은 요청
+     * @param request 수정할 제목·본문과 첨부파일 식별자를 담은 요청
      * @param principal 로그인 사용자 정보
      * @return 수정된 게시글 정보
      * @throws BusinessException 게시글이 없거나 커뮤니티 게시글이 아니거나 작성자가 아니거나
-     *                           첨부파일 연결을 요청한 경우
+     *                           첨부파일을 연결할 수 없는 경우
      */
     @Transactional
     public PostUpdateResponse updateCommunityPost(Long postId, PostUpdateRequest request,
                                                   AuthenticatedUser principal) {
         User actor = currentUserService.requireActiveUser(principal);
-        if (request.attachmentIds() != null) {
-            throw new BusinessException(ErrorCode.POST_ATTACHMENT_NOT_ALLOWED);
-        }
         Post post = requireVisiblePost(postId, PostType.COMMUNITY);
         if (!isAuthor(post, actor)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
 
         post.update(trimmedOrNull(request.title()), trimmedOrNull(request.content()));
+        attachmentLinkService.replaceLinks(
+                post, request.attachmentIds(), actor, LocalDateTime.now(clock));
         return PostUpdateResponse.from(post);
     }
 

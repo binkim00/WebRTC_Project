@@ -10,10 +10,14 @@ import java.time.LocalDateTime;
 /**
  * 초안 팬미팅에서 선택적으로 변경할 값들을 전달한다.
  *
+ * <p>커버 이미지는 외부 URL을 그대로 넣거나,
+ * {@code POST /api/v1/attachments}에 {@code attachmentType=MEETING_COVER}로 올린 뒤 받은
+ * {@code fileUrl}을 보낸다({@link FanMeetingCreateRequest} 참고).
+ *
  * @param influencerId 변경할 인플루언서 식별자
  * @param title 변경할 제목
  * @param description 변경할 설명
- * @param coverImageUrl 변경할 커버 이미지 URL
+ * @param coverImageUrl 변경할 커버 이미지 URL이며 외부 주소나 업로드한 첨부의 콘텐츠 URL을 쓴다
  * @param scheduledStartAt 변경할 예정 시작 시각
  * @param application 변경할 응모 설정
  * @param operation 변경할 운영 설정
