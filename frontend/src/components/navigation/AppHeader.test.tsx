@@ -39,6 +39,9 @@ const expectedNavigation = {
   INFLUENCER: [
     { labelKey: 'nav.influencer.meetings', label: '내 팬미팅', to: '/influencer/fan-meetings' },
     { labelKey: 'nav.influencer.fans', label: '내 팬', to: '/influencer/fans' },
+    // 소속 인플루언서만 조직에 들어갈 수 있어(초대 발급·수락 모두 INFLUENCER 전용)
+    // 1인 인플루언서 메뉴에는 이 항목이 없다.
+    { labelKey: 'nav.influencer.organization', label: '내 조직', to: '/influencer/organization' },
     serviceNoticesItem,
     {
       labelKey: 'nav.influencer.mypage',
@@ -110,9 +113,13 @@ describe('AppHeader', () => {
     },
   )
 
-  it('인플루언서와 1인 인플루언서가 같은 네비게이션 배열을 공유한다', () => {
-    expect(getAppHeaderNavigation('SOLO_INFLUENCER')).toBe(
-      getAppHeaderNavigation('INFLUENCER'),
+  it('1인 인플루언서 메뉴는 조직 항목만 빠지고 나머지는 인플루언서와 같다', () => {
+    // 두 역할이 같은 배열을 공유하던 시절에는 조직 화면을 인플루언서에게만 열 수 없었다.
+    // 배열을 나눈 뒤에도 조직 말고 다른 항목이 갈라지지 않는지 확인한다.
+    expect(getAppHeaderNavigation('SOLO_INFLUENCER')).toEqual(
+      getAppHeaderNavigation('INFLUENCER').filter(
+        (item) => item.to !== '/influencer/organization',
+      ),
     )
   })
 
