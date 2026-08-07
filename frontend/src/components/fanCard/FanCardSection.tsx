@@ -916,11 +916,14 @@ export function FanCardSection({
   /**
    * 사진 한 장을 카드에 넣거나 뺀다.
    *
-   * <p>한 장만 쓰는 레이아웃은 곧바로 교체하고, 네컷은 고른 순서대로 칸을 채운다.
+   * <p>미리보기에서 칸을 골라 둔 상태라면 그 칸에 넣을 사진만 갈아 끼운다. 다른 칸의 배치는
+   * 그대로 두고 바뀐 칸의 확대·이동만 처음으로 되돌린다. 같은 사진을 여러 칸에 쓸 때 어느
+   * 칸을 바꿀지 고르는 유일한 방법이다.
    *
-   * <p>찍어 둔 사진이 칸 수보다 적으면 같은 사진을 여러 칸에 넣을 수 있다. 그때는 이미 고른
-   * 사진을 다시 눌러도 빼지 않고 남은 칸에 한 번 더 넣고, 칸이 다 찬 뒤에 눌러야 한 칸씩
-   * 뺀다. 사진이 넉넉하면 예전처럼 누를 때마다 넣고 빼기만 한다.
+   * <p>칸을 고르지 않았으면 한 장만 쓰는 레이아웃은 곧바로 교체하고, 여러 칸을 쓰는
+   * 레이아웃은 고른 순서대로 빈 칸을 채운다. 찍어 둔 사진이 칸 수보다 적으면 칸이 이미 다
+   * 차 있으므로 아무 일도 하지 않는다. 여기서 한 칸을 비우면 누를 때마다 같은 칸이 빠졌다
+   * 다시 차기만 해서, 사진이 한 장뿐이면 마지막 칸이 깜빡이기만 한다.
    *
    * @param index 사진 목록에서의 위치
    */
@@ -929,26 +932,39 @@ export function FanCardSection({
       const need = photoCountOf(layout)
       if (need === 0) return
 
+      const targetSlot = selectedPhotoIndex
+      if (targetSlot !== undefined && targetSlot < need) {
+        setPhotoAdjustments((current) => {
+          const next = [...current]
+          while (next.length <= targetSlot) next.push({ ...DEFAULT_PHOTO_ADJUSTMENT })
+          next[targetSlot] = { ...DEFAULT_PHOTO_ADJUSTMENT }
+          return next
+        })
+        setSelectedPhotoIndexes((current) => {
+          if (targetSlot >= current.length) return current
+          const next = [...current]
+          next[targetSlot] = index
+          return next
+        })
+        return
+      }
+
       // 사진을 빼거나 더하면 칸 순번이 밀려 남아 있던 배치가 엉뚱한 사진에 붙는다.
       setPhotoAdjustments([])
-      setSelectedPhotoIndex(undefined)
       setSelectedPhotoIndexes((current) => {
         if (need === 1) return [index]
-
-        const canRepeat = photoBlobs.length < need
-        if (canRepeat) {
-          if (current.length < need) return [...current, index]
-          // 칸이 다 찼으면 그 사진이 놓인 마지막 칸 하나만 비운다.
-          const last = current.lastIndexOf(index)
-          return last < 0 ? current : current.filter((_, slot) => slot !== last)
+        if (current.length >= need) {
+          // 사진이 모자라 모든 칸이 같은 사진으로 찬 경우다. 칸을 골라야 바꿀 수 있다.
+          if (photoBlobs.length < need) return current
+          return current.includes(index) ? current.filter((item) => item !== index) : current
         }
-
-        if (current.includes(index)) return current.filter((item) => item !== index)
-        if (current.length >= need) return current
+        if (current.includes(index) && photoBlobs.length >= need) {
+          return current.filter((item) => item !== index)
+        }
         return [...current, index]
       })
     },
-    [layout, photoBlobs.length],
+    [layout, photoBlobs.length, selectedPhotoIndex],
   )
 
   /**
@@ -1071,6 +1087,7 @@ export function FanCardSection({
               onTogglePhoto={togglePhoto}
               photoUrls={photoUrls}
               selectedPhotoIndexes={selectedPhotoIndexes}
+              selectedSlot={selectedPhotoIndex}
             />
           ) : null}
 

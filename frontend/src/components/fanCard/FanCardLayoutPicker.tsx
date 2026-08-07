@@ -10,6 +10,8 @@ type FanCardLayoutPickerProps = {
   layout?: FanCardLayout
   /** 카드에 넣기로 한 사진의 위치이며 순서가 곧 칸 순서다 */
   selectedPhotoIndexes: readonly number[]
+  /** 미리보기에서 고른 칸의 순번이며 고른 칸이 없으면 undefined다 */
+  selectedSlot?: number
   /** 카드 모양을 바꿨을 때 호출한다 */
   onLayoutChange: (layout: FanCardLayout | undefined) => void
   /** 사진을 넣거나 뺄 때 호출한다 */
@@ -26,6 +28,7 @@ export function FanCardLayoutPicker({
   photoUrls,
   layout,
   selectedPhotoIndexes,
+  selectedSlot,
   onLayoutChange,
   onTogglePhoto,
 }: FanCardLayoutPickerProps) {
@@ -98,7 +101,12 @@ export function FanCardLayoutPicker({
               )
             })}
           </ul>
-          {photoUrls.length < needed ? (
+          {/* 고른 칸이 있으면 그 칸을 바꾼다는 것을 먼저 알린다. 사진이 모자라 모든 칸이
+              차 있을 때 칸을 고르는 것이 배치를 바꾸는 유일한 방법이다. */}
+          {selectedSlot !== undefined && needed > 1 ? (
+            <p className="mt-2.5 text-[13px] font-semibold leading-6 text-[var(--color-primary-coral)]">
+               {t('fanCardLayoutPicker.t11', { p0: selectedSlot + 1 })} </p>
+          ) : photoUrls.length < needed ? (
             <p className="mt-2.5 text-[13px] font-medium leading-6 text-[var(--color-text-muted)]">
                {t('fanCardLayoutPicker.t10')} </p>
           ) : selectedPhotoIndexes.length < needed ? (
