@@ -392,9 +392,9 @@ class ExternalParticipantApiIntegrationTest {
 
         assertThat(body).startsWith("﻿");
         assertThat(body).contains(
-                "participantId,participantSource,callOrder,nickname,"
-                        + "participantStatus,queueStatus,callStatus,callDurationSec");
-        assertThat(body).contains("EXTERNAL_SELECTION");
+                "참가자 ID,참가 경로,통화 순번,닉네임,"
+                        + "참가 상태,대기열 상태,통화 상태,통화 시간(초)");
+        assertThat(body).contains("외부 선별");
         assertThat(body).contains("첫째팬").contains("둘째팬");
         assertThat(body).doesNotContain("ext-fan1@example.com");
         assertThat(body).doesNotContain("@example.com");
