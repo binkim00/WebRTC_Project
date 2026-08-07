@@ -34,7 +34,7 @@ import { cardStickerUrl } from './cardStickers'
 import { FanCardColorPicker } from './FanCardColorPicker'
 import { FanCardQuotePicker } from './FanCardQuotePicker'
 import { FanCardLayoutPicker } from './FanCardLayoutPicker'
-import { photoCountOf } from './fanCardLayoutOptions'
+import { fillPhotoSlots, photoCountOf } from './fanCardLayoutOptions'
 import { FanCardFontPicker } from './FanCardFontPicker'
 import { FanCardThemePicker } from './FanCardThemePicker'
 import {
@@ -906,13 +906,9 @@ export function FanCardSection({
       setLayout(nextLayout)
       const need = photoCountOf(nextLayout)
 
-      setSelectedPhotoIndexes((current) => {
-        if (need === 0) return []
-        const trimmed = current.slice(0, need)
-        if (trimmed.length > 0) return trimmed
-        // 아직 고른 사진이 없으면 앞에서부터 필요한 만큼 자동으로 채워 준다.
-        return photoBlobs.slice(0, need).map((_, index) => index)
-      })
+      setSelectedPhotoIndexes((current) =>
+        fillPhotoSlots(current.slice(0, need), need, photoBlobs.length),
+      )
     },
     [layout, photoBlobs],
   )
@@ -921,6 +917,10 @@ export function FanCardSection({
    * 사진 한 장을 카드에 넣거나 뺀다.
    *
    * <p>한 장만 쓰는 레이아웃은 곧바로 교체하고, 네컷은 고른 순서대로 칸을 채운다.
+   *
+   * <p>찍어 둔 사진이 칸 수보다 적으면 같은 사진을 여러 칸에 넣을 수 있다. 그때는 이미 고른
+   * 사진을 다시 눌러도 빼지 않고 남은 칸에 한 번 더 넣고, 칸이 다 찬 뒤에 눌러야 한 칸씩
+   * 뺀다. 사진이 넉넉하면 예전처럼 누를 때마다 넣고 빼기만 한다.
    *
    * @param index 사진 목록에서의 위치
    */
@@ -934,12 +934,21 @@ export function FanCardSection({
       setSelectedPhotoIndex(undefined)
       setSelectedPhotoIndexes((current) => {
         if (need === 1) return [index]
+
+        const canRepeat = photoBlobs.length < need
+        if (canRepeat) {
+          if (current.length < need) return [...current, index]
+          // 칸이 다 찼으면 그 사진이 놓인 마지막 칸 하나만 비운다.
+          const last = current.lastIndexOf(index)
+          return last < 0 ? current : current.filter((_, slot) => slot !== last)
+        }
+
         if (current.includes(index)) return current.filter((item) => item !== index)
         if (current.length >= need) return current
         return [...current, index]
       })
     },
-    [layout],
+    [layout, photoBlobs.length],
   )
 
   /**

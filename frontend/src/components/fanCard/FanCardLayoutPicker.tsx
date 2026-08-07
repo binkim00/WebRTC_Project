@@ -61,8 +61,12 @@ export function FanCardLayoutPicker({
           </h4>
           <ul className="mt-3 grid grid-cols-4 gap-2">
             {photoUrls.map((url, index) => {
-              const order = selectedPhotoIndexes.indexOf(index)
-              const chosen = order >= 0
+              // 사진이 칸 수보다 적으면 한 장이 여러 칸에 들어가므로 칸 번호를 모두 모은다.
+              const orders = selectedPhotoIndexes.reduce<number[]>((slots, item, slot) => {
+                if (item === index) slots.push(slot + 1)
+                return slots
+              }, [])
+              const chosen = orders.length > 0
               return (
                 <li key={url}>
                   <button
@@ -82,10 +86,11 @@ export function FanCardLayoutPicker({
                     type="button"
                   >
                     <img alt="" className="block aspect-video w-full object-cover" src={url} />
-                    {/* 네컷은 고른 차례가 곧 칸 순서라 번호를 보여 준다. */}
+                    {/* 네컷은 고른 차례가 곧 칸 순서라 번호를 보여 준다. 한 사진이 여러 칸에
+                        들어가면 번호를 함께 적어 어디에 놓였는지 알 수 있게 한다. */}
                     {chosen && needed > 1 ? (
-                      <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-[var(--color-primary-coral)] text-[11px] font-extrabold text-white">
-                        {order + 1}
+                      <span className="absolute right-1 top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-primary-coral)] px-1.5 text-[11px] font-extrabold text-white">
+                        {orders.join('·')}
                       </span>
                     ) : null}
                   </button>
@@ -93,7 +98,10 @@ export function FanCardLayoutPicker({
               )
             })}
           </ul>
-          {selectedPhotoIndexes.length < needed ? (
+          {photoUrls.length < needed ? (
+            <p className="mt-2.5 text-[13px] font-medium leading-6 text-[var(--color-text-muted)]">
+               {t('fanCardLayoutPicker.t10')} </p>
+          ) : selectedPhotoIndexes.length < needed ? (
             <p className="mt-2.5 text-[13px] font-medium leading-6 text-[var(--color-text-muted)]">
                {t('fanCardLayoutPicker.t9')} </p>
           ) : null}

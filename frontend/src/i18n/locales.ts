@@ -3349,6 +3349,8 @@ const ko = {
   'fanCardLayoutPicker.t7': ' 선택 해제',
   'fanCardLayoutPicker.t8': ' 선택',
   'fanCardLayoutPicker.t9': '남은 칸은 빈 자리로 나옵니다. 원하는 사진을 더 골라 주세요.',
+  'fanCardLayoutPicker.t10':
+    '사진이 칸보다 적어 같은 사진이 여러 칸에 들어갑니다. 사진을 눌러 칸을 바꿀 수 있어요.',
   'fanCardQuotePicker.t1': '문구를 불러오지 못했습니다',
   'fanCardQuotePicker.t2': '다시 불러오기',
   'fanCardQuotePicker.t3': '문구를 불러오고 있습니다.',
@@ -6943,6 +6945,8 @@ const en: Partial<Record<TranslationKey, string>> = {
   'fanCardLayoutPicker.t7': ', deselect',
   'fanCardLayoutPicker.t8': ', select',
   'fanCardLayoutPicker.t9': 'Empty slots stay blank. Please choose more photos if you want.',
+  'fanCardLayoutPicker.t10':
+    'You have fewer photos than slots, so a photo repeats. Tap a photo to change its slot.',
   'fanCardQuotePicker.t1': 'Could not load the quotes',
   'fanCardQuotePicker.t2': 'Load again',
   'fanCardQuotePicker.t3': 'Loading the quotes.',
