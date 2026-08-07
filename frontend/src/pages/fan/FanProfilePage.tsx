@@ -7,12 +7,17 @@ import {
 } from '@phosphor-icons/react'
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { PREFERRED_LANGUAGE_OPTIONS, preferredLanguageLabel } from '../../api/auth'
-import { getAuthSession } from '../../api/authSession'
+import { clearAuthSession, getAuthSession } from '../../api/authSession'
 import { getEmailVerificationStatus } from '../../api/emailVerifications'
-import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
+import {
+  changeMyPassword,
+  getMyProfile,
+  updateMyProfile,
+  type UserProfile,
+} from '../../api/users'
 import { isEmailVerificationEnabled } from '../../config/features'
 import {
   AlertBanner,
@@ -20,6 +25,7 @@ import {
   Button,
   Card,
   CardContent,
+  Dialog,
   EmailVerificationNotice,
   Select,
   Spinner,
@@ -56,12 +62,21 @@ const activityItems = [
 
 export function FanProfilePage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [profile, setProfile] = useState<UserProfile>()
   const [loadError, setLoadError] = useState<string>()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string>()
   const [saveNotice, setSaveNotice] = useState<string>()
+
+  // 비밀번호 변경. 성공하면 백엔드가 모든 기기의 세션을 끊으므로 로그인 화면으로 되돌린다.
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordError, setPasswordError] = useState<string>()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -165,6 +180,62 @@ export function FanProfilePage() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  /** 비밀번호 변경 대화상자를 열거나 닫고, 닫을 때 입력값을 남기지 않는다. */
+  function handlePasswordOpenChange(open: boolean) {
+    if (!open) {
+      setCurrentPassword('')
+      setNewPassword('')
+      setNewPasswordConfirm('')
+      setPasswordError(undefined)
+    }
+    setPasswordOpen(open)
+  }
+
+  /**
+   * 현재 비밀번호를 확인해 새 비밀번호로 바꾼다.
+   *
+   * 성공하면 서버가 세션을 끊은 상태이므로 남은 토큰을 지우고 로그인 화면으로 안내한다.
+   */
+  function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (passwordSaving) return
+
+    const session = getAuthSession()
+    if (!session) {
+      setPasswordError(t('fanProfilePage.t24'))
+      return
+    }
+    if (!currentPassword) {
+      setPasswordError(t('accountSecurity.currentPasswordRequired'))
+      return
+    }
+    if (!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(newPassword)) {
+      setPasswordError(t('accountSecurity.passwordRule'))
+      return
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setPasswordError(t('accountSecurity.passwordMismatch'))
+      return
+    }
+
+    setPasswordSaving(true)
+    setPasswordError(undefined)
+
+    void changeMyPassword(currentPassword, newPassword, session.accessToken)
+      .then(() => {
+        clearAuthSession()
+        navigate('/login', { replace: true, state: { notice: t('accountSecurity.changeDone') } })
+      })
+      .catch((reason: unknown) => {
+        setPasswordError(
+          reason instanceof ApiError || reason instanceof TypeError
+            ? reason.message
+            : t('accountSecurity.changeFailed'),
+        )
+      })
+      .finally(() => setPasswordSaving(false))
   }
 
   const isLoading = profile === undefined && !loadError
@@ -322,15 +393,13 @@ export function FanProfilePage() {
                 >
                   {t('fanProfilePage.t16')}
                 </Button>
-                {/* TODO: 비밀번호 변경 API가 아직 백엔드에 없어 비활성화 상태로 둡니다. */}
                 <Button
-                  disabled
                   leadingIcon={<Key aria-hidden size={17} weight="bold" />}
+                  onClick={() => setPasswordOpen(true)}
                   size="sm"
-                  title={t('fanProfilePage.t17')}
                   variant="secondary"
                 >
-                  {t('fanProfilePage.t18')}
+                  {t('accountSecurity.changeButton')}
                 </Button>
               </div>
             ) : null}
@@ -378,6 +447,60 @@ export function FanProfilePage() {
       </Card>
 
       <WithdrawAccountSection description={t('fanProfilePage.t21')} />
+
+      <Dialog
+        description={t('accountSecurity.changeDescription')}
+        footer={
+          <>
+            <Button
+              disabled={passwordSaving}
+              onClick={() => handlePasswordOpenChange(false)}
+              variant="secondary"
+            >
+              {t('accountSecurity.close')}
+            </Button>
+            <Button form="fan-password-form" loading={passwordSaving} type="submit">
+              {passwordSaving ? t('accountSecurity.changing') : t('accountSecurity.changeSubmit')}
+            </Button>
+          </>
+        }
+        onOpenChange={handlePasswordOpenChange}
+        open={passwordOpen}
+        title={t('accountSecurity.changeTitle')}
+      >
+        <form className="grid gap-4" id="fan-password-form" onSubmit={handlePasswordSubmit}>
+          <TextField
+            autoComplete="current-password"
+            label={t('accountSecurity.currentPassword')}
+            onChange={(event) => setCurrentPassword(event.currentTarget.value)}
+            required
+            type="password"
+            value={currentPassword}
+          />
+          <TextField
+            autoComplete="new-password"
+            helperText={t('accountSecurity.passwordHint')}
+            label={t('accountSecurity.newPassword')}
+            onChange={(event) => setNewPassword(event.currentTarget.value)}
+            required
+            type="password"
+            value={newPassword}
+          />
+          <TextField
+            autoComplete="new-password"
+            label={t('accountSecurity.newPasswordConfirm')}
+            onChange={(event) => setNewPasswordConfirm(event.currentTarget.value)}
+            required
+            type="password"
+            value={newPasswordConfirm}
+          />
+          {passwordError ? (
+            <AlertBanner title={t('accountSecurity.errorTitle')} variant="error">
+              {passwordError}
+            </AlertBanner>
+          ) : null}
+        </form>
+      </Dialog>
     </div>
   )
 }
