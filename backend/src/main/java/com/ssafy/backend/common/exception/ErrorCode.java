@@ -194,10 +194,39 @@ public enum ErrorCode {
     // ─────────────────────────────────────────────────────────────────
 
     // ── S4: 응모 폼 ──
+    APPLICATION_QUESTION_OPTION_INVALID(HttpStatus.BAD_REQUEST,
+            "객관식 질문의 선택지 구성이 올바르지 않습니다."),
+    APPLICATION_PARTICIPATION_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST,
+            "팬미팅 참여 동의가 필요합니다."),
+    APPLICATION_RECORDING_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST,
+            "녹화 및 보관 동의가 필요합니다."),
 
     // ── S5: 계정·인증 ──
+    // 가입 중복 확인 (AUTH-013)
+    // 확인 대상(type)이 지원 범위를 벗어난 경우다. 잘못된 값이 그대로 통과하면
+    // 프론트가 "사용 가능"으로 오해할 수 있어 검사 결과가 아니라 오류로 돌려준다.
+    DUPLICATE_CHECK_TARGET_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "확인할 수 없는 항목입니다."),
+    DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
+    // 비밀번호 변경·재설정 (AUTH-014, AUTH-015, USER-007)
+    // 만료·사용 완료·위조를 구분해 알려 주면 다른 계정의 토큰 상태를 탐색할 수 있어 한 코드로 합친다.
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST,
+            "비밀번호 재설정 정보가 만료되었거나 이미 사용되었습니다."),
+    // 메일 발송 실패는 서버 밖 원인이라 502로 알리고, 사용자가 재요청으로 복구할 수 있게 한다.
+    PASSWORD_RESET_SEND_FAILED(HttpStatus.BAD_GATEWAY, "비밀번호 재설정 메일을 발송하지 못했습니다."),
+    PASSWORD_POLICY_VIOLATION(HttpStatus.BAD_REQUEST,
+            "비밀번호는 8자 이상이며 영문과 숫자를 함께 포함해야 합니다."),
+    PASSWORD_SAME_AS_CURRENT(HttpStatus.BAD_REQUEST, "현재 비밀번호와 다른 비밀번호를 입력해 주세요."),
+    // 소셜 전용 계정은 비밀번호 자리에 매칭되지 않는 자리표시자가 들어 있어 변경할 대상이 없다.
+    PASSWORD_CHANGE_NOT_AVAILABLE(HttpStatus.CONFLICT,
+            "소셜 로그인으로만 사용하는 계정은 비밀번호를 변경할 수 없어요."),
 
     // ── S6: 첨부·이미지·공지 ──
+    ATTACHMENT_TYPE_MISMATCH(HttpStatus.BAD_REQUEST,
+            "이 게시글에 연결할 수 없는 용도의 첨부파일입니다."),
+    ATTACHMENT_IMAGE_REQUIRED(HttpStatus.BAD_REQUEST,
+            "이미지 파일만 올릴 수 있습니다."),
+    ATTACHMENT_TOO_MANY(HttpStatus.BAD_REQUEST,
+            "한 게시글에 연결할 수 있는 첨부파일 수를 넘었습니다."),
 
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 값이 올바르지 않습니다.");
 
