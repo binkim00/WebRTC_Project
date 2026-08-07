@@ -1,12 +1,14 @@
 package com.ssafy.backend.application.service;
 
 import com.ssafy.backend.application.domain.ApplicationForm;
+import com.ssafy.backend.application.domain.ApplicationOption;
 import com.ssafy.backend.application.domain.ApplicationQuestion;
 import com.ssafy.backend.application.domain.ApplicationQuestionType;
 import com.ssafy.backend.application.dto.ApplicationFormResponse;
 import com.ssafy.backend.application.dto.ApplicationFormSaveRequest;
 import com.ssafy.backend.application.dto.ApplicationFormSaveResponse;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
+import com.ssafy.backend.application.repository.ApplicationOptionRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
 import com.ssafy.backend.common.exception.BusinessException;
@@ -54,6 +56,7 @@ class ApplicationFormServiceTest {
     private MeetingApplicationSettingRepository applicationSettingRepository;
     private ApplicationFormRepository applicationFormRepository;
     private ApplicationQuestionRepository applicationQuestionRepository;
+    private ApplicationOptionRepository applicationOptionRepository;
     private ApplicationFormService applicationFormService;
     private AuthenticatedUser principal;
     private User operator;
@@ -68,6 +71,7 @@ class ApplicationFormServiceTest {
         applicationSettingRepository = mock(MeetingApplicationSettingRepository.class);
         applicationFormRepository = mock(ApplicationFormRepository.class);
         applicationQuestionRepository = mock(ApplicationQuestionRepository.class);
+        applicationOptionRepository = mock(ApplicationOptionRepository.class);
         applicationFormService = new ApplicationFormService(
                 currentUserService,
                 meetingAccessService,
@@ -75,6 +79,7 @@ class ApplicationFormServiceTest {
                 applicationSettingRepository,
                 applicationFormRepository,
                 applicationQuestionRepository,
+                applicationOptionRepository,
                 Clock.fixed(NOW, SEOUL)
         );
         principal = new AuthenticatedUser(3L, UserRole.MANAGER);
@@ -288,18 +293,108 @@ class ApplicationFormServiceTest {
         verify(applicationQuestionRepository, never()).saveAll(anyList());
     }
 
-    /** 지원하지 않는 선택형 질문 유형 저장을 400 오류로 거부하는지 검증한다. */
+    /** 객관식 질문에 선택지를 붙여 저장하고 응답에 표시 순서대로 담는지 검증한다. */
     @Test
-    void rejectsUnsupportedQuestionType() {
+    void savesChoiceQuestionWithOptions() {
+        when(applicationFormRepository.findByMeeting_Id(MEETING_ID))
+                .thenReturn(Optional.of(form("안내문")));
+        stubQuestionSaveAll(201L);
+        stubOptionSaveAll(401L, 402L);
+
+        ApplicationFormSaveResponse response = applicationFormService.saveForm(
+                MEETING_ID,
+                request("안내문", List.of(choiceQuestionRequest(
+                        null, "좋아하는 곡", ApplicationQuestionType.SINGLE_CHOICE, 1,
+                        List.of(optionRequest(null, "발라드", 1), optionRequest(null, "댄스", 2))
+                ))),
+                principal
+        );
+
+        assertThat(response.questions()).hasSize(1);
+        assertThat(response.questions().get(0).questionType())
+                .isEqualTo(ApplicationQuestionType.SINGLE_CHOICE);
+        assertThat(response.questions().get(0).options())
+                .extracting("optionId", "optionText", "displayOrder")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(401L, "발라드", 1),
+                        org.assertj.core.groups.Tuple.tuple(402L, "댄스", 2)
+                );
+    }
+
+    /** 선택지가 하나뿐인 객관식 질문 저장을 전용 400 오류로 거부하는지 검증한다. */
+    @Test
+    void rejectsChoiceQuestionWithSingleOption() {
         assertThatThrownBy(() -> applicationFormService.saveForm(
                 MEETING_ID,
-                request("안내문", List.of(
-                        questionRequest(null, "질문", ApplicationQuestionType.SINGLE_CHOICE, true, 1)
-                )),
+                request("안내문", List.of(choiceQuestionRequest(
+                        null, "좋아하는 곡", ApplicationQuestionType.SINGLE_CHOICE, 1,
+                        List.of(optionRequest(null, "발라드", 1))
+                ))),
                 principal
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.INVALID_REQUEST));
+                        .isEqualTo(ErrorCode.APPLICATION_QUESTION_OPTION_INVALID));
+
+        verify(applicationOptionRepository, never()).saveAll(anyList());
+    }
+
+    /** 주관식 질문에 선택지를 붙인 저장을 전용 400 오류로 거부하는지 검증한다. */
+    @Test
+    void rejectsOptionsOnTextQuestion() {
+        assertThatThrownBy(() -> applicationFormService.saveForm(
+                MEETING_ID,
+                request("안내문", List.of(choiceQuestionRequest(
+                        null, "이름", ApplicationQuestionType.SHORT_TEXT, 1,
+                        List.of(optionRequest(null, "발라드", 1), optionRequest(null, "댄스", 2))
+                ))),
+                principal
+        )).isInstanceOfSatisfying(BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.APPLICATION_QUESTION_OPTION_INVALID));
+    }
+
+    /** 표시 순서가 중복된 선택지 저장을 전용 400 오류로 거부하는지 검증한다. */
+    @Test
+    void rejectsDuplicatedOptionDisplayOrder() {
+        assertThatThrownBy(() -> applicationFormService.saveForm(
+                MEETING_ID,
+                request("안내문", List.of(choiceQuestionRequest(
+                        null, "좋아하는 곡", ApplicationQuestionType.SINGLE_CHOICE, 1,
+                        List.of(optionRequest(null, "발라드", 1), optionRequest(null, "댄스", 1))
+                ))),
+                principal
+        )).isInstanceOfSatisfying(BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.APPLICATION_QUESTION_OPTION_INVALID));
+    }
+
+    /** 객관식을 주관식으로 바꾸면 남아 있던 선택지를 삭제 처리하는지 검증한다. */
+    @Test
+    void softDeletesOptionsWhenQuestionBecomesText() {
+        ApplicationForm form = form("안내문");
+        ApplicationQuestion question =
+                question(201L, form, "좋아하는 곡", ApplicationQuestionType.SINGLE_CHOICE, true, 1);
+        ApplicationOption removed = option(401L, question, "발라드", 1);
+        when(applicationFormRepository.findByMeeting_Id(MEETING_ID)).thenReturn(Optional.of(form));
+        when(applicationQuestionRepository
+                .findAllByApplicationForm_IdAndDeletedAtIsNullOrderByDisplayOrderAsc(FORM_ID))
+                .thenReturn(List.of(question));
+        when(applicationOptionRepository
+                .findAllByQuestion_IdInAndDeletedAtIsNullOrderByDisplayOrderAsc(List.of(201L)))
+                .thenReturn(List.of(removed));
+        stubQuestionSaveAll();
+        stubOptionSaveAll();
+
+        ApplicationFormSaveResponse response = applicationFormService.saveForm(
+                MEETING_ID,
+                request("안내문", List.of(questionRequest(
+                        201L, "좋아하는 곡", ApplicationQuestionType.SHORT_TEXT, true, 1
+                ))),
+                principal
+        );
+
+        assertThat(removed.getDeletedAt()).isEqualTo(now());
+        assertThat(response.questions().get(0).options()).isEmpty();
     }
 
     /** 다른 폼에 속하거나 존재하지 않는 질문 식별자 저장을 400 오류로 거부하는지 검증한다. */
@@ -417,14 +512,43 @@ class ApplicationFormServiceTest {
         return new ApplicationFormSaveRequest(formDescription, questions);
     }
 
-    /** 테스트에 사용할 응모 질문 저장 요청 한 건을 생성한다. */
+    /** 테스트에 사용할 주관식 응모 질문 저장 요청 한 건을 생성한다. */
     private ApplicationFormSaveRequest.QuestionRequest questionRequest(
             Long questionId, String questionText, ApplicationQuestionType questionType,
             boolean required, int displayOrder
     ) {
         return new ApplicationFormSaveRequest.QuestionRequest(
-                questionId, questionText, questionType, required, displayOrder
+                questionId, questionText, questionType, required, displayOrder, null
         );
+    }
+
+    /** 테스트에 사용할 객관식 응모 질문 저장 요청 한 건을 선택지와 함께 생성한다. */
+    private ApplicationFormSaveRequest.QuestionRequest choiceQuestionRequest(
+            Long questionId, String questionText, ApplicationQuestionType questionType,
+            int displayOrder, List<ApplicationFormSaveRequest.OptionRequest> options
+    ) {
+        return new ApplicationFormSaveRequest.QuestionRequest(
+                questionId, questionText, questionType, true, displayOrder, options
+        );
+    }
+
+    /** 테스트에 사용할 선택지 저장 요청 한 건을 생성한다. */
+    private ApplicationFormSaveRequest.OptionRequest optionRequest(
+            Long optionId, String optionText, int displayOrder
+    ) {
+        return new ApplicationFormSaveRequest.OptionRequest(optionId, optionText, displayOrder);
+    }
+
+    /** 새 선택지 저장 시 지정한 식별자를 순서대로 부여하도록 저장소를 구성한다. */
+    private void stubOptionSaveAll(long... assignedIds) {
+        when(applicationOptionRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<ApplicationOption> options = invocation.getArgument(0);
+            List<ApplicationOption> saved = new ArrayList<>(options);
+            for (int index = 0; index < saved.size(); index++) {
+                ReflectionTestUtils.setField(saved.get(index), "id", assignedIds[index]);
+            }
+            return saved;
+        });
     }
 
     /** 지정한 개수만큼 서로 다른 표시 순서를 가진 새 질문 요청을 생성한다. */
@@ -469,6 +593,15 @@ class ApplicationFormServiceTest {
         ApplicationQuestion result = ApplicationQuestion.create(
                 form, questionText, questionType, required, displayOrder
         );
+        ReflectionTestUtils.setField(result, "id", id);
+        return result;
+    }
+
+    /** 지정한 속성을 가진 테스트 응모 선택지를 생성한다. */
+    private ApplicationOption option(
+            Long id, ApplicationQuestion question, String optionText, int displayOrder
+    ) {
+        ApplicationOption result = ApplicationOption.create(question, optionText, displayOrder);
         ReflectionTestUtils.setField(result, "id", id);
         return result;
     }

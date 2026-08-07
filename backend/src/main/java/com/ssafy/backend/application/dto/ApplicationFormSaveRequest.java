@@ -28,15 +28,40 @@ public record ApplicationFormSaveRequest(
      *
      * @param questionId 기존 질문을 수정할 때의 질문 식별자이며 새 질문이면 null
      * @param questionText 질문 문구
-     * @param questionType 질문 유형이며 SHORT_TEXT 또는 LONG_TEXT만 허용한다
+     * @param questionType 질문 유형
      * @param required 필수 응답 여부
      * @param displayOrder 화면 표시 순서
+     * @param options 객관식 질문의 선택지 전체 목록이며 주관식 질문이면 null 또는 빈 목록
      */
     public record QuestionRequest(
             Long questionId,
             @NotBlank @Size(max = 500) String questionText,
             @NotNull ApplicationQuestionType questionType,
             @NotNull Boolean required,
+            @NotNull @PositiveOrZero Integer displayOrder,
+            List<@Valid OptionRequest> options
+    ) {
+
+        /**
+         * 선택지 목록을 null 대신 빈 목록으로 돌려준다.
+         *
+         * @return 선택지 목록이며 전달되지 않았으면 빈 목록
+         */
+        public List<OptionRequest> optionsOrEmpty() {
+            return options == null ? List.of() : options;
+        }
+    }
+
+    /**
+     * 저장할 객관식 선택지 한 개를 전달한다.
+     *
+     * @param optionId 기존 선택지를 수정할 때의 선택지 식별자이며 새 선택지면 null
+     * @param optionText 선택지 문구
+     * @param displayOrder 화면 표시 순서
+     */
+    public record OptionRequest(
+            Long optionId,
+            @NotBlank @Size(max = 500) String optionText,
             @NotNull @PositiveOrZero Integer displayOrder
     ) {
     }
