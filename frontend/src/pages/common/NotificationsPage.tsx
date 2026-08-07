@@ -40,6 +40,19 @@ const notificationTypeContent = (): Record<
   MEETING_CHANGED: { label: translate('notificationsPage.t22'), variant: 'warning' },
   MEETING_CANCELED: { label: translate('notificationsPage.t23'), variant: 'danger' },
   MEETING_PUBLISHED: { label: translate('notificationsPage.t24'), variant: 'info' },
+  // 조직 알림은 팬미팅과 무관해 meetingId가 없다. 그래서 목록에서는 라벨만 붙고 링크는 없다.
+  ORGANIZATION_INVITED: {
+    label: translate('notificationsPage.orgInvited'),
+    variant: 'primary',
+  },
+  ORGANIZATION_INVITATION_ACCEPTED: {
+    label: translate('notificationsPage.orgInvitationAccepted'),
+    variant: 'success',
+  },
+  ORGANIZATION_MEMBER_REMOVED: {
+    label: translate('notificationsPage.orgMemberRemoved'),
+    variant: 'warning',
+  },
 })
 
 function getNotificationLink(

@@ -1,6 +1,7 @@
 import { apiRequest } from './client'
 import { buildQuery, unwrapEnvelope, type PageResponse } from './envelope'
 
+/** 백엔드 NotificationType enum과 같은 값을 쓴다. 한쪽만 늘리면 화면이 알 수 없는 유형으로 받는다. */
 export type NotificationType =
   | 'APPLICATION_RESULT'
   | 'QUEUE_ORDER_ASSIGNED'
@@ -9,6 +10,10 @@ export type NotificationType =
   | 'MEETING_CHANGED'
   | 'MEETING_CANCELED'
   | 'MEETING_PUBLISHED'
+  // 조직 알림은 팬미팅에 딸리지 않으므로 meetingId가 항상 null이다.
+  | 'ORGANIZATION_INVITED'
+  | 'ORGANIZATION_INVITATION_ACCEPTED'
+  | 'ORGANIZATION_MEMBER_REMOVED'
 
 export type NotificationResponse = {
   notificationId: number
