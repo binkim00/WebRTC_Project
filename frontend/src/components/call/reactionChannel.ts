@@ -18,8 +18,15 @@ export const REACTION_DATA_TOPIC = 'reaction'
  *
  * 자유 입력을 허용하지 않는 이유는 두 가지다. (1) 2분 통화에서 이모지를 고르는 시간조차 아깝다.
  * (2) 상대 화면에 임의 문자열이 그려지는 경로를 만들지 않는다.
+ *
+ * 그렇다고 다섯 개로는 하고 싶은 말을 담기 어려워, 통화에서 자주 나오는 감정을 한 줄에 담기는
+ * 만큼만 늘렸다. 앞의 다섯 개는 가장 많이 쓰이므로 순서를 그대로 두어 위치를 익힌 팬이 헷갈리지
+ * 않게 한다. 좁은 화면에서는 버튼 줄이 접힌다(CallStage).
  */
-export const REACTION_EMOJIS = ['❤️', '👏', '😍', '🎉', '😂'] as const
+export const REACTION_EMOJIS = [
+  '❤️', '👏', '😍', '🎉', '😂',
+  '🥰', '🙌', '🔥', '👍', '😭',
+] as const
 
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 

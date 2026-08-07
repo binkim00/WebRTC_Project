@@ -18,16 +18,25 @@ import {
 } from '../../api/capturedPhotos'
 import { AlertBanner, Button, Card, CardContent } from '..'
 import {
+  DEFAULT_FAN_CARD_THEME,
+  DEFAULT_PHOTO_ADJUSTMENT,
   drawFanCard,
   fanCardSizeOf,
+  photoOffsetLimits,
   type CardDecoration,
   type FanCardFont,
   type FanCardLayout,
+  type FanCardThemeKey,
+  type PhotoAdjustment,
+  type PhotoSlotRect,
 } from './fanCardCanvas'
+import { cardStickerUrl } from './cardStickers'
+import { FanCardColorPicker } from './FanCardColorPicker'
 import { FanCardQuotePicker } from './FanCardQuotePicker'
 import { FanCardLayoutPicker } from './FanCardLayoutPicker'
 import { photoCountOf } from './fanCardLayoutOptions'
 import { FanCardFontPicker } from './FanCardFontPicker'
+import { FanCardThemePicker } from './FanCardThemePicker'
 import {
   FanCardStickerPanel,
   MAX_DECORATION_SIZE,
@@ -49,6 +58,21 @@ const DRAFT_SAVE_DELAY_MS = 600
 
 /** 내려받기용 임시 주소를 정리하기까지 기다리는 시간이다. */
 const OBJECT_URL_RELEASE_DELAY_MS = 1_000
+
+/**
+ * 내려받는 파일 이름에 붙일 시각을 만든다.
+ *
+ * <p>`20260806_2143` 처럼 날짜와 시·분만 남긴다. 초까지 넣으면 이름이 길어지고, 날짜만 두면 같은
+ * 날 여러 장을 저장할 때 브라우저가 뒤에 (1)(2) 를 붙인다.
+ *
+ * @returns 파일 이름에 넣을 시각 문자열
+ */
+function downloadStamp(): string {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+    + `_${pad(now.getHours())}${pad(now.getMinutes())}`
+}
 
 /**
  * 고른 요소를 감싸는 점선 색을 디자인 토큰에서 읽어 온다.
@@ -163,6 +187,17 @@ function findDecorationAt(
   return undefined
 }
 
+/**
+ * 값을 -limit ~ limit 사이로 붙잡아 둔다.
+ *
+ * @param value 붙잡을 값
+ * @param limit 0 이상의 한계값
+ * @returns 한계 안으로 들어온 값
+ */
+function clamp(value: number, limit: number): number {
+  return Math.min(Math.max(value, -limit), limit)
+}
+
 type FanCardSectionProps = {
   /** 카드를 만들 통화 세션 식별자 */
   callSessionId: string
@@ -211,12 +246,21 @@ export function FanCardSection({
    * 카드에 넣기로 한 사진만 풀어 둔다.
    *
    * <p>PNG를 ImageBitmap 으로 풀면 장당 4MB 가까이 차지해, 찍은 것을 모두 풀면 휴대폰에서
-   * 버겁다. 고른 것만 남기고 빠진 것은 곧바로 닫아 최대 네 장만 메모리에 둔다.
+   * 버겁다. 고른 것만 남기고 빠진 것은 곧바로 닫아 여섯 장까지만 메모리에 둔다.
    */
   const bitmapCacheRef = useRef(new Map<number, ImageBitmap>())
   const [layout, setLayout] = useState<FanCardLayout>()
   const [selectedPhotoIndexes, setSelectedPhotoIndexes] = useState<readonly number[]>([])
   const [fontKey, setFontKey] = useState<FanCardFont>('DEFAULT')
+  /**
+   * 문구 크기 배율이다.
+   *
+   * <p>글꼴마다 같은 px 에서 글자가 커 보이는 정도가 달라, 글꼴을 바꾸면 문구가 갑자기 작아
+   * 보이거나 답답해진다. 자동 맞춤을 기준으로 팬이 조금씩 키우고 줄일 수 있게 한다.
+   */
+  const [quoteScale, setQuoteScale] = useState(1)
+  /** 고른 카드 도안이다. 칸 배치와 따로 골라 같은 배치를 여러 분위기로 뽑을 수 있다. */
+  const [themeKey, setThemeKey] = useState<FanCardThemeKey>(DEFAULT_FAN_CARD_THEME)
   const [decorations, setDecorations] = useState<readonly CardDecoration[]>([])
   const [selectedDecorationId, setSelectedDecorationId] = useState<string>()
   const decorationCounterRef = useRef(0)
@@ -232,13 +276,54 @@ export function FanCardSection({
         startSize: number
         startRotation: number
       }
+    | {
+        // 사진은 칸 안에서 보이는 부분을 비율로 미는 것이라, 집은 시점의 값에 누적해야 한다.
+        kind: 'photo'
+        index: number
+        slot: PhotoSlotRect
+        startX: number
+        startY: number
+        base: PhotoAdjustment
+      }
     | undefined
   >(undefined)
   /** 보관해 둔 상태를 다 불러왔는지. 불러오기 전에 저장하면 초기값이 덮어쓴다. */
   const draftLoadedRef = useRef(false)
+  /** 사진별 배치다. 손대지 않은 사진은 기본 배치(원본 전체)로 그려진다. */
+  const [photoAdjustments, setPhotoAdjustments] = useState<readonly PhotoAdjustment[]>([])
+  /** 방금 그린 카드에서 사진이 놓인 자리다. 어느 칸을 눌렀는지 판단하는 데 쓴다. */
+  const [photoSlots, setPhotoSlots] = useState<readonly PhotoSlotRect[]>([])
+  /** 칸에 들어간 사진의 원본 크기이며 밀 수 있는 범위를 구하는 데 쓴다. */
+  const [photoSizes, setPhotoSizes] = useState<readonly { width: number; height: number }[]>([])
+  /** 지금 고른 사진 칸이며 없으면 아무 칸도 고르지 않은 상태다. */
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>()
+
+  /** 팬미팅 이름 크기 배율이다. */
+  const [titleScale, setTitleScale] = useState(1)
+  /** 팬미팅 이름 색이며 없으면 도안 색을 쓴다. */
+  const [titleColor, setTitleColor] = useState<string>()
+  /** 문구 색이며 없으면 도안 색을 쓴다. */
+  const [quoteColor, setQuoteColor] = useState<string>()
 
   const selectedDecoration = decorations.find(
     (decoration) => decoration.id === selectedDecorationId,
+  )
+
+  /**
+   * 고른 글자 요소의 색을 바꾼다.
+   *
+   * @param color 칠할 색이며 없으면 흰색으로 돌아간다
+   */
+  const changeSelectedDecorationColor = useCallback(
+    (color?: string) => {
+      if (!selectedDecorationId) return
+      setDecorations((current) =>
+        current.map((decoration) =>
+          decoration.id === selectedDecorationId ? { ...decoration, color } : decoration,
+        ),
+      )
+    },
+    [selectedDecorationId],
   )
 
   /**
@@ -248,6 +333,22 @@ export function FanCardSection({
    * 없으면 빈 도안만 남으므로 그때는 미리보기와 내려받기를 열지 않는다.
    */
   const canCompose = Boolean(selectedText) || selectedPhotoIndexes.length > 0
+
+  /**
+   * 방금 올린 스티커의 바운스 연출 정보다. 카드 중앙에 크게 나타나 통통 자리 잡는다.
+   *
+   * 캔버스에는 스티커가 즉시 그려지므로, 같은 그림을 같은 자리·같은 크기로 끝나는
+   * DOM 오버레이로 잠깐 덧그려 애니메이션만 얹는다. 끝나면 흔적 없이 사라진다.
+   */
+  const [stickerPop, setStickerPop] = useState<{ code: string; id: number; widthPercent: number }>()
+  useEffect(() => {
+    if (!stickerPop) return
+    const timer = window.setTimeout(() => setStickerPop(undefined), 560)
+    return () => window.clearTimeout(timer)
+  }, [stickerPop])
+
+  /** 내려받기 순간 카드 위를 쓸고 지나가는 광택의 재생 횟수다. */
+  const [shineCount, setShineCount] = useState(0)
 
   /**
    * 카드 한가운데에 새 꾸미기 요소를 얹고 곧바로 선택한다.
@@ -270,6 +371,15 @@ export function FanCardSection({
       }
       setDecorations((current) => [...current, created])
       setSelectedDecorationId(created.id)
+
+      // 글자는 글꼴 렌더링이 캔버스와 어긋날 수 있어 스티커에만 바운스를 얹는다.
+      if (kind === 'STICKER') {
+        setStickerPop((previous) => ({
+          code: content,
+          id: (previous?.id ?? 0) + 1,
+          widthPercent: (NEW_STICKER_SIZE / size.width) * 100,
+        }))
+      }
     },
     [layout],
   )
@@ -291,6 +401,27 @@ export function FanCardSection({
    *
    * @param event 포인터 누름 이벤트
    */
+  /**
+   * 사진 한 장의 배치를 바꾼다.
+   *
+   * <p>목록은 사진 순번과 나란히 두고, 아직 손대지 않은 앞자리는 기본 배치로 메운다. 배열을
+   * 성기게 두면 저장·복원에서 구멍이 생긴다.
+   *
+   * @param index 사진 순번
+   * @param patch 바꿀 값만 담은 배치
+   */
+  const updatePhotoAdjustment = useCallback(
+    (index: number, patch: Partial<PhotoAdjustment>) => {
+      setPhotoAdjustments((current) => {
+        const next = [...current]
+        while (next.length <= index) next.push({ ...DEFAULT_PHOTO_ADJUSTMENT })
+        next[index] = { ...(next[index] ?? DEFAULT_PHOTO_ADJUSTMENT), ...patch }
+        return next
+      })
+    },
+    [],
+  )
+
   const handleCanvasPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
       const canvas = event.currentTarget
@@ -325,18 +456,47 @@ export function FanCardSection({
       const hit = findDecorationAt(decorations, point)
 
       setSelectedDecorationId(hit?.id)
-      if (!hit) return
+      if (hit) {
+        setSelectedPhotoIndex(undefined)
+        // 집은 지점과 요소 중심의 차이를 기억해야 끌 때 요소가 튀지 않는다.
+        draggingRef.current = {
+          kind: 'move',
+          id: hit.id,
+          offsetX: point.x - hit.x,
+          offsetY: point.y - hit.y,
+        }
+        canvas.setPointerCapture(event.pointerId)
+        return
+      }
 
-      // 집은 지점과 요소 중심의 차이를 기억해야 끌 때 요소가 튀지 않는다.
+      // 꾸미기 요소가 사진 위에 얹히므로 요소를 먼저 집고, 빈 곳이면 사진 칸을 집는다.
+      const slot = photoSlots.find(
+        (candidate) =>
+          point.x >= candidate.x
+          && point.x <= candidate.x + candidate.width
+          && point.y >= candidate.y
+          && point.y <= candidate.y + candidate.height,
+      )
+      setSelectedPhotoIndex(slot?.index)
+      if (!slot) return
+
       draggingRef.current = {
-        kind: 'move',
-        id: hit.id,
-        offsetX: point.x - hit.x,
-        offsetY: point.y - hit.y,
+        kind: 'photo',
+        index: slot.index,
+        slot,
+        startX: point.x,
+        startY: point.y,
+        base: photoAdjustments[slot.index] ?? DEFAULT_PHOTO_ADJUSTMENT,
       }
       canvas.setPointerCapture(event.pointerId)
     },
-    [decorations, removeSelectedDecoration, selectedDecoration],
+    [
+      decorations,
+      photoAdjustments,
+      photoSlots,
+      removeSelectedDecoration,
+      selectedDecoration,
+    ],
   )
 
   /**
@@ -351,6 +511,24 @@ export function FanCardSection({
 
       const canvas = event.currentTarget
       const point = toCardPoint(canvas, event.clientX, event.clientY)
+
+      if (dragging.kind === 'photo') {
+        const size = photoSizes[dragging.index]
+        if (!size) return
+
+        const { slot, base } = dragging
+        // 한계 계산은 카드를 그리는 쪽과 같은 함수를 쓴다. 두 곳이 갈라지면 미리보기에서 끌던
+        // 위치와 저장본이 어긋난다.
+        const limits = photoOffsetLimits(
+          slot.width, slot.height, size.width, size.height, base.scale,
+        )
+
+        updatePhotoAdjustment(dragging.index, {
+          offsetX: clamp(base.offsetX + (point.x - dragging.startX) / slot.width, limits.x),
+          offsetY: clamp(base.offsetY + (point.y - dragging.startY) / slot.height, limits.y),
+        })
+        return
+      }
 
       if (dragging.kind === 'transform') {
         const distance = Math.max(1, distanceBetween(point, dragging.center))
@@ -379,7 +557,7 @@ export function FanCardSection({
         ),
       )
     },
-    [],
+    [photoSizes, updatePhotoAdjustment],
   )
 
   /** 끌기를 마친다. */
@@ -411,6 +589,12 @@ export function FanCardSection({
           setLayout(draft.layout)
           setFontKey(draft.fontKey)
           setSelectedPhotoIndexes(draft.selectedPhotoIndexes)
+          setPhotoAdjustments(draft.photoAdjustments ?? [])
+          setQuoteScale(draft.quoteScale ?? 1)
+          setTitleScale(draft.titleScale ?? 1)
+          setTitleColor(draft.titleColor)
+          setQuoteColor(draft.quoteColor)
+          setThemeKey(draft.themeKey ?? DEFAULT_FAN_CARD_THEME)
           setDecorations(draft.decorations)
           // 이어 붙일 식별자가 겹치지 않게 이미 쓴 번호 뒤에서 시작한다.
           decorationCounterRef.current = draft.decorations.length
@@ -447,13 +631,31 @@ export function FanCardSection({
         layout,
         fontKey,
         selectedPhotoIndexes: [...selectedPhotoIndexes],
+        photoAdjustments: [...photoAdjustments],
+        quoteScale,
+        titleScale,
+        titleColor,
+        quoteColor,
+        themeKey,
         decorations: [...decorations],
         savedAt: new Date().toISOString(),
       }).catch(() => undefined)
     }, DRAFT_SAVE_DELAY_MS)
 
     return () => window.clearTimeout(timer)
-  }, [callSessionId, decorations, fontKey, layout, selectedPhotoIndexes])
+  }, [
+    callSessionId,
+    decorations,
+    fontKey,
+    layout,
+    photoAdjustments,
+    quoteColor,
+    quoteScale,
+    selectedPhotoIndexes,
+    themeKey,
+    titleColor,
+    titleScale,
+  ])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -538,6 +740,7 @@ export function FanCardSection({
     void resolveSelectedPhotos()
       .then((photos) => {
         if (!active) return undefined
+        setPhotoSizes(photos.map((photo) => ({ width: photo.width, height: photo.height })))
         return drawFanCard(canvas, {
           text: selectedText ?? '',
           meetingTitle,
@@ -548,7 +751,35 @@ export function FanCardSection({
           photos,
           fontKey,
           decorations,
+          photoAdjustments,
+          quoteScale,
+          titleScale,
+          titleColor,
+          quoteColor,
+          themeKey,
         })
+      })
+      .then((slots) => {
+        if (!active) return
+        // 칸 위치는 레이아웃이 정하므로 그린 쪽이 알려 준 값을 그대로 쓴다.
+        setPhotoSlots(slots ?? [])
+
+        // 고른 사진 칸도 점선으로 알려 준다. 저장본에는 남지 않는다.
+        const selectedSlot = slots?.find((slot) => slot.index === selectedPhotoIndex)
+        if (!selectedSlot) return
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.save()
+        ctx.setLineDash([14, 10])
+        ctx.lineWidth = 4
+        ctx.strokeStyle = resolveSelectionColor()
+        ctx.strokeRect(
+          selectedSlot.x + 2,
+          selectedSlot.y + 2,
+          selectedSlot.width - 4,
+          selectedSlot.height - 4,
+        )
+        ctx.restore()
       })
       .then(() => {
         // 고른 요소를 알아볼 수 있게 점선을 두르고, 카드 위에서 바로 조작할 수 있는
@@ -633,6 +864,13 @@ export function FanCardSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     canCompose,
+    photoAdjustments,
+    quoteColor,
+    quoteScale,
+    selectedPhotoIndex,
+    themeKey,
+    titleColor,
+    titleScale,
     dateLabel,
     decorations,
     fanNickname,
@@ -691,6 +929,9 @@ export function FanCardSection({
       const need = photoCountOf(layout)
       if (need === 0) return
 
+      // 사진을 빼거나 더하면 칸 순번이 밀려 남아 있던 배치가 엉뚱한 사진에 붙는다.
+      setPhotoAdjustments([])
+      setSelectedPhotoIndex(undefined)
       setSelectedPhotoIndexes((current) => {
         if (need === 1) return [index]
         if (current.includes(index)) return current.filter((item) => item !== index)
@@ -735,11 +976,20 @@ export function FanCardSection({
   async function handleDownload() {
     if (!canCompose) return
 
+    // 실물 포토카드 코팅처럼 광택이 한 번 쓸고 지나가며 "저장했다"는 반응을 준다.
+    setShineCount((count) => count + 1)
+
     const canvas = document.createElement('canvas')
 
     try {
       const photos = await resolveSelectedPhotos()
       await drawFanCard(canvas, {
+        photoAdjustments,
+        quoteScale,
+        titleScale,
+        titleColor,
+        quoteColor,
+        themeKey,
         text: selectedText ?? '',
         meetingTitle,
         influencerName,
@@ -764,8 +1014,9 @@ export function FanCardSection({
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      // 여러 모양으로 내려받아도 파일이 덮이지 않게 레이아웃을 파일명에 남긴다.
-      anchor.download = `melly-card-${callSessionId}${layout ? `-${layout.toLowerCase()}` : ''}.png`
+      // 통화 식별자를 파일명에 쓰면 팬에게 아무 뜻도 없는 긴 문자열이 남는다. 갤러리에서 알아볼 수
+      // 있게 서비스 이름을 앞에 두고, 내려받은 시각을 붙여 여러 장을 저장해도 덮이지 않게 한다.
+      anchor.download = `Melly_Photo_Card_${downloadStamp()}.png`
       anchor.rel = 'noopener'
       document.body.append(anchor)
       anchor.click()
@@ -816,27 +1067,180 @@ export function FanCardSection({
 
           {canCompose ? (
             <div className="mt-6 border-t border-[var(--color-divider)] pt-6">
+              <FanCardThemePicker onChange={setThemeKey} themeKey={themeKey} />
+
               <FanCardFontPicker fontKey={fontKey} onChange={setFontKey} />
+
+              {selectedText ? (
+                <div className="mt-3 flex items-center gap-3">
+                  <label
+                    className="text-xs font-bold text-[var(--color-text-secondary)]"
+                    htmlFor="fan-card-quote-scale"
+                  >
+                    {t('fanCardSection.t24')}
+                  </label>
+                  <input
+                    className="h-1.5 flex-1 cursor-pointer accent-[var(--color-primary-coral)]"
+                    id="fan-card-quote-scale"
+                    max={1.4}
+                    min={0.7}
+                    onChange={(event) => setQuoteScale(Number(event.target.value))}
+                    step={0.05}
+                    type="range"
+                    value={quoteScale}
+                  />
+                  <button
+                    className="mj-font-label whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface-panel)]"
+                    onClick={() => setQuoteScale(1)}
+                    type="button"
+                  >
+                    {t('fanCardSection.t22')}
+                  </button>
+                </div>
+              ) : null}
+
+              {selectedText ? (
+                <FanCardColorPicker
+                  label={t('fanCardSection.t27')}
+                  onChange={setQuoteColor}
+                  value={quoteColor}
+                />
+              ) : null}
+
+              {/* 팬미팅 이름은 문구를 고르지 않아도 카드에 늘 들어가므로 언제나 조절할 수 있다. */}
+              <div className="mt-3 flex items-center gap-3">
+                <label
+                  className="text-xs font-bold text-[var(--color-text-secondary)]"
+                  htmlFor="fan-card-title-scale"
+                >
+                  {t('fanCardSection.t25')}
+                </label>
+                <input
+                  className="h-1.5 flex-1 cursor-pointer accent-[var(--color-primary-coral)]"
+                  id="fan-card-title-scale"
+                  max={1.4}
+                  min={0.7}
+                  onChange={(event) => setTitleScale(Number(event.target.value))}
+                  step={0.05}
+                  type="range"
+                  value={titleScale}
+                />
+                <button
+                  className="mj-font-label whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface-panel)]"
+                  onClick={() => setTitleScale(1)}
+                  type="button"
+                >
+                  {t('fanCardSection.t22')}
+                </button>
+              </div>
+
+              <FanCardColorPicker
+                label={t('fanCardSection.t26')}
+                onChange={setTitleColor}
+                value={titleColor}
+              />
 
               <h3 className="mt-6 text-[15px] font-extrabold text-[var(--color-text-primary)]">
                  {t('fanCardSection.t9')} </h3>
-              <canvas
-                aria-label={
-                  selectedText
-                    ? t('fanCardSection.t10', { p0: selectedText })
-                    : t('fanCardSection.t17')
-                }
-                // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
-                className={`mx-auto mt-3 h-auto w-full max-w-sm touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
-                  decorations.length > 0 ? 'cursor-grab' : ''
-                }`}
-                onPointerCancel={handleCanvasPointerUp}
-                onPointerDown={handleCanvasPointerDown}
-                onPointerMove={handleCanvasPointerMove}
-                onPointerUp={handleCanvasPointerUp}
-                ref={canvasRef}
-                role="img"
-              />
+              {/* 연출 오버레이(스티커 바운스·내려받기 광택)를 얹기 위해 캔버스를 감싼다. */}
+              <div className="relative mx-auto mt-3 w-full max-w-sm">
+                <canvas
+                  aria-label={
+                    selectedText
+                      ? t('fanCardSection.t10', { p0: selectedText })
+                      : t('fanCardSection.t17')
+                  }
+                  // touch-none 이 없으면 모바일에서 스티커를 끌 때 화면이 함께 스크롤된다.
+                  className={`h-auto w-full touch-none rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] ${
+                    decorations.length > 0 ? 'cursor-grab' : ''
+                  }`}
+                  onPointerCancel={handleCanvasPointerUp}
+                  onPointerDown={handleCanvasPointerDown}
+                  onPointerMove={handleCanvasPointerMove}
+                  onPointerUp={handleCanvasPointerUp}
+                  ref={canvasRef}
+                  role="img"
+                />
+                {/* 방금 올린 스티커의 바운스 — 캔버스의 최종 위치·크기로 착지해 흔적 없이 사라진다. */}
+                {stickerPop ? (
+                  <img
+                    alt=""
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-1/2 top-1/2 hidden motion-safe:block motion-safe:animate-[mj-sticker-pop_520ms_cubic-bezier(0.16,1,0.3,1)_both]"
+                    key={stickerPop.id}
+                    src={cardStickerUrl(stickerPop.code)}
+                    style={{ width: `${stickerPop.widthPercent}%` }}
+                  />
+                ) : null}
+                {/* 내려받기 광택 — 저장하는 순간 카드 위를 한 번 쓸고 지나간다. */}
+                {shineCount > 0 ? (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 overflow-hidden rounded-[var(--radius-panel)]"
+                    key={shineCount}
+                  >
+                    <span className="absolute -top-[10%] left-0 h-[120%] w-1/3 -translate-x-[160%] bg-white/45 motion-safe:animate-[mj-card-shine_750ms_ease-in-out_both]" />
+                  </span>
+                ) : null}
+              </div>
+
+              {photoSlots.length > 0 ? (
+                <div className="mt-5 rounded-[var(--radius-panel)] bg-[var(--color-surface-page)] p-4">
+                  <h4 className="text-[13px] font-extrabold text-[var(--color-text-primary)]">
+                    {t('fanCardSection.t19')}
+                  </h4>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                    {selectedPhotoIndex === undefined
+                      ? t('fanCardSection.t20')
+                      : t('fanCardSection.t23', { p0: selectedPhotoIndex + 1 })}
+                  </p>
+
+                  {selectedPhotoIndex !== undefined ? (
+                    <div className="mt-3 flex items-center gap-3">
+                      <label
+                        className="text-xs font-bold text-[var(--color-text-secondary)]"
+                        htmlFor="fan-card-photo-scale"
+                      >
+                        {t('fanCardSection.t21')}
+                      </label>
+                      <input
+                        className="h-1.5 flex-1 cursor-pointer accent-[var(--color-primary-coral)]"
+                        id="fan-card-photo-scale"
+                        max={3}
+                        min={1}
+                        onChange={(event) =>
+                          updatePhotoAdjustment(selectedPhotoIndex, {
+                            scale: Number(event.target.value),
+                          })
+                        }
+                        step={0.01}
+                        type="range"
+                        value={
+                          photoAdjustments[selectedPhotoIndex]?.scale
+                          ?? DEFAULT_PHOTO_ADJUSTMENT.scale
+                        }
+                      />
+                      <button
+                        className="mj-font-label whitespace-nowrap rounded-[var(--radius-control)] border border-[var(--color-border-control)] px-3 py-1.5 text-xs font-bold hover:bg-[var(--color-surface-panel)]"
+                        onClick={() =>
+                          updatePhotoAdjustment(selectedPhotoIndex, DEFAULT_PHOTO_ADJUSTMENT)
+                        }
+                        type="button"
+                      >
+                        {t('fanCardSection.t22')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {selectedDecoration?.kind === 'TEXT' ? (
+                <FanCardColorPicker
+                  label={t('fanCardSection.t28')}
+                  onChange={changeSelectedDecorationColor}
+                  value={selectedDecoration.color}
+                />
+              ) : null}
 
               <FanCardStickerPanel
                 decorationCount={decorations.length}

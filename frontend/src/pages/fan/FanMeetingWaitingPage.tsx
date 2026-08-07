@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertBanner, Button, Dialog, Textarea } from '../../components'
 import { localizeQueueChangeNotice, useTranslation } from '../../i18n'
@@ -70,7 +71,7 @@ function formatCountdown(totalSec: number): string {
  * 모듈 함수라 훅을 쓸 수 없어 "게시"에 해당하는 문구를 인자로 받는다.
  */
 function formatNoticeAt(value: string, postedLabel: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())} ${postedLabel}`
 }
@@ -122,6 +123,47 @@ function notifyFanCall(notifyTitle: string, notifyBody: string) {
   } catch {
     // Web Audio가 차단된 환경에서도 시각·보조기기 알림은 유지한다.
   }
+}
+
+/**
+ * 값이 바뀌면 이전 값이 위로 밀려나가고 새 값이 굴러 올라오는 숫자 표시다.
+ *
+ * 대기 순번은 팬이 가장 오래 지켜보는 값인데 조용히 교체되면 줄어드는 것을 눈치채기 어렵다.
+ * 애니메이션이 비활성(모션 최소화)이어도 타이머가 이전 값을 지워 최신 값만 남는다.
+ */
+function RollingValue({ value, className }: { value: string; className?: string }) {
+  const [previous, setPrevious] = useState<string>()
+  const lastValueRef = useRef(value)
+
+  useEffect(() => {
+    if (lastValueRef.current === value) return
+    setPrevious(lastValueRef.current)
+    lastValueRef.current = value
+
+    // onAnimationEnd 대신 타이머로 정리한다. 모션 최소화 환경에서는 애니메이션 이벤트가
+    // 오지 않아 이전 값이 화면에 남기 때문이다.
+    const timer = window.setTimeout(() => setPrevious(undefined), 420)
+    return () => window.clearTimeout(timer)
+  }, [value])
+
+  return (
+    <span aria-label={value} className={`block h-[1em] overflow-hidden ${className ?? ''}`} role="text">
+      {previous === undefined ? (
+        <span aria-hidden="true" className="block h-[1em]">
+          {value}
+        </span>
+      ) : (
+        <span
+          aria-hidden="true"
+          className="block motion-safe:animate-[mj-roll-up_380ms_cubic-bezier(0.16,1,0.3,1)_both]"
+          key={`${previous}->${value}`}
+        >
+          <span className="block h-[1em]">{previous}</span>
+          <span className="block h-[1em]">{value}</span>
+        </span>
+      )}
+    </span>
+  )
 }
 
 export function FanMeetingWaitingPage() {
@@ -316,7 +358,7 @@ export function FanMeetingWaitingPage() {
     return () => window.clearInterval(timer)
   }, [calledAt])
 
-  const calledAtSec = calledAt ? Math.floor(new Date(calledAt).getTime() / 1000) : null
+  const calledAtSec = calledAt ? Math.floor(parseServerDate(calledAt).getTime() / 1000) : null
   const callRemainSec =
     calledAtSec !== null ? calledAtSec + CALL_WINDOW_SEC - nowSec : null
   const canEnter = Boolean(queueSnapshot?.canEnterCall && queueSnapshot.callSessionId)
@@ -339,6 +381,14 @@ export function FanMeetingWaitingPage() {
     phase === 'expired' && calledAtSec !== null
       ? Math.max(0, calledAtSec + CALL_WINDOW_SEC + REENTER_WINDOW_SEC - nowSec)
       : null
+
+  // 호출로 전환되는 순간에만 코랄 펄스를 한 번 퍼뜨린다. 값이 바뀔 때마다 key가 갈려 다시 돈다.
+  const [callPulseKey, setCallPulseKey] = useState(0)
+  const wasCalledForPulseRef = useRef(false)
+  useEffect(() => {
+    if (isCalled && !wasCalledForPulseRef.current) setCallPulseKey((key) => key + 1)
+    wasCalledForPulseRef.current = isCalled
+  }, [isCalled])
 
   useEffect(() => {
     const meetingTitle = detail?.meeting.title ?? t('wait.fallbackMeeting')
@@ -643,6 +693,14 @@ export function FanMeetingWaitingPage() {
                 'linear-gradient(90deg, rgba(232,97,92,0) 0%, rgba(217,66,63,0.95) 50%, rgba(232,97,92,0) 100%)',
             }}
           />
+          {/* 호출 순간 한 번 퍼지는 코랄 펄스 — "내 차례" 전환을 놓치지 않게 한다. */}
+          {callPulseKey > 0 && isCalled ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-1/2 size-44 rounded-full border-4 border-[var(--color-primary-coral)] opacity-0 motion-safe:animate-[mj-call-pulse_900ms_ease-out_both]"
+              key={callPulseKey}
+            />
+          ) : null}
           {isCalled && callRemainSec !== null ? (
             <div className="absolute inset-0 grid place-items-center text-center motion-safe:animate-[mj-lift_460ms_cubic-bezier(0.16,1,0.3,1)_both]">
               <div>
@@ -695,7 +753,7 @@ export function FanMeetingWaitingPage() {
               {queueSnapshot.lastChangedAt ? (
                 <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
                   {t('wait.positionChanged.at', {
-                    time: new Date(queueSnapshot.lastChangedAt).toLocaleString(
+                    time: parseServerDate(queueSnapshot.lastChangedAt).toLocaleString(
                       locale === 'en' ? 'en-US' : 'ko-KR',
                     ),
                   })}
@@ -708,9 +766,11 @@ export function FanMeetingWaitingPage() {
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="text-sm font-bold text-[var(--color-text-muted)]">{t('wait.myPosition')}</p>
-                <p className="mt-1.5 text-[34px] font-black leading-none tracking-[-0.04em] tabular-nums">
-                  {position !== undefined ? t('wait.positionNth', { position }) : '-'}
-                </p>
+                {/* 순번이 줄어드는 순간이 보이도록 굴러 올라오는 표시를 쓴다. */}
+                <RollingValue
+                  className="mt-1.5 text-[34px] font-black leading-none tracking-[-0.04em] tabular-nums"
+                  value={position !== undefined ? t('wait.positionNth', { position }) : '-'}
+                />
               </div>
               {/* 대기 진행 모티프 — 앞 인원이 줄어들 때만 차오르는 액체 인디케이터다. (handoff 젤리 규칙 3) */}
               <span

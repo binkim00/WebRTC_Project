@@ -1,0 +1,99 @@
+package com.ssafy.backend.queue.repository;
+
+import com.ssafy.backend.queue.domain.QueueEntry;
+import com.ssafy.backend.queue.domain.QueueEntryStatus;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 대기열 항목 영속성 처리를 담당한다.
+ */
+public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
+    /** 팬미팅에 생성된 대기열 항목이 하나라도 있는지 확인한다. */
+    boolean existsByMeeting_Id(Long meetingId);
+
+    /** 팬미팅의 대기열을 순번대로 연관 참가자와 함께 조회한다. */
+    @EntityGraph(attributePaths = {"participant", "participant.fan", "meeting"})
+    List<QueueEntry> findByMeeting_IdOrderByQueuePositionAsc(Long meetingId);
+
+    /** 팬미팅과 팬 사용자 식별자로 본인의 대기열 항목을 조회한다. */
+    @EntityGraph(attributePaths = {"participant", "participant.fan", "meeting"})
+    Optional<QueueEntry> findByMeeting_IdAndParticipant_Fan_Id(Long meetingId, Long fanId);
+
+    /** 팬미팅과 대기열 식별자가 일치하는 항목을 조회한다. */
+    @EntityGraph(attributePaths = {"participant", "participant.fan", "meeting"})
+    Optional<QueueEntry> findByMeeting_IdAndId(Long meetingId, Long id);
+
+    /**
+     * 팬미팅 결과 통계 집계에 사용할 지정 상태의 대기열 항목 수를 반환한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param status 집계할 대기열 항목 상태
+     * @return 해당 상태의 대기열 항목 수
+     */
+    long countByMeeting_IdAndStatus(Long meetingId, QueueEntryStatus status);
+
+    /** 팬미팅에서 지정한 상태인 첫 번째 대기열 항목을 조회한다. */
+    Optional<QueueEntry> findFirstByMeeting_IdAndStatusOrderByQueuePositionAsc(
+            Long meetingId, QueueEntryStatus status);
+
+    /** 상태 변경을 위해 대기열 항목을 비관적 쓰기 잠금으로 조회한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from QueueEntry q join fetch q.participant p join fetch p.fan "
+            + "where q.meeting.id = :meetingId and q.id = :entryId")
+    Optional<QueueEntry> findForUpdate(@Param("meetingId") Long meetingId,
+                                       @Param("entryId") Long entryId);
+
+    /**
+     * 팬 본인의 대기열 항목을 비관적 쓰기 잠금으로 조회한다.
+     *
+     * <p>잠금 조회는 트랜잭션 시작 시점의 스냅샷이 아니라 최신 커밋 데이터를 읽는다.
+     * 별도 트랜잭션으로 초기화된 대기열 항목을 같은 요청에서 바로 사용할 때 필요하다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @param fanId 팬 사용자 식별자
+     * @return 잠금이 적용된 본인의 대기열 항목
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from QueueEntry q join fetch q.participant p join fetch p.fan f "
+            + "where q.meeting.id = :meetingId and f.id = :fanId")
+    Optional<QueueEntry> findForUpdateByMeetingAndFan(@Param("meetingId") Long meetingId,
+                                                      @Param("fanId") Long fanId);
+
+    /** 대기열 식별자로 항목과 팬미팅을 조회하면서 비관적 쓰기 잠금을 획득한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from QueueEntry q join fetch q.meeting m "
+            + "join fetch q.participant p join fetch p.fan where q.id = :entryId")
+    Optional<QueueEntry> findByIdForUpdate(@Param("entryId") Long entryId);
+
+    /**
+     * 팬미팅 종료 시 모든 대기열 항목을 한 번에 잠금 조회한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @return 팬미팅의 전체 대기열 항목
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from QueueEntry q join fetch q.meeting where q.meeting.id = :meetingId")
+    List<QueueEntry> findAllByMeetingIdForUpdate(@Param("meetingId") Long meetingId);
+
+    /**
+     * 순서 재정렬을 위해 팬미팅의 전체 대기열 항목을 식별자 순서로 잠금 조회한다.
+     *
+     * <p>동시에 들어온 순서 변경 요청이 항상 같은 순서로 행 잠금을 얻도록 식별자로 정렬한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @return 식별자 오름차순으로 잠금이 적용된 전체 대기열 항목
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select q from QueueEntry q join fetch q.meeting m "
+            + "join fetch q.participant p join fetch p.fan "
+            + "where m.id = :meetingId order by q.id asc")
+    List<QueueEntry> findAllByMeetingIdOrderByIdForUpdate(@Param("meetingId") Long meetingId);
+}

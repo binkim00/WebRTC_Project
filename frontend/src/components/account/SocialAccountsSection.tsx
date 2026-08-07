@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { useLocation } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
@@ -20,7 +21,7 @@ import { useTranslation } from '../../i18n'
 
 /** 연결 시각을 2026.08.05 14:00 형태로 보여 준다. */
 function formatConnectedAt(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
 
   const pad = (part: number) => String(part).padStart(2, '0')

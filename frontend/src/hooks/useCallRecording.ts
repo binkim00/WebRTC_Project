@@ -61,21 +61,68 @@ const MIME_TYPE_CANDIDATES = [
 ] as const
 
 /**
- * 이 브라우저가 실제로 만들 수 있는 녹화 형식을 고른다.
+ * 이 브라우저가 만들 수 있다고 답한 형식만 순서대로 남긴다.
  *
- * @returns MediaRecorder에 넘길 MIME 타입이며 후보가 모두 막히면 undefined
+ * <p>마지막의 undefined는 형식을 지정하지 않고 브라우저 기본값에 맡기는 시도다. 어떤 후보도
+ * 통과하지 못했을 때 녹화를 포기하지 않기 위한 마지막 수단이다.
+ *
+ * @returns 시도할 MIME 타입 목록이며 마지막 원소는 형식 미지정을 뜻하는 undefined
  */
-function pickSupportedMimeType(): string | undefined {
-  if (typeof MediaRecorder === 'undefined') return undefined
+function supportedMimeTypes(): (string | undefined)[] {
+  if (typeof MediaRecorder === 'undefined') return []
 
-  for (const candidate of MIME_TYPE_CANDIDATES) {
+  const supported = MIME_TYPE_CANDIDATES.filter((candidate) => {
     try {
-      if (MediaRecorder.isTypeSupported(candidate)) return candidate
+      return MediaRecorder.isTypeSupported(candidate)
     } catch {
-      // isTypeSupported 미지원 브라우저면 다음 후보를 확인한다.
+      // isTypeSupported 미지원 브라우저면 이 후보는 건너뛰고 기본값 시도에 맡긴다.
+      return false
+    }
+  })
+
+  return [...supported, undefined]
+}
+
+/**
+ * 후보를 앞에서부터 실제로 만들어 보고 처음 성공한 녹화기를 돌려준다.
+ *
+ * <p><b>지원한다는 답과 실제로 만들 수 있는지는 다르다.</b> {@code isTypeSupported}가 true여도
+ * 기기에 쓸 수 있는 인코더가 없으면 생성이나 start에서 예외가 난다. mp4(H.264)는 하드웨어
+ * 인코더 사정을 타서 특히 그렇다. 후보 하나에 전부를 걸면 그 순간 녹화가 통째로 사라지고
+ * 팬은 다시보기도 기념 카드 사진도 받지 못하므로, 실패하면 다음 후보(webm)로 내려간다.
+ *
+ * <p>리스너 등록을 호출 측 콜백으로 받는 이유는 start 전에 붙여야 첫 조각을 놓치지 않기
+ * 때문이다. 시도가 실패하면 그 녹화기는 리스너째 버려진다.
+ *
+ * @param stream 녹화할 스트림
+ * @param timesliceMs 조각을 끊을 간격(밀리초)
+ * @param prepare start 직전에 녹화기에 리스너를 붙이는 콜백
+ * @returns 녹화를 시작한 MediaRecorder
+ * @throws 모든 후보가 실패한 경우 마지막 오류
+ */
+export function startRecorderWithFallback(
+  stream: MediaStream,
+  timesliceMs: number,
+  prepare: (recorder: MediaRecorder) => void,
+): MediaRecorder {
+  const candidates = supportedMimeTypes()
+  let lastError: unknown = new Error('사용할 수 있는 녹화 형식이 없습니다.')
+
+  for (const candidate of candidates) {
+    try {
+      const recorder = candidate
+        ? new MediaRecorder(stream, { mimeType: candidate })
+        : new MediaRecorder(stream)
+      prepare(recorder)
+      recorder.start(timesliceMs)
+      return recorder
+    } catch (error: unknown) {
+      lastError = error
+      console.warn(`녹화 형식 ${candidate ?? '(브라우저 기본)'}으로 시작하지 못했습니다.`, error)
     }
   }
-  return undefined
+
+  throw lastError
 }
 
 function recordingErrorMessage(error: unknown): string {
@@ -376,22 +423,23 @@ export function useCallRecording({
         for (const track of audioTracks) stream.addTrack(track)
       }
 
-      const mimeType = pickSupportedMimeType()
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream)
+
+      chunksRef.current = []
+      const recorder = startRecorderWithFallback(stream, 1_000, (candidate) => {
+        // 앞 후보가 조각을 남기고 실패했을 수 있으므로 시도마다 비운다. 형식이 섞인 조각을
+        // 이어 붙이면 재생할 수 없는 파일이 된다.
+        chunksRef.current = []
+        candidate.addEventListener('dataavailable', (event: BlobEvent) => {
+          if (event.data.size > 0) chunksRef.current.push(event.data)
+        })
+        candidate.addEventListener('error', (event) => {
+          updateState('failed', translate('useCallRecording.t9'))
+          console.warn('통화 녹화 중 오류가 발생했습니다.', event)
+        })
+      })
       // 실제로 무엇을 만드는지는 recorder가 안다. 요청한 형식을 브라우저가 그대로 쓰지
       // 않을 수 있는데, 잘못 적으면 업로드 확장자와 내용이 어긋나 다시보기가 깨진다.
-      mimeTypeRef.current = recorder.mimeType || mimeType || 'video/webm'
-      chunksRef.current = []
-      recorder.addEventListener('dataavailable', (event: BlobEvent) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data)
-      })
-      recorder.addEventListener('error', (event) => {
-        updateState('failed', translate('useCallRecording.t9'))
-        console.warn('통화 녹화 중 오류가 발생했습니다.', event)
-      })
-      recorder.start(1_000)
+      mimeTypeRef.current = recorder.mimeType || 'video/webm'
       recorderRef.current = recorder
       startedAtRef.current = Date.now()
       updateState('recording')

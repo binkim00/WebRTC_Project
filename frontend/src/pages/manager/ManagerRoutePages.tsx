@@ -1,4 +1,5 @@
 import { ArrowLeft } from '@phosphor-icons/react'
+import { parseServerDate } from '../../api/serverTime'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
@@ -165,8 +166,8 @@ function toScheduleInput(form: FanMeetingForm) {
 
 /** 예정 팬미팅과 대기열 시작 시간의 선후 관계를 검사하고 오류 메시지를 반환한다. */
 function validateMeetingSchedule(form: FanMeetingForm): string | undefined {
-  const scheduledStart = new Date(form.scheduledStartAt)
-  const queueOpen = new Date(form.operation.queueOpenAt)
+  const scheduledStart = parseServerDate(form.scheduledStartAt)
+  const queueOpen = parseServerDate(form.operation.queueOpenAt)
 
   const minimumStart = new Date(Date.now() + 60_000)
 

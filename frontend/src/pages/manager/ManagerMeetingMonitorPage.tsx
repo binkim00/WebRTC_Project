@@ -44,6 +44,7 @@ import { AlertBanner, Badge, Button, Card, Spinner } from '../../components'
 import { MeetingWrapUp } from '../../components/call/MeetingWrapUp'
 import { getAvailableActions } from './meetingLifecycle'
 import { translate, useTranslation } from '../../i18n'
+import { parseServerDate } from '../../api/serverTime'
 
 const previewQueue: MeetingQueue = {
   currentCall: {
@@ -133,6 +134,34 @@ export function ManagerMeetingMonitorPage() {
     participantCount,
   })
 
+  /**
+   * 상태가 방금 바뀐 행을 잠깐 하이라이트한다.
+   *
+   * 폴링으로 표가 조용히 갱신되면 운영자가 호출됨·입장 같은 변화를 놓치기 쉽다.
+   * 직전 스냅숏과 상태가 달라진 행만 물들였다 돌아오게 한다. 첫 조회는 비교 대상이
+   * 없으므로 스냅숏만 남기고 하이라이트하지 않는다.
+   */
+  const entryStatusRef = useRef(new Map<string, string>())
+  const flashTimerRef = useRef<number | undefined>(undefined)
+  const [flashedEntryIds, setFlashedEntryIds] = useState<ReadonlySet<string>>(new Set())
+  const markStatusChanges = useCallback(
+    (entries: readonly { queueEntryId: string; status: string }[]) => {
+      const previous = entryStatusRef.current
+      const changed = entries.filter((entry) => {
+        const before = previous.get(entry.queueEntryId)
+        return before !== undefined && before !== entry.status
+      })
+      entryStatusRef.current = new Map(entries.map((entry) => [entry.queueEntryId, entry.status]))
+      if (changed.length === 0) return
+
+      setFlashedEntryIds(new Set(changed.map((entry) => entry.queueEntryId)))
+      window.clearTimeout(flashTimerRef.current)
+      flashTimerRef.current = window.setTimeout(() => setFlashedEntryIds(new Set()), 1_500)
+    },
+    [],
+  )
+  useEffect(() => () => window.clearTimeout(flashTimerRef.current), [])
+
   const loadQueue = useCallback(async (showSpinner = false) => {
     if (!fanMeetingId) {
       setError(t('managerMeetingMonitorPage.t45'))
@@ -164,6 +193,7 @@ export function ManagerMeetingMonitorPage() {
       const response = await fetchMeetingQueue(fanMeetingId, token, controller.signal)
       if (controller.signal.aborted || requestId !== queueRequestIdRef.current) return
       setQueue(response)
+      markStatusChanges(response.entries)
       setError(undefined)
       setQueueUnavailable(false)
     } catch (reason) {
@@ -190,7 +220,7 @@ export function ManagerMeetingMonitorPage() {
     }
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fanMeetingId, isPreview])
+  }, [fanMeetingId, isPreview, markStatusChanges])
 
   /** 대기 중(PENDING)인 순서 변경 요청 목록을 갱신한다. 실패해도 대기열 운영은 막지 않는다. */
   const loadChangeRequests = useCallback(async () => {
@@ -752,7 +782,7 @@ export function ManagerMeetingMonitorPage() {
                   <div className="min-w-0">
                     <strong>{request.nickname}</strong>
                     <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{request.requestReason}</p>
-                    <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t('managerMeetingMonitorPage.t31')} {new Date(request.requestedAt).toLocaleString('ko-KR')}{request.previousPosition !== null ? t('managerMeetingMonitorPage.t99', { p0: request.previousPosition }) : ''}</p>
+                    <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{t('managerMeetingMonitorPage.t31')} {parseServerDate(request.requestedAt).toLocaleString('ko-KR')}{request.previousPosition !== null ? t('managerMeetingMonitorPage.t99', { p0: request.previousPosition }) : ''}</p>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -775,7 +805,15 @@ export function ManagerMeetingMonitorPage() {
         ) : (
           <div className="divide-y divide-[var(--color-divider)]">
             {queue.entries.map((entry) => (
-              <div className="grid gap-4 p-5 sm:grid-cols-[60px_minmax(0,1fr)_110px_auto] sm:items-center" key={entry.queueEntryId}>
+              <div
+                className={`grid gap-4 p-5 sm:grid-cols-[60px_minmax(0,1fr)_110px_auto] sm:items-center ${
+                  // 상태가 방금 바뀐 행은 잠깐 물들었다 돌아와 운영자의 눈에 걸린다.
+                  flashedEntryIds.has(entry.queueEntryId)
+                    ? 'motion-safe:animate-[mj-row-flash_1400ms_ease-out_both]'
+                    : ''
+                }`}
+                key={entry.queueEntryId}
+              >
                 <span className="flex size-10 items-center justify-center rounded-full bg-[var(--color-surface-page)] font-black">{entry.position}</span>
                 <div>
                   <strong>{entry.nickname}</strong>

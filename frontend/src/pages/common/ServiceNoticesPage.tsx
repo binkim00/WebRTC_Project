@@ -1,4 +1,5 @@
 import { ArrowLeft, ArrowRight, PushPin } from '@phosphor-icons/react'
+import { parseServerDate } from '../../api/serverTime'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { attachmentContentUrl } from '../../api/attachments'
@@ -21,7 +22,7 @@ import { useTranslation } from '../../i18n'
 
 /** LocalDateTime 문자열을 읽기 쉬운 한국어 일시로 표시한다. */
 function formatDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR')
 }
 

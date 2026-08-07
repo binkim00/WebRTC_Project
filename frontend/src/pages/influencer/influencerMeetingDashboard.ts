@@ -1,4 +1,5 @@
 import type { LoginRole } from '../../api/authSession'
+import { parseServerDate } from '../../api/serverTime'
 import type { ManagerMeetingSummary } from '../../api/managerMeetings'
 import { translate } from '../../i18n'
 
@@ -13,7 +14,7 @@ export type DashboardMeetingAction =
   | { kind: 'disabled'; label: string; reason: string }
 
 function scheduledTime(meeting: ManagerMeetingSummary): number {
-  const value = new Date(meeting.scheduledStartAt).getTime()
+  const value = parseServerDate(meeting.scheduledStartAt).getTime()
   return Number.isNaN(value) ? Number.POSITIVE_INFINITY : value
 }
 

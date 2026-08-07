@@ -27,6 +27,7 @@ import {
   type InfluencerDashboardRole,
 } from './influencerMeetingDashboard'
 import { translate, useTranslation } from '../../i18n'
+import { parseServerDate } from '../../api/serverTime'
 
 export type InfluencerMyMeetingPageProps = {
   role?: LoginRole
@@ -44,7 +45,7 @@ type TodayStat = {
 
 function formatClock(value?: string | null): string {
   if (!value) return translate('influencerMyMeetingPage.t21')
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('ko-KR', {
     hour: '2-digit',
@@ -65,7 +66,7 @@ function formatDuration(totalSeconds: number): string {
 }
 
 function timeUntil(value: string, now: Date): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return translate('influencerMyMeetingPage.t25')
   const seconds = Math.floor((date.getTime() - now.getTime()) / 1000)
   return seconds <= 0 ? translate('influencerMyMeetingPage.t26') : formatDuration(seconds)

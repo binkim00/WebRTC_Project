@@ -24,6 +24,7 @@ import {
 import { AlertBanner, IconButton, Skeleton, Spinner } from '../../components'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
 import { translate, type TranslationKey, useTranslation } from '../../i18n'
+import { parseServerDate } from '../../api/serverTime'
 
 type FeaturedMeeting = {
   id: number
@@ -67,7 +68,7 @@ function toStatusLabel(status: string | undefined): string {
 }
 
 function formatSchedule(scheduledStartAt: string): string {
-  const date = new Date(scheduledStartAt)
+  const date = parseServerDate(scheduledStartAt)
   if (Number.isNaN(date.getTime())) return scheduledStartAt
   return date.toLocaleString('ko-KR', {
     year: 'numeric',
@@ -256,7 +257,7 @@ function formatDurationMinSec(totalSeconds: number): string {
 }
 
 function formatScheduleDot(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
 
   const pad = (part: number) => String(part).padStart(2, '0')

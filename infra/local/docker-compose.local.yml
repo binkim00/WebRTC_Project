@@ -5,13 +5,13 @@ services:
     restart: unless-stopped
 
     environment:
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USERNAME}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-melly}
+      MYSQL_USER: ${DB_USERNAME:-melly_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me}
 
     ports:
-      - "${DB_PORT}:3306"
+      - "${DB_PORT:-3306}:3306"
 
     volumes:
       - melly-local-mysql-data:/var/lib/mysql
@@ -26,6 +26,9 @@ services:
       timeout: 5s
       retries: 10
 
+    networks:
+      - melly-local-network
+
   redis:
     image: redis:7.4-alpine
     container_name: melly-local-redis
@@ -34,7 +37,7 @@ services:
     command: redis-server --appendonly yes
 
     ports:
-      - "${REDIS_PORT}:6379"
+      - "${REDIS_PORT:-6379}:6379"
 
     volumes:
       - melly-local-redis-data:/data
@@ -45,6 +48,9 @@ services:
       timeout: 5s
       retries: 10
 
+    networks:
+      - melly-local-network
+
   livekit:
     image: livekit/livekit-server:v1.13.4
     container_name: melly-local-livekit
@@ -53,18 +59,39 @@ services:
     command:
       - --config
       - /etc/livekit.yaml
+      # 브라우저에게 "미디어를 이 주소로 보내라"고 광고할 IP다.
+      # 같은 PC에서 개발하면 127.0.0.1 이면 되고,
+      # 다른 기기(휴대폰 등)에서 접속하려면 이 호스트의 LAN IP를 넣는다.
+      - --node-ip
+      - ${LIVEKIT_NODE_IP:-127.0.0.1}
 
-    environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    # LIVEKIT_KEYS 환경변수는 의도적으로 두지 않는다.
+    # 이 변수를 설정하면 livekit.local.yaml 의 keys 맵이 통째로 교체되어
+    # webhook.api_key 가 참조하는 devkey 가 사라지고 서버가 기동에 실패한다.
+    # 로컬 키는 livekit.local.yaml 한 곳에서만 관리한다.
+
+    depends_on:
+      redis:
+        condition: service_healthy
 
     ports:
-      - "${LIVEKIT_HTTP_PORT}:7880"
-      - "${LIVEKIT_TCP_PORT}:7881"
-      - "${LIVEKIT_UDP_PORT_START}-${LIVEKIT_UDP_PORT_END}:50000-50100/udp"
+      - "${LIVEKIT_HTTP_PORT:-17880}:7880"
+      # 아래 두 미디어 포트는 반드시 1:1로 매핑한다.
+      # LiveKit이 브라우저에 알려주는 접속 후보는 컨테이너가 실제로 듣는 포트 번호이므로,
+      # 호스트 포트를 다르게 매핑하면 신호는 연결되지만 영상·음성이 전혀 흐르지 않는다.
+      - "7881:7881"
+      - "7882:7882/udp"
 
     volumes:
       - ./livekit.local.yaml:/etc/livekit.yaml:ro
 
+    networks:
+      - melly-local-network
+
 volumes:
   melly-local-mysql-data:
   melly-local-redis-data:
+
+networks:
+  melly-local-network:
+    driver: bridge

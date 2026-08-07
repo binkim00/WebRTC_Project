@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { serverLocalDateTimeMs } from './serverTime'
 import { unwrapEnvelope } from './envelope'
 import { translate } from '../i18n'
 
@@ -170,17 +171,9 @@ export async function controlFanMeetingForTest(
   return unwrapEnvelope<FanMeetingManagementResponse>(response)
 }
 
-/**
- * 서버가 보낸 LocalDateTime 문자열을 밀리초로 바꾼다.
- *
- * offset이 없는 값은 서버 시간대(KST) 기준으로 해석한다. `new Date(value)`에 그대로 넘기면
- * 브라우저 시간대를 따라가므로 KST가 아닌 환경에서 오픈 시각 비교가 어긋난다.
- */
-export function serverLocalDateTimeMs(value?: string | null): number {
-  if (!value) return Number.NaN
-  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)
-  return new Date(hasOffset ? value : `${value}+09:00`).getTime()
-}
+// 시각 해석은 도메인과 무관한 공용 관심사라 serverTime 으로 옮겼다. 이 모듈을 통해 쓰던
+// 화면이 많아 이름 그대로 다시 내보낸다.
+export { serverLocalDateTimeMs }
 
 /**
  * 대기실 오픈 시각이 이미 지났는지 확인한다.

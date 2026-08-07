@@ -1,0 +1,18 @@
+# Dockerfile 의 `COPY . .` 가 이 디렉터리를 통째로 이미지에 넣는다. secret 이 섞이면
+# 이미지 레이어에 그대로 남으므로(삭제해도 레이어에는 남는다) 여기서 먼저 제외한다.
+# 실제 값은 compose 의 environment 와 볼륨 마운트로만 주입한다.
+.env
+.env.*
+!.env.example
+google-credentials.json
+*.json
+
+# 캐시/로컬 가상환경은 이미지 크기만 늘리고, 플랫폼이 다르면 오히려 해가 된다.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+*.log
+.git
+.gitignore

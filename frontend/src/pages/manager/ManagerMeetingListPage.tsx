@@ -35,6 +35,7 @@ import {
   toErrorMessage,
 } from './meetingLifecycle'
 import { useTranslation } from '../../i18n'
+import { parseServerDate } from '../../api/serverTime'
 
 /** 서버 데이터가 없을 때도 페이지가 동일한 구조를 사용하도록 하는 빈 페이지 값이다. */
 const emptyPage: ManagerMeetingPage = {
@@ -48,7 +49,7 @@ const emptyPage: ManagerMeetingPage = {
 
 /** ISO 날짜 문자열을 목록에서 읽기 쉬운 `YYYY.MM.DD HH:mm` 형식으로 바꾼다. */
 function formatMeetingDate(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
 
   const year = date.getFullYear()

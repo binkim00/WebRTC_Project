@@ -56,6 +56,12 @@ function roleContentOf(role: LoginRole): RoleContent {
           // 이 목록 화면은 status 쿼리(upcoming/completed)가 없으면 목록 대신 오류 화면을 보여준다.
           to: '/fan/mypage/fan-meetings?status=upcoming',
         },
+        {
+          title: translate('myPage.t64'),
+          description: translate('myPage.t65'),
+          // 팔로잉은 인플루언서 탐색 화면의 탭이므로 tab 쿼리로 바로 그 탭을 연다.
+          to: '/fan/influencers?tab=following',
+        },
       ],
       withdrawDescription: translate('myPage.t34'),
     }

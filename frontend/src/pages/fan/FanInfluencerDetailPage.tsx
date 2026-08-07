@@ -1,13 +1,20 @@
-import { ArrowLeft, ArrowRight, LinkSimple, UsersThree } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowRight, Check, LinkSimple, UsersThree } from '@phosphor-icons/react'
+import { parseServerDate } from '../../api/serverTime'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
-import { getInfluencer, type InfluencerDetailResponse } from '../../api/influencers'
+import {
+  followInfluencer,
+  getInfluencer,
+  unfollowInfluencer,
+  type InfluencerDetailResponse,
+} from '../../api/influencers'
 import {
   AlertBanner,
   Avatar,
   Badge,
+  Button,
   Card,
   CardContent,
   EmptyState,
@@ -19,7 +26,7 @@ import { useTranslation } from '../../i18n'
 
 /** 백엔드 LocalDateTime 문자열을 한국어 날짜·시각 표기로 바꾼다. */
 function formatDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
 
   return new Intl.DateTimeFormat('ko-KR', {
@@ -40,6 +47,51 @@ export function FanInfluencerDetailPage() {
   const [detail, setDetail] = useState<InfluencerDetailResponse>()
   const [loading, setLoading] = useState(validId)
   const [error, setError] = useState<string>()
+
+  const session = getAuthSession()
+  // 팔로우는 FAN 전용 API다. 다른 역할로 로그인한 사용자에게는 버튼 자체를 보이지 않는다.
+  const canFollow = !session || session.role === 'FAN'
+  const [followPending, setFollowPending] = useState(false)
+  const [followError, setFollowError] = useState<string>()
+
+  /**
+   * 팔로우를 켜고 끈다.
+   *
+   * 이 화면은 팔로워 수를 함께 보여 주므로, 응답이 주는 갱신된 수치로 상세 상태를 바로 맞춘다.
+   */
+  async function toggleFollow() {
+    if (!detail) return
+
+    const authToken = session?.accessToken
+    if (!authToken) {
+      setFollowError(t('fanInfluencerDetailPage.t21'))
+      return
+    }
+
+    setFollowPending(true)
+    setFollowError(undefined)
+
+    try {
+      const result = detail.isFollowing
+        ? await unfollowInfluencer(detail.influencerId, authToken)
+        : await followInfluencer(detail.influencerId, authToken)
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              isFollowing: result.isFollowing,
+              followerCount: result.followerCount,
+            }
+          : current,
+      )
+    } catch (cause: unknown) {
+      setFollowError(
+        cause instanceof ApiError ? cause.message : t('fanInfluencerDetailPage.t20'),
+      )
+    } finally {
+      setFollowPending(false)
+    }
+  }
 
   useEffect(() => {
     if (!validId) return
@@ -133,7 +185,30 @@ export function FanInfluencerDetailPage() {
             </a>
           ) : null}
         </div>
+
+        {canFollow ? (
+          <Button
+            aria-pressed={detail.isFollowing}
+            className="sm:ml-auto"
+            leadingIcon={
+              detail.isFollowing ? <Check aria-hidden size={16} weight="bold" /> : undefined
+            }
+            loading={followPending}
+            onClick={() => void toggleFollow()}
+            variant={detail.isFollowing ? 'secondary' : 'primary'}
+          >
+            {detail.isFollowing
+              ? t('fanInfluencerDetailPage.t19')
+              : t('fanInfluencerDetailPage.t18')}
+          </Button>
+        ) : null}
       </header>
+
+      {followError ? (
+        <AlertBanner title={t('fanInfluencerDetailPage.t5')} variant="error">
+          {followError}
+        </AlertBanner>
+      ) : null}
 
       {detail.introduction ? (
         <Card>

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,6 +21,7 @@ class LiveKitTokenServiceTest {
 
     private LiveKitTokenService tokenService;
 
+    /** 외부 LiveKit 서버 없이 토큰 생성 로직을 검증할 테스트 설정과 서비스를 구성한다. */
     @BeforeEach
     void setUp() {
         LiveKitProperties properties = new LiveKitProperties();
@@ -29,12 +31,21 @@ class LiveKitTokenServiceTest {
         tokenService = new LiveKitTokenService(properties);
     }
 
+    /** 서로 다른 사용자에게 같은 테스트 방의 서로 다른 JWT가 발급되는지 확인한다. */
     @Test
     void issuesTokensForDifferentIdentitiesInTheSameTestRoom() {
         long issuedAt = Instant.now().getEpochSecond();
 
-        LiveKitTokenResponse first = tokenService.createTestToken("test-user-1", "테스트 사용자 1");
-        LiveKitTokenResponse second = tokenService.createTestToken("test-user-2", null);
+        Map<String, String> fanAttributes = Map.of(
+                "user_id", "11",
+                "role", "FAN",
+                "call_session_id", "100",
+                "fan_lang", "en"
+        );
+        LiveKitTokenResponse first = tokenService.createTestToken(
+                "test-user-1", "테스트 사용자 1", fanAttributes);
+        LiveKitTokenResponse second = tokenService.createTestToken(
+                "test-user-2", null, Map.of());
 
         assertThat(first.liveKitUrl()).isEqualTo(LIVEKIT_URL);
         assertThat(first.roomName()).isEqualTo("test-room");
@@ -43,11 +54,24 @@ class LiveKitTokenServiceTest {
         assertThat(second.identity()).isEqualTo("test-user-2");
         assertThat(first.accessToken()).isNotEqualTo(second.accessToken());
 
-        assertTokenClaims(first.accessToken(), "test-user-1", issuedAt);
-        assertTokenClaims(second.accessToken(), "test-user-2", issuedAt);
+        assertTokenClaims(first.accessToken(), "test-user-1", issuedAt, fanAttributes);
+        assertTokenClaims(second.accessToken(), "test-user-2", issuedAt, Map.of());
     }
 
-    private void assertTokenClaims(String token, String identity, long issuedAt) {
+    /**
+     * JWT payload를 디코딩해 사용자, 방, attributes, 미디어 권한 및 만료 시간을 검증한다.
+     *
+     * @param token 검증할 LiveKit JWT
+     * @param identity 기대하는 참가자 식별자
+     * @param issuedAt 토큰 발급 직전 시각
+     * @param attributes 토큰에 포함되어야 할 참가자 속성
+     */
+    private void assertTokenClaims(
+            String token,
+            String identity,
+            long issuedAt,
+            Map<String, String> attributes
+    ) {
         String[] parts = token.split("\\.");
         assertThat(parts).hasSize(3);
 
@@ -62,6 +86,8 @@ class LiveKitTokenServiceTest {
                 .contains("\"roomJoin\":true")
                 .contains("\"canPublish\":true")
                 .contains("\"canSubscribe\":true");
+        attributes.forEach((key, value) -> assertThat(payload)
+                .contains("\"" + key + "\":\"" + value + "\""));
 
         Matcher matcher = EXPIRATION_PATTERN.matcher(payload);
         assertThat(matcher.find()).isTrue();

@@ -13,6 +13,12 @@ HELP.md
 .env.*
 !.env.example
 
+### Local Codex instructions ###
+/AGENTS.md
+
+### Local working notes ###
+/FOLLOW-UP.md
+
 ### Logs ###
 *.log
 logs/
@@ -59,3 +65,6 @@ nbdist/
 ### Test / Coverage ###
 test-results/
 coverage/
+
+# test
+# test

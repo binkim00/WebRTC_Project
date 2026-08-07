@@ -13,8 +13,16 @@ export type AppHeaderNavigationItem = {
   end?: boolean
 }
 
+// 서비스 전체 공지는 역할과 무관한 공용 안내이므로 모든 역할 메뉴에 함께 둔다.
+const serviceNoticesItem = {
+  labelKey: 'app.nav.serviceNotices',
+  to: '/service-notices',
+} as const satisfies AppHeaderNavigationItem
+
 const fanNavigation = [
   { labelKey: 'nav.fan.events', to: '/fan/events' },
+  { labelKey: 'nav.fan.influencers', to: '/fan/influencers' },
+  serviceNoticesItem,
   { labelKey: 'nav.fan.mypage', to: '/fan/mypage/profile' },
   { labelKey: 'nav.notifications', to: '/notifications' },
 ] as const satisfies readonly AppHeaderNavigationItem[]
@@ -22,6 +30,7 @@ const fanNavigation = [
 const influencerNavigation = [
   { labelKey: 'nav.influencer.meetings', to: '/influencer/fan-meetings' },
   { labelKey: 'nav.influencer.fans', to: '/influencer/fans' },
+  serviceNoticesItem,
   { labelKey: 'nav.influencer.mypage', to: '/influencer/mypage/profile' },
   { labelKey: 'nav.notifications', to: '/notifications' },
 ] as const satisfies readonly AppHeaderNavigationItem[]
@@ -29,6 +38,7 @@ const influencerNavigation = [
 const managerNavigation = [
   { labelKey: 'nav.manager.meetings', to: '/manager/fan-meetings' },
   { labelKey: 'nav.manager.organization', to: '/manager/organization' },
+  serviceNoticesItem,
   { labelKey: 'nav.manager.mypage', to: '/manager/mypage' },
 ] as const satisfies readonly AppHeaderNavigationItem[]
 
@@ -37,9 +47,11 @@ const managerNavigation = [
  *
  * 팬미팅을 만들거나 진행하지 않으므로 운영 화면을 넣지 않고, 서비스 단위 업무인
  * 전체 공지 관리만 둔다. 알림은 팬미팅 진행 알림이라 운영자에게 의미가 없어 제외한다.
+ * 공지사항(공개 화면)은 게시된 모습 그대로 확인하는 용도로 함께 둔다.
  */
 const adminNavigation = [
   { labelKey: 'nav.admin.serviceNotices', to: '/admin/service-notices' },
+  serviceNoticesItem,
 ] as const satisfies readonly AppHeaderNavigationItem[]
 
 /** 역할별 전역 네비게이션의 단일 출처다. 화면에서는 별도 배열을 만들지 않는다. */

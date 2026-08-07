@@ -4,6 +4,8 @@ import type {
   CardDecoration,
   FanCardFont,
   FanCardLayout,
+  FanCardThemeKey,
+  PhotoAdjustment,
 } from '../components/fanCard/fanCardCanvas'
 import { translate } from '../i18n'
 
@@ -27,6 +29,18 @@ export type FanCardDraft = {
   selectedPhotoIndexes: number[]
   /** 얹어 둔 스티커와 글자 */
   decorations: CardDecoration[]
+  /** 사진을 칸 안에서 옮기고 키운 값이며 예전 초안에는 없다. */
+  photoAdjustments?: PhotoAdjustment[]
+  /** 문구 크기 배율이며 예전 초안에는 없다. */
+  quoteScale?: number
+  /** 팬미팅 이름 크기 배율이며 예전 초안에는 없다. */
+  titleScale?: number
+  /** 팬이 고른 팬미팅 이름 색이며 고르지 않았으면 없다. */
+  titleColor?: string
+  /** 팬이 고른 문구 색이며 고르지 않았으면 없다. */
+  quoteColor?: string
+  /** 고른 카드 도안이며 예전 초안에는 없다. */
+  themeKey?: FanCardThemeKey
   /** 마지막으로 저장한 시각 (ISO) */
   savedAt: string
 }
@@ -43,8 +57,8 @@ export type FanCardDraft = {
  */
 export const MAX_CAPTURED_PHOTOS = 20
 
-/** 카드 한 장에 들어가는 사진 수의 상한이다. 네컷 계열이 이만큼 쓴다. */
-export const MAX_PHOTOS_PER_CARD = 4
+/** 카드 한 장에 들어가는 사진 수의 상한이다. 여섯컷이 이만큼 쓴다. */
+export const MAX_PHOTOS_PER_CARD = 6
 
 /**
  * 사진과 꾸미던 상태를 브라우저에 두는 기간이다.

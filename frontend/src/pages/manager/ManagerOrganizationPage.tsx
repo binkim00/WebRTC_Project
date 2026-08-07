@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { getAuthSession } from '../../api/authSession'
 import {
   createOrganization,
@@ -39,20 +40,20 @@ function pad(value: number) {
 
 /** 2026.03.02 — 합류일 표기다. */
 function formatDate(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
 
 /** 2026.08.03 14:20 — 초대 만료 시각 표기다. */
 function formatDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${formatDate(value)} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 function isExpired(invitation: IssuedInvitation, now: number): boolean {
-  const expiry = new Date(invitation.expiresAt).getTime()
+  const expiry = parseServerDate(invitation.expiresAt).getTime()
   return Number.isFinite(expiry) && expiry <= now
 }
 

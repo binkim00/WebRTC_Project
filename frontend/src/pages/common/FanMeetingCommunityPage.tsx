@@ -1,4 +1,5 @@
 import { PencilSimple } from '@phosphor-icons/react'
+import { parseServerDate } from '../../api/serverTime'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getAuthSession } from '../../api/auth'
@@ -27,7 +28,7 @@ import { useTranslation } from '../../i18n'
 const PAGE_SIZE = 10
 
 function formatDateTime(iso: string): string {
-  const date = new Date(iso)
+  const date = parseServerDate(iso)
 
   if (Number.isNaN(date.getTime())) {
     return iso

@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import moldEmptyImage from '../../assets/jelly-mold-empty.png'
@@ -86,7 +87,7 @@ function dateRangeOf(value: string): { start: Date; end: Date } | undefined {
 }
 
 function formatDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
 
   const year = date.getFullYear()
@@ -100,7 +101,7 @@ function formatDateTime(value: string): string {
 
 /** "응모 마감 MM.DD" 표기용으로 연도 없이 월.일만 남긴다. */
 function formatMonthDay(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
@@ -108,7 +109,7 @@ function formatMonthDay(value: string): string {
 }
 
 function daysUntil(value: string): number {
-  const target = startOfDay(new Date(value))
+  const target = startOfDay(parseServerDate(value))
   const today = startOfDay(new Date())
   return Math.round((target.getTime() - today.getTime()) / DAY_MS)
 }
@@ -202,7 +203,7 @@ export function FanEventListPage() {
     )
     .filter((meeting) => {
       if (!dateBounds) return true
-      const scheduled = new Date(meeting.scheduledStartAt)
+      const scheduled = parseServerDate(meeting.scheduledStartAt)
       return scheduled >= dateBounds.start && scheduled < dateBounds.end
     })
     .sort((left, right) => {
@@ -210,7 +211,7 @@ export function FanEventListPage() {
       if (!left.applicationEndAt && !right.applicationEndAt) return 0
       if (!left.applicationEndAt) return 1
       if (!right.applicationEndAt) return -1
-      return new Date(left.applicationEndAt).getTime() - new Date(right.applicationEndAt).getTime()
+      return new Date(left.applicationEndAt).getTime() - parseServerDate(right.applicationEndAt).getTime()
     })
 
   const soonestOpenMeetingId = visibleMeetings.find(

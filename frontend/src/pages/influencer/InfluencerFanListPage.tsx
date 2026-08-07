@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession, type LoginRole } from '../../api/auth'
@@ -223,7 +224,7 @@ function equipmentContent(participant: FanMeetingParticipant) {
 
 function formatEnteredAt(value?: string) {
   if (!value) return translate('influencerFanListPage.t82')
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return translate('influencerFanListPage.t83')
 
   return new Intl.DateTimeFormat('ko-KR', {

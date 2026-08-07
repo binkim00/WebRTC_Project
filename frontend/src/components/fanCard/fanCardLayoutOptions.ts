@@ -19,9 +19,14 @@ export type LayoutOption = {
 export const LAYOUT_OPTIONS = (): readonly LayoutOption[] => [
   { key: 'INSTA', label: translate('fanCardLayoutOptions.t1'), photoCount: 1 },
   { key: 'POLAROID', label: translate('fanCardLayoutOptions.t2'), photoCount: 1 },
-  { key: 'FOURCUT', label: translate('fanCardLayoutOptions.t3'), photoCount: MAX_PHOTOS_PER_CARD },
-  { key: 'FOURCUT_VERTICAL', label: translate('fanCardLayoutOptions.t4'), photoCount: MAX_PHOTOS_PER_CARD },
-  { key: 'FOURCUT_HORIZONTAL', label: translate('fanCardLayoutOptions.t5'), photoCount: MAX_PHOTOS_PER_CARD },
+  { key: 'TWOCUT', label: translate('fanCardLayoutOptions.t7'), photoCount: 2 },
+  { key: 'FOURCUT', label: translate('fanCardLayoutOptions.t3'), photoCount: 4 },
+  { key: 'FOURCUT_VERTICAL', label: translate('fanCardLayoutOptions.t4'), photoCount: 4 },
+  { key: 'FOURCUT_HORIZONTAL', label: translate('fanCardLayoutOptions.t5'), photoCount: 4 },
+  { key: 'FILM', label: translate('fanCardLayoutOptions.t8'), photoCount: 4 },
+  { key: 'SIXCUT', label: translate('fanCardLayoutOptions.t9'), photoCount: MAX_PHOTOS_PER_CARD },
+  { key: 'HEART', label: translate('fanCardLayoutOptions.t10'), photoCount: 1 },
+  { key: 'SCATTER', label: translate('fanCardLayoutOptions.t12'), photoCount: 3 },
   { key: undefined, label: translate('fanCardLayoutOptions.t6'), photoCount: 0 },
 ]
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
@@ -22,21 +23,21 @@ function pad(part: number) {
 
 /** 2026.07.27 18:00 */
 function formatDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /** 2026.07.18 */
 function formatDate(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
 
 /** 08.02 18:30 — 같은 해 안의 가까운 기한에 쓰는 짧은 표기다. */
 function formatShortDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
@@ -49,7 +50,7 @@ function formatCallDuration(seconds: number): string {
 
 /** 결과 발표까지 남은 시간을 "N일 N시간"으로 계산한다. 지났으면 0으로 고정한다. */
 function formatRemaining(announceAt: string): string {
-  const diff = Math.max(0, new Date(announceAt).getTime() - Date.now())
+  const diff = Math.max(0, parseServerDate(announceAt).getTime() - Date.now())
   const days = Math.floor(diff / 86_400_000)
   const hours = Math.floor((diff % 86_400_000) / 3_600_000)
   return translate('fanApplicationResultPage.t42', { p0: days, p1: hours })
@@ -227,18 +228,7 @@ export function FanApplicationResultPage() {
 
     return (
       <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
-        {/* 히어로는 축하 배경일 뿐 정보가 아니므로 본문을 밀어내지 않는 높이로 제한하고,
-            이미지가 없으면 아예 그리지 않는다. */}
-        {application.coverImageUrl ? (
-          <figure className="relative m-0 h-[min(34vw,320px)] overflow-hidden bg-[var(--color-surface-muted)]">
-            <img
-              alt={t('fanApplicationResultPage.t44', { p0: application.influencerName })}
-              className="absolute inset-0 size-full object-cover"
-              src={application.coverImageUrl}
-            />
-          </figure>
-        ) : null}
-
+        {/* 커버 이미지는 두지 않는다. 젤리 축하 연출과 겹쳐 화면만 무거워지고 정보가 아니다. */}
         <div className="mx-auto w-[min(100%-40px,1240px)] pb-[72px] pt-11 min-[1081px]:w-[min(100%-88px,1240px)]">
           {/* 당첨 문구 위에 배치하는 장식형 축하 연출 — 버튼·정보를 가리지 않는다. */}
           <JellyCelebration className="mb-2 h-[clamp(225px,27vw,315px)]" />
@@ -286,14 +276,18 @@ export function FanApplicationResultPage() {
                 </div>
               </div>
               <p className="mt-7 max-w-[56ch] border-t border-[var(--color-divider)] pt-5 text-base font-medium leading-[1.75] text-[var(--color-text-muted)]">
-                {meetingClosed ? (
-                  t('fanApplicationResultPage.t47')
-                ) : (
-                  <>
-                    {t('fanApplicationResultPage.t14')} {operation?.earlyStartMinutes ?? 10}
-                    {t('fanApplicationResultPage.t15')}
-                  </>
-                )}
+                {meetingClosed
+                  ? t('fanApplicationResultPage.t47')
+                  // 대기실 입장 시각은 queueOpenAt 이 정한다. earlyStartMinutes 는 매니저가 예정보다
+                  // 일찍 시작할 수 있는 여유라 팬 안내에 쓸 값이 아니었고, 값이 커서 "17280분 전부터"
+                  // 처럼 읽혔다.
+                  : `${t('fanApplicationResultPage.t14')} ${
+                    operation?.queueOpenAt
+                      ? t('fanApplicationResultPage.t15', {
+                        p0: formatDateTime(operation.queueOpenAt),
+                      })
+                      : t('fanApplicationResultPage.t50')
+                  }`}
               </p>
             </section>
             <section aria-label={t('fanApplicationResultPage.t16')}>

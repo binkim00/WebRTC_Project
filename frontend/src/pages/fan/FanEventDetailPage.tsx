@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
@@ -42,21 +43,21 @@ function pad(part: number) {
 
 /** 2026.08.02 19:00 */
 function formatDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /** 07.27 18:00 — 같은 해 안의 가까운 일정에 쓰는 짧은 표기다. */
 function formatShortDateTime(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /** 07.25 — 배지의 마감 표기다. */
 function formatMonthDay(value: string): string {
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
@@ -80,7 +81,7 @@ function canWithdrawApplication(detail: PublicFanMeetingDetail): boolean {
   if (!startAt || !endAt) return false
 
   const now = Date.now()
-  return now >= new Date(startAt).getTime() && now < new Date(endAt).getTime()
+  return now >= new Date(startAt).getTime() && now < parseServerDate(endAt).getTime()
 }
 
 /** 이미지와 정보 열이 만나는 경계 굴절이다. 데스크톱은 수직, ≤1080px에서는 하단 수평으로 회전한다. */

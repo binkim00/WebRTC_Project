@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
@@ -36,6 +37,8 @@ type FanMeetingListItem = {
 
 const ITEMS_PER_PAGE = 6
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
 function pad(value: number) {
   return String(value).padStart(2, '0')
 }
@@ -43,7 +46,7 @@ function pad(value: number) {
 /** 2026.08.02 19:00 — L0 날짜·시간 표기다. */
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '-'
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
@@ -51,20 +54,32 @@ function formatDateTime(value: string | null | undefined): string {
 /** 2026.07.30 */
 function formatDate(value: string | null | undefined): string {
   if (!value) return '-'
-  const date = new Date(value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
 }
 
+/** 그 날 0시다. 시각을 떼고 날짜 단위로만 비교할 때 쓴다. */
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+/**
+ * 오늘 0시를 기준으로 남은 일수다. 오늘이면 0, 이미 지났으면 음수이고 날짜를 못 읽으면 null이다.
+ *
+ * 이벤트 목록(FanEventListPage)의 응모 마감 D-Day와 같은 계산이라 두 화면의 D-Day가 하루 어긋나지
+ * 않는다. 시각이 아니라 날짜 경계로 세므로 오늘 밤 늦은 팬미팅도 D-1이 아닌 '오늘'이 된다.
+ */
+function daysUntil(value: string | null | undefined): number | null {
+  if (!value) return null
+  const target = parseServerDate(value)
+  if (Number.isNaN(target.getTime())) return null
+  return Math.round((startOfDay(target).getTime() - startOfDay(new Date()).getTime()) / DAY_MS)
+}
+
+/** 그 시각이 오늘인지다. D-Day 계산과 같은 기준을 써서 카드 안 두 표기가 갈라지지 않게 한다. */
 function isToday(value: string): boolean {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return false
-  const now = new Date()
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  )
+  return daysUntil(value) === 0
 }
 
 /**
@@ -76,10 +91,10 @@ function isToday(value: string): boolean {
 function remainingDays(availableUntil: string | null | undefined): number | null {
   if (!availableUntil) return null
 
-  const until = new Date(availableUntil).getTime()
+  const until = parseServerDate(availableUntil).getTime()
   if (Number.isNaN(until)) return null
 
-  return Math.max(0, Math.ceil((until - Date.now()) / (24 * 60 * 60 * 1000)))
+  return Math.max(0, Math.ceil((until - Date.now()) / DAY_MS))
 }
 
 function isResultPublished(detail: PublicFanMeetingDetail | undefined): boolean {
@@ -328,8 +343,8 @@ export function FanMeetingListPage() {
     return items
       .filter((item) => item.listStatus === status)
       .sort((first, second) => {
-        const firstTime = new Date(first.application.scheduledStartAt).getTime()
-        const secondTime = new Date(second.application.scheduledStartAt).getTime()
+        const firstTime = parseServerDate(first.application.scheduledStartAt).getTime()
+        const secondTime = parseServerDate(second.application.scheduledStartAt).getTime()
         return status === 'upcoming' ? firstTime - secondTime : secondTime - firstTime
       })
   }, [items, status])
@@ -513,6 +528,12 @@ export function FanMeetingListPage() {
           ) : (
             visibleItems.map((item, index) => {
               const today = isToday(item.application.scheduledStartAt)
+              // 응모 마감이 아니라 팬미팅 시작 예정 시각까지 남은 일수다. 시작 시각이 지난
+              // 팬미팅(진행 중이거나 목록 갱신이 늦은 경우)에는 D-Day를 붙이지 않는다.
+              const daysToStart = daysUntil(item.application.scheduledStartAt)
+              const showDday = daysToStart !== null && daysToStart >= 0
+              // 강조 기준은 이벤트 목록의 마감 D-Day와 같은 7일이다.
+              const ddayUrgent = daysToStart !== null && daysToStart <= 7
               // LIVE 상태만으로 입장을 허용하지 않는다. 대기열 오픈 시각이 지나고
               // 서버가 참가자 입장을 허용한 경우에만 대기실로 이동한다.
               const queueIsOpen = isWaitingRoomOpen(item.detail?.meeting.operation.queueOpenAt)
@@ -576,9 +597,20 @@ export function FanMeetingListPage() {
                     <p className="mt-3.5 text-[13px] font-bold text-[var(--color-text-muted)]">
                       {t('fanMeetingListPage.t21')}
                     </p>
-                    <p className="mt-[5px] text-lg font-extrabold tabular-nums">
-                      {formatDateTime(item.application.scheduledStartAt)}
-                    </p>
+                    <div className="mt-[5px] flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                      <p className="text-lg font-extrabold tabular-nums">
+                        {formatDateTime(item.application.scheduledStartAt)}
+                      </p>
+                      {showDday ? (
+                        <p
+                          className={`whitespace-nowrap text-[13px] font-extrabold ${ddayUrgent ? 'text-[var(--color-warning)]' : 'text-[var(--color-text-muted)]'}`}
+                        >
+                          {daysToStart === 0
+                            ? t('fanMeetingListPage.t59')
+                            : t('fanMeetingListPage.t58', { p0: daysToStart })}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="flex flex-col items-start gap-2.5 text-left min-[901px]:items-end min-[901px]:text-right">
                     <span
