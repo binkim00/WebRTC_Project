@@ -12,12 +12,19 @@ export type ApplicationQuestionType =
 
 export type ApplicationAnswerRequest = {
   questionId: number
-  value: string
+  /** 주관식 답변 본문이며 객관식이면 보내지 않는다 */
+  value?: string
+  /** 객관식에서 고른 선택지이며 주관식이면 보내지 않는다 */
+  optionIds?: number[]
 }
 
 export type ApplicationSubmitRequest = {
-  /** 현재 백엔드가 응모 시 영구 저장하는 필수 동의 값이다. */
+  /** 개인정보 수집 및 이용 동의 */
   personalInformationConsent: boolean
+  /** 녹화·보관 동의. 녹화를 쓰지 않는 팬미팅에서는 서버가 검사하지 않는다 */
+  recordingConsent: boolean
+  /** 팬미팅 참여 규칙 동의 */
+  participationConsent: boolean
   /** 최대 10개 */
   answers: ApplicationAnswerRequest[]
 }
@@ -64,7 +71,10 @@ export type MyApplicationSummaryResponse = {
 export type ApplicantAnswerResponse = {
   questionId: number
   questionText: string
+  /** 객관식이면 고른 선택지 문구를 쉼표로 이어 붙인 값이다 */
   answerText: string
+  /** 객관식에서 고른 선택지 식별자이며 주관식이면 빈 배열이다 */
+  selectedOptionIds: number[]
 }
 
 export type ApplicantResponse = {
@@ -91,8 +101,9 @@ export type ApplicantListResponse = {
 export type QuestionStatResponse = {
   questionId: number
   questionText: string
+  /** 답변 행 수가 아니라 응답한 응모 수라 복수 선택에서도 부풀지 않는다 */
   responseCount: number
-  /** 주관식 질문만 지원하므로 항상 null */
+  /** 선택지 식별자별 선택 수이며 주관식 질문이면 null */
   optionCounts: Record<string, number> | null
 }
 
@@ -117,12 +128,20 @@ export type ResultPublishResponse = {
   resultStatus: string
 }
 
+export type ApplicationFormOptionResponse = {
+  optionId: number
+  optionText: string
+  displayOrder: number
+}
+
 export type ApplicationFormQuestionResponse = {
   questionId: number
   questionText: string
   questionType: ApplicationQuestionType
   required: boolean
   displayOrder: number
+  /** 객관식 질문의 선택지이며 주관식 질문이면 빈 배열이다 */
+  options: ApplicationFormOptionResponse[]
 }
 
 export type ApplicationFormResponse = {
@@ -131,14 +150,22 @@ export type ApplicationFormResponse = {
   questions: ApplicationFormQuestionResponse[]
 }
 
+export type ApplicationFormOptionSaveRequest = {
+  /** 기존 선택지 수정 시에만 지정하며 새 선택지면 생략한다 */
+  optionId?: number | null
+  optionText: string
+  displayOrder: number
+}
+
 export type ApplicationFormQuestionSaveRequest = {
   /** 기존 질문 수정 시에만 지정하며 새 질문이면 생략한다 */
   questionId?: number | null
   questionText: string
-  /** SHORT_TEXT 또는 LONG_TEXT만 허용 */
   questionType: ApplicationQuestionType
   required: boolean
   displayOrder: number
+  /** 객관식 질문은 선택지 2~10개가 필요하고 주관식 질문은 생략한다 */
+  options?: ApplicationFormOptionSaveRequest[]
 }
 
 export type ApplicationFormSaveRequest = {
