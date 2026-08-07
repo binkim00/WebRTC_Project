@@ -251,6 +251,20 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
     hostStaysConnected && noPendingFan && Boolean(sessionStatus && isCallSessionEnded(sessionStatus))
 
   /**
+   * 마지막 팬까지 끝난 뒤, 인플루언서가 마무리 화면으로 넘어가겠다고 직접 고른 상태다.
+   *
+   * 이 값 없이 `allCallsFinished`만으로 화면을 바꾸면 통화 화면이 통째로 사라지면서 옆 패널의
+   * 메모 입력도 함께 없어져, 하필 **마지막 팬만** 메모를 남길 수 없었다. 넘어가는 시점을
+   * 사용자가 정하게 해 마지막 팬의 메모를 저장할 시간을 준다.
+   */
+  const [wrapUpConfirmed, setWrapUpConfirmed] = useState(false)
+
+  // 다음 팬을 다시 호출하면(운영 패널의 이어 호출 등) 마무리 상태를 되돌린다.
+  useEffect(() => {
+    if (!allCallsFinished) setWrapUpConfirmed(false)
+  }, [allCallsFinished])
+
+  /**
    * 팬미팅을 모두 마친 화면에서 보여 줄 진행 결과다.
    *
    * 마지막으로 읽은 대기열을 집계한다. 대기열을 못 읽었으면(undefined) 숫자를 보여 주지 않는다.
@@ -343,7 +357,11 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
   // 두 조건 모두 hostStaysConnected일 때만 참이 되므로 팬 화면에는 나타나지 않는다.
   // allCallsFinished는 조건에 직접 포함하고, meetingClosed는 이를 검사하는 loadMeetingStatus가
   // 호스트가 아니면 곧바로 반환하므로 팬 세션에서는 설정되지 않는다.
-  if (meetingClosed || allCallsFinished) {
+  //
+  // 마지막 팬까지 만난 경우에는 곧바로 바꾸지 않고 마무리 버튼을 누를 때까지 통화 화면을 둔다.
+  // 옆 패널에서 마지막 팬의 메모를 저장할 시간이 필요하기 때문이다. 반면 운영자가 팬미팅 자체를
+  // 끝내거나 취소한 경우(meetingClosed)에는 통화 화면을 유지할 근거가 없어 그대로 넘어간다.
+  if (meetingClosed || (allCallsFinished && wrapUpConfirmed)) {
     return (
       <MeetingWrapUp
         meetingId={props.meetingId}
@@ -411,6 +429,24 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
         recordingPolicyError={recordingPolicyError}
         sessionStatus={sessionStatus}
       />
+      {/*
+        마지막 팬까지 만난 뒤의 마무리 안내다.
+        통화 화면은 뷰포트를 가득 채우므로 아래에 이어 붙이면 스크롤해야 보인다. 화면 아래에
+        고정해 메모를 저장한 다음 바로 누를 수 있게 한다.
+      */}
+      {allCallsFinished ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[var(--color-surface-dark-panel)] px-4 py-3 sm:px-6 lg:px-10">
+          <div className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[15px] font-extrabold text-white">{t('videoCallRoom.s1WrapTitle')}</p>
+              <p className="mt-0.5 text-sm font-medium leading-[1.5] text-white/70">
+                {t('videoCallRoom.s1WrapDesc')}
+              </p>
+            </div>
+            <Button onClick={() => setWrapUpConfirmed(true)}>{t('videoCallRoom.s1WrapAction')}</Button>
+          </div>
+        </div>
+      ) : null}
       {connectionError ? (
         <div className="mt-4">
           <AlertBanner title={t('videoCallRoom.t4')} variant="error">

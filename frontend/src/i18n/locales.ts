@@ -3467,6 +3467,63 @@ const ko = {
   'influencerMyFansPage.t54': '팔로우한 날',
   'influencerMyFansPage.t55': '팬 번호',
   'influencerMyFansPage.t56': '참가 이력이 있는 팬만 집계합니다. 팔로워와는 다를 수 있습니다.',
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 세션별 추가 구역 (2026-08-07)
+  //
+  // 여러 작업 세션이 동시에 이 파일에 문구를 추가하면 같은 줄에서 충돌한다.
+  // 각 세션은 **자기 앵커 바로 아래에만** 키를 추가하고 다른 구역은 건드리지 않는다.
+  // 같은 키를 en 사전 쪽 같은 이름의 앵커에도 반드시 추가한다(누락은 타입으로 안 잡힌다).
+  // ─────────────────────────────────────────────────────────────────────
+
+  // ── S1: 통화 화면 운영·메모 ──
+  'influencerCallSidePanel.s1OpsHint':
+    '팬이 들어오지 않으면 노쇼로 처리하고, 통화 화면을 벗어나지 않고 다음 팬을 바로 호출할 수 있어요.',
+  'influencerCallSidePanel.s1CallNext': '다음 팬 호출',
+  'influencerCallSidePanel.s1CallNextFailed':
+    '다음 팬을 호출하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  'influencerCallSidePanel.s1NoShowDesc':
+    '통화가 즉시 종료되고 {p0} 님은 대기열에서 빠집니다. 기록에 노쇼로 남으며 되돌릴 수 없습니다. 다음 팬이 있으면 이어서 바로 호출합니다.',
+  'influencerCallSidePanel.s1SkipDesc':
+    '지금 통화를 끝내고 {p0}번째 {p1} 님을 이 화면에서 바로 호출합니다. {p2} 님은 대기열 마지막으로 이동합니다.',
+  'influencerCallSidePanel.s1MemoTitle': '이번 통화 메모',
+  'influencerCallSidePanel.s1MemoFor': '{p0} 님과의 이번 회차에 남는 메모예요.',
+  'influencerCallSidePanel.s1MemoPlaceholder':
+    '기억하고 싶은 내용을 적어 두세요. 팬 기록 화면에서 다시 볼 수 있어요.',
+  'influencerCallSidePanel.s1MemoSave': '메모 저장',
+  'influencerCallSidePanel.s1MemoSaving': '저장하는 중',
+  'influencerCallSidePanel.s1MemoSaved': '메모를 저장했어요.',
+  'influencerCallSidePanel.s1MemoFailed': '메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  'influencerCallSidePanel.s1MemoCount': '{p0}/{p1}자',
+  'influencerCallSidePanel.s1MemoNoFan': '통화가 시작되면 이 자리에 메모를 남길 수 있어요.',
+  'influencerCallSidePanel.s1PastMemoTitle': '지난 회차 메모',
+  'influencerCallSidePanel.s1PastMemoEmpty': '지난 회차에 남긴 메모가 없어요.',
+  'videoCallRoom.s1WrapTitle': '오늘 만날 팬을 모두 만났어요',
+  'videoCallRoom.s1WrapDesc': '옆 패널에서 마지막 팬의 메모를 저장한 뒤 마무리하세요.',
+  'videoCallRoom.s1WrapAction': '팬미팅 마무리하기',
+  'influencerFanRecordPage.s1Delete': '메모 삭제',
+  'influencerFanRecordPage.s1DeleteTitle': '메모를 삭제할까요?',
+  'influencerFanRecordPage.s1DeleteDesc': '{p0} 회차에 남긴 메모가 지워집니다. 되돌릴 수 없어요.',
+  'influencerFanRecordPage.s1DeleteConfirm': '삭제',
+  'influencerFanRecordPage.s1Deleted': '메모를 삭제했어요.',
+  'influencerFanRecordPage.s1DeleteFailed':
+    '메모를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+
+  // ── S3: 알림 실시간화 ──
+  // 서버가 알림과 함께 내려주는 사전 키다. 백엔드 NotificationMessage 의 키·문장 틀과
+  // 자리표시자 이름이 같아야 하며, 한쪽만 고치면 문장이 어긋난다.
+  // 제목은 사전 키 없이 내려오므로 알림 유형으로 찾는다. (i18n/serverText.ts)
+
+  // ── S4: 응모 폼 ──
+
+  // ── S5: 계정·인증 ──
+
+  // ── S6: 첨부·이미지·공지 ──
+
+  // ── S7: 조직 ──
+
+  // ── S8: 출력물·죽은 UI 정리 ──
+
 } as const
 
 /** 사전 키다. 한국어 사전에 있는 키만 쓸 수 있다. */
@@ -7064,6 +7121,57 @@ const en: Partial<Record<TranslationKey, string>> = {
   'influencerMyFansPage.t54': 'Followed on',
   'influencerMyFansPage.t55': 'Fan ID',
   'influencerMyFansPage.t56': 'Counts only fans with participation history, so it can differ from your followers.',
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 세션별 추가 구역 (2026-08-07) — ko 사전의 같은 이름 앵커와 짝을 맞춘다.
+  // ─────────────────────────────────────────────────────────────────────
+
+  // ── S1: 통화 화면 운영·메모 ──
+  'influencerCallSidePanel.s1OpsHint':
+    'If the fan does not show up, mark a no-show and call the next fan right here without leaving the call.',
+  'influencerCallSidePanel.s1CallNext': 'Call next fan',
+  'influencerCallSidePanel.s1CallNextFailed':
+    'We could not call the next fan. Please try again in a moment.',
+  'influencerCallSidePanel.s1NoShowDesc':
+    'The call ends immediately and {p0} is removed from the queue. This is recorded as a no-show and cannot be undone. If another fan is waiting, they are called right after.',
+  'influencerCallSidePanel.s1SkipDesc':
+    'This ends the current call and calls {p1}, who is number {p0}, right on this screen. {p2} moves to the end of the queue.',
+  'influencerCallSidePanel.s1MemoTitle': 'Note for this call',
+  'influencerCallSidePanel.s1MemoFor': 'This note is saved for this session with {p0}.',
+  'influencerCallSidePanel.s1MemoPlaceholder':
+    'Jot down what you want to remember. You can read it again on the fan record page.',
+  'influencerCallSidePanel.s1MemoSave': 'Save note',
+  'influencerCallSidePanel.s1MemoSaving': 'Saving',
+  'influencerCallSidePanel.s1MemoSaved': 'The note was saved.',
+  'influencerCallSidePanel.s1MemoFailed': 'Saving the note failed. Please try again in a moment.',
+  'influencerCallSidePanel.s1MemoCount': '{p0}/{p1}',
+  'influencerCallSidePanel.s1MemoNoFan': 'Once a call starts you can leave a note here.',
+  'influencerCallSidePanel.s1PastMemoTitle': 'Notes from past sessions',
+  'influencerCallSidePanel.s1PastMemoEmpty': 'No notes from past sessions yet.',
+  'videoCallRoom.s1WrapTitle': 'You have met every fan for today',
+  'videoCallRoom.s1WrapDesc': "Save the last fan's note in the side panel, then wrap up.",
+  'videoCallRoom.s1WrapAction': 'Wrap up the fan meeting',
+  'influencerFanRecordPage.s1Delete': 'Delete note',
+  'influencerFanRecordPage.s1DeleteTitle': 'Delete this note?',
+  'influencerFanRecordPage.s1DeleteDesc':
+    'The note you left for {p0} will be removed. This cannot be undone.',
+  'influencerFanRecordPage.s1DeleteConfirm': 'Delete',
+  'influencerFanRecordPage.s1Deleted': 'The note was deleted.',
+  'influencerFanRecordPage.s1DeleteFailed':
+    'Deleting the note failed. Please try again in a moment.',
+
+  // ── S3: 알림 실시간화 ──
+
+  // ── S4: 응모 폼 ──
+
+  // ── S5: 계정·인증 ──
+
+  // ── S6: 첨부·이미지·공지 ──
+
+  // ── S7: 조직 ──
+
+  // ── S8: 출력물·죽은 UI 정리 ──
+
 }
 
 /** 언어별 사전이다. ko는 완전하고 en은 부분 번역을 허용한다. */
