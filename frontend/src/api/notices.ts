@@ -105,14 +105,21 @@ export async function getServiceNotices(
   return unwrapEnvelope<PageResponse<NoticeSummaryResponse>>(response)
 }
 
-/** 서비스 공지 상세를 조회한다. (인증 불필요) */
+/**
+ * 서비스 공지 상세를 조회한다.
+ *
+ * 비로그인도 읽을 수 있지만, 응답의 `canEdit`·`canDelete`는 **토큰을 보낸 경우에만** 채워진다.
+ * 서버는 로그인 정보가 없으면 두 값을 그냥 false로 내려 주므로, 수정·삭제 버튼을 이 값으로
+ * 정하는 화면은 토큰을 반드시 넘겨야 한다.
+ */
 export async function getServiceNotice(
   noticeId: string | number,
+  authToken?: string,
   signal?: AbortSignal,
 ): Promise<NoticeDetailResponse> {
   const response = await apiRequest<unknown>(
     `/api/v1/service-notices/${encodeURIComponent(String(noticeId))}`,
-    { method: 'GET', signal },
+    { method: 'GET', authToken, signal },
   )
 
   return unwrapEnvelope<NoticeDetailResponse>(response)

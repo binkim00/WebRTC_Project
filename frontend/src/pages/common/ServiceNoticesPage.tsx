@@ -148,7 +148,7 @@ export function ServiceNoticeDetailPage() {
     const controller = new AbortController()
 
     setLoading(true)
-    getServiceNotice(noticeId, controller.signal)
+    getServiceNotice(noticeId, undefined, controller.signal)
       .then((result) => {
         setNotice(result)
         setError(undefined)

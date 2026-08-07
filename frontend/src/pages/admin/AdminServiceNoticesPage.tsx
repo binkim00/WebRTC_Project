@@ -47,10 +47,13 @@ function errorMessage(reason: unknown, fallback: string): string {
 /**
  * 서비스 운영자(ADMIN)가 서비스 전체 공지를 작성·수정·삭제하는 화면이다.
  *
- * 팬미팅 공지와 달리 서비스 전체에 노출되므로 백엔드가 ADMIN 역할로 제한하고,
- * 수정·삭제는 **작성자 본인만** 가능하다(PostCommandService가 다시 검증한다).
- * 그래서 목록의 수정·삭제 버튼은 상세 조회로 받은 `canEdit`·`canDelete`를 따른다 —
- * 화면에서 역할만 보고 열어 두면 다른 운영자의 공지에서 권한 오류를 만나게 된다.
+ * 팬미팅 공지와 달리 서비스 전체에 노출되므로 백엔드가 ADMIN 역할로 제한하고, 수정·삭제는
+ * 작성자 본인이나 ADMIN에게 허용한다(PostCommandService가 다시 검증한다). 화면은 역할을
+ * 직접 따지지 않고 상세 조회로 받은 `canEdit`·`canDelete`를 따라, 권한 규칙이 바뀌어도
+ * 서버 판단을 그대로 반영한다.
+ *
+ * <p>상세 조회에 **로그인 토큰을 반드시 함께 보낸다.** 서버는 토큰이 없으면 조회자를 알 수
+ * 없어 두 값을 false로 내려 주고, 그러면 내가 쓴 공지까지 "다른 운영자가 작성"으로 보인다.
  *
  * 라우트 보호는 `/admin/*` 경로에 걸린 MANAGE_SERVICE_NOTICES 권한이 담당한다.
  */
@@ -90,7 +93,9 @@ export function AdminServiceNoticesPage() {
         const permissions = await Promise.all(
           result.content.map(async (item) => {
             try {
-              const detail = await getServiceNotice(item.noticeId, signal)
+              const detail = await getServiceNotice(
+                item.noticeId, session?.accessToken, signal,
+              )
               return detail.canEdit || detail.canDelete ? item.noticeId : undefined
             } catch {
               return undefined
@@ -130,7 +135,7 @@ export function AdminServiceNoticesPage() {
     setEditorError(undefined)
     try {
       // 목록 요약에는 본문이 없어 상세를 읽어 채운다.
-      const detail = await getServiceNotice(item.noticeId)
+      const detail = await getServiceNotice(item.noticeId, session?.accessToken)
       setEditor({
         mode: 'edit',
         noticeId: detail.noticeId,
