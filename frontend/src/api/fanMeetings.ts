@@ -357,18 +357,59 @@ export async function fetchPublicFanMeetings(
   return parsePage(response)
 }
 
+const DETAIL_CACHE_TTL_MS = 30_000
+const publicDetailCache = new Map<
+  string,
+  { expiresAt: number; detail: PublicFanMeetingDetail }
+>()
+const publicDetailRequests = new Map<string, Promise<PublicFanMeetingDetail>>()
+
+function publicDetailCacheKey(meetingId: number, authToken?: string): string {
+  return `${meetingId}:${authToken ?? 'guest'}`
+}
+
+/** 목록의 카드에 포인터가 닿았을 때 상세 데이터를 미리 받아 첫 진입 대기 시간을 줄인다. */
+export function prefetchPublicFanMeetingDetail(
+  meetingId: number,
+  authToken?: string,
+): Promise<void> {
+  return fetchPublicFanMeetingDetail(meetingId, authToken)
+    .then(() => undefined)
+    .catch(() => undefined)
+}
+
 export async function fetchPublicFanMeetingDetail(
   meetingId: number,
   authToken?: string,
   signal?: AbortSignal,
+  forceRefresh = false,
 ): Promise<PublicFanMeetingDetail> {
-  const response = await apiRequest<unknown>(
-    `/api/v1/fan-meetings/${meetingId}`,
-    {
-      authToken,
-      signal,
-    },
-  )
+  const cacheKey = publicDetailCacheKey(meetingId, authToken)
+  const cached = publicDetailCache.get(cacheKey)
+  if (!forceRefresh && cached && cached.expiresAt > Date.now()) return cached.detail
 
-  return parseDetail(response)
+  const pending = !forceRefresh ? publicDetailRequests.get(cacheKey) : undefined
+  if (pending) return pending
+
+  const request = apiRequest<unknown>(`/api/v1/fan-meetings/${meetingId}`, {
+    authToken,
+    signal,
+  }).then((response) => {
+    const detail = parseDetail(response)
+    publicDetailCache.set(cacheKey, {
+      detail,
+      expiresAt: Date.now() + DETAIL_CACHE_TTL_MS,
+    })
+    return detail
+  })
+
+  if (!signal && !forceRefresh) {
+    publicDetailRequests.set(cacheKey, request)
+    void request.then(
+      () => publicDetailRequests.delete(cacheKey),
+      () => publicDetailRequests.delete(cacheKey),
+    )
+  }
+
+  return request
 }

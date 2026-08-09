@@ -9,6 +9,7 @@ import {
   type LoginRole,
 } from './api/auth'
 import { purgeExpiredFanCardData } from './api/capturedPhotos'
+import { isLoginRole } from './api/authSession'
 import { AppHeader } from './components'
 import {
   canRoleAccessPath,
@@ -139,7 +140,29 @@ function App() {
     /^\/fan-meetings\/[^/]+\/device-check$/.test(pathname) ||
     /^\/influencer\/fan-meetings\/[^/]+\/device-check$/.test(pathname)
   const authSession = getAuthSession()
-  const isAuthenticated = authSession !== null
+  const previewRole = import.meta.env.DEV ? searchParams.get('dashboardRole') : null
+  const dashboardPreviewSession: LoginResponse | null =
+    isHomePage && isLoginRole(previewRole)
+      ? {
+          accessToken: 'dashboard-preview',
+          refreshToken: 'dashboard-preview',
+          expiresIn: 3600,
+          userId: 1,
+          role: previewRole,
+          nickname:
+            previewRole === 'FAN'
+              ? '민지'
+              : previewRole === 'MANAGER'
+                ? '민준'
+                : previewRole === 'ADMIN'
+                  ? '관리자'
+                  : previewRole === 'SOLO_INFLUENCER'
+                    ? '도현'
+                    : '서윤',
+        }
+      : null
+  const headerSession = authSession ?? dashboardPreviewSession
+  const isAuthenticated = headerSession !== null
   const returnTo = `${pathname}${search}`
   /**
    * 가드가 막아서 보내는 로그인 경로다. 로그인 후 원래 가려던 화면으로 되돌려 준다.
@@ -166,8 +189,8 @@ function App() {
           to: item.to,
         }))
   const roleHeaderRole =
-    authSession && !isAuthPage && !isDeviceCheckPage
-      ? authSession.role
+    headerSession && !isAuthPage && !isDeviceCheckPage
+      ? headerSession.role
       : undefined
   const headerNavigationProps = roleHeaderRole
     ? ({ role: roleHeaderRole } as const)
@@ -247,9 +270,9 @@ function App() {
         actions={
           isHomePage ? (
             <nav aria-label={t('app.t4')} className="flex items-center gap-7 text-sm font-semibold">
-              {authSession ? (
+              {headerSession ? (
                 <>
-                  <UserProfileSummary session={authSession} />
+                  <UserProfileSummary session={headerSession} />
                   <button
                     className="font-semibold hover:text-[var(--color-primary-coral)]"
                     onClick={() => void handleLogout()}
@@ -326,7 +349,9 @@ function App() {
           isCallPage
             ? 'mx-auto w-full max-w-[1440px] flex-1 px-3 py-5 sm:px-6 lg:px-10 lg:py-6'
             : isHomePage
-              ? 'mx-auto w-full max-w-[1480px] flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:pb-16 lg:pt-10'
+              ? headerSession
+                ? 'mx-auto w-full max-w-[1680px] flex-1 px-4 py-8 sm:px-5 lg:px-6 lg:pb-16 lg:pt-10'
+                : 'mx-auto w-full max-w-[1480px] flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:pb-16 lg:pt-10'
             : isEditorialExamplePage
               ? 'w-full flex-1'
             : isDeviceCheckPage

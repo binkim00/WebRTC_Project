@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import {
+  CALL_SUMMARY_POLL_INTERVAL_MS,
   getCallSummary,
   parseSummaryKeywords,
   type AiCallSummary,
@@ -12,8 +13,6 @@ import { Spinner } from '../feedback/Spinner'
 import { useTranslation } from '../../i18n'
 
 /** 생성 중일 때 다시 물어보는 간격이다. 요약은 통화 종료 직후 수 초~수십 초가 걸린다. */
-const POLL_INTERVAL_MS = 5000
-
 /** 조회·생성 대기·완료·실패를 한 값으로 다루어 화면이 중간 상태를 놓치지 않게 한다. */
 type PanelState =
   | { kind: 'loading' }
@@ -57,7 +56,7 @@ export function CallSummaryPanel({ callSessionId }: { callSessionId: string | nu
 
         if (result.state === 'GENERATING') {
           setState({ kind: 'generating', message: result.message })
-          timer = setTimeout(() => void load(), POLL_INTERVAL_MS)
+          timer = setTimeout(() => void load(), CALL_SUMMARY_POLL_INTERVAL_MS)
           return
         }
         setState({ kind: 'ready', summary: result.summary })

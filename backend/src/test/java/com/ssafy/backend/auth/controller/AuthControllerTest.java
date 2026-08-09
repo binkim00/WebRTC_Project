@@ -10,7 +10,6 @@ import com.ssafy.backend.auth.exception.AccountUnavailableException;
 import com.ssafy.backend.auth.exception.InvalidCredentialsException;
 import com.ssafy.backend.auth.exception.InvalidRefreshTokenException;
 import com.ssafy.backend.auth.exception.TooManyLoginAttemptsException;
-import com.ssafy.backend.auth.service.AccountAvailabilityService;
 import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
@@ -37,7 +36,6 @@ class AuthControllerTest {
     private LogoutService logoutService;
     private RefreshTokenService refreshTokenService;
     private DeviceTokenService deviceTokenService;
-    private AccountAvailabilityService accountAvailabilityService;
     private MockMvc mockMvc;
 
     /** 서비스 mock과 전역 예외 처리가 적용된 standalone MockMvc를 구성한다. */
@@ -48,11 +46,9 @@ class AuthControllerTest {
         logoutService = mock(LogoutService.class);
         refreshTokenService = mock(RefreshTokenService.class);
         deviceTokenService = mock(DeviceTokenService.class);
-        accountAvailabilityService = mock(AccountAvailabilityService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
                         new AuthController(signupService, loginService, logoutService,
-                                refreshTokenService, deviceTokenService,
-                                accountAvailabilityService))
+                                refreshTokenService, deviceTokenService))
                 .setControllerAdvice(new AuthExceptionHandler())
                 .build();
     }

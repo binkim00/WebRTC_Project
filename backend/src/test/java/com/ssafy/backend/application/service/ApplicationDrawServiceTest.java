@@ -8,7 +8,6 @@ import com.ssafy.backend.application.dto.DrawResultResponse;
 import com.ssafy.backend.application.dto.ResultPublishResponse;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
-import com.ssafy.backend.application.repository.ApplicationOptionRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
@@ -20,7 +19,6 @@ import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
-import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.notification.domain.Notification;
 import com.ssafy.backend.notification.domain.NotificationType;
@@ -448,11 +446,9 @@ class ApplicationDrawServiceTest {
                 fanUserService,
                 meetingRepository,
                 applicationSettingRepository,
-                mock(MeetingOperationSettingRepository.class),
                 applicationRepository,
                 mock(ApplicationFormRepository.class),
                 mock(ApplicationQuestionRepository.class),
-                mock(ApplicationOptionRepository.class),
                 mock(ApplicationAnswerRepository.class),
                 Clock.fixed(NOW, SEOUL),
                 true,
@@ -460,8 +456,7 @@ class ApplicationDrawServiceTest {
         );
 
         assertThatThrownBy(() -> applicationService.submit(
-                MEETING_ID, new ApplicationSubmitRequest(true, true, true, List.of()),
-                latecomer, null
+                MEETING_ID, new ApplicationSubmitRequest(true, List.of()), latecomer, null
         )).isInstanceOfSatisfying(BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
                         .isEqualTo(ErrorCode.APPLICATION_PERIOD_CLOSED));

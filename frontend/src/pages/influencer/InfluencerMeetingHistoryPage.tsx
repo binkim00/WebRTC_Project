@@ -5,6 +5,7 @@ import { AlertBanner, Button, Pagination, Spinner, TextField } from '../../compo
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import {
+  compareEndedMeetingsNewestFirst,
   fetchMyMeetings,
   type ManagerMeetingSummary,
 } from '../../api/managerMeetings'
@@ -25,7 +26,6 @@ const fallbackStatus = () => ({ label: translate('influencerMeetingHistoryPage.t
 
 const PAGE_SIZE = 5
 /** 이 화면에서만 팬미팅을 만드는 1인 인플루언서·매니저 전용 경로다. 소속 인플루언서가 열면 라우터가 403으로 보낸다. */
-const NEW_MEETING_PATH = '/manager/fan-meetings/new'
 
 function formatSchedule(value: string) {
   const date = parseServerDate(value)
@@ -80,12 +80,12 @@ export function InfluencerMeetingHistoryPage() {
     setLoadError(undefined)
 
     void fetchMyMeetings(
-      { keyword, page: page - 1, size: PAGE_SIZE },
+      { keyword, page: page - 1, size: PAGE_SIZE, endedFirst: true },
       authToken,
       controller.signal,
     )
       .then((result) => {
-        setMeetings(result.content)
+        setMeetings([...result.content].sort(compareEndedMeetingsNewestFirst))
         setTotalPages(result.totalPages)
       })
       .catch((reason: unknown) => {
@@ -138,12 +138,6 @@ export function InfluencerMeetingHistoryPage() {
             {t('influencerMeetingHistoryPage.t5')}
           </Button>
         </form>
-        <Link
-          className="mj-font-emphasis inline-flex min-h-11 items-center whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
-          to={NEW_MEETING_PATH}
-        >
-          {t('influencerMeetingHistoryPage.t6')}
-        </Link>
       </div>
 
       {loadError ? (
@@ -170,14 +164,7 @@ export function InfluencerMeetingHistoryPage() {
             <Button className="mt-5" onClick={resetSearch} variant="secondary">
               {t('influencerMeetingHistoryPage.t9')}
             </Button>
-          ) : (
-            <Link
-              className="mj-font-emphasis mt-5 inline-flex min-h-11 items-center rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-5 text-[15px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
-              to={NEW_MEETING_PATH}
-            >
-              {t('influencerMeetingHistoryPage.t10')}
-            </Link>
-          )}
+          ) : null}
         </div>
       ) : (
         <>

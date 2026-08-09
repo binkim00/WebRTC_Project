@@ -10,7 +10,6 @@ import com.ssafy.backend.user.dto.MyProfileResponse;
 import com.ssafy.backend.user.dto.MyProfileUpdateRequest;
 import com.ssafy.backend.user.dto.MyProfileUpdateResponse;
 import com.ssafy.backend.user.dto.UserWithdrawResponse;
-import com.ssafy.backend.user.service.UserPasswordService;
 import com.ssafy.backend.user.service.UserProfileService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,18 +37,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class UserControllerTest {
     private static final AuthenticatedUser PRINCIPAL = new AuthenticatedUser(1L, UserRole.FAN);
     private UserProfileService userProfileService;
-    private UserPasswordService userPasswordService;
     private MockMvc mockMvc;
 
     /** 인증 principal과 검증·예외 처리가 적용된 독립 MockMvc를 구성한다. */
     @BeforeEach
     void setUp() {
         userProfileService = mock(UserProfileService.class);
-        userPasswordService = mock(UserPasswordService.class);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(PRINCIPAL, null, List.of()));
-        mockMvc = MockMvcBuilders.standaloneSetup(
-                        new UserController(userProfileService, userPasswordService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new UserController(userProfileService))
                 .setCustomArgumentResolvers(new PrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }

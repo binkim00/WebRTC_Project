@@ -13,7 +13,6 @@ import com.ssafy.backend.application.dto.MyApplicationSummaryResponse;
 import com.ssafy.backend.application.dto.ParticipantAssignment;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
-import com.ssafy.backend.application.repository.ApplicationOptionRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
@@ -65,7 +64,6 @@ class ApplicationQueryServiceTest {
     private ApplicationRepository applicationRepository;
     private ApplicationFormRepository applicationFormRepository;
     private ApplicationQuestionRepository applicationQuestionRepository;
-    private ApplicationOptionRepository applicationOptionRepository;
     private ApplicationAnswerRepository applicationAnswerRepository;
     private ApplicationQueryService applicationQueryService;
     private AuthenticatedUser fanPrincipal;
@@ -83,7 +81,6 @@ class ApplicationQueryServiceTest {
         applicationRepository = mock(ApplicationRepository.class);
         applicationFormRepository = mock(ApplicationFormRepository.class);
         applicationQuestionRepository = mock(ApplicationQuestionRepository.class);
-        applicationOptionRepository = mock(ApplicationOptionRepository.class);
         applicationAnswerRepository = mock(ApplicationAnswerRepository.class);
         applicationQueryService = new ApplicationQueryService(
                 currentUserService,
@@ -92,7 +89,6 @@ class ApplicationQueryServiceTest {
                 applicationRepository,
                 applicationFormRepository,
                 applicationQuestionRepository,
-                applicationOptionRepository,
                 applicationAnswerRepository
         );
         fanPrincipal = new AuthenticatedUser(FAN_ID, UserRole.FAN);
@@ -276,7 +272,7 @@ class ApplicationQueryServiceTest {
         when(applicationRepository.countByMeeting_IdAndStatusNot(
                 MEETING_ID, ApplicationStatus.WITHDRAWN)).thenReturn(7L);
         when(applicationAnswerRepository
-                .findAllByApplication_IdInOrderByQuestion_DisplayOrderAscAnswerSequenceAsc(List.of(100L)))
+                .findAllByApplication_IdInOrderByQuestion_DisplayOrderAsc(List.of(100L)))
                 .thenReturn(List.of(
                         answer(application, question(201L, form, "이름", 1), "멜리"),
                         answer(application, question(202L, form, "응원 메시지", 2), "화이팅")
@@ -320,7 +316,7 @@ class ApplicationQueryServiceTest {
         assertThat(response.totalApplications()).isEqualTo(7L);
         assertThat(response.totalElements()).isZero();
         verify(applicationAnswerRepository, never())
-                .findAllByApplication_IdInOrderByQuestion_DisplayOrderAscAnswerSequenceAsc(anyCollection());
+                .findAllByApplication_IdInOrderByQuestion_DisplayOrderAsc(anyCollection());
     }
 
     /** 소유 운영자가 아닌 사용자의 응모자 목록 조회가 권한 검증에서 막히는지 검증한다. */

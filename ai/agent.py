@@ -389,58 +389,36 @@ async def my_agent(ctx: JobContext) -> None:
     # ── 인플루언서 STT 루프 ───────────────────────────────────────────────
 
     async def _run_influencer_stt() -> None:
-        """인플루언서 트랙으로 STT 시작. 팬 교체 시 재시작됨.
-
-        시작 시점의 통화를 call에 붙잡아 두고 콜백에서도 그 값만 쓴다. current_call을
-        콜백 실행 시점에 읽으면 통화 경계에서 자막이 엉뚱한 세션으로 넘어간다.
-        end_fan_call은 current_call을 None으로 만든 뒤 STT가 마지막 문장을 flush하도록
-        최대 STT_DRAIN_TIMEOUT_SECONDS초를 기다리는데, 그 사이에 확정되는 문장은
-        (a) 새 팬이 아직 없으면 current_call이 None이라 그대로 버려지고,
-        (b) 새 팬이 들어왔으면 이전 통화의 발화가 새 세션 자막으로 저장된다.
-        붙잡아 둔 통화를 쓰면 드레인의 원래 목적대로 마지막 문장이 제 통화에 남는다.
-        (처리 순서상 processor.close()는 드레인이 끝난 뒤라 여기서 닫힌 프로세서를
-        쓰게 되는 일은 없다)
-        """
-        call = current_call
-        if call is None or influencer_track is None:
+        """인플루언서 트랙으로 STT 시작. 팬 교체 시 재시작됨."""
+        if current_call is None or influencer_track is None:
             return
 
         audio_stream = rtc.AudioStream(influencer_track)
 
         #문장 확정되면 이거 실행
         async def on_final(transcript: FinalTranscript) -> None:
-            await call.processor.handle_final(
+            if current_call is None:
+                return
+            await current_call.processor.handle_final(
                 transcript=transcript,
                 speaker_id=influencer_user_id,
                 speaker_role="INFLUENCER",
-                target_lang=call.fan_lang,
-            )
-
-        # 확정 전 부분 자막(번역 지연 감소용). DeepL만 호출하고 Google은 무시한다.
-        async def on_interim(text: str, translated_text: str | None, segment_id: int) -> None:
-            await call.processor.push_interim(
-                speaker_role="INFLUENCER",
-                segment_id=segment_id,
-                text=text,
-                original_lang=call.assumed_influencer_lang,
-                translated_text=translated_text,
-                translated_lang=call.fan_lang,
+                target_lang=current_call.fan_lang,
             )
 
         # STT 원문 언어는 어댑터를 만들 때 고정한 값을 그대로 쓴다.
         # 최신 influencer_lang을 쓰면, 어댑터가 이미 그 언어를 번역 대상으로 잡고 있을 때
         # 원문과 번역 대상이 같아진 요청을 DeepL에 보내 자막이 통째로 실패할 수 있다.
-        assumed_lang = call.assumed_influencer_lang
+        assumed_lang = current_call.assumed_influencer_lang
 
         # 예외를 잡지 않으면 task가 조용히 죽어 자막이 멈춘 이유를 알 수 없다.
         try:
             #어댑터에게 시킬일, 어댑터가 on_final의 상태를 결정함
-            await call.influencer_adapter.transcribe(
+            await current_call.influencer_adapter.transcribe(
                 audio_stream=audio_stream,
                 language=assumed_lang,
-                # 문장이 확정되면 on_final을, 확정 전엔 on_interim을 처리하라는 뜻
+                # 문장이 확정되면 on_final을 처리하라는 뜻
                 on_final=on_final,
-                on_interim=on_interim,
             )
         except asyncio.CancelledError:
             raise
@@ -535,25 +513,12 @@ async def my_agent(ctx: JobContext) -> None:
                             target_lang=current_call.assumed_influencer_lang,
                         )
 
-                # 확정 전 부분 자막(번역 지연 감소용). DeepL만 호출하고 Google은 무시한다.
-                async def on_interim(text: str, translated_text: str | None, segment_id: int) -> None:
-                    if current_call and current_call.fan_identity == participant.identity:
-                        await current_call.processor.push_interim(
-                            speaker_role="FAN",
-                            segment_id=segment_id,
-                            text=text,
-                            original_lang=current_call.fan_lang,
-                            translated_text=translated_text,
-                            translated_lang=current_call.assumed_influencer_lang,
-                        )
-
                 # 예외를 잡지 않으면 task가 조용히 죽어 자막이 멈춘 이유를 알 수 없다.
                 try:
                     await current_call.fan_adapter.transcribe(
                         audio_stream=audio_stream,
                         language=current_call.fan_lang,
                         on_final=on_final,
-                        on_interim=on_interim,
                     )
                 except asyncio.CancelledError:
                     raise

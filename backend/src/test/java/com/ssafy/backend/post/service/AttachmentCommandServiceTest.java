@@ -7,7 +7,6 @@ import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.post.config.AttachmentStorageProperties;
 import com.ssafy.backend.post.domain.Attachment;
 import com.ssafy.backend.post.domain.AttachmentType;
-import com.ssafy.backend.post.dto.AttachmentDeleteResponse;
 import com.ssafy.backend.post.dto.AttachmentUploadResponse;
 import com.ssafy.backend.post.repository.AttachmentRepository;
 import com.ssafy.backend.post.storage.AttachmentFileStorage;
@@ -15,7 +14,6 @@ import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -25,9 +23,7 @@ import java.io.InputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -202,122 +198,6 @@ class AttachmentCommandServiceTest {
                 service.upload(file, AttachmentType.NOTICE, PRINCIPAL))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_STORAGE_FAILED);
-    }
-
-    /** 커뮤니티 첨부 유형도 업로드를 허용하고 유형을 그대로 저장하는지 검증한다. */
-    @Test
-    void uploadsCommunityAttachment() {
-        stubUploader();
-        stubStorage("2026/08/02/uuid.png", "png");
-        when(attachmentRepository.save(any(Attachment.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        service.upload(imageFile("photo.png", "image/png"),
-                AttachmentType.COMMUNITY, PRINCIPAL);
-
-        ArgumentCaptor<Attachment> captor = ArgumentCaptor.forClass(Attachment.class);
-        verify(attachmentRepository).save(captor.capture());
-        assertThat(captor.getValue().getAttachmentType()).isEqualTo(AttachmentType.COMMUNITY);
-    }
-
-    /** 커버 이미지 유형은 화면에 그릴 수 없는 PDF를 거부하는지 검증한다. */
-    @Test
-    void rejectsNonImageForMeetingCover() {
-        stubUploader();
-
-        assertThatThrownBy(() -> service.upload(
-                imageFile("guide.pdf", "application/pdf"),
-                AttachmentType.MEETING_COVER, PRINCIPAL))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_IMAGE_REQUIRED);
-        verify(fileStorage, never()).store(anyString(), any(InputStream.class), anyLong());
-    }
-
-    /** 첨부 교체가 식별자를 유지한 채 새 파일로 바뀌고 옛 파일을 지우는지 검증한다. */
-    @Test
-    void replacesFileKeepingAttachmentId() {
-        User uploader = stubUploader();
-        Attachment attachment = attachment(uploader, AttachmentType.NOTICE);
-        when(attachmentRepository.findAccessContextById(7L)).thenReturn(Optional.of(attachment));
-        stubStorage("2026/08/02/new.png", "png");
-
-        AttachmentUploadResponse response = service.replace(
-                7L, imageFile("new-cover.png", "image/png"), PRINCIPAL);
-
-        assertThat(response.attachmentId()).isEqualTo(7L);
-        assertThat(response.fileUrl()).isEqualTo("/api/v1/attachments/7/content");
-        assertThat(attachment.getStorageKey()).isEqualTo("2026/08/02/new.png");
-        assertThat(attachment.getOriginalFileName()).isEqualTo("new-cover.png");
-        verify(fileStorage).delete("2026/08/02/old.png");
-    }
-
-    /** 교체 요청이 형식 검증에서 막히면 옛 파일을 그대로 두는지 검증한다. */
-    @Test
-    void keepsPreviousFileWhenReplaceRejected() {
-        User uploader = stubUploader();
-        Attachment attachment = attachment(uploader, AttachmentType.MEETING_COVER);
-        when(attachmentRepository.findAccessContextById(7L)).thenReturn(Optional.of(attachment));
-
-        assertThatThrownBy(() -> service.replace(
-                7L, imageFile("guide.pdf", "application/pdf"), PRINCIPAL))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_IMAGE_REQUIRED);
-        assertThat(attachment.getStorageKey()).isEqualTo("2026/08/02/old.png");
-        verify(fileStorage, never()).delete(anyString());
-    }
-
-    /** 업로더도 작성자도 운영자도 아니면 교체를 거부하는지 검증한다. */
-    @Test
-    void rejectsReplaceByOtherUser() {
-        User other = mock(User.class);
-        when(other.getId()).thenReturn(2L);
-        when(other.getRole()).thenReturn(UserRole.FAN);
-        when(currentUserService.requireActiveUser(PRINCIPAL)).thenReturn(other);
-        User uploader = mock(User.class);
-        when(uploader.getId()).thenReturn(1L);
-        when(attachmentRepository.findAccessContextById(7L))
-                .thenReturn(Optional.of(attachment(uploader, AttachmentType.NOTICE)));
-
-        assertThatThrownBy(() -> service.replace(
-                7L, imageFile("new.png", "image/png"), PRINCIPAL))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ACCESS_DENIED);
-    }
-
-    /** 첨부 삭제가 논리 삭제로 처리되고 삭제 시각을 시계에서 가져오는지 검증한다. */
-    @Test
-    void deletesAttachmentLogically() {
-        User uploader = stubUploader();
-        Attachment attachment = attachment(uploader, AttachmentType.NOTICE);
-        when(attachmentRepository.findAccessContextById(7L)).thenReturn(Optional.of(attachment));
-
-        AttachmentDeleteResponse response = service.delete(7L, PRINCIPAL);
-
-        assertThat(response.attachmentId()).isEqualTo(7L);
-        assertThat(response.deletedAt()).isEqualTo(LocalDateTime.now(CLOCK));
-        assertThat(attachment.isDeleted()).isTrue();
-    }
-
-    /** 이미 삭제된 첨부는 없는 것으로 취급해 다시 삭제하지 못하는지 검증한다. */
-    @Test
-    void rejectsDeleteOfAlreadyDeletedAttachment() {
-        User uploader = stubUploader();
-        Attachment attachment = attachment(uploader, AttachmentType.NOTICE);
-        attachment.softDelete(LocalDateTime.now(CLOCK));
-        when(attachmentRepository.findAccessContextById(7L)).thenReturn(Optional.of(attachment));
-
-        assertThatThrownBy(() -> service.delete(7L, PRINCIPAL))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_NOT_FOUND);
-    }
-
-    /** 식별자 7번을 가진 테스트용 첨부파일을 만든다. */
-    private Attachment attachment(User uploader, AttachmentType attachmentType) {
-        Attachment attachment = Attachment.createUploaded(
-                uploader, attachmentType, "old-cover.png",
-                "2026/08/02/old.png", 1024L, "image/png");
-        ReflectionTestUtils.setField(attachment, "id", 7L);
-        return attachment;
     }
 
     /** 저장 키 생성과 파일 저장이 성공하도록 대역을 설정한다. */

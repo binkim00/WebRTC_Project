@@ -3,8 +3,6 @@ package com.ssafy.backend.auth.service;
 import com.ssafy.backend.auth.dto.SignupRequest;
 import com.ssafy.backend.auth.exception.DuplicateEmailException;
 import com.ssafy.backend.auth.exception.DuplicateLoginIdException;
-import com.ssafy.backend.common.exception.BusinessException;
-import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.user.domain.PreferredLanguage;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
@@ -76,24 +74,6 @@ class SignupServiceTest {
 
         assertThatThrownBy(() -> signupService.signup(request(UserRole.FAN)))
                 .isInstanceOf(DuplicateEmailException.class);
-        verifyNoInteractions(passwordEncoder);
-        verify(userRepository, never()).save(any());
-    }
-
-    /**
-     * 닉네임이 중복되면 암호화와 저장 전에 가입을 중단하는지 확인한다.
-     *
-     * <p>가입 화면의 중복 확인과 가입 요청 사이에 같은 닉네임이 먼저 등록될 수 있어
-     * 서버가 같은 기준으로 다시 확인해야 한다.
-     */
-    @Test
-    void rejectsDuplicateNicknameBeforeEncodingOrSaving() {
-        when(userRepository.existsByNickname("tester")).thenReturn(true);
-
-        assertThatThrownBy(() -> signupService.signup(request(UserRole.FAN)))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getErrorCode())
-                                .isEqualTo(ErrorCode.DUPLICATE_NICKNAME));
         verifyNoInteractions(passwordEncoder);
         verify(userRepository, never()).save(any());
     }

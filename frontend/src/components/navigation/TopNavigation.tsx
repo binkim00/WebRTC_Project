@@ -119,7 +119,7 @@ export function TopNavigation({
       </a>
       <div className="relative mx-auto flex h-full w-full max-w-[1360px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
         <Link
-          className="mj-font-title shrink-0 text-[28px] tracking-[-0.06em] text-[var(--color-text-primary)]"
+          className="mj-font-title shrink-0 text-[28px] tracking-[-0.06em] text-[var(--color-primary-coral)]"
           to={brandTo}
         >
           {brand}

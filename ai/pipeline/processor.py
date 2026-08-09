@@ -82,11 +82,9 @@ class SubtitleProcessor:
                 )
             )
 
-        # 3. Data Channel push (확정본)
+        # 3. Data Channel push
         payload = json.dumps({
             "subtitle_id": subtitle_id,
-            "segment_id": transcript.segment_id,
-            "is_final": True,
             "speaker_role": speaker_role,
             "original_text": transcript.text,
             "original_lang": transcript.language,
@@ -97,41 +95,6 @@ class SubtitleProcessor:
         await self.local_participant.publish_data(
             payload,
             reliable=True,
-            topic="subtitle",
-        )
-
-    async def push_interim(
-        self,
-        *,
-        speaker_role: str,               # "INFLUENCER" | "FAN"
-        segment_id: int,
-        text: str,                       # 지금까지 누적된 원문 전체(델타 아님)
-        original_lang: str,
-        translated_text: str | None,
-        translated_lang: str | None,
-    ) -> None:
-        """
-        확정 전 부분 자막을 Data Channel로만 push (DB 저장 안 함).
-
-        같은 segment_id의 확정본이 handle_final로 나오면 프론트가 이 줄을 교체한다.
-        순서가 보장되는 방식으로 보낸다. lossy로 보내면 조각들이 뒤바뀌어 도착할 수 있고, 그때
-        짧은 조각이 나중에 도착해 자막 글자가 거꾸로 줄어든다. payload에는 어느 쪽이 최신인지
-        가릴 정보가 없어 화면이 판단할 수 없다. 자막 한 건은 작아서 비용 차이가 거의 없다.
-        """
-        payload = json.dumps({
-            "subtitle_id": None,
-            "segment_id": segment_id,
-            "is_final": False,
-            "speaker_role": speaker_role,
-            "original_text": text,
-            "original_lang": original_lang,
-            "translated_text": translated_text,
-            "translated_lang": translated_lang,
-        }, ensure_ascii=False)
-
-        await self.local_participant.publish_data(
-            payload,
-            reliable=True,   # 순서 보장 — 뒤바뀌면 자막이 거꾸로 줄어든다
             topic="subtitle",
         )
 

@@ -1,11 +1,9 @@
 package com.ssafy.backend.application.dto;
 
 import com.ssafy.backend.application.domain.ApplicationForm;
-import com.ssafy.backend.application.domain.ApplicationOption;
 import com.ssafy.backend.application.domain.ApplicationQuestion;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 팬에게 노출할 응모 폼 안내문과 질문 목록이다.
@@ -24,23 +22,15 @@ public record ApplicationFormResponse(
      *
      * @param form 응모 폼 엔티티
      * @param questions 표시 순서대로 정렬된 활성 질문 목록
-     * @param optionsByQuestionId 질문 식별자별 선택지이며 주관식 질문은 값이 없다
      * @return 응모 폼 조회 응답
      */
     public static ApplicationFormResponse of(
-            ApplicationForm form,
-            List<ApplicationQuestion> questions,
-            Map<Long, List<ApplicationOption>> optionsByQuestionId
+            ApplicationForm form, List<ApplicationQuestion> questions
     ) {
         return new ApplicationFormResponse(
                 form.getId(),
                 form.getFormDescription(),
-                questions.stream()
-                        .map(question -> ApplicationFormQuestionResponse.of(
-                                question,
-                                optionsByQuestionId.getOrDefault(question.getId(), List.of())
-                        ))
-                        .toList()
+                questions.stream().map(ApplicationFormQuestionResponse::from).toList()
         );
     }
 }

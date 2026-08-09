@@ -1,13 +1,10 @@
 package com.ssafy.backend.auth.controller;
 
-import com.ssafy.backend.auth.dto.AvailabilityResponse;
-import com.ssafy.backend.auth.dto.AvailabilityTarget;
 import com.ssafy.backend.auth.jwt.JwtAuthenticationEntryPoint;
 import com.ssafy.backend.auth.jwt.JwtAuthenticationFilter;
 import com.ssafy.backend.auth.jwt.JwtTokenProvider;
 import com.ssafy.backend.auth.jwt.RevokedAccessTokenStore;
 import com.ssafy.backend.auth.jwt.TokenSessionStore;
-import com.ssafy.backend.auth.service.AccountAvailabilityService;
 import com.ssafy.backend.auth.service.LoginService;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
@@ -23,12 +20,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -65,9 +58,6 @@ class AuthPathSecurityTest {
     private DeviceTokenService deviceTokenService;
 
     @MockitoBean
-    private AccountAvailabilityService accountAvailabilityService;
-
-    @MockitoBean
     private JwtTokenProvider jwtTokenProvider;
 
     @MockitoBean
@@ -90,23 +80,6 @@ class AuthPathSecurityTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(refreshTokenService);
-    }
-
-    /**
-     * 가입 화면의 중복 확인이 로그인 없이 동작하는지 검증한다.
-     *
-     * <p>이 확인을 통과해야 가입 버튼이 열리므로, 401이 나오면 가입 자체가 막힌다.
-     */
-    @Test
-    void allowsUnauthenticatedAvailabilityCheck() throws Exception {
-        when(accountAvailabilityService.check(anyString(), anyString()))
-                .thenReturn(AvailabilityResponse.of(AvailabilityTarget.LOGIN_ID, "newbie", true));
-
-        mockMvc.perform(get("/api/v1/auth/availability")
-                        .param("type", "LOGIN_ID")
-                        .param("value", "newbie"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.available").value(true));
     }
 
     /** 이전 경로가 더 이상 공개 엔드포인트로 남아 있지 않은지 검증한다. */

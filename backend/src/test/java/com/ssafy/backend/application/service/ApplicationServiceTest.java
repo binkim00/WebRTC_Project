@@ -3,7 +3,6 @@ package com.ssafy.backend.application.service;
 import com.ssafy.backend.application.domain.Application;
 import com.ssafy.backend.application.domain.ApplicationAnswer;
 import com.ssafy.backend.application.domain.ApplicationForm;
-import com.ssafy.backend.application.domain.ApplicationOption;
 import com.ssafy.backend.application.domain.ApplicationQuestion;
 import com.ssafy.backend.application.domain.ApplicationQuestionType;
 import com.ssafy.backend.application.domain.ApplicationRiskStatus;
@@ -14,7 +13,6 @@ import com.ssafy.backend.application.dto.ApplicationSubmitResponse;
 import com.ssafy.backend.application.dto.ApplicationWithdrawResponse;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
-import com.ssafy.backend.application.repository.ApplicationOptionRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
@@ -23,10 +21,8 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
-import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
-import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,11 +59,9 @@ class ApplicationServiceTest {
     private CurrentUserService currentUserService;
     private FanMeetingRepository fanMeetingRepository;
     private MeetingApplicationSettingRepository applicationSettingRepository;
-    private MeetingOperationSettingRepository operationSettingRepository;
     private ApplicationRepository applicationRepository;
     private ApplicationFormRepository applicationFormRepository;
     private ApplicationQuestionRepository applicationQuestionRepository;
-    private ApplicationOptionRepository applicationOptionRepository;
     private ApplicationAnswerRepository applicationAnswerRepository;
     private ApplicationService applicationService;
     private AuthenticatedUser principal;
@@ -80,11 +74,9 @@ class ApplicationServiceTest {
         currentUserService = mock(CurrentUserService.class);
         fanMeetingRepository = mock(FanMeetingRepository.class);
         applicationSettingRepository = mock(MeetingApplicationSettingRepository.class);
-        operationSettingRepository = mock(MeetingOperationSettingRepository.class);
         applicationRepository = mock(ApplicationRepository.class);
         applicationFormRepository = mock(ApplicationFormRepository.class);
         applicationQuestionRepository = mock(ApplicationQuestionRepository.class);
-        applicationOptionRepository = mock(ApplicationOptionRepository.class);
         applicationAnswerRepository = mock(ApplicationAnswerRepository.class);
         applicationService = newApplicationService(true, DeviceDuplicatePolicy.FLAG);
         principal = new AuthenticatedUser(1L, UserRole.FAN);
@@ -250,7 +242,7 @@ class ApplicationServiceTest {
 
         ApplicationSubmitResponse response = applicationService.submit(
                 10L,
-                request(List.of(textAnswer(200L, "새 답변"))),
+                request(List.of(new ApplicationSubmitRequest.AnswerRequest(200L, "새 답변"))),
                 principal,
                 null
         );
@@ -304,8 +296,7 @@ class ApplicationServiceTest {
     /** 개인정보 수집에 동의하지 않은 응모 요청을 저장 전에 거부하는지 검증한다. */
     @Test
     void rejectsMissingPersonalInformationConsent() {
-        ApplicationSubmitRequest request =
-                new ApplicationSubmitRequest(false, true, true, List.of());
+        ApplicationSubmitRequest request = new ApplicationSubmitRequest(false, List.of());
 
         assertThatThrownBy(() -> applicationService.submit(10L, request, principal, null))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -313,179 +304,6 @@ class ApplicationServiceTest {
                                 .isEqualTo(ErrorCode.APPLICATION_CONSENT_REQUIRED));
 
         verify(applicationRepository, never()).saveAndFlush(any(Application.class));
-    }
-
-    /** 참여 동의를 하지 않은 응모 요청을 저장 전에 거부하는지 검증한다. */
-    @Test
-    void rejectsMissingParticipationConsent() {
-        ApplicationSubmitRequest request =
-                new ApplicationSubmitRequest(true, true, false, List.of());
-
-        assertThatThrownBy(() -> applicationService.submit(10L, request, principal, null))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getErrorCode())
-                                .isEqualTo(ErrorCode.APPLICATION_PARTICIPATION_CONSENT_REQUIRED));
-
-        verify(applicationRepository, never()).saveAndFlush(any(Application.class));
-    }
-
-    /** 녹화를 사용하는 팬미팅에서 녹화 동의가 빠진 응모를 거부하는지 검증한다. */
-    @Test
-    void rejectsMissingRecordingConsentWhenRecordingEnabled() {
-        stubRecording(true);
-        ApplicationSubmitRequest request =
-                new ApplicationSubmitRequest(true, false, true, List.of());
-
-        assertThatThrownBy(() -> applicationService.submit(10L, request, principal, null))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getErrorCode())
-                                .isEqualTo(ErrorCode.APPLICATION_RECORDING_CONSENT_REQUIRED));
-
-        verify(applicationRepository, never()).saveAndFlush(any(Application.class));
-    }
-
-    /** 녹화를 사용하는 팬미팅의 동의 세 가지를 모두 시각으로 남기는지 검증한다. */
-    @Test
-    void recordsAllConsentTimesWhenRecordingEnabled() {
-        stubRecording(true);
-        stubNewApplication();
-
-        applicationService.submit(10L, request(List.of()), principal, null);
-
-        Application saved = savedApplication();
-        assertThat(saved.getPersonalInformationConsentAt()).isEqualTo(now());
-        assertThat(saved.getRecordingConsentAt()).isEqualTo(now());
-        assertThat(saved.getParticipationConsentAt()).isEqualTo(now());
-    }
-
-    /**
-     * 녹화를 쓰지 않는 팬미팅은 녹화 동의 없이도 접수하고 녹화 동의 시각을 남기지 않는지 검증한다.
-     *
-     * <p>화면에서도 녹화 동의 항목을 감추므로 동의를 강제하면 응모 자체가 막힌다.
-     */
-    @Test
-    void acceptsApplicationWithoutRecordingConsentWhenRecordingDisabled() {
-        stubRecording(false);
-        stubNewApplication();
-
-        applicationService.submit(
-                10L, new ApplicationSubmitRequest(true, false, true, List.of()), principal, null
-        );
-
-        Application saved = savedApplication();
-        assertThat(saved.getRecordingConsentAt()).isNull();
-        assertThat(saved.getParticipationConsentAt()).isEqualTo(now());
-    }
-
-    /** 복수 선택 답변을 고른 선택지 수만큼 표시 순서대로 저장하는지 검증한다. */
-    @Test
-    void savesOneAnswerRowPerSelectedOption() {
-        ApplicationQuestion question =
-                choiceQuestion(200L, true, ApplicationQuestionType.MULTIPLE_CHOICE);
-        ApplicationOption first = option(401L, question, "발라드", 1);
-        ApplicationOption second = option(402L, question, "댄스", 2);
-        stubFormWithQuestion(question, first, second);
-        stubNewApplication();
-
-        applicationService.submit(
-                // 고른 순서가 아니라 선택지 표시 순서대로 저장되어야 한다.
-                10L, request(List.of(choiceAnswer(200L, List.of(402L, 401L)))), principal, null
-        );
-
-        assertThat(savedAnswers())
-                .extracting(answer -> answer.getSelectedOption().getId(),
-                        ApplicationAnswer::getAnswerSequence,
-                        ApplicationAnswer::getAnswerText)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(401L, 1, null),
-                        org.assertj.core.groups.Tuple.tuple(402L, 2, null)
-                );
-    }
-
-    /** 단일 선택 질문에 선택지를 두 개 보낸 응모를 거부하는지 검증한다. */
-    @Test
-    void rejectsMultipleOptionsForSingleChoiceQuestion() {
-        ApplicationQuestion question =
-                choiceQuestion(200L, true, ApplicationQuestionType.SINGLE_CHOICE);
-        stubFormWithQuestion(question, option(401L, question, "발라드", 1),
-                option(402L, question, "댄스", 2));
-
-        assertThatThrownBy(() -> applicationService.submit(
-                10L, request(List.of(choiceAnswer(200L, List.of(401L, 402L)))), principal, null
-        )).isInstanceOfSatisfying(BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.APPLICATION_ANSWER_INVALID));
-
-        verify(applicationRepository, never()).saveAndFlush(any(Application.class));
-    }
-
-    /** 이 질문에 속하지 않은 선택지를 고른 응모를 거부하는지 검증한다. */
-    @Test
-    void rejectsOptionThatDoesNotBelongToQuestion() {
-        ApplicationQuestion question =
-                choiceQuestion(200L, true, ApplicationQuestionType.SINGLE_CHOICE);
-        stubFormWithQuestion(question, option(401L, question, "발라드", 1),
-                option(402L, question, "댄스", 2));
-
-        assertThatThrownBy(() -> applicationService.submit(
-                10L, request(List.of(choiceAnswer(200L, List.of(999L)))), principal, null
-        )).isInstanceOfSatisfying(BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.APPLICATION_ANSWER_INVALID));
-    }
-
-    /** 객관식 질문에 자유 입력 답변만 보낸 응모를 거부하는지 검증한다. */
-    @Test
-    void rejectsTextValueForChoiceQuestion() {
-        ApplicationQuestion question =
-                choiceQuestion(200L, true, ApplicationQuestionType.SINGLE_CHOICE);
-        stubFormWithQuestion(question, option(401L, question, "발라드", 1),
-                option(402L, question, "댄스", 2));
-
-        assertThatThrownBy(() -> applicationService.submit(
-                10L, request(List.of(textAnswer(200L, "발라드"))), principal, null
-        )).isInstanceOfSatisfying(BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.APPLICATION_ANSWER_INVALID));
-    }
-
-    /** 주관식 질문에 선택지를 보낸 응모를 거부하는지 검증한다. */
-    @Test
-    void rejectsOptionsForTextQuestion() {
-        stubFormWithQuestion(question(200L, true));
-
-        assertThatThrownBy(() -> applicationService.submit(
-                10L, request(List.of(choiceAnswer(200L, List.of(401L)))), principal, null
-        )).isInstanceOfSatisfying(BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.APPLICATION_ANSWER_INVALID));
-    }
-
-    /** 공백만 입력한 주관식 답변을 거부하는지 검증한다. */
-    @Test
-    void rejectsBlankTextAnswer() {
-        stubFormWithQuestion(question(200L, true));
-
-        assertThatThrownBy(() -> applicationService.submit(
-                10L, request(List.of(textAnswer(200L, "   "))), principal, null
-        )).isInstanceOfSatisfying(BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.APPLICATION_ANSWER_INVALID));
-    }
-
-    /** 필수 객관식 질문을 고르지 않은 응모를 거부하는지 검증한다. */
-    @Test
-    void rejectsMissingRequiredChoiceAnswer() {
-        ApplicationQuestion question =
-                choiceQuestion(200L, true, ApplicationQuestionType.SINGLE_CHOICE);
-        stubFormWithQuestion(question, option(401L, question, "발라드", 1),
-                option(402L, question, "댄스", 2));
-
-        assertThatThrownBy(() -> applicationService.submit(
-                10L, request(List.of()), principal, null
-        )).isInstanceOfSatisfying(BusinessException.class,
-                exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.APPLICATION_ANSWER_INVALID));
     }
 
     /** 최초 응모 저장이 식별자를 채워 반환하도록 저장소 대역을 준비한다. */
@@ -524,11 +342,9 @@ class ApplicationServiceTest {
                 currentUserService,
                 fanMeetingRepository,
                 applicationSettingRepository,
-                operationSettingRepository,
                 applicationRepository,
                 applicationFormRepository,
                 applicationQuestionRepository,
-                applicationOptionRepository,
                 applicationAnswerRepository,
                 Clock.fixed(NOW, SEOUL),
                 emailVerificationRequired,
@@ -536,79 +352,11 @@ class ApplicationServiceTest {
         );
     }
 
-    /** 테스트에 사용할 동의 완료 상태의 응모 제출 요청을 생성한다. */
+    /** 테스트에 사용할 응모 제출 요청을 생성한다. */
     private ApplicationSubmitRequest request(
             List<ApplicationSubmitRequest.AnswerRequest> answers
     ) {
-        return new ApplicationSubmitRequest(true, true, true, answers);
-    }
-
-    /** 테스트에 사용할 주관식 답변 요청 한 건을 생성한다. */
-    private ApplicationSubmitRequest.AnswerRequest textAnswer(Long questionId, String value) {
-        return new ApplicationSubmitRequest.AnswerRequest(questionId, value, null);
-    }
-
-    /** 테스트에 사용할 객관식 답변 요청 한 건을 생성한다. */
-    private ApplicationSubmitRequest.AnswerRequest choiceAnswer(
-            Long questionId, List<Long> optionIds
-    ) {
-        return new ApplicationSubmitRequest.AnswerRequest(questionId, null, optionIds);
-    }
-
-    /**
-     * 지정한 질문을 가진 응모 폼과 그 질문의 선택지를 조회하도록 저장소 대역을 준비한다.
-     *
-     * @param question 폼에 포함할 질문
-     * @param options 객관식 질문의 선택지이며 주관식이면 비운다
-     */
-    private void stubFormWithQuestion(ApplicationQuestion question, ApplicationOption... options) {
-        ApplicationForm form = mock(ApplicationForm.class);
-        when(form.getId()).thenReturn(300L);
-        when(applicationFormRepository.findByMeeting_Id(10L)).thenReturn(Optional.of(form));
-        when(applicationQuestionRepository
-                .findAllByApplicationForm_IdAndDeletedAtIsNullOrderByDisplayOrderAsc(300L))
-                .thenReturn(List.of(question));
-        if (options.length > 0) {
-            when(applicationOptionRepository
-                    .findAllByQuestion_IdInAndDeletedAtIsNullOrderByDisplayOrderAsc(
-                            List.of(question.getId())))
-                    .thenReturn(List.of(options));
-        }
-    }
-
-    /** 저장 요청에 전달된 응모 답변 목록을 꺼낸다. */
-    private List<ApplicationAnswer> savedAnswers() {
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<ApplicationAnswer>> captor = ArgumentCaptor.forClass(List.class);
-        verify(applicationAnswerRepository).saveAll(captor.capture());
-        return captor.getValue();
-    }
-
-    /** 필수 여부와 식별자, 유형을 지정한 객관식 질문 테스트 대역을 생성한다. */
-    private ApplicationQuestion choiceQuestion(
-            Long id, boolean required, ApplicationQuestionType type
-    ) {
-        ApplicationQuestion result = mock(ApplicationQuestion.class);
-        when(result.getId()).thenReturn(id);
-        when(result.isRequired()).thenReturn(required);
-        when(result.getQuestionType()).thenReturn(type);
-        return result;
-    }
-
-    /** 지정한 질문에 속한 선택지 테스트 대역을 생성한다. */
-    private ApplicationOption option(
-            Long id, ApplicationQuestion question, String optionText, int displayOrder
-    ) {
-        ApplicationOption result = ApplicationOption.create(question, optionText, displayOrder);
-        ReflectionTestUtils.setField(result, "id", id);
-        return result;
-    }
-
-    /** 녹화 사용 여부를 지정한 팬미팅 운영 설정을 조회하도록 저장소 대역을 준비한다. */
-    private void stubRecording(boolean recordingEnabled) {
-        MeetingOperationSetting setting = mock(MeetingOperationSetting.class);
-        when(setting.isRecordingEnabled()).thenReturn(recordingEnabled);
-        when(operationSettingRepository.findById(10L)).thenReturn(Optional.of(setting));
+        return new ApplicationSubmitRequest(true, answers);
     }
 
     /** 지정한 식별자와 역할을 가진 이메일 인증 완료 사용자 테스트 대역을 생성한다. */

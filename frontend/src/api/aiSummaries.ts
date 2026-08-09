@@ -5,6 +5,9 @@ import { translate } from '../i18n'
 /** 백엔드 AiCallSummaryStatus enum과 같은 값이다. */
 export type AiCallSummaryStatus = 'GENERATING' | 'COMPLETED' | 'FAILED'
 
+/** lab 백엔드가 202 GENERATING을 반환할 때 완료 여부를 다시 확인하는 간격이다. */
+export const CALL_SUMMARY_POLL_INTERVAL_MS = 5000
+
 /** 생성이 끝난 통화 요약이다. */
 export type AiCallSummary = {
   callSummaryId: number

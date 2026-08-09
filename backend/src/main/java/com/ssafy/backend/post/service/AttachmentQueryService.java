@@ -96,17 +96,10 @@ public class AttachmentQueryService {
     /**
      * 누구나 볼 수 있는 첨부파일인지 확인한다.
      *
-     * <p>팬미팅 커버 이미지는 게시글에 연결하지 않아 공개 여부를 판정할 게시글이 없지만
-     * 비로그인 팬에게도 보여야 하므로 유형 자체를 공개로 본다
-     * ({@code AttachmentType.isPubliclyReadable}).
-     *
      * @param attachment 대상 첨부파일
-     * @return 유형이 공개이거나 공개 상태의 게시글에 연결되어 있으면 true
+     * @return 공개 상태의 게시글에 연결되어 있으면 true
      */
     private boolean isPubliclyVisible(Attachment attachment) {
-        if (attachment.getAttachmentType().isPubliclyReadable()) {
-            return true;
-        }
         return attachment.isAttached() && attachment.getPost().isVisibleToPublic();
     }
 

@@ -1,9 +1,5 @@
 package com.ssafy.backend.post.support;
 
-import com.ssafy.backend.post.domain.Attachment;
-
-import java.util.List;
-
 /**
  * 첨부파일 콘텐츠 조회 URL을 만든다.
  *
@@ -27,22 +23,5 @@ public final class AttachmentUrls {
      */
     public static String contentUrl(Long attachmentId) {
         return CONTENT_PATH_FORMAT.formatted(attachmentId);
-    }
-
-    /**
-     * 게시글 목록·상세에 쓸 대표 썸네일 URL을 고른다.
-     *
-     * <p>{@code posts} 테이블에는 썸네일 컬럼이 없으므로 연결된 첨부 이미지를 대표로 승격한다.
-     * 표시 순서가 가장 앞선 이미지를 쓰며, PDF만 붙어 있으면 그릴 그림이 없으므로 null이다.
-     *
-     * @param attachments 게시글에 연결된 첨부파일이며 표시 순서대로 정렬되어 있어야 한다
-     * @return 대표 이미지의 콘텐츠 조회 URL이며 이미지 첨부가 없으면 null
-     */
-    public static String thumbnailUrl(List<Attachment> attachments) {
-        return attachments.stream()
-                .filter(Attachment::isImage)
-                .findFirst()
-                .map(attachment -> contentUrl(attachment.getId()))
-                .orElse(null);
     }
 }

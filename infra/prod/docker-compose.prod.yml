@@ -227,21 +227,6 @@ services:
       EMAIL_VERIFY_BASE_URL: ${EMAIL_VERIFY_BASE_URL}
       DEVICE_TOKEN_SECURE: ${DEVICE_TOKEN_SECURE}
 
-      # 비밀번호 찾기. 발송 수단과 발신 주소는 위 MAIL_* / EMAIL_VERIFY_DELIVERY 를 그대로 따른다.
-      #
-      # BASE_URL 은 메일 링크가 도착할 화면 주소이며, 로그인 화면이 resetToken 쿼리를 읽어
-      # 새 비밀번호 폼을 띄운다. 지정하지 않으면 애플리케이션 기본값이 localhost 라
-      # 운영에서 나간 메일의 링크가 열리지 않는다. 기동은 정상이라 배포 시점에는 멀쩡해
-      # 보이고 사용자가 링크를 눌러야 드러나므로, OAUTH_REDIRECT_BASE_URL 과 같은 방식으로
-      # 운영 기본값을 여기서 박아 둔다.
-      PASSWORD_RESET_BASE_URL: ${PASSWORD_RESET_BASE_URL:-https://i15e106.p.ssafy.io/login}
-      PASSWORD_RESET_TTL_SECONDS: ${PASSWORD_RESET_TTL_SECONDS:-1800}
-      PASSWORD_RESET_RESEND_COOLDOWN_SECONDS: ${PASSWORD_RESET_RESEND_COOLDOWN_SECONDS:-60}
-      PASSWORD_RESET_MAX_SEND_PER_WINDOW: ${PASSWORD_RESET_MAX_SEND_PER_WINDOW:-5}
-      PASSWORD_RESET_SEND_WINDOW_SECONDS: ${PASSWORD_RESET_SEND_WINDOW_SECONDS:-3600}
-      # PASSWORD_RESET_EXPOSE_LINK 는 일부러 전달하지 않는다. 전달하지 않으면
-      # 애플리케이션이 false 로 두고, 운영 프로파일에서 true 면 기동 자체가 막힌다.
-
       # 소셜 로그인(구글·카카오·네이버).
       # 콜백은 프론트 라우트라 운영에서는 https://<도메인>/oauth/callback 을 써야 하고,
       # 3사 콘솔에 등록한 Redirect URI 와 문자 하나까지 같아야 한다.

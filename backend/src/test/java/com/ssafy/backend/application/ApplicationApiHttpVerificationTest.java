@@ -141,7 +141,6 @@ class ApplicationApiHttpVerificationTest {
 
         HttpResponse<String> submitted = send("POST", applicationsPath(), fanToken, """
                 {"personalInformationConsent":true,
-                 "recordingConsent":true,"participationConsent":true,
                  "answers":[{"questionId":%d,"value":"멜리"},
                             {"questionId":%d,"value":"응원합니다"}]}
                 """.formatted(firstQuestionId, secondQuestionId));

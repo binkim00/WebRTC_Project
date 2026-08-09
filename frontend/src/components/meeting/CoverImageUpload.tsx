@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ApiError } from '../../api/ApiError'
 import { attachmentContentUrl, uploadAttachment } from '../../api/attachments'
 import { getAuthSession } from '../../api/authSession'
@@ -32,12 +32,18 @@ type CoverImageUploadProps = {
  */
 export function CoverImageUpload({ value, onChange, disabled = false }: CoverImageUploadProps) {
   const { t } = useTranslation()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [selectedFileName, setSelectedFileName] = useState<string>()
+  const [uploadComplete, setUploadComplete] = useState(false)
   const [error, setError] = useState<string>()
 
   /** 고른 파일을 커버 이미지로 올리고 주소를 부모에게 넘긴다. */
   async function upload(file: File | undefined) {
     if (!file) return
+
+    setSelectedFileName(file.name)
+    setUploadComplete(false)
 
     const authToken = getAuthSession()?.accessToken
     if (!authToken) {
@@ -50,6 +56,7 @@ export function CoverImageUpload({ value, onChange, disabled = false }: CoverIma
     try {
       const uploaded = await uploadAttachment(file, 'MEETING_COVER', authToken)
       onChange(attachmentContentUrl(uploaded.attachmentId))
+      setUploadComplete(true)
     } catch (cause) {
       setError(
         cause instanceof ApiError || cause instanceof TypeError
@@ -64,24 +71,36 @@ export function CoverImageUpload({ value, onChange, disabled = false }: CoverIma
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm font-semibold text-[var(--color-text-secondary)]">
-          {t('coverImageUpload.s6Label')}
-          <input
-            // 커버는 화면에 그림으로 그려지므로 백엔드도 이미지만 받는다.
-            accept="image/png,image/jpeg,image/webp"
-            className="mt-1 block w-full text-sm"
-            disabled={disabled || uploading}
-            onChange={(event) => {
-              void upload(event.target.files?.[0])
-              event.target.value = ''
-            }}
-            type="file"
-          />
-        </label>
+        <input
+          ref={fileInputRef}
+          accept="image/png,image/jpeg,image/webp"
+          className="sr-only"
+          disabled={disabled || uploading}
+          onChange={(event) => {
+            void upload(event.target.files?.[0])
+            event.target.value = ''
+          }}
+          type="file"
+        />
+        <Button
+          disabled={disabled || uploading}
+          loading={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          size="sm"
+          variant="secondary"
+        >
+          {value
+            ? t('coverImageUpload.s6Replace')
+            : t('coverImageUpload.s6Choose')}
+        </Button>
         {value ? (
           <Button
             disabled={disabled || uploading}
-            onClick={() => onChange('')}
+            onClick={() => {
+              onChange('')
+              setSelectedFileName(undefined)
+              setUploadComplete(false)
+            }}
             size="sm"
             variant="ghost"
           >
@@ -89,6 +108,21 @@ export function CoverImageUpload({ value, onChange, disabled = false }: CoverIma
           </Button>
         ) : null}
       </div>
+
+      <p className="min-w-0 break-all text-sm text-[var(--color-text-secondary)]">
+        {selectedFileName ? (
+          <>
+            <span title={selectedFileName}>{selectedFileName}</span>
+            {uploadComplete ? (
+              <strong className="ml-2 whitespace-nowrap text-[var(--color-success)]">
+                {t('coverImageUpload.s6Complete')}
+              </strong>
+            ) : null}
+          </>
+        ) : (
+          t('coverImageUpload.s6Hint')
+        )}
+      </p>
 
       {uploading ? (
         <p className="text-sm text-[var(--color-text-secondary)]">

@@ -33,6 +33,43 @@ export type ManagerMeetingQuery = {
   status?: string
   page?: number
   size?: number
+  /** 종료된 팬미팅을 전체 결과의 앞쪽에 배치한 뒤 페이지를 나눈다. */
+  endedFirst?: boolean
+}
+
+/** 매니저 팬미팅 목록과 동일한 최신순 기준이다. */
+export function compareMeetingsNewestFirst(
+  left: ManagerMeetingSummary,
+  right: ManagerMeetingSummary,
+): number {
+  const leftCreatedAt = left.createdAt ? new Date(left.createdAt).getTime() : Number.NaN
+  const rightCreatedAt = right.createdAt ? new Date(right.createdAt).getTime() : Number.NaN
+  if (
+    Number.isFinite(leftCreatedAt) &&
+    Number.isFinite(rightCreatedAt) &&
+    leftCreatedAt !== rightCreatedAt
+  ) {
+    return rightCreatedAt - leftCreatedAt
+  }
+
+  // 현재 목록 API 응답에는 createdAt이 없으므로 증가하는 meetingId를 최신순 기준으로 사용한다.
+  const leftId = Number(left.meetingId)
+  const rightId = Number(right.meetingId)
+  if (Number.isFinite(leftId) && Number.isFinite(rightId) && leftId !== rightId) {
+    return rightId - leftId
+  }
+  return right.meetingId.localeCompare(left.meetingId)
+}
+
+/** 종료된 팬미팅을 먼저 두고, 각 묶음 안에서는 매니저 목록과 같은 최신순으로 정렬한다. */
+export function compareEndedMeetingsNewestFirst(
+  left: ManagerMeetingSummary,
+  right: ManagerMeetingSummary,
+): number {
+  const leftEnded = left.status === 'ENDED'
+  const rightEnded = right.status === 'ENDED'
+  if (leftEnded !== rightEnded) return leftEnded ? -1 : 1
+  return compareMeetingsNewestFirst(left, right)
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -150,7 +187,7 @@ export async function fetchOwnedMeetings(
   signal?: AbortSignal,
 ): Promise<ManagerMeetingPage> {
   const keyword = query.keyword?.trim().toLocaleLowerCase('ko-KR')
-  if (keyword) {
+  if (keyword || query.endedFirst) {
     // 소유 팬미팅 API는 keyword를 받지 않으므로 모든 서버 페이지를 읽은 뒤 로컬에서 정확히 검색·재페이지화한다.
     const firstPage = await fetchOwnedMeetings(
       { status: query.status, page: 0, size: 100 },
@@ -169,19 +206,24 @@ export async function fetchOwnedMeetings(
       allMeetings.push(...nextPage.content)
     }
 
-    const filtered = allMeetings.filter((meeting) =>
-      meeting.title.toLocaleLowerCase('ko-KR').includes(keyword) ||
-      meeting.influencerName.toLocaleLowerCase('ko-KR').includes(keyword),
-    )
+    const filtered = keyword
+      ? allMeetings.filter((meeting) =>
+          meeting.title.toLocaleLowerCase('ko-KR').includes(keyword) ||
+          meeting.influencerName.toLocaleLowerCase('ko-KR').includes(keyword),
+        )
+      : allMeetings
+    const ordered = query.endedFirst
+      ? [...filtered].sort(compareEndedMeetingsNewestFirst)
+      : filtered
     const page = Math.max(0, query.page ?? 0)
     const size = Math.max(1, query.size ?? 20)
-    const totalPages = Math.max(1, Math.ceil(filtered.length / size))
+    const totalPages = Math.max(1, Math.ceil(ordered.length / size))
 
     return {
-      content: filtered.slice(page * size, (page + 1) * size),
+      content: ordered.slice(page * size, (page + 1) * size),
       page,
       size,
-      totalElements: filtered.length,
+      totalElements: ordered.length,
       totalPages,
       hasNext: page + 1 < totalPages,
     }

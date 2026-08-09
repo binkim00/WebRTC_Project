@@ -43,7 +43,7 @@ MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """당신은 인플루언서의 팬미팅 보조 AI입니다.
     인플루언서와 팬의 대화 자막을 분석하여 인플루언서가 팬을 기억하는 데 도움이 되는 메모 초안을 작성하고,
-    팬이 기념 카드에 새길 짧은 기념 문구를 지어 줍니다."""
+    팬이 기념 카드로 간직할 문구 후보를 골라 줍니다."""
 
 USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 자막입니다.
 
@@ -57,33 +57,24 @@ USER_PROMPT_TEMPLATE = """아래는 인플루언서와 팬의 실시간 대화 �
     - 팬의 관심사, 좋아하는 것
     - 팬이 인플루언서에게 바라는 것, 다음에 하고 싶은 것
     - 인플루언서가 기억하면 좋을 특이사항
-    - 대화에서 확인되는 내용만 적습니다. 나오지 않은 사실을 지어내지 않습니다.
-    - 대화가 거의 없거나 알아들을 수 없어 적을 내용이 없으면, 문장 수를 채우려 하지 말고
-      특별한 이야기가 없었다는 사실만 한 문장으로 적습니다.
 
-    2) 팬이 기념 카드에 새길 문구 후보 3개 (팬용)
-    - 대화 문장을 그대로 옮기지 않습니다. 카드 한 줄에 새길 **기념 문구**를 새로 씁니다.
-    - 이날 오간 이야기(장소, 계획, 함께 웃은 일, 팬의 사연)를 소재로, 팬이 나중에 다시
-      읽었을 때 그날이 떠오르는 짧은 문장을 만듭니다.
-    - 인플루언서가 한 말처럼 보이게 쓰지 않습니다. 따옴표를 붙이지 않고,
-      인플루언서를 화자로 삼는 말투("~할게요", "~드릴게요")도 쓰지 않습니다.
-    - 세 문구는 서로 다른 소재를 잡습니다.
-    - 마침표 없이 {card_limit}자 안팎으로 짧게 씁니다.
-    - 대화에 나오지 않은 사실을 지어내지 않습니다.
-    - 전화번호, 이메일, 주소, 계정 아이디, 실명처럼 개인정보가 담긴 내용은 넣지 않습니다.
-    - 카드에 남길 만한 소재가 없으면 빈 배열로 둡니다.
-
-    문구 예시입니다. 형식과 길이만 참고하고 내용은 반드시 위 대화에서 가져옵니다.
-    "겨울 제주에서 다시 만나요", "호주에서 온 첫 팬미팅", "한라산 눈꽃 이야기를 나눈 날"
+    2) 팬이 기념 카드로 간직할 문구 후보 3개 (팬용)
+    - 반드시 **인플루언서가 실제로 한 말**에서만 고릅니다. 팬의 발화는 쓰지 않습니다.
+    - 자막 문장을 거의 그대로 쓰고, 말끝이 잘렸으면 자연스럽게만 다듬습니다.
+      인플루언서가 하지 않은 말을 새로 만들어내지 않습니다.
+    - 팬이 나중에 다시 읽을 때 기분이 좋아지는 따뜻한 문장을 고릅니다.
+    - 각 문구는 {card_limit}자 이내로 합니다.
+    - 전화번호, 이메일, 주소, 계정 아이디, 실명처럼 개인정보가 담긴 문장은 제외합니다.
+    - 고를 만한 문장이 없으면 빈 배열로 둡니다.
 {language_rules}
     반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요:
     {{
-    "summary": "2~4문장의 메모 초안. 적을 내용이 없으면 특별한 이야기가 없었다는 한 문장",
+    "summary": "2~4문장의 메모 초안",
     "keywords": ["핵심키워드1", "핵심키워드2"],
     "card_candidates": ["문구1", "문구2", "문구3"]
     }}
 
-    대화 내용이 너무 짧거나, 알아들을 수 없거나, 특별한 내용이 없으면:
+    대화 내용이 너무 짧거나 특별한 내용이 없으면:
     {{
     "summary": "특별한 내용 없음",
     "keywords": [],
@@ -98,12 +89,6 @@ CARD_CANDIDATE_MAX_LENGTH = 60
 # 옮기면 70자를 넘기 일쑤라, 60자를 그대로 적용하면 옮긴 문구가 전부 잘려 후보가 빈 배열이
 # 된다. 백엔드 FanCard.MAX_TEXT_LENGTH가 200자라 100자까지는 저장에도 걸리지 않는다.
 CARD_CANDIDATE_MAX_LENGTH_BY_LANG = {"en": 100, "vi": 100}
-
-# 프롬프트에 적는 권장 길이다. 카드 한 줄에 새기는 기념 문구라 대화 문장보다 훨씬 짧아야
-# 하는데, 이 값을 저장 상한으로도 쓰면 모델이 조금만 넘겨도 후보가 통째로 버려져 목록이
-# 빈다. 그래서 "이 정도로 써 달라"는 권장값과 "이보다 길면 버린다"는 상한을 나눠 둔다.
-CARD_CANDIDATE_TARGET_LENGTH = 25
-CARD_CANDIDATE_TARGET_LENGTH_BY_LANG = {"en": 45, "vi": 45}
 
 # 백엔드(QueueCommandService.toLanguageCode)가 쓰는 언어 코드와 프롬프트에 넣을 이름.
 # 모델이 어떤 언어인지 확실히 알도록 해당 언어 표기를 함께 적는다.
@@ -159,19 +144,6 @@ def _card_candidate_max_length(fan_lang: str) -> int:
     return CARD_CANDIDATE_MAX_LENGTH_BY_LANG.get(fan_lang, CARD_CANDIDATE_MAX_LENGTH)
 
 
-def _card_candidate_target_length(fan_lang: str) -> int:
-    """
-    프롬프트에 적을 카드 문구 권장 길이를 고른다.
-
-    저장 상한과 달리 이 값을 넘겼다고 후보를 버리지는 않는다. 모델에게 짧게 쓰도록
-    안내하는 용도다.
-
-    :param fan_lang: 정규화된 팬 언어 코드
-    :return: 해당 언어의 권장 글자 수
-    """
-    return CARD_CANDIDATE_TARGET_LENGTH_BY_LANG.get(fan_lang, CARD_CANDIDATE_TARGET_LENGTH)
-
-
 def _build_language_rules(fan_lang: str, influencer_lang: str) -> str:
     """
     프롬프트에 끼워 넣을 출력 언어 규칙 블록을 만든다.
@@ -191,9 +163,10 @@ def _build_language_rules(fan_lang: str, influencer_lang: str) -> str:
     rules = [
         "    3) 출력 언어",
         f"    - 메모 초안(summary)과 핵심 키워드(keywords)는 {influencer_label}로 작성합니다.",
-        f"    - 팬 카드 문구 후보(card_candidates)는 처음부터 {fan_label}로 씁니다.",
-        f"    - 대화가 {fan_label}가 아닌 언어로 오갔더라도 소재만 가져와 {fan_label}로",
-        "      쓰고, 원문은 함께 적지 않습니다.",
+        f"    - 팬 카드 문구 후보(card_candidates)는 {fan_label}로 제시합니다.",
+        f"    - 인플루언서가 {fan_label}로 말하지 않았다면, 실제로 한 말의 뜻을 그대로",
+        f"      {fan_label}로 옮겨 적습니다. 뜻을 바꾸거나 인플루언서가 하지 않은 말을",
+        "      덧붙이지 않으며, 원문은 함께 적지 않고 옮긴 문장만 남깁니다.",
     ]
     return "\n" + "\n".join(rules) + "\n"
 
@@ -218,42 +191,12 @@ def _build_system_prompt(fan_lang: str, influencer_lang: str) -> str:
     )
 
 
-def _subtitle_text(subtitle: dict) -> str:
-    """
-    자막 한 줄에서 프롬프트에 넣을 원문을 꺼낸다.
-
-    original_text가 없거나 문자열이 아닌 행(컬럼이 NULL인 경우 등)을 만나도 요약 전체가
-    죽지 않도록 빈 문자열로 돌려준다.
-
-    :param subtitle: 자막 한 줄
-    :return: 앞뒤 공백을 없앤 원문이며 쓸 내용이 없으면 빈 문자열
-    """
-    text = subtitle.get("original_text")
-    return text.strip() if isinstance(text, str) else ""
-
-
-def _has_meaningful_speech(subtitles: list[dict] | None) -> bool:
-    """
-    모델에 넘길 만한 발화가 실제로 있는지 본다.
-
-    자막 행 개수만으로는 판단할 수 없다. STT가 무음이나 잡음만 받으면 원문이 빈 행만
-    쌓이는데, 그때 _format_subtitles는 "(대화 내용 없음)"을 돌려주고 모델은 소재가
-    하나도 없는 상태에서 요약을 지어낸다.
-
-    :param subtitles: 통화의 자막 목록
-    :return: 원문이 비어 있지 않은 행이 하나라도 있으면 True
-    """
-    if not subtitles:
-        return False
-    return any(_subtitle_text(s) for s in subtitles)
-
-
 #추후 db호출 구조에 따라 수정
 def _format_subtitles(subtitles: list[dict]) -> str:
     lines = []
     for s in subtitles:
         role = "인플루언서" if s.get("speaker_role") == "INFLUENCER" else "팬"
-        text = _subtitle_text(s)
+        text = s.get("original_text", "").strip()
         if text:
             lines.append(f"{role}: {text}")
     return "\n".join(lines) if lines else "(대화 내용 없음)"
@@ -533,10 +476,8 @@ async def generate_summary(
     :param influencer_lang: 메모 초안을 적을 언어 코드이며 없으면 기본 언어로 본다
     :return: 모델 응답을 파싱한 dict이며 실패하면 None
     """
-    # 행 개수가 아니라 실제 발화 유무로 막는다. 원문이 전부 빈 행이면 프롬프트에
-    # "(대화 내용 없음)"만 들어가 모델이 없는 이야기를 지어낸다.
-    if not _has_meaningful_speech(subtitles):
-        logger.info("의미 있는 발화 없음 — 요약 생략 rows=%s", len(subtitles or []))
+    if not subtitles:
+        logger.info("자막 없음 — 요약 생략")
         return None
 
     if not GMS_API_KEY:
@@ -549,7 +490,7 @@ async def generate_summary(
     subtitle_text = _format_subtitles(subtitles)
     user_prompt = USER_PROMPT_TEMPLATE.format(
         subtitles=subtitle_text,
-        card_limit=_card_candidate_target_length(fan_lang),
+        card_limit=_card_candidate_max_length(fan_lang),
         language_rules=_build_language_rules(fan_lang, influencer_lang),
     )
 
@@ -611,18 +552,6 @@ async def generate_and_save_summary(
     :param influencer_lang: 인플루언서 언어 코드이며 없으면 기본 언어로 본다
     """
     logger.info("요약 생성 시작 call_session_id=%s", call_session_id)
-
-    # 자막 행이 있어도 원문이 전부 비어 있으면 모델에 넘길 소재가 없다. 몇 번을 다시
-    # 물어도 결과가 달라지지 않으므로 재시도 없이 곧바로 실패로 확정한다. 조용히 끝내면
-    # 행이 GENERATING으로 남아 조회 API가 계속 202를 돌려준다.
-    # (자막 행 자체가 없는 경우는 agent.py가 먼저 NO_SUBTITLE로 기록한다)
-    if not _has_meaningful_speech(subtitles):
-        logger.warning(
-            "의미 있는 발화 없음 — 요약 생략 call_session_id=%s rows=%s",
-            call_session_id, len(subtitles or []),
-        )
-        await queries.fail_call_summary(pool, call_session_id, "NO_SPEECH")
-        return
 
     if fan_lang is None:
         fan_lang = await _load_fan_lang(pool, call_session_id)

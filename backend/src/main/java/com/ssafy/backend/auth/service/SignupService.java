@@ -4,8 +4,6 @@ import com.ssafy.backend.auth.dto.SignupRequest;
 import com.ssafy.backend.auth.dto.SignupResponse;
 import com.ssafy.backend.auth.exception.DuplicateEmailException;
 import com.ssafy.backend.auth.exception.DuplicateLoginIdException;
-import com.ssafy.backend.common.exception.BusinessException;
-import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -35,18 +33,12 @@ public class SignupService {
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateEmailException();
         }
-        // 가입 화면이 중복 확인을 통과해야 버튼을 열어 주므로 서버도 같은 기준으로 다시 확인한다.
-        // 확인 후 가입까지의 사이에 같은 닉네임이 먼저 등록될 수 있어 프론트 검사만으로는 부족하다.
-        String nickname = request.nickname().trim();
-        if (userRepository.existsByNickname(nickname)) {
-            throw new BusinessException(ErrorCode.DUPLICATE_NICKNAME);
-        }
         // 비밀번호 원문은 저장하지 않고 PasswordEncoder가 만든 해시만 엔티티에 전달한다.
         User user = User.createActive(
                 loginId,
                 email,
                 passwordEncoder.encode(request.password()),
-                nickname,
+                request.nickname().trim(),
                 request.role(),
                 request.preferredLanguage()
         );

@@ -7,8 +7,6 @@ import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
-import com.ssafy.backend.post.domain.Attachment;
-import com.ssafy.backend.post.domain.AttachmentType;
 import com.ssafy.backend.post.domain.Post;
 import com.ssafy.backend.post.domain.PostStatus;
 import com.ssafy.backend.post.domain.PostType;
@@ -33,13 +31,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -320,7 +316,7 @@ class PostCommandServiceTest {
         });
 
         CommunityPostCreateResponse response = commandService.createCommunityPost(
-                MEETING_ID, new CommunityPostCreateRequest("  글 제목  ", "  글 본문  ", null),
+                MEETING_ID, new CommunityPostCreateRequest("  글 제목  ", "  글 본문  "),
                 MANAGER_PRINCIPAL
         );
 
@@ -345,7 +341,7 @@ class PostCommandServiceTest {
                 .thenReturn(meeting(FanMeetingStatus.CANCELED));
 
         assertThatThrownBy(() -> commandService.createCommunityPost(
-                MEETING_ID, new CommunityPostCreateRequest("제목", "본문", null), MANAGER_PRINCIPAL))
+                MEETING_ID, new CommunityPostCreateRequest("제목", "본문"), MANAGER_PRINCIPAL))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.FAN_MEETING_STATE_CONFLICT);
@@ -575,72 +571,6 @@ class PostCommandServiceTest {
         );
         ReflectionTestUtils.setField(post, "id", 400L);
         return post;
-    }
-
-    /** 커뮤니티 글 작성이 보낸 순서대로 첨부를 연결하는지 검증한다. */
-    @Test
-    void linksAttachmentsWhenCreatingCommunityPost() {
-        User author = user(1L, UserRole.MANAGER);
-        when(currentUserService.requireActiveUser(MANAGER_PRINCIPAL)).thenReturn(author);
-        when(meetingAccessService.requireOperator(MEETING_ID, author))
-                .thenReturn(meeting(FanMeetingStatus.PUBLISHED));
-        when(postRepository.save(any(Post.class))).thenAnswer(invocation -> {
-            Post saved = invocation.getArgument(0);
-            ReflectionTestUtils.setField(saved, "id", 400L);
-            ReflectionTestUtils.setField(saved, "createdAt", LocalDateTime.of(2026, 7, 31, 10, 0));
-            return saved;
-        });
-        Attachment first = communityAttachment(50L, author);
-        Attachment second = communityAttachment(51L, author);
-        when(attachmentRepository.findAllByIdInAndDeletedAtIsNull(anyCollection()))
-                .thenReturn(List.of(first, second));
-        when(attachmentRepository
-                .findAllByPost_IdAndDeletedAtIsNullOrderByDisplayOrderAsc(400L))
-                .thenReturn(List.of());
-
-        commandService.createCommunityPost(
-                MEETING_ID,
-                new CommunityPostCreateRequest("글 제목", "글 본문", List.of(51L, 50L)),
-                MANAGER_PRINCIPAL
-        );
-
-        // 보낸 순서가 표시 순서가 되므로 51번이 1번, 50번이 2번이다.
-        assertThat(second.getDisplayOrder()).isEqualTo(1);
-        assertThat(first.getDisplayOrder()).isEqualTo(2);
-        assertThat(first.isAttached()).isTrue();
-    }
-
-    /** 커뮤니티 글 수정이 첨부 목록을 받아 연결을 갈아 끼우는지 검증한다. */
-    @Test
-    void replacesAttachmentsWhenUpdatingCommunityPost() {
-        User author = user(1L, UserRole.MANAGER);
-        Post post = communityPost(1L);
-        when(currentUserService.requireActiveUser(MANAGER_PRINCIPAL)).thenReturn(author);
-        when(postRepository.findDetailById(400L)).thenReturn(Optional.of(post));
-        Attachment kept = communityAttachment(50L, author);
-        Attachment dropped = communityAttachment(51L, author);
-        dropped.attachTo(post, 1);
-        when(attachmentRepository.findAllByIdInAndDeletedAtIsNull(anyCollection()))
-                .thenReturn(List.of(kept));
-        when(attachmentRepository
-                .findAllByPost_IdAndDeletedAtIsNullOrderByDisplayOrderAsc(400L))
-                .thenReturn(List.of(dropped));
-
-        commandService.updateCommunityPost(
-                400L, new PostUpdateRequest(null, null, List.of(50L)), MANAGER_PRINCIPAL);
-
-        assertThat(kept.isAttached()).isTrue();
-        assertThat(dropped.isDeleted()).isTrue();
-    }
-
-    /** 식별자와 업로더를 가진 커뮤니티용 테스트 첨부파일을 만든다. */
-    private Attachment communityAttachment(Long attachmentId, User uploader) {
-        Attachment attachment = Attachment.createUploaded(
-                uploader, AttachmentType.COMMUNITY, "photo.png",
-                "2026/07/31/" + attachmentId + ".png", 1024L, "image/png"
-        );
-        ReflectionTestUtils.setField(attachment, "id", attachmentId);
-        return attachment;
     }
 
     /** 테스트에 사용할 활성 사용자를 생성한다. */

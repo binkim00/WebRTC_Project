@@ -74,12 +74,6 @@ public class CallSessionExpirationService {
      * <p>연결 대기 세션은 자동으로 정리되지 않으면 팬미팅당 한 건만 허용되는 활성 세션 자리를
      * 계속 차지해 다음 참가자 호출을 막으므로, 시간이 지나면 노쇼로 마감해 자리를 비운다.
      *
-     * <p>다만 팬이 이미 Room에 들어와 기다리고 있으면 마감하지 않는다. 이 마감은 대기열을
-     * 노쇼로 바꾸는데, 늦는 쪽이 인플루언서인 상황에서 노쇼가 되는 것은 응답한 팬이다. 노쇼는
-     * 되돌릴 수 있는 상태가 아니어서 그 팬은 통화 기회를 잃는다. 그래서 팬이 접속해 있는 동안은
-     * 인플루언서의 입장을 계속 기다리고, 통화가 성사될 수 없다고 판단되면 운영자가 강제 종료로
-     * 자리를 비운다.
-     *
      * @param callSessionId 연결 시간 초과 후보 통화 세션 식별자
      */
     @Transactional
@@ -93,9 +87,6 @@ public class CallSessionExpirationService {
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime createdAt = callSession.getCreatedAt();
         if (createdAt == null || createdAt.plusSeconds(connectTimeoutSec).isAfter(now)) {
-            return;
-        }
-        if (realtimeStore.isFanConnected(callSessionId)) {
             return;
         }
         finalizer.failConnecting(callSession, now, CallEndReason.CONNECTION_FAILED, null);

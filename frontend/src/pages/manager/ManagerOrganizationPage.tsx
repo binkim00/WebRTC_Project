@@ -1,3 +1,4 @@
+import { Copy } from '@phosphor-icons/react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { parseServerDate } from '../../api/serverTime'
 import { getAuthSession } from '../../api/authSession'
@@ -105,6 +106,7 @@ export function ManagerOrganizationPage() {
   const [sending, setSending] = useState(false)
   const [invitations, setInvitations] = useState<IssuedInvitation[]>([])
   const [copiedToken, setCopiedToken] = useState<string>()
+  const [copiedMemberId, setCopiedMemberId] = useState<number>()
   const [reissuedToken, setReissuedToken] = useState<string>()
   const [reissuingId, setReissuingId] = useState<number>()
 
@@ -282,6 +284,18 @@ export function ManagerOrganizationPage() {
       setCopiedToken(invitation.token)
     } catch {
       setError(t('managerOrganizationPage.t48'))
+    }
+  }
+
+  async function handleCopyMemberId(userId: number) {
+    try {
+      await navigator.clipboard.writeText(String(userId))
+      setCopiedMemberId(userId)
+      window.setTimeout(() => {
+        setCopiedMemberId((current) => (current === userId ? undefined : current))
+      }, 1800)
+    } catch {
+      setError(t('managerOrganizationPage.copyMemberFailed'))
     }
   }
 
@@ -477,9 +491,23 @@ export function ManagerOrganizationPage() {
                         <strong className="block text-base font-extrabold text-[var(--color-text-primary)]">
                           {member.nickname}
                         </strong>
-                        <span className="mt-1 block text-sm font-medium text-[var(--color-text-tertiary)] [overflow-wrap:anywhere]">
-                          {t('managerOrganizationPage.t23')} {member.userId}
-                        </span>
+                        <button
+                          aria-label={t('managerOrganizationPage.copyMemberAria', { id: member.userId })}
+                          className="mt-1 inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md px-1 text-left text-sm font-semibold text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-primary-coral)]"
+                          onClick={() => void handleCopyMemberId(member.userId)}
+                          title={t('managerOrganizationPage.copyMember')}
+                          type="button"
+                        >
+                          <span className="min-w-0 [overflow-wrap:anywhere]">
+                            {t('managerOrganizationPage.t23')} {member.userId}
+                          </span>
+                          <Copy aria-hidden className="shrink-0" size={15} />
+                          {copiedMemberId === member.userId ? (
+                            <span className="shrink-0 text-xs text-[var(--color-success)]">
+                              {t('managerOrganizationPage.copiedMember')}
+                            </span>
+                          ) : null}
+                        </button>
                       </div>
                       <span
                         className={`text-[15px] font-extrabold ${member.userRole === 'MANAGER' ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-primary-coral)]'}`}
