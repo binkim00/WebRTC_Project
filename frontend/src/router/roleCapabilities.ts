@@ -109,3 +109,18 @@ export function canRoleAccessPath(pathname: string, role: LoginRole): boolean {
     ? hasRoleCapability(role, requiredCapability)
     : true
 }
+
+/** 로그인 전 URL이 안전하고 현재 역할에 허용될 때만 복귀시키고, 아니면 역할 메인으로 보낸다. */
+export function landingPathAfterLogin(
+  requestedPath: string | null | undefined,
+  role: LoginRole,
+): string {
+  if (!requestedPath?.startsWith('/') || requestedPath.startsWith('//')) {
+    return landingPathForRole(role)
+  }
+
+  const pathname = requestedPath.split(/[?#]/, 1)[0] ?? requestedPath
+  return canRoleAccessPath(pathname, role)
+    ? requestedPath
+    : landingPathForRole(role)
+}

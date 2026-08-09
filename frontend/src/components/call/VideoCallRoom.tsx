@@ -24,6 +24,24 @@ import { useTranslation } from '../../i18n'
 
 export type { VideoCallRoomProps } from './types'
 
+/** 상태 API가 잠시 실패해도 LiveKit 연결을 시작하고 다음 폴링에서 복구하기 위한 임시 상태다. */
+function fallbackCallSessionStatus(callSessionId: string): CallSessionStatusResponse {
+  const numericId = Number(callSessionId)
+  return {
+    callSessionId: Number.isFinite(numericId) ? numericId : 0,
+    status: 'CONNECTING',
+    startedAt: null,
+    endsAt: null,
+    endedAt: null,
+    serverNow: new Date().toISOString(),
+    remainingSec: 0,
+    reconnectAllowedUntil: null,
+    endReason: null,
+    fanLanguage: null,
+    influencerLanguage: null,
+  }
+}
+
 export function VideoCallRoom(props: VideoCallRoomProps) {
   const { t } = useTranslation()
   const [connectionInfo, setConnectionInfo] = useState<LiveKitAccessTokenResponse>()
@@ -81,10 +99,31 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       try {
         const authSession = getAuthSession()
         const authToken = authSession?.accessToken
-        const [info, status] = await Promise.all([
+        const [infoResult, statusResult] = await Promise.allSettled([
           issueLiveKitAccessToken(connectSessionId, { authToken, signal }),
           getCallSessionStatus(connectSessionId, { authToken, signal }),
         ])
+
+        // LiveKit 토큰은 영상 입장에 필수지만 상태 조회는 타이머·종료 표시용 보조 정보다.
+        // 둘을 Promise.all로 묶으면 상태 API의 일시 오류만으로 영상 화면 전체가 사라진다.
+        if (infoResult.status === 'rejected') throw infoResult.reason
+        const info = infoResult.value
+        const status = statusResult.status === 'fulfilled'
+          ? statusResult.value
+          : fallbackCallSessionStatus(connectSessionId)
+        if (statusResult.status === 'rejected') {
+          if (
+            statusResult.reason instanceof DOMException &&
+            statusResult.reason.name === 'AbortError'
+          ) {
+            throw statusResult.reason
+          }
+          setStatusError(
+            statusResult.reason instanceof Error
+              ? statusResult.reason.message
+              : t('videoCallRoom.t9'),
+          )
+        }
 
         // 녹화 여부와 통화 제한 시간은 통화 진입 시 서버 상세를 다시 읽어
         // 오래된 화면 값을 쓰지 않는다. 상세 조회는 모든 역할에 열려 있다.
@@ -406,7 +445,8 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
 
   return (
     <LiveKitRoom
-      audio={microphoneId ? { deviceId: { exact: microphoneId } } : true}
+      // 이전에 고른 장치가 분리됐어도 브라우저 기본 장치로 대체할 수 있게 ideal을 사용한다.
+      audio={microphoneId ? { deviceId: { ideal: microphoneId } } : true}
       connect
       onError={(error) => setConnectionError(error.message)}
       onMediaDeviceFailure={() => {
@@ -416,7 +456,7 @@ export function VideoCallRoom(props: VideoCallRoomProps) {
       }}
       serverUrl={connectionInfo.liveKitUrl}
       token={connectionInfo.accessToken}
-      video={cameraId ? { deviceId: { exact: cameraId } } : true}
+      video={cameraId ? { deviceId: { ideal: cameraId } } : true}
     >
       <ConnectedCallRoom
         {...props}

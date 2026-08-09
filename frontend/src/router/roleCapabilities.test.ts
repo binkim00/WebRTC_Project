@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canRoleAccessPath,
   hasRoleCapability,
+  landingPathAfterLogin,
   requiredCapabilityForPath,
 } from './roleCapabilities'
 
@@ -46,5 +47,16 @@ describe('역할별 기능 권한', () => {
     )
     expect(requiredCapabilityForPath('/login')).toBeUndefined()
     expect(canRoleAccessPath('/login', 'FAN')).toBe(true)
+  })
+
+  it('로그인 후에는 현재 역할에 허용된 이전 URL로만 돌아간다', () => {
+    expect(landingPathAfterLogin('/fan/events?status=open', 'FAN')).toBe(
+      '/fan/events?status=open',
+    )
+    expect(landingPathAfterLogin('/manager/fan-meetings/17', 'FAN')).toBe('/')
+    expect(landingPathAfterLogin('/manager/fan-meetings/17', 'MANAGER')).toBe(
+      '/manager/fan-meetings/17',
+    )
+    expect(landingPathAfterLogin('//malicious.example', 'FAN')).toBe('/')
   })
 })

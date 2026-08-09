@@ -27,7 +27,9 @@ import {
   TextField,
 } from '../../components'
 import { useTranslation, type TranslationKey } from '../../i18n'
-import { landingPathForRole } from '../../router/roleCapabilities'
+import {
+  landingPathAfterLogin,
+} from '../../router/roleCapabilities'
 
 /**
  * 새 비밀번호가 백엔드 정책(8자 이상, 영문+숫자)을 만족하는지 확인한다.
@@ -179,11 +181,7 @@ export function LoginPage() {
       // HttpOnly 쿠키 기반 장기 세션 API가 없으므로 토큰은 현재 탭 세션에만 보관한다.
       saveAuthSession(response, false)
       const requestedPath = searchParams.get('redirect')
-      const safeRequestedPath =
-        requestedPath?.startsWith('/') && !requestedPath.startsWith('//')
-          ? requestedPath
-          : undefined
-      const landingPath = safeRequestedPath ?? landingPathForRole(response.role)
+      const landingPath = landingPathAfterLogin(requestedPath, response.role)
       navigate(landingPath, { replace: true })
     } catch (error: unknown) {
       setSubmitError(
