@@ -4,19 +4,52 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { ApiError } from '../../api/ApiError'
 import {
   PREFERRED_LANGUAGE_OPTIONS,
+  checkAvailability,
   clearAuthSession,
+  confirmPasswordReset,
   isPreferredLanguage,
   login,
+  requestPasswordReset,
   saveAuthSession,
   signup,
+  type AvailabilityTarget,
   type SignupRequest,
   type SignupRole,
 } from '../../api/auth'
 import { maskEmail } from '../../api/emailVerifications'
 import { isEmailVerificationEnabled } from '../../config/features'
-import { AlertBanner, EmailVerificationNotice, SocialLoginButtons } from '../../components'
+import {
+  AlertBanner,
+  Button,
+  Dialog,
+  EmailVerificationNotice,
+  SocialLoginButtons,
+  TextField,
+} from '../../components'
 import { useTranslation, type TranslationKey } from '../../i18n'
 import { landingPathForRole } from '../../router/roleCapabilities'
+
+/**
+ * 새 비밀번호가 백엔드 정책(8자 이상, 영문+숫자)을 만족하는지 확인한다.
+ *
+ * 백엔드도 같은 규칙을 검사하지만, 서버까지 다녀오기 전에 화면에서 먼저 알려 준다.
+ */
+function isStrongPassword(password: string): boolean {
+  return /^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(password)
+}
+
+/**
+ * 아이디·닉네임 중복 확인의 진행 상태다.
+ *
+ * `value`는 확인을 마친 값이다. 입력이 바뀌면 상태를 idle로 되돌리지만, 앞뒤 공백 차이처럼
+ * 되돌리지 못하는 경우가 있어 검증할 때 확인한 값과 지금 값이 같은지 한 번 더 비교한다.
+ */
+type AvailabilityCheck =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'available'; value: string }
+  | { kind: 'taken'; value: string }
+  | { kind: 'failed'; message: string }
 
 /**
  * 역할 선택 옵션이다. 값은 백엔드 enum을 그대로 쓰고, 라벨·설명은 **사전 키**로 들고 있는다.
@@ -66,6 +99,45 @@ function FieldError({ children }: { children: ReactNode }) {
   )
 }
 
+/** 중복확인을 통과했을 때 보여 주는 안내다. 오류와 구분되도록 성공 색을 쓴다. */
+function FieldSuccess({ children }: { children: ReactNode }) {
+  return (
+    <p className="mt-[7px] text-sm font-bold text-[var(--color-success)]" role="status">
+      {children}
+    </p>
+  )
+}
+
+/** 중복확인 버튼 모양이다. 입력과 같은 높이로 맞춰 한 줄에 붙인다. */
+const duplicateCheckButtonClass =
+  'min-h-[50px] shrink-0 whitespace-nowrap rounded-lg border border-[var(--color-border-control)] bg-white px-4 text-sm font-extrabold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-text-tertiary)] disabled:cursor-not-allowed disabled:text-[var(--color-text-tertiary)] focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]'
+
+/**
+ * 중복확인 상태를 필드 오류 문구로 바꾼다.
+ *
+ * 확인을 통과한 값에서만 빈 문자열을 돌려준다. 아직 확인하지 않았거나 확인 뒤 값이 바뀌었으면
+ * 오류로 남겨 가입 버튼이 열리지 않게 한다.
+ *
+ * @param check 현재 중복확인 상태
+ * @param currentValue 입력창의 현재 값
+ * @param notCheckedMessage 아직 확인하지 않았을 때 보여 줄 문구
+ * @param takenMessage 이미 사용 중일 때 보여 줄 문구
+ */
+function availabilityError(
+  check: AvailabilityCheck,
+  currentValue: string,
+  notCheckedMessage: string,
+  takenMessage: string,
+): string {
+  const value = currentValue.trim()
+
+  if (check.kind === 'available' && check.value === value) return ''
+  if (check.kind === 'taken' && check.value === value) return takenMessage
+  if (check.kind === 'failed') return check.message
+
+  return notCheckedMessage
+}
+
 export function LoginPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -81,6 +153,11 @@ export function LoginPage() {
     const state = location.state as { notice?: string } | null
     return typeof state?.notice === 'string' ? state.notice : undefined
   })
+  const [forgotOpen, setForgotOpen] = useState(false)
+
+  // 재설정 메일의 링크는 이 화면으로 돌아온다(전용 라우트를 새로 만들지 않는다).
+  // 토큰이 쿼리에 있으면 로그인 폼 대신 새 비밀번호 입력 폼을 보여 준다.
+  const resetToken = searchParams.get('resetToken')
 
   const filled = loginId.trim() !== '' && password.trim() !== ''
   const canSubmit = filled && !loading
@@ -117,6 +194,18 @@ export function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 재설정 링크로 들어온 경우다. 새 비밀번호를 정하면 로그인 화면으로 돌려보낸다.
+  if (resetToken) {
+    return (
+      <PasswordResetForm
+        onDone={(message) =>
+          navigate('/login', { replace: true, state: { notice: message } })
+        }
+        token={resetToken}
+      />
+    )
   }
 
   return (
@@ -205,13 +294,11 @@ export function LoginPage() {
 
           <div className="mt-[18px] flex items-center justify-end gap-4">
             <button
-              aria-disabled="true"
-              className="cursor-not-allowed whitespace-nowrap text-[15px] font-bold text-[var(--color-text-tertiary)]"
-              disabled
-              title={t('login.forgotPasswordTitle')}
+              className="whitespace-nowrap text-[15px] font-bold text-[var(--color-text-tertiary)] hover:text-[var(--color-primary-coral)]"
+              onClick={() => setForgotOpen(true)}
               type="button"
             >
-              {t('login.forgotPasswordPending')}
+              {t('accountSecurity.forgotPassword')}
             </button>
           </div>
 
@@ -257,6 +344,214 @@ export function LoginPage() {
           </Link>
         </p>
       </section>
+
+      <ForgotPasswordDialog onOpenChange={setForgotOpen} open={forgotOpen} />
+    </main>
+  )
+}
+
+/**
+ * 비밀번호 재설정 메일을 요청하는 대화상자다.
+ *
+ * 가입되지 않은 주소인지 알려 주지 않는다(백엔드도 같은 응답을 준다). 그래서 성공 안내에
+ * "가입되지 않은 주소라면 메일이 오지 않는다"는 사실을 함께 적는다.
+ */
+function ForgotPasswordDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { t } = useTranslation()
+  const [email, setEmail] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string>()
+  const [sent, setSent] = useState(false)
+
+  function handleOpenChange(next: boolean) {
+    if (!next) {
+      // 다시 열었을 때 이전 결과가 남아 있지 않도록 닫을 때 정리한다.
+      setEmail('')
+      setError(undefined)
+      setSent(false)
+    }
+    onOpenChange(next)
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (sending) return
+
+    const address = email.trim()
+    if (!address) {
+      setError(t('accountSecurity.emailRequired'))
+      return
+    }
+
+    setSending(true)
+    setError(undefined)
+
+    void requestPasswordReset(address)
+      .then(() => setSent(true))
+      .catch((reason: unknown) => {
+        setError(
+          reason instanceof ApiError || reason instanceof TypeError
+            ? reason.message
+            : t('accountSecurity.sendFailed'),
+        )
+      })
+      .finally(() => setSending(false))
+  }
+
+  return (
+    <Dialog
+      description={t('accountSecurity.forgotDescription')}
+      footer={
+        sent ? (
+          <Button onClick={() => handleOpenChange(false)}>{t('accountSecurity.close')}</Button>
+        ) : (
+          <>
+            <Button
+              disabled={sending}
+              onClick={() => handleOpenChange(false)}
+              variant="secondary"
+            >
+              {t('accountSecurity.close')}
+            </Button>
+            <Button form="forgot-password-form" loading={sending} type="submit">
+              {sending ? t('accountSecurity.sending') : t('accountSecurity.sendLink')}
+            </Button>
+          </>
+        )
+      }
+      onOpenChange={handleOpenChange}
+      open={open}
+      title={t('accountSecurity.forgotTitle')}
+    >
+      {sent ? (
+        <AlertBanner title={t('accountSecurity.noticeTitle')} variant="success">
+          {t('accountSecurity.sent')}
+        </AlertBanner>
+      ) : (
+        <form className="grid gap-4" id="forgot-password-form" onSubmit={handleSubmit}>
+          <TextField
+            autoComplete="email"
+            label={t('accountSecurity.emailLabel')}
+            onChange={(event) => setEmail(event.currentTarget.value)}
+            placeholder="example@email.com"
+            required
+            type="email"
+            value={email}
+          />
+          {error ? (
+            <AlertBanner title={t('accountSecurity.errorTitle')} variant="error">
+              {error}
+            </AlertBanner>
+          ) : null}
+        </form>
+      )}
+    </Dialog>
+  )
+}
+
+/**
+ * 메일 링크로 돌아온 사용자가 새 비밀번호를 정하는 화면이다.
+ *
+ * 전용 라우트를 만들지 않고 로그인 경로의 `resetToken` 쿼리로 들어온다. 성공하면 토큰이 남은
+ * 주소에 머무르지 않도록 곧바로 로그인 화면으로 되돌린다.
+ */
+function PasswordResetForm({
+  token,
+  onDone,
+}: {
+  token: string
+  onDone: (notice: string) => void
+}) {
+  const { t } = useTranslation()
+  const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string>()
+
+  const passwordError = password && !isStrongPassword(password)
+    ? t('accountSecurity.passwordRule')
+    : ''
+  const confirmError = passwordConfirm && passwordConfirm !== password
+    ? t('accountSecurity.passwordMismatch')
+    : ''
+  const canSubmit =
+    isStrongPassword(password) && passwordConfirm === password && !submitting
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!canSubmit) return
+
+    setSubmitting(true)
+    setError(undefined)
+
+    void confirmPasswordReset(token, password)
+      .then(() => onDone(t('accountSecurity.resetDone')))
+      .catch((reason: unknown) => {
+        setError(
+          reason instanceof ApiError || reason instanceof TypeError
+            ? reason.message
+            : t('accountSecurity.resetFailed'),
+        )
+      })
+      .finally(() => setSubmitting(false))
+  }
+
+  return (
+    <main className="mx-auto w-full max-w-[480px] pb-16 pt-8 sm:pt-12">
+      <p className="text-[13px] font-extrabold tracking-[0.08em] text-[var(--color-primary-coral)]">
+        MELLY FAN MEETING
+      </p>
+      <h1 className="mt-3.5 text-[28px] font-black tracking-[-0.045em] text-[var(--color-text-primary)]">
+        {t('accountSecurity.resetTitle')}
+      </h1>
+      <p className="mt-3 text-[16px] font-medium leading-[1.7] text-[var(--color-text-body)]">
+        {t('accountSecurity.resetDescription')}
+      </p>
+
+      <form
+        className="mt-7 grid gap-4 rounded-xl border border-[var(--color-divider)] p-7"
+        onSubmit={handleSubmit}
+      >
+        <TextField
+          autoComplete="new-password"
+          error={passwordError || undefined}
+          helperText={t('accountSecurity.passwordHint')}
+          label={t('accountSecurity.newPassword')}
+          onChange={(event) => setPassword(event.currentTarget.value)}
+          required
+          type="password"
+          value={password}
+        />
+        <TextField
+          autoComplete="new-password"
+          error={confirmError || undefined}
+          label={t('accountSecurity.newPasswordConfirm')}
+          onChange={(event) => setPasswordConfirm(event.currentTarget.value)}
+          required
+          type="password"
+          value={passwordConfirm}
+        />
+        {error ? (
+          <AlertBanner title={t('accountSecurity.errorTitle')} variant="error">
+            {error}
+          </AlertBanner>
+        ) : null}
+        <Button disabled={!canSubmit} loading={submitting} type="submit">
+          {submitting ? t('accountSecurity.resetting') : t('accountSecurity.resetSubmit')}
+        </Button>
+        <Link
+          className="text-center text-[15px] font-bold text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+          to="/login"
+        >
+          {t('accountSecurity.resetCancel')}
+        </Link>
+      </form>
     </main>
   )
 }
@@ -284,6 +579,9 @@ export function SignupPage() {
   const [termsAgreed, setTermsAgreed] = useState(false)
   const [privacyAgreed, setPrivacyAgreed] = useState(false)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
+  // 중복확인을 통과하지 않으면 가입 버튼이 열리지 않는다. 입력이 바뀌면 확인 결과를 지운다.
+  const [loginIdCheck, setLoginIdCheck] = useState<AvailabilityCheck>({ kind: 'idle' })
+  const [nicknameCheck, setNicknameCheck] = useState<AvailabilityCheck>({ kind: 'idle' })
   const [showPassword, setShowPassword] = useState(false)
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
   const [policyNotice, setPolicyNotice] = useState<string>()
@@ -301,8 +599,12 @@ export function SignupPage() {
     : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
       ? t('signup.error.emailFormat')
       : ''
-  const loginIdError = loginId.trim() ? '' : t('signup.error.loginId')
-  const nicknameError = nickname.trim() ? '' : t('signup.error.nickname')
+  const loginIdError = loginId.trim()
+    ? availabilityError(loginIdCheck, loginId, t('signup.error.loginIdCheck'), t('signup.loginIdTaken'))
+    : t('signup.error.loginId')
+  const nicknameError = nickname.trim()
+    ? availabilityError(nicknameCheck, nickname, t('signup.error.nicknameCheck'), t('signup.nicknameTaken'))
+    : t('signup.error.nickname')
   const passwordError = !password
     ? t('signup.error.password')
     : !/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(password)
@@ -330,6 +632,37 @@ export function SignupPage() {
 
   const show = (field: string, error: string) => Boolean(error && touched[field])
   const selectedRole = roleOptions.find((option) => option.value === role)
+
+  /**
+   * 아이디·닉네임이 이미 쓰이고 있는지 서버에 물어본다.
+   *
+   * 확인을 마친 값과 입력이 같을 때만 가입 버튼이 열린다. 실패하면 사용 가능으로 넘기지 않고
+   * 오류를 남겨, 확인되지 않은 값으로 가입이 진행되지 않게 한다.
+   *
+   * @param target 확인할 항목
+   */
+  async function runAvailabilityCheck(target: AvailabilityTarget) {
+    const field = target === 'LOGIN_ID' ? 'loginId' : 'nickname'
+    const setCheck = target === 'LOGIN_ID' ? setLoginIdCheck : setNicknameCheck
+    const value = (target === 'LOGIN_ID' ? loginId : nickname).trim()
+
+    setTouched((current) => ({ ...current, [field]: true }))
+    if (!value) return
+
+    setCheck({ kind: 'checking' })
+    try {
+      const result = await checkAvailability(target, value)
+      setCheck({ kind: result.available ? 'available' : 'taken', value: result.value })
+    } catch (error: unknown) {
+      setCheck({
+        kind: 'failed',
+        message:
+          error instanceof ApiError || error instanceof TypeError
+            ? error.message
+            : t('signup.checkFailed'),
+      })
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -393,6 +726,11 @@ export function SignupPage() {
         })
       }
     } catch (error: unknown) {
+      // 중복확인과 가입 요청 사이에 누군가 먼저 같은 값을 등록한 경우다. 확인 결과를 되돌려
+      // 사용자가 다른 값으로 바꾸고 다시 확인하도록 만든다.
+      if (error instanceof ApiError && error.code === 'DUPLICATE_NICKNAME') {
+        setNicknameCheck({ kind: 'taken', value: request.nickname })
+      }
       setSubmitError(
         error instanceof ApiError || error instanceof TypeError
           ? error.message
@@ -523,36 +861,76 @@ export function SignupPage() {
         </label>
         {show('email', emailError) ? <FieldError>{emailError}</FieldError> : null}
 
+        {/*
+          아이디·닉네임은 중복확인을 통과해야 가입 버튼이 열린다. 입력이 바뀌면 이전 확인 결과를
+          지워, 확인한 값과 실제로 보내는 값이 어긋나지 않게 한다.
+        */}
         <div className="mt-[18px] grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="block">
+            <label className="block" htmlFor="su-login-id">
               <FieldLabel>{t('signup.loginId')}</FieldLabel>
+            </label>
+            <div className="mt-2 flex gap-2">
               <input
                 aria-invalid={show('loginId', loginIdError)}
                 autoComplete="username"
-                className={`${signupInputClass} ${fieldBorderClass(show('loginId', loginIdError))}`}
+                className={`${signupInputClass} mt-0 min-w-0 flex-1 ${fieldBorderClass(show('loginId', loginIdError))}`}
+                id="su-login-id"
                 onBlur={markTouched('loginId')}
-                onChange={(event) => setLoginId(event.currentTarget.value)}
+                onChange={(event) => {
+                  setLoginId(event.currentTarget.value)
+                  setLoginIdCheck({ kind: 'idle' })
+                }}
                 placeholder={t('signup.loginIdPlaceholder')}
                 value={loginId}
               />
-            </label>
-            {show('loginId', loginIdError) ? <FieldError>{loginIdError}</FieldError> : null}
+              <button
+                className={duplicateCheckButtonClass}
+                disabled={!loginId.trim() || loginIdCheck.kind === 'checking'}
+                onClick={() => void runAvailabilityCheck('LOGIN_ID')}
+                type="button"
+              >
+                {loginIdCheck.kind === 'checking' ? t('signup.checking') : t('signup.check')}
+              </button>
+            </div>
+            {show('loginId', loginIdError) ? (
+              <FieldError>{loginIdError}</FieldError>
+            ) : loginIdCheck.kind === 'available' ? (
+              <FieldSuccess>{t('signup.loginIdAvailable')}</FieldSuccess>
+            ) : null}
           </div>
           <div>
-            <label className="block">
+            <label className="block" htmlFor="su-nickname">
               <FieldLabel>{t('signup.nickname')}</FieldLabel>
+            </label>
+            <div className="mt-2 flex gap-2">
               <input
                 aria-invalid={show('nickname', nicknameError)}
                 autoComplete="nickname"
-                className={`${signupInputClass} ${fieldBorderClass(show('nickname', nicknameError))}`}
+                className={`${signupInputClass} mt-0 min-w-0 flex-1 ${fieldBorderClass(show('nickname', nicknameError))}`}
+                id="su-nickname"
                 onBlur={markTouched('nickname')}
-                onChange={(event) => setNickname(event.currentTarget.value)}
+                onChange={(event) => {
+                  setNickname(event.currentTarget.value)
+                  setNicknameCheck({ kind: 'idle' })
+                }}
                 placeholder={t('signup.nicknamePlaceholder')}
                 value={nickname}
               />
-            </label>
-            {show('nickname', nicknameError) ? <FieldError>{nicknameError}</FieldError> : null}
+              <button
+                className={duplicateCheckButtonClass}
+                disabled={!nickname.trim() || nicknameCheck.kind === 'checking'}
+                onClick={() => void runAvailabilityCheck('NICKNAME')}
+                type="button"
+              >
+                {nicknameCheck.kind === 'checking' ? t('signup.checking') : t('signup.check')}
+              </button>
+            </div>
+            {show('nickname', nicknameError) ? (
+              <FieldError>{nicknameError}</FieldError>
+            ) : nicknameCheck.kind === 'available' ? (
+              <FieldSuccess>{t('signup.nicknameAvailable')}</FieldSuccess>
+            ) : null}
             {/* 인플루언서 닉네임은 팬미팅 이름과 함께 해외 팬에게 그대로 노출되므로 영어 이름을 권장한다. */}
             {role === 'INFLUENCER' || role === 'SOLO_INFLUENCER' ? (
               <p className="mt-1.5 text-[13px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
@@ -561,6 +939,9 @@ export function SignupPage() {
             ) : null}
           </div>
         </div>
+        <p className="mt-2 text-[13px] font-medium leading-[1.55] text-[var(--color-text-muted)]">
+          {t('signup.checkHint')}
+        </p>
 
         <label className="mt-[18px] block">
           <FieldLabel>{t('signup.password')}</FieldLabel>
@@ -757,6 +1138,20 @@ export function SignupPage() {
           {allValid ? t('signup.allValid') : t('signup.fillRequired')}
         </p>
       </form>
+
+      <div className="mt-7">
+        <div className="mb-4 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-[var(--color-divider)]" />
+          <span className="text-sm font-semibold text-[var(--color-text-tertiary)]">
+            {t('signup.socialDivider')}
+          </span>
+          <span className="h-px flex-1 bg-[var(--color-divider)]" />
+        </div>
+        <SocialLoginButtons labelPrefix={t('signup.socialButton')} />
+        <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-tertiary)]">
+          {t('signup.socialNotice')}
+        </p>
+      </div>
 
       <p className="mt-6 border-t border-[var(--color-divider)] pt-[18px] text-[15px] font-medium text-[var(--color-text-tertiary)]">
         {t('signup.hasAccount')}{' '}

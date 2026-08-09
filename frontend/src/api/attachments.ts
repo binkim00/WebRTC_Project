@@ -1,13 +1,23 @@
 import { ApiError } from './ApiError'
+import { apiRequest } from './client'
 import { unwrapEnvelope } from './envelope'
 import { translate } from '../i18n'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
-/** 현재 백엔드가 지원하는 첨부 용도는 공지 하나뿐이다. */
-export type AttachmentType = 'NOTICE'
+/**
+ * 첨부 용도다. 업로드할 때 정하고 나중에 바꿀 수 없다.
+ *
+ * - `NOTICE`: 서비스 공지·팬미팅 공지에 붙인다.
+ * - `COMMUNITY`: 커뮤니티 게시글에 붙인다.
+ * - `MEETING_COVER`: 팬미팅 커버 이미지다. 게시글에 붙이지 않고 콘텐츠 URL을
+ *   `coverImageUrl`에 넣어 쓰며, 이미지 파일만 받는다.
+ *
+ * 용도가 게시글 종류와 맞지 않으면 연결에서 `ATTACHMENT_TYPE_MISMATCH`로 거절된다.
+ */
+export type AttachmentType = 'NOTICE' | 'COMMUNITY' | 'MEETING_COVER'
 
-/** 업로드 직후 받는 첨부 정보이며, attachmentId를 공지 생성·수정 요청에 넘겨 연결한다. */
+/** 업로드 직후 받는 첨부 정보이며, attachmentId를 게시글 생성·수정 요청에 넘겨 연결한다. */
 export type AttachmentUploadResponse = {
   attachmentId: number
   originalFileName: string
@@ -15,6 +25,12 @@ export type AttachmentUploadResponse = {
   fileUrl: string
   contentType: string
   fileSize: number
+}
+
+/** 첨부 삭제 결과다. */
+export type AttachmentDeleteResponse = {
+  attachmentId: number
+  deletedAt: string
 }
 
 /**
@@ -81,6 +97,74 @@ export async function uploadAttachment(
   }
 
   return unwrapEnvelope<AttachmentUploadResponse>(await response.json())
+}
+
+/**
+ * 이미 올린 첨부의 내용을 새 파일로 교체한다.
+ *
+ * attachmentId와 콘텐츠 URL이 그대로라 게시글을 다시 저장하거나 커버 이미지 URL을 고치지
+ * 않아도 새 파일이 보인다. 용도(NOTICE/COMMUNITY/MEETING_COVER)는 업로드 때 정한 그대로다.
+ */
+export async function replaceAttachment(
+  attachmentId: string | number,
+  file: File,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<AttachmentUploadResponse> {
+  const formData = new FormData()
+  formData.append('file', file, file.name)
+
+  const response = await fetch(
+    `${API_URL}/api/v1/attachments/${encodeURIComponent(String(attachmentId))}`,
+    {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: formData,
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    throw await readUploadError(response)
+  }
+
+  return unwrapEnvelope<AttachmentUploadResponse>(await response.json())
+}
+
+/**
+ * 첨부를 삭제한다. 게시글에 연결돼 있었다면 그 게시글에서도 함께 사라진다.
+ *
+ * 화면에서 첨부 목록을 다시 보내 연결을 끊는 방식(공지 PATCH의 attachmentIds)과 달리,
+ * 아직 어디에도 연결하지 않은 업로드분을 정리할 때 쓴다.
+ */
+export async function deleteAttachment(
+  attachmentId: string | number,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<AttachmentDeleteResponse> {
+  const response = await apiRequest<unknown>(
+    `/api/v1/attachments/${encodeURIComponent(String(attachmentId))}`,
+    { method: 'DELETE', authToken, signal },
+  )
+
+  return unwrapEnvelope<AttachmentDeleteResponse>(response)
+}
+
+/**
+ * 서버가 내려준 첨부 URL을 이 브라우저에서 바로 열 수 있는 주소로 바꾼다.
+ *
+ * 백엔드는 `fileUrl`·`thumbnailUrl`을 `/api/v1/attachments/{id}/content` 같은 **상대 경로**로
+ * 준다. 배포에서는 프론트와 API가 같은 오리진이라 그대로 열리지만, 로컬은 프론트가 5173,
+ * 백엔드가 8080이라 그대로 쓰면 404가 난다. 그래서 상대 경로면 API 주소를 앞에 붙인다.
+ * 운영자가 손으로 넣은 외부 커버 이미지 주소처럼 이미 절대 URL이면 그대로 둔다.
+ */
+export function resolveAttachmentUrl(url: string): string
+export function resolveAttachmentUrl(url: null | undefined): null
+export function resolveAttachmentUrl(url: string | null | undefined): string | null
+export function resolveAttachmentUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  return url.startsWith('/') ? `${API_URL}${url}` : url
 }
 
 /** 첨부파일 내용 URL을 만든다. download=true면 브라우저가 저장 대화상자를 띄운다. */

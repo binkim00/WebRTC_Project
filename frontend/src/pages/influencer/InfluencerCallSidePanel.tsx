@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import { forceEndCallSession } from '../../api/callSessions'
 import {
+  callQueueEntry,
   fetchFanMemos,
   fetchMeetingQueue,
   markQueueEntryNoShow,
   type FanMemo,
   type MeetingQueue,
+  type QueueEntry,
 } from '../../api/fanMeetingParticipants'
+import { createFanMemo, updateFanMemo } from '../../api/fanMemos'
 import { getApplicants, type ApplicantAnswerResponse } from '../../api/applications'
 import { changeQueuePosition } from '../../api/queueManagement'
 import { AlertBanner, Button, Dialog } from '../../components'
@@ -17,19 +19,36 @@ import { useTranslation } from '../../i18n'
 
 type ConfirmKind = 'noshow' | 'skip'
 
+/** 백엔드 팬 메모 계약의 상한이다. (FanMemoCreateRequest.content) */
+const MEMO_MAX_LENGTH = 300
+
+/**
+ * 실패 원인을 화면 문구로 만든다.
+ *
+ * 서버가 준 메시지가 가장 정확하므로 그것을 먼저 쓰고, 정체를 알 수 없는 오류만 기본 문구로 덮는다.
+ *
+ * @param reason catch로 받은 값
+ * @param fallback 서버 메시지를 쓸 수 없을 때의 기본 문구
+ * @return 화면에 띄울 문구
+ */
+function failureMessage(reason: unknown, fallback: string) {
+  return reason instanceof ApiError || reason instanceof TypeError ? reason.message : fallback
+}
+
 /**
  * 인플루언서 통화의 팬 정보 패널이다. (Influencer Call.dc.html 우측 260px)
  *
- * 1인 인플루언서(solo)에게만 운영 블록이 붙는다 — 통화 중에는 모니터링 화면을 볼 수 없으므로
- * 노쇼 처리와 다음 팬 넘기기의 최소 조작을 여기서 제공한다.
+ * 통화 중에는 모니터링 화면을 볼 수 없으므로 이 패널이 그 자리를 대신한다. 팬 정보·응모 답변을
+ * 읽는 것뿐 아니라 **메모 작성**과(모든 인플루언서) **대기열 운영**(1인 인플루언서)까지 여기서 끝난다.
+ * 운영 조치를 해도 대기실로 나가지 않고 이 화면에서 다음 팬을 이어 호출한다.
+ *
+ * @param meetingId 진행 중인 팬미팅 식별자
  */
 export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [session] = useState(() => getAuthSession())
   const isSolo = session?.role === 'SOLO_INFLUENCER'
   const [queue, setQueue] = useState<MeetingQueue>()
-  const [memo, setMemo] = useState<FanMemo>()
   const [memoOpen, setMemoOpen] = useState(false)
   const [confirm, setConfirm] = useState<ConfirmKind>()
   const [opsBusy, setOpsBusy] = useState(false)
@@ -78,25 +97,89 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
   )
 
   const currentFanName = queue?.currentCall?.nickname ?? currentEntry?.nickname
-  const currentFanId = currentEntry?.fanId
   const callConnected = Boolean(queue?.currentCall?.startedAt)
 
+  /**
+   * 방금까지 통화한 팬이다.
+   *
+   * 마지막 팬의 통화가 끝나면 `currentCall`이 비고 대기열에도 IN_CALL이 없어 메모를 남길 대상이
+   * 사라진다. 그러면 하필 **마지막 팬만** 메모를 못 남기게 되므로 직전 대상을 기억해 둔다.
+   */
+  const [lastEntry, setLastEntry] = useState<QueueEntry>()
+
   useEffect(() => {
-    if (!currentFanId) {
-      setMemo(undefined)
-      return
-    }
+    if (currentEntry) setLastEntry(currentEntry)
+    // 폴링마다 새 객체가 오므로 식별자가 바뀔 때만 반응한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentEntry?.queueEntryId])
+
+  const memoFan = currentEntry ?? lastEntry
+  const memoFanId = memoFan?.fanId
+
+  const [memos, setMemos] = useState<readonly FanMemo[]>([])
+  /** 메모 목록을 어느 팬 기준으로 채웠는지다. 초안을 채울 시점을 이 값으로 판단한다. */
+  const [memoLoadedFanId, setMemoLoadedFanId] = useState<string>()
+  const [memoDraft, setMemoDraft] = useState('')
+  const [memoSaving, setMemoSaving] = useState(false)
+  const [memoNotice, setMemoNotice] = useState<string>()
+  const [memoError, setMemoError] = useState<string>()
+
+  /**
+   * 이 팬의 메모를 읽어 온다. 첫 조회와 저장 직후의 갱신에 함께 쓴다.
+   *
+   * @param fanId 메모를 읽을 팬 회원 식별자
+   * @param signal 화면 이탈·팬 교체 시 조회를 끊을 신호
+   */
+  const loadMemos = useCallback(async (fanId: string, signal?: AbortSignal) => {
     const token = getAuthSession()?.accessToken
     if (!token) return
 
+    try {
+      const response = await fetchFanMemos(fanId, token, signal)
+      if (signal?.aborted) return
+      setMemos(response.content)
+    } catch {
+      if (signal?.aborted) return
+      // 메모를 못 읽어도 새로 쓰는 것은 막지 않는다.
+      setMemos([])
+    }
+    setMemoLoadedFanId(fanId)
+  }, [])
+
+  useEffect(() => {
+    if (!memoFanId) {
+      setMemos([])
+      setMemoLoadedFanId(undefined)
+      return
+    }
+
     const controller = new AbortController()
-    void fetchFanMemos(currentFanId, token, controller.signal)
-      .then((response) => setMemo(response.content[0]))
-      .catch(() => {
-        if (!controller.signal.aborted) setMemo(undefined)
-      })
+    void loadMemos(memoFanId, controller.signal)
     return () => controller.abort()
-  }, [currentFanId])
+  }, [loadMemos, memoFanId])
+
+  /** 이번 회차에 이미 저장된 메모다. 있으면 수정(PATCH), 없으면 생성(POST)으로 저장한다. */
+  const currentMemo = useMemo(
+    () => memos.find((item) => item.meetingId === meetingId),
+    [meetingId, memos],
+  )
+  /** 지난 회차에 남긴 메모 중 가장 최근 것이다. 이번 회차 메모와 섞이지 않게 따로 보여 준다. */
+  const pastMemo = useMemo(
+    () => memos.find((item) => item.meetingId !== meetingId),
+    [meetingId, memos],
+  )
+
+  /** 초안을 이미 채운 팬이다. 저장 후 재조회가 입력 중인 내용을 덮지 않도록 한 번만 채운다. */
+  const memoSeededForRef = useRef<string>(undefined)
+
+  useEffect(() => {
+    if (!memoLoadedFanId || memoSeededForRef.current === memoLoadedFanId) return
+
+    memoSeededForRef.current = memoLoadedFanId
+    setMemoDraft(currentMemo?.content ?? '')
+    setMemoNotice(undefined)
+    setMemoError(undefined)
+  }, [currentMemo?.content, memoLoadedFanId])
 
   /**
    * 지금 통화 중인 팬이 응모할 때 쓴 답변을 읽는다.
@@ -111,7 +194,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
   const [answersOpen, setAnswersOpen] = useState(false)
 
   useEffect(() => {
-    if (!currentFanId) {
+    if (!memoFanId) {
       setAnswers([])
       return
     }
@@ -124,7 +207,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
       .then((response) => {
         if (controller.signal.aborted) return
         const matched = response.content.find(
-          (applicant) => String(applicant.fanId) === String(currentFanId),
+          (applicant) => String(applicant.fanId) === String(memoFanId),
         )
         setAnswers(matched?.answers ?? [])
       })
@@ -133,13 +216,88 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
         if (!controller.signal.aborted) setAnswers([])
       })
     return () => controller.abort()
-  }, [currentFanId, meetingId])
+  }, [meetingId, memoFanId])
 
-  /** 운영 조치 후에는 다음 팬을 호출할 대기실로 복귀한다. */
-  function returnToReady() {
-    navigate(`/influencer/fan-meetings/${encodeURIComponent(meetingId)}/ready`)
+  /**
+   * 통화 중 적은 메모를 저장한다.
+   *
+   * 한 회차에 메모는 하나이므로 이번 회차 메모가 이미 있으면 새로 만들지 않고 덮어쓴다.
+   */
+  async function handleMemoSave() {
+    const token = getAuthSession()?.accessToken
+    const content = memoDraft.trim()
+    if (!token || !memoFanId || !content || memoSaving) return
+
+    setMemoSaving(true)
+    setMemoNotice(undefined)
+    setMemoError(undefined)
+    try {
+      if (currentMemo) {
+        await updateFanMemo(currentMemo.memoId, { content }, token)
+      } else {
+        // 팬미팅 식별자는 경로 파라미터라 문자열이지만 백엔드는 숫자를 받는다.
+        const numericMeetingId = Number(meetingId)
+        await createFanMemo(
+          memoFanId,
+          Number.isFinite(numericMeetingId)
+            ? { meetingId: numericMeetingId, content }
+            : { content },
+          token,
+        )
+      }
+      setMemoNotice(t('influencerCallSidePanel.s1MemoSaved'))
+      // 방금 만든 메모의 memoId를 받아 둬야 다음 저장이 생성이 아니라 수정으로 간다.
+      await loadMemos(memoFanId)
+    } catch (reason) {
+      setMemoError(failureMessage(reason, t('influencerCallSidePanel.s1MemoFailed')))
+    } finally {
+      setMemoSaving(false)
+    }
   }
 
+  /**
+   * 대기열의 다음 팬을 호출한다.
+   *
+   * 호출에 성공하면 통화 화면의 대기열 폴링(VideoCallRoom)이 새 통화 세션을 따라가므로
+   * 이 화면을 벗어나지 않고 그대로 다음 통화로 이어진다.
+   *
+   * @param token 인증 토큰
+   * @throws 호출 API가 실패하면 그대로 던진다. 호출한 쪽이 문구를 정한다.
+   */
+  async function callNextFan(token: string) {
+    if (!nextEntry) return
+    await callQueueEntry(nextEntry.queueEntryId, token)
+    await loadQueue()
+  }
+
+  /**
+   * 운영 조치를 끝낸 뒤 다음 팬을 이어서 호출한다.
+   *
+   * 앞 단계(노쇼·건너뛰기)는 이미 서버에 반영됐으므로, 호출 실패를 앞 단계의 실패처럼 보이게
+   * 하지 않는다. 실패해도 "다음 팬 호출" 버튼으로 다시 시도할 수 있다.
+   *
+   * @param token 인증 토큰
+   */
+  async function continueWithNextFan(token: string) {
+    try {
+      await callNextFan(token)
+    } catch (reason) {
+      setOpsError(failureMessage(reason, t('influencerCallSidePanel.s1CallNextFailed')))
+    }
+  }
+
+  /** "다음 팬 호출" 버튼이다. 진행 중인 통화가 없을 때 다음 순번을 직접 부른다. */
+  async function handleCallNext() {
+    const token = getAuthSession()?.accessToken
+    if (!token || !nextEntry || opsBusy) return
+
+    setOpsBusy(true)
+    setOpsError(undefined)
+    await continueWithNextFan(token)
+    setOpsBusy(false)
+  }
+
+  /** 현재 팬을 노쇼로 처리하고, 다음 팬이 있으면 이 화면에서 이어 호출한다. */
   async function handleNoShow() {
     const token = getAuthSession()?.accessToken
     if (!token || !currentEntry || opsBusy) return
@@ -148,7 +306,7 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
     setOpsError(undefined)
     try {
       await markQueueEntryNoShow(currentEntry.queueEntryId, token)
-      // 화면 이동만으로는 서버 세션이 정리되지 않으므로 통화도 명시적으로 종료한다.
+      // 대기열만 정리하면 서버 세션이 남으므로 통화도 명시적으로 종료한다.
       const sessionId = queue?.currentCall?.callSessionId
       if (sessionId) {
         try {
@@ -158,18 +316,17 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
         }
       }
       setConfirm(undefined)
-      returnToReady()
     } catch (reason) {
-      setOpsError(
-        reason instanceof ApiError || reason instanceof TypeError
-          ? reason.message
-          : t('influencerCallSidePanel.t17'),
-      )
-    } finally {
+      setOpsError(failureMessage(reason, t('influencerCallSidePanel.t17')))
       setOpsBusy(false)
+      return
     }
+
+    await continueWithNextFan(token)
+    setOpsBusy(false)
   }
 
+  /** 현재 팬을 대기열 마지막으로 보내고, 다음 팬을 이 화면에서 이어 호출한다. */
   async function handleSkip() {
     const token = getAuthSession()?.accessToken
     if (!token || !currentEntry || opsBusy) return
@@ -177,7 +334,6 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
     setOpsBusy(true)
     setOpsError(undefined)
     try {
-      // 지금 통화를 끝내고 현재 팬을 대기열 마지막으로 보낸다. 다음 호출은 대기실에서 진행한다.
       if (queue?.currentCall?.callSessionId) {
         await forceEndCallSession(
           queue.currentCall.callSessionId,
@@ -190,20 +346,20 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
         await changeQueuePosition(currentEntry.queueEntryId, entries.length, token)
       }
       setConfirm(undefined)
-      returnToReady()
     } catch (reason) {
-      setOpsError(
-        reason instanceof ApiError || reason instanceof TypeError
-          ? reason.message
-          : t('influencerCallSidePanel.t19'),
-      )
-    } finally {
+      setOpsError(failureMessage(reason, t('influencerCallSidePanel.t19')))
       setOpsBusy(false)
+      return
     }
+
+    await continueWithNextFan(token)
+    setOpsBusy(false)
   }
 
-  const memoContent = memo?.content ?? ''
-  const showMemoToggle = memoContent.length > 60
+  const pastMemoContent = pastMemo?.content ?? ''
+  const showMemoToggle = pastMemoContent.length > 60
+  /** 진행 중인 통화가 있으면 다음 팬을 부를 수 없다. 팬미팅당 활성 통화 세션은 하나다. */
+  const canCallNext = Boolean(nextEntry) && !queue?.currentCall
 
   return (
     <aside
@@ -235,12 +391,69 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
         </div>
       </dl>
 
+      {/*
+        이번 통화 메모 — 통화 중에 바로 쓴다. 예전에는 이 패널이 조회만 해서, 방금 나눈 대화를
+        적어 두려면 통화가 끝난 뒤 팬 기록 화면까지 찾아가야 했다.
+        마지막 팬은 통화가 끝나도 대상이 남도록 memoFan(직전 통화 상대)을 쓴다.
+      */}
+      <section aria-labelledby="ic-memo" className="mt-5 border-t border-white/10 pt-4">
+        <h3 className="text-sm font-extrabold text-white/90" id="ic-memo">
+          {t('influencerCallSidePanel.s1MemoTitle')}
+        </h3>
+        {memoFan ? (
+          <>
+            <p className="mt-1.5 text-[13px] font-medium leading-[1.5] text-white/60">
+              {t('influencerCallSidePanel.s1MemoFor', { p0: memoFan.nickname })}
+            </p>
+            <textarea
+              aria-label={t('influencerCallSidePanel.s1MemoTitle')}
+              className="mj-font-body mt-2.5 min-h-[104px] w-full resize-y rounded-lg border border-white/20 bg-white/5 p-3 text-[15px] leading-[1.7] text-white placeholder:text-white/45 focus:border-[var(--color-primary-coral-on-dark)] focus:outline-none focus-visible:[outline:var(--focus-ring-width)_solid_var(--color-focus-indigo)] focus-visible:[outline-offset:var(--focus-ring-offset)]"
+              maxLength={MEMO_MAX_LENGTH}
+              onChange={(event) => setMemoDraft(event.target.value)}
+              placeholder={t('influencerCallSidePanel.s1MemoPlaceholder')}
+              value={memoDraft}
+            />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <button
+                className="mj-font-label min-h-10 rounded-lg border border-white/35 bg-white/10 px-3.5 text-sm text-white transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!memoDraft.trim() || memoSaving}
+                onClick={() => void handleMemoSave()}
+                type="button"
+              >
+                {memoSaving
+                  ? t('influencerCallSidePanel.s1MemoSaving')
+                  : t('influencerCallSidePanel.s1MemoSave')}
+              </button>
+              <span className="text-sm font-semibold text-white/55 tabular-nums">
+                {t('influencerCallSidePanel.s1MemoCount', {
+                  p0: memoDraft.length,
+                  p1: MEMO_MAX_LENGTH,
+                })}
+              </span>
+            </div>
+            <p
+              aria-live="polite"
+              className={`mt-2 min-h-5 text-sm font-bold leading-[1.5] ${memoError ? 'text-[var(--color-error-on-dark)]' : 'text-[var(--color-success-on-dark)]'}`}
+            >
+              {memoError ?? memoNotice}
+            </p>
+          </>
+        ) : (
+          <p className="mt-2.5 text-sm font-medium leading-[1.6] text-white/65">
+            {t('influencerCallSidePanel.s1MemoNoFan')}
+          </p>
+        )}
+      </section>
+
+      {/* 지난 회차 메모 — 이번 회차 메모와 섞이지 않도록 다른 회차의 최신 메모만 보여 준다. */}
       <section className="mt-5 border-t border-white/10 pt-4">
-        <h3 className="text-sm font-extrabold text-white/90">{t('influencerCallSidePanel.t5')}</h3>
+        <h3 className="text-sm font-extrabold text-white/90">
+          {t('influencerCallSidePanel.s1PastMemoTitle')}
+        </h3>
         <p
           className={`mt-2.5 text-[15px] font-medium leading-[1.75] text-white/80 ${memoOpen ? '' : 'line-clamp-2'}`}
         >
-          {memoContent || t('influencerCallSidePanel.t23')}
+          {pastMemoContent || t('influencerCallSidePanel.s1PastMemoEmpty')}
         </p>
         {showMemoToggle ? (
           <button
@@ -320,23 +533,41 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
             {t('influencerCallSidePanel.t9')}
           </h3>
           <p className="mt-[7px] text-sm font-medium leading-[1.55] text-white/75">
-            {t('influencerCallSidePanel.t10')}
+            {t('influencerCallSidePanel.s1OpsHint')}
           </p>
           <div className="mt-3 grid gap-2">
+            {/*
+              다음 팬 호출 — 이전에는 이 조작이 대기실에만 있어서, 통화가 끝날 때마다 화면을
+              오가야 다음 팬을 부를 수 있었다. 진행 중인 통화가 있으면 부를 수 없으므로 잠근다.
+            */}
             <button
-              className="mj-font-label min-h-11 rounded-lg border border-[color-mix(in_srgb,var(--color-error-on-dark)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_24%,var(--color-surface-dark-panel))] text-[15px] text-[var(--color-error-on-dark)] transition-colors hover:bg-[color-mix(in_srgb,var(--color-error)_34%,var(--color-surface-dark-panel))] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={!currentEntry}
-              onClick={() => {
-                setOpsError(undefined)
-                setConfirm('noshow')
-              }}
+              className="mj-font-label min-h-11 rounded-lg border border-[color-mix(in_srgb,var(--color-primary-coral-on-dark)_55%,transparent)] bg-[color-mix(in_srgb,var(--color-primary-coral)_26%,var(--color-surface-dark-panel))] text-[15px] text-white transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary-coral)_38%,var(--color-surface-dark-panel))] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!canCallNext || opsBusy}
+              onClick={() => void handleCallNext()}
               type="button"
             >
-              {t('influencerCallSidePanel.t11')}
+              {t('influencerCallSidePanel.s1CallNext')}
             </button>
+            {/*
+              노쇼는 팬이 들어오지 않은 상태의 조치다. 통화가 시작된 뒤에도 눌리면 대화 중인 팬을
+              노쇼로 남기게 되므로, 연결이 확인되면 버튼 자체를 감춘다.
+            */}
+            {callConnected ? null : (
+              <button
+                className="mj-font-label min-h-11 rounded-lg border border-[color-mix(in_srgb,var(--color-error-on-dark)_45%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_24%,var(--color-surface-dark-panel))] text-[15px] text-[var(--color-error-on-dark)] transition-colors hover:bg-[color-mix(in_srgb,var(--color-error)_34%,var(--color-surface-dark-panel))] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!currentEntry || opsBusy}
+                onClick={() => {
+                  setOpsError(undefined)
+                  setConfirm('noshow')
+                }}
+                type="button"
+              >
+                {t('influencerCallSidePanel.t11')}
+              </button>
+            )}
             <button
               className="mj-font-label min-h-11 rounded-lg border border-white/35 bg-white/10 text-[15px] text-white/90 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={!currentEntry}
+              disabled={!currentEntry || opsBusy}
               onClick={() => {
                 setOpsError(undefined)
                 setConfirm('skip')
@@ -346,15 +577,24 @@ export function InfluencerCallSidePanel({ meetingId }: { meetingId: string }) {
               {t('influencerCallSidePanel.t12')}
             </button>
           </div>
+          {/* 확인 창을 거치지 않는 조작(다음 팬 호출)의 실패도 알려야 하므로 여기에도 둔다. */}
+          {opsError && confirm === undefined ? (
+            <p
+              className="mt-2.5 text-sm font-bold leading-[1.55] text-[var(--color-error-on-dark)]"
+              role="alert"
+            >
+              {opsError}
+            </p>
+          ) : null}
         </section>
       ) : null}
 
       <Dialog
         description={
           confirm === 'noshow'
-            ? t('influencerCallSidePanel.t33', { p0: currentFanName ?? t('influencerCallSidePanel.t26') })
+            ? t('influencerCallSidePanel.s1NoShowDesc', { p0: currentFanName ?? t('influencerCallSidePanel.t26') })
             : nextEntry
-              ? t('influencerCallSidePanel.t34', { p0: nextEntry.position, p1: nextEntry.nickname, p2: currentFanName ?? t('influencerCallSidePanel.t27') })
+              ? t('influencerCallSidePanel.s1SkipDesc', { p0: nextEntry.position, p1: nextEntry.nickname, p2: currentFanName ?? t('influencerCallSidePanel.t27') })
               : t('influencerCallSidePanel.t28')
         }
         footer={

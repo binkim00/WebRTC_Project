@@ -1,5 +1,5 @@
-import type { FanCardCandidates } from '../../api/fanCards'
-import { AlertBanner, Badge, Button } from '..'
+import { FAN_CARD_TEXT_INPUT_LIMIT, type FanCardCandidates } from '../../api/fanCards'
+import { AlertBanner, Badge, Button, Textarea } from '..'
 import { useTranslation } from '../../i18n'
 
 type FanCardQuotePickerProps = {
@@ -66,6 +66,23 @@ export function FanCardQuotePicker({
             : t('fanCardQuotePicker.t5')}
         </p>
       ) : null}
+
+      {/* 고른 문구가 이 칸에 담기고, 그대로 고쳐 쓸 수도 있다. 추천이 마음에 들지 않거나
+          통화에서 고를 말이 없을 때 팬이 직접 적을 길을 항상 열어 둔다. 값이 곧 카드에
+          들어갈 문구라 아래 목록의 선택 표시도 이 값을 따라간다. */}
+      <div className="mt-5">
+        <Textarea
+          label={t('fanCardQuotePicker.t12')}
+          maxLength={FAN_CARD_TEXT_INPUT_LIMIT}
+          onChange={(event) => onSelect(event.target.value || undefined)}
+          placeholder={t('fanCardQuotePicker.t13')}
+          rows={2}
+          value={selectedText ?? ''}
+        />
+        <p className="mt-1 text-right text-xs text-[var(--color-text-muted)]">
+          {(selectedText ?? '').length}/{FAN_CARD_TEXT_INPUT_LIMIT}
+        </p>
+      </div>
 
       {hasAnyCandidate ? (
         <p className="mt-4 text-xs text-[var(--color-text-secondary)]">

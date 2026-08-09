@@ -1,4 +1,4 @@
-import { ArrowLeft } from '@phosphor-icons/react'
+import { ArrowLeft, Paperclip } from '@phosphor-icons/react'
 import { parseServerDate } from '../../api/serverTime'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -38,7 +38,10 @@ import {
 } from '../../api/notices'
 import { getMyOrganization, type OrganizationMember } from '../../api/organizations'
 import { AlertBanner, Badge, Button, Card, CardContent, CardHeader, CardTitle, Checkbox, Dialog, Pagination, Select, Spinner, Switch, TextField, Textarea } from '../../components'
+// components/index.ts는 여러 세션이 함께 고치는 파일이라 배럴을 거치지 않고 직접 가져온다.
+import { CoverImageUpload } from '../../components/meeting/CoverImageUpload'
 import {
+  deriveScheduleDefaults,
   formatDateTime,
   getScheduleErrors,
   toApiLocalDateTime,
@@ -299,6 +302,48 @@ export function ManagerMeetingCreatePage() {
     const derived = new Date(scheduledStartDate.getTime() - ms)
     const floor = new Date(Date.now() + 10 * 60 * 1000)
     return toLocalInputValue(derived > floor ? derived : floor)
+  }
+
+  // 예정 일시를 입력하면 비어 있는 나머지 일정을 자동으로 채웠음을 알리는 안내다.
+  const [scheduleAutoFilled, setScheduleAutoFilled] = useState(false)
+
+  /**
+   * 예정 일시가 바뀔 때 아직 비어 있는 일정(응모 시작·마감, 발표, 대기열 오픈)을
+   * 추천값으로 채운다. 이미 값이 있는 필드는 절대 덮어쓰지 않으므로 직접 고른 시각은 유지된다.
+   * 응모 관련 시각은 응모를 받는 방식일 때만 채운다.
+   */
+  const handleScheduledStartChange = (value: string) => {
+    const defaults = deriveScheduleDefaults(value)
+    if (!defaults) {
+      setScheduleAutoFilled(false)
+      setForm({ ...form, scheduledStartAt: value })
+      return
+    }
+
+    let didFill = false
+    const application = { ...form.application }
+    if (form.application.enabled && selectionType === 'APPLICATION') {
+      if (!application.startAt) {
+        application.startAt = defaults.applicationStartAt
+        didFill = true
+      }
+      if (!application.endAt) {
+        application.endAt = defaults.applicationEndAt
+        didFill = true
+      }
+      if (!application.resultAnnouncementAt) {
+        application.resultAnnouncementAt = defaults.resultAnnouncementAt
+        didFill = true
+      }
+    }
+    const operation = { ...form.operation }
+    if (!operation.queueOpenAt) {
+      operation.queueOpenAt = defaults.queueOpenAt
+      didFill = true
+    }
+
+    setScheduleAutoFilled(didFill)
+    setForm({ ...form, scheduledStartAt: value, application, operation })
   }
   const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [templateDownloadError, setTemplateDownloadError] = useState<string>()
@@ -1012,13 +1057,20 @@ export function ManagerMeetingCreatePage() {
             {step === 0 ? (
               <div className="grid items-start gap-5 sm:grid-cols-2">
                 <TextField label={t('managerRoutePages.t17')} maxLength={200} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} helperText={t('managerRoutePages.t18')} />
-                <TextField
-                  label={t('managerRoutePages.t19')}
-                  required
-                  type="datetime-local"
-                  value={form.scheduledStartAt}
-                  onChange={(event) => setForm({ ...form, scheduledStartAt: event.target.value })}
-                />
+                <div>
+                  <TextField
+                    label={t('managerRoutePages.t19')}
+                    required
+                    type="datetime-local"
+                    value={form.scheduledStartAt}
+                    onChange={(event) => handleScheduledStartChange(event.target.value)}
+                  />
+                  {scheduleAutoFilled ? (
+                    <p className="mt-2 text-sm font-medium text-[var(--color-success)]" role="status">
+                      {t('managerCreate.autoFill.notice')}
+                    </p>
+                  ) : null}
+                </div>
                 <div>
                   {isInfluencerAccount ? (
                     <div className="grid gap-2">
@@ -1058,16 +1110,22 @@ export function ManagerMeetingCreatePage() {
                   onChange={(event) => setForm({ ...form, description: event.target.value })}
                   placeholder={t('managerRoutePages.t26')}
                 />
-                <TextField
-                  containerClassName="sm:col-span-2"
-                  helperText={t('managerRoutePages.t27')}
-                  label={t('managerRoutePages.t28')}
-                  maxLength={2048}
-                  type="url"
-                  value={form.coverImageUrl ?? ''}
-                  onChange={(event) => setForm({ ...form, coverImageUrl: event.target.value })}
-                  placeholder="https://example.com/cover.jpg"
-                />
+                <div className="grid gap-3 sm:col-span-2">
+                  <TextField
+                    helperText={t('managerRoutePages.t27')}
+                    label={t('managerRoutePages.t28')}
+                    maxLength={2048}
+                    type="url"
+                    value={form.coverImageUrl ?? ''}
+                    onChange={(event) => setForm({ ...form, coverImageUrl: event.target.value })}
+                    placeholder="https://example.com/cover.jpg"
+                  />
+                  {/* 주소를 붙여 넣는 대신 파일을 올리면 위 칸이 업로드 주소로 채워진다. */}
+                  <CoverImageUpload
+                    onChange={(url) => setForm({ ...form, coverImageUrl: url })}
+                    value={form.coverImageUrl ?? ''}
+                  />
+                </div>
               </div>
             ) : null}
 
@@ -1535,6 +1593,7 @@ export function ManagerMeetingCreatePage() {
                       <img
                         alt={t('managerRoutePages.t311', { p0: form.title })}
                         className="mt-3 aspect-[16/10] w-full rounded-[var(--radius-panel)] border-b-2 border-[var(--color-primary-coral)] object-cover"
+                        decoding="async"
                         src={form.coverImageUrl}
                       />
                     ) : null}
@@ -2117,17 +2176,28 @@ export function ManagerNoticesPage() {
                       ({attachments.length}/{NOTICE_ATTACHMENT_MAX_COUNT})
                     </span>
                   </legend>
-                  <input
-                    accept="image/*,.pdf"
-                    className="block w-full text-sm"
-                    disabled={!canEdit || uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT}
-                    multiple
-                    onChange={(event) => {
-                      void uploadFiles(event.target.files)
-                      event.target.value = ''
-                    }}
-                    type="file"
-                  />
+                  <label
+                    aria-disabled={!canEdit || uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT}
+                    className={`inline-flex min-h-11 w-fit max-w-full items-center gap-2 rounded-lg border px-4 text-sm font-bold ${
+                      !canEdit || uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT
+                        ? 'cursor-not-allowed border-[var(--color-divider)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)] opacity-70'
+                        : 'cursor-pointer border-[var(--color-border-control)] bg-white text-[var(--color-text-primary)] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]'
+                    }`}
+                  >
+                    <Paperclip aria-hidden size={18} weight="bold" />
+                    <span className="min-w-0 break-words">{t('managerRoutePages.attachmentChoose')}</span>
+                    <input
+                      accept="image/*,.pdf"
+                      className="sr-only"
+                      disabled={!canEdit || uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT}
+                      multiple
+                      onChange={(event) => {
+                        void uploadFiles(event.target.files)
+                        event.target.value = ''
+                      }}
+                      type="file"
+                    />
+                  </label>
                   {uploading ? <p className="text-sm text-[var(--color-text-secondary)]">{t('managerRoutePages.t115')}</p> : null}
                   {attachments.length ? (
                     <ul className="grid gap-2">

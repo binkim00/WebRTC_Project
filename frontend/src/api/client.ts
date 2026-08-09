@@ -7,6 +7,7 @@ import {
   replaceAuthSession,
   type LoginResponse,
 } from './authSession'
+import { announceNotificationsMayHaveChanged } from './notificationEvents'
 import { translate } from '../i18n'
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -169,6 +170,27 @@ async function refreshStoredSession(): Promise<LoginResponse | null> {
   return refreshPromise
 }
 
+/**
+ * 알림을 만들 수 있는 요청이 성공하면 알림 벨에 다시 읽으라고 알린다.
+ *
+ * 알림 벨은 폴링 주기가 돌아와야 배지를 갱신한다. 사용자가 방금 한 행동의 결과는 그때까지
+ * 기다리지 않고 바로 보이는 편이 자연스럽다. 모든 API가 지나가는 이 지점에서 한 번만 걸면
+ * 화면마다 갱신을 따로 챙기지 않아도 된다.
+ *
+ * 조회(GET·HEAD)와 알림 API 자신은 제외한다. 알림 API까지 알리면 읽음 처리(PATCH)가 다시
+ * 목록 조회를 부르는 되먹임이 생긴다.
+ *
+ * @param path 호출한 API 경로
+ * @param method 호출에 쓴 HTTP 메서드이며 지정하지 않았으면 GET으로 본다
+ */
+function announceIfMutating(path: string, method: string | undefined): void {
+  const verb = (method ?? 'GET').toUpperCase()
+  if (verb === 'GET' || verb === 'HEAD') return
+  if (path.startsWith('/api/v1/notifications')) return
+
+  announceNotificationsMayHaveChanged()
+}
+
 async function requestWithRefresh<T>(
   path: string,
   options: ApiRequestOptions,
@@ -219,6 +241,8 @@ async function requestWithRefresh<T>(
       error.detail,
     )
   }
+
+  announceIfMutating(path, requestOptions.method)
 
   if (response.status === 204) {
     return undefined as T

@@ -24,7 +24,7 @@ export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
         className,
       )}
     >
-      {src ? <img alt={name} className="size-full object-cover" src={src} /> : fallback}
+      {src ? <img alt={name} className="size-full object-cover" decoding="async" loading="lazy" src={src} /> : fallback}
     </span>
   )
 }

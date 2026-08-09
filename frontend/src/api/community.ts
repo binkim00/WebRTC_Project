@@ -10,7 +10,7 @@ export type CommunityPostSummaryResponse = {
   title: string
   authorId: number
   authorNickname: string
-  /** 첨부파일 미구현으로 항상 null */
+  /** 첨부한 이미지 중 표시 순서가 가장 앞선 것의 URL이고 이미지가 없으면 null이다. */
   thumbnailUrl: string | null
   createdAt: string
   pinned: boolean
@@ -24,7 +24,7 @@ export type CommunityPostDetailResponse = {
   authorId: number
   authorNickname: string
   thumbnailUrl: string | null
-  /** 첨부파일 미구현으로 항상 빈 배열 */
+  /** 표시 순서대로 정렬된 첨부파일이며 없으면 빈 배열이다. */
   attachments: NoticeAttachmentResponse[]
   commentCount: number
   createdAt: string
@@ -37,6 +37,13 @@ export type CommunityPostDetailResponse = {
 export type CommunityPostCreateRequest = {
   title: string
   content: string
+  /**
+   * 연결할 첨부파일 식별자이며 보낸 순서가 표시 순서가 된다.
+   *
+   * `POST /api/v1/attachments`에 **attachmentType=COMMUNITY**로 먼저 업로드한 뒤 받은
+   * 식별자를 넘긴다. NOTICE로 올린 파일을 넘기면 `ATTACHMENT_TYPE_MISMATCH`로 거절된다.
+   */
+  attachmentIds?: number[]
 }
 
 export type CommunityPostCreateResponse = {
@@ -49,7 +56,17 @@ export type CommunityPostCreateResponse = {
 export type CommunityPostUpdateRequest = {
   title?: string
   content?: string
+  /**
+   * 연결할 첨부파일 식별자 전체 목록이다.
+   *
+   * PATCH이므로 생략하면 기존 첨부를 유지하고, 보내면 그 목록이 연결 상태를 대신한다.
+   * 빈 배열을 보내면 모든 첨부가 해제된다. 공지 수정과 같은 규칙이다.
+   */
+  attachmentIds?: number[]
 }
+
+/** 게시글 한 건에 연결할 수 있는 첨부파일 최대 개수이며 공지와 같은 값이다. */
+export const COMMUNITY_ATTACHMENT_MAX_COUNT = 10
 
 export type CommentSummaryResponse = {
   commentId: number

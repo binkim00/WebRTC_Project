@@ -143,7 +143,12 @@ export function InfluencerMeetingReadyPage() {
 
     try {
       setDetail(
-        await fetchPublicFanMeetingDetail(Number(fanMeetingId), session.accessToken, signal),
+        await fetchPublicFanMeetingDetail(
+          Number(fanMeetingId),
+          session.accessToken,
+          signal,
+          true,
+        ),
       )
     } catch (reason: unknown) {
       if (signal?.aborted) return
@@ -344,6 +349,8 @@ export function InfluencerMeetingReadyPage() {
       const refreshed = await fetchPublicFanMeetingDetail(
         Number(fanMeetingId),
         session.accessToken,
+        undefined,
+        true,
       )
       setDetail(refreshed)
       setOpenQueueConfirm(false)
@@ -680,6 +687,7 @@ export function InfluencerMeetingReadyPage() {
                   <img
                     alt={t('influencerMeetingReadyPage.t88', { p0: currentFanName })}
                     className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+                    decoding="async"
                     src={currentEntry.profileImageUrl}
                   />
                 ) : (

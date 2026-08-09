@@ -1,3 +1,4 @@
+import { Copy } from '@phosphor-icons/react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { parseServerDate } from '../../api/serverTime'
 import { getAuthSession } from '../../api/authSession'
@@ -57,6 +58,26 @@ function isExpired(invitation: IssuedInvitation, now: number): boolean {
   return Number.isFinite(expiry) && expiry <= now
 }
 
+/**
+ * 구성원 목록 정렬 기준이다. 매니저를 먼저 놓고, 같은 역할 안에서는 먼저 합류한 순으로 세운다.
+ *
+ * 서버 순서를 그대로 쓰면 매니저와 인플루언서가 섞여 누가 조직을 관리하는지 한눈에 들어오지 않고,
+ * 구성원이 늘 때마다 줄 위치가 바뀌어 같은 사람을 다시 찾기 어려웠다.
+ *
+ * @param left 비교할 구성원
+ * @param right 비교 대상 구성원
+ * @return 정렬에 쓰는 비교 결과다. 날짜를 읽을 수 없으면 순서를 바꾸지 않는다.
+ */
+function compareMembers(left: OrganizationMember, right: OrganizationMember): number {
+  const leftIsManager = left.userRole === 'MANAGER'
+  if (leftIsManager !== (right.userRole === 'MANAGER')) return leftIsManager ? -1 : 1
+
+  const leftJoined = parseServerDate(left.joinedAt).getTime()
+  const rightJoined = parseServerDate(right.joinedAt).getTime()
+  if (Number.isNaN(leftJoined) || Number.isNaN(rightJoined)) return 0
+  return leftJoined - rightJoined
+}
+
 const roleLabels = (): Record<string, string> => ({
   MANAGER: translate('managerOrganizationPage.t69'),
   INFLUENCER: translate('managerOrganizationPage.t70'),
@@ -85,6 +106,7 @@ export function ManagerOrganizationPage() {
   const [sending, setSending] = useState(false)
   const [invitations, setInvitations] = useState<IssuedInvitation[]>([])
   const [copiedToken, setCopiedToken] = useState<string>()
+  const [copiedMemberId, setCopiedMemberId] = useState<number>()
   const [reissuedToken, setReissuedToken] = useState<string>()
   const [reissuingId, setReissuingId] = useState<number>()
 
@@ -95,6 +117,12 @@ export function ManagerOrganizationPage() {
   // 초대 만료 표시가 시각에 맞게 바뀌도록 1분마다 갱신한다.
   const now = useNowTicker(60_000)
   const sessionUserId = getAuthSession()?.userId
+
+  // dc의 "활성 상태인 구성원만 표시됩니다."와 실제 목록을 일치시킨다.
+  // 초대 중복 검사가 이 목록을 쓰므로 렌더 분기보다 앞에서 만든다.
+  const members = (data?.members ?? [])
+    .filter((member) => member.status === 'ACTIVE')
+    .sort(compareMembers)
 
   /**
    * 조직 정보를 읽는다.
@@ -198,13 +226,17 @@ export function ManagerOrganizationPage() {
 
   const inviteIdNumber = Number(inviteId)
   const inviteIdValid = inviteId.trim() !== '' && Number.isInteger(inviteIdNumber) && inviteIdNumber > 0
+  // 이미 소속된 회원번호는 백엔드가 거절한다. 보내기 전에 같은 사실을 입력란에서 알려 준다.
+  const alreadyMember = inviteIdValid && members.some((member) => member.userId === inviteIdNumber)
   const inviteInputError =
     inviteTouched && inviteId.trim() !== '' && !inviteIdValid
       ? t('managerOrganizationPage.t45')
-      : undefined
+      : alreadyMember
+        ? t('managerOrganizationPage.t80')
+        : undefined
 
   async function handleSendInvite() {
-    if (!inviteIdValid || sending) return
+    if (!inviteIdValid || alreadyMember || sending) return
 
     setSending(true)
     setInviteServerError(undefined)
@@ -240,12 +272,30 @@ export function ManagerOrganizationPage() {
     }
   }
 
+  /** 초대 대화상자를 연다. 상단 버튼과 빈 목록의 안내에서 같이 쓴다. */
+  function openInviteDialog() {
+    setInviteServerError(undefined)
+    setInviteOpen(true)
+  }
+
   async function handleCopy(invitation: IssuedInvitation) {
     try {
       await navigator.clipboard.writeText(invitation.url)
       setCopiedToken(invitation.token)
     } catch {
       setError(t('managerOrganizationPage.t48'))
+    }
+  }
+
+  async function handleCopyMemberId(userId: number) {
+    try {
+      await navigator.clipboard.writeText(String(userId))
+      setCopiedMemberId(userId)
+      window.setTimeout(() => {
+        setCopiedMemberId((current) => (current === userId ? undefined : current))
+      }, 1800)
+    } catch {
+      setError(t('managerOrganizationPage.copyMemberFailed'))
     }
   }
 
@@ -271,8 +321,6 @@ export function ManagerOrganizationPage() {
     return <p className="py-10 text-[var(--color-text-secondary)]">{t('managerOrganizationPage.t1')}</p>
   }
 
-  // dc의 "활성 상태인 구성원만 표시됩니다."와 실제 목록을 일치시킨다.
-  const members = data?.members.filter((member) => member.status === 'ACTIVE') ?? []
   const influencerCount = members.filter((member) => member.userRole !== 'MANAGER').length
   const managerCount = members.filter((member) => member.userRole === 'MANAGER').length
   const pendingCount = invitations.filter((invitation) => !isExpired(invitation, now)).length
@@ -367,10 +415,7 @@ export function ManagerOrganizationPage() {
             </div>
             <button
               className="mj-font-emphasis min-h-12 whitespace-nowrap rounded-lg border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] px-5 text-[15px] text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
-              onClick={() => {
-                setInviteServerError(undefined)
-                setInviteOpen(true)
-              }}
+              onClick={openInviteDialog}
               type="button"
             >
               {t('managerOrganizationPage.t17')}
@@ -446,9 +491,23 @@ export function ManagerOrganizationPage() {
                         <strong className="block text-base font-extrabold text-[var(--color-text-primary)]">
                           {member.nickname}
                         </strong>
-                        <span className="mt-1 block text-sm font-medium text-[var(--color-text-tertiary)] [overflow-wrap:anywhere]">
-                          {t('managerOrganizationPage.t23')} {member.userId}
-                        </span>
+                        <button
+                          aria-label={t('managerOrganizationPage.copyMemberAria', { id: member.userId })}
+                          className="mt-1 inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md px-1 text-left text-sm font-semibold text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-primary-coral)]"
+                          onClick={() => void handleCopyMemberId(member.userId)}
+                          title={t('managerOrganizationPage.copyMember')}
+                          type="button"
+                        >
+                          <span className="min-w-0 [overflow-wrap:anywhere]">
+                            {t('managerOrganizationPage.t23')} {member.userId}
+                          </span>
+                          <Copy aria-hidden className="shrink-0" size={15} />
+                          {copiedMemberId === member.userId ? (
+                            <span className="shrink-0 text-xs text-[var(--color-success)]">
+                              {t('managerOrganizationPage.copiedMember')}
+                            </span>
+                          ) : null}
+                        </button>
                       </div>
                       <span
                         className={`text-[15px] font-extrabold ${member.userRole === 'MANAGER' ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-primary-coral)]'}`}
@@ -486,6 +545,27 @@ export function ManagerOrganizationPage() {
                   )
                 })}
               </div>
+              {/* 조직을 막 만들면 매니저 본인만 남아 목록이 헤더뿐이라 다음 할 일이 보이지 않는다. */}
+              {influencerCount === 0 ? (
+                <div
+                  className="mt-4 grid justify-items-center gap-3 rounded-lg border border-dashed border-[var(--color-border-control)] px-4 py-8 text-center"
+                  role="status"
+                >
+                  <strong className="text-base font-extrabold text-[var(--color-text-primary)]">
+                    {t('managerOrganizationPage.t78')}
+                  </strong>
+                  <p className="text-[15px] font-medium leading-[1.6] text-[var(--color-text-tertiary)]">
+                    {t('managerOrganizationPage.t79')}
+                  </p>
+                  <button
+                    className="mj-font-emphasis min-h-11 rounded-lg border border-[var(--color-primary-coral)] bg-[var(--color-primary-coral)] px-4 text-sm text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                    onClick={openInviteDialog}
+                    type="button"
+                  >
+                    {t('managerOrganizationPage.t17')}
+                  </button>
+                </div>
+              ) : null}
               <p className="mt-3.5 text-sm font-medium leading-[1.6] text-[var(--color-text-tertiary)]">
                 {t('managerOrganizationPage.t25')}
               </p>
@@ -505,12 +585,21 @@ export function ManagerOrganizationPage() {
               </div>
 
               {invitations.length === 0 ? (
-                <p
-                  className="mt-4 rounded-lg border border-dashed border-[var(--color-border-control)] px-4 py-8 text-center text-[15px] font-medium leading-[1.6] text-[var(--color-text-tertiary)]"
+                <div
+                  className="mt-4 grid justify-items-center gap-3 rounded-lg border border-dashed border-[var(--color-border-control)] px-4 py-8 text-center"
                   role="status"
                 >
-                  {t('managerOrganizationPage.t28')}
-                </p>
+                  <p className="text-[15px] font-medium leading-[1.6] text-[var(--color-text-tertiary)]">
+                    {t('managerOrganizationPage.t28')}
+                  </p>
+                  <button
+                    className="min-h-11 rounded-lg border border-[var(--color-border-control)] bg-white px-4 text-sm font-bold transition-colors hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+                    onClick={openInviteDialog}
+                    type="button"
+                  >
+                    {t('managerOrganizationPage.t17')}
+                  </button>
+                </div>
               ) : (
                 <>
                   <div className="mt-3.5 grid gap-2">
@@ -563,11 +652,16 @@ export function ManagerOrganizationPage() {
                       )
                     })}
                   </div>
-                  <p className="mt-3.5 text-[13px] font-medium leading-[1.55] text-[var(--color-text-tertiary)]">
-                    {t('managerOrganizationPage.t30')}
-                  </p>
                 </>
               )}
+
+              {/* 초대 규칙과, 초대 말고는 합류시킬 방법이 없다는 사실을 목록 유무와 상관없이 알린다. */}
+              <p className="mt-3.5 border-t border-[var(--color-divider)] pt-3.5 text-[13px] font-medium leading-[1.55] text-[var(--color-text-tertiary)]">
+                {t('managerOrganizationPage.t30')}
+              </p>
+              <p className="mt-2 text-[13px] font-medium leading-[1.55] text-[var(--color-text-tertiary)]">
+                {t('managerOrganizationPage.t81')}
+              </p>
             </aside>
           </div>
         </>
@@ -581,7 +675,7 @@ export function ManagerOrganizationPage() {
               {t('managerOrganizationPage.t32')}
             </Button>
             <Button
-              disabled={!inviteIdValid}
+              disabled={!inviteIdValid || alreadyMember}
               loading={sending}
               onClick={() => void handleSendInvite()}
             >
@@ -640,11 +734,26 @@ export function ManagerOrganizationPage() {
         open={removeTarget !== undefined}
         title={t('managerOrganizationPage.t77', { p0: removeTarget?.nickname ?? t('managerOrganizationPage.t68') })}
       >
-        {removeError ? (
-          <AlertBanner title={t('managerOrganizationPage.t41')} variant="error">
-            {removeError}
-          </AlertBanner>
-        ) : null}
+        <div className="grid gap-3">
+          {removeError ? (
+            <AlertBanner title={t('managerOrganizationPage.t41')} variant="error">
+              {removeError}
+            </AlertBanner>
+          ) : null}
+          {/* 목록에서 옆줄을 잘못 눌러도 알아채도록 대상의 회원번호·역할·합류일을 함께 보여 준다. */}
+          {removeTarget ? (
+            <div className="rounded-lg border border-[var(--color-divider)] bg-[var(--color-surface-subtle)] px-4 py-3">
+              <strong className="block text-base font-extrabold text-[var(--color-text-primary)] [overflow-wrap:anywhere]">
+                {removeTarget.nickname}
+              </strong>
+              <span className="mt-1 block text-sm font-medium text-[var(--color-text-tertiary)] [overflow-wrap:anywhere]">
+                {t('managerOrganizationPage.t23')} {removeTarget.userId} ·{' '}
+                {roleLabels()[removeTarget.userRole] ?? removeTarget.userRole} ·{' '}
+                {t('managerOrganizationPage.t56')} {formatDate(removeTarget.joinedAt)}
+              </span>
+            </div>
+          ) : null}
+        </div>
       </Dialog>
     </div>
   )

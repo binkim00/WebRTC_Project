@@ -144,7 +144,7 @@ export function JellyCelebration({ className }: JellyCelebrationProps) {
               </span>
             )
           })}
-      <img alt="" className="jc-duo" draggable={false} src={jellyDuo} />
+      <img alt="" className="jc-duo" decoding="async" draggable={false} src={jellyDuo} />
     </div>
   )
 }

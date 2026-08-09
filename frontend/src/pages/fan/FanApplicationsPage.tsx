@@ -274,6 +274,8 @@ export function FanApplicationsPage() {
                         <img
                           alt={t('fanApplicationsPage.t30', { p0: application.meetingTitle })}
                           className="aspect-[16/5.5] w-full object-cover"
+                          decoding="async"
+                          loading="lazy"
                           src={application.coverImageUrl}
                         />
                       ) : (

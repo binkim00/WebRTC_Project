@@ -63,6 +63,12 @@ export function localizeNotificationTitle(type: NotificationType, title: string)
       return translate('serverText.notif.meetingCanceled.title')
     case 'MEETING_PUBLISHED':
       return translate('serverText.notif.meetingPublished.title')
+    case 'ORGANIZATION_INVITED':
+      return translate('serverText.notif.organizationInvited.title')
+    case 'ORGANIZATION_INVITATION_ACCEPTED':
+      return translate('serverText.notif.organizationInvitationAccepted.title')
+    case 'ORGANIZATION_MEMBER_REMOVED':
+      return translate('serverText.notif.organizationMemberRemoved.title')
     default:
       // 프론트가 모르는 새 유형은 대체 문구를 지어내지 않고 서버 원문을 그대로 둔다.
       return title

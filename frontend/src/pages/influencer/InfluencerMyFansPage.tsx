@@ -406,6 +406,8 @@ export function InfluencerMyFansPage() {
                           <img
                             alt={selected.nickname}
                             className="size-[52px] flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+                            decoding="async"
+                            loading="lazy"
                             src={selected.profileImageUrl}
                           />
                         ) : (
@@ -599,6 +601,8 @@ function FollowerList({
                   <img
                     alt={follower.nickname}
                     className="size-11 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+                    decoding="async"
+                    loading="lazy"
                     src={follower.profileImageUrl}
                   />
                 ) : (

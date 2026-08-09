@@ -8,6 +8,9 @@ import ringLight from '../../assets/landing/ring-light.webp'
 import timer from '../../assets/landing/timer.webp'
 import './landing.css'
 import { useTranslation } from '../../i18n'
+import { useSearchParams } from 'react-router-dom'
+import { getAuthSession, isLoginRole, type LoginResponse } from '../../api/authSession'
+import { RoleDashboardPage } from './RoleDashboardPage'
 
 const particlePalette = ['#f5aca1', '#f3d76c', '#b8e3d3', '#d9c7f4', '#b9dbf6']
 
@@ -26,6 +29,30 @@ const floatObjects = [
  */
 export function LandingPage() {
   const { t } = useTranslation()
+  const [searchParams] = useSearchParams()
+  const session = getAuthSession()
+  const requestedPreviewRole = import.meta.env.DEV
+    ? searchParams.get('dashboardRole')
+    : null
+  const previewSession: LoginResponse | null = isLoginRole(requestedPreviewRole)
+    ? {
+        accessToken: 'dashboard-preview',
+        refreshToken: 'dashboard-preview',
+        expiresIn: 3600,
+        userId: 1,
+        role: requestedPreviewRole,
+        nickname:
+          requestedPreviewRole === 'FAN'
+            ? '민지'
+            : requestedPreviewRole === 'MANAGER'
+              ? '민준'
+              : requestedPreviewRole === 'ADMIN'
+                ? '관리자'
+                : requestedPreviewRole === 'SOLO_INFLUENCER'
+                  ? '도현'
+                  : '서윤',
+      }
+    : null
   const heroRef = useRef<HTMLElement>(null)
 
   // 원본 script.js의 파티클 생성·포인터 패럴랙스·젤리 보잉 인터랙션을 그대로 옮겼다.
@@ -133,6 +160,15 @@ export function LandingPage() {
     }
   }, [])
 
+  if (session || previewSession) {
+    return (
+      <RoleDashboardPage
+        preview={previewSession !== null && session === null}
+        session={session ?? previewSession!}
+      />
+    )
+  }
+
   return (
     // App main의 패딩(py-8, lg:pt-10/pb-16)을 상하 각각 정확히 상쇄해야 히어로가 화면을 꽉 채운다.
     <section
@@ -147,13 +183,14 @@ export function LandingPage() {
           alt=""
           className={`float-object ${object.className}`}
           data-depth={object.depth}
+          decoding="async"
           key={object.className}
           src={object.src}
         />
       ))}
 
       <div className="hero-copy">
-        <img alt="Melly" className="wordmark" src={wordmark} />
+        <img alt="Melly" className="wordmark" decoding="async" src={wordmark} />
         <h1 id="hero-title">
           {t('landingPage.t1')}
           <br />

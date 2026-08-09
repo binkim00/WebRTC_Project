@@ -116,6 +116,46 @@ export async function updateMyProfile(
 }
 
 /**
+ * 비밀번호 변경 결과다.
+ *
+ * reloginRequired는 항상 true다. 백엔드가 변경과 동시에 모든 기기의 로그인 세션을 끊으므로
+ * 호출한 화면은 반드시 세션을 정리하고 로그인 화면으로 안내해야 한다.
+ */
+export type PasswordChangeResult = {
+  changedAt: string
+  reloginRequired: boolean
+}
+
+/**
+ * 로그인한 사용자의 비밀번호를 바꾼다. 본인 확인을 위해 현재 비밀번호가 필요하다.
+ *
+ * 현재 비밀번호가 다르면 400(USER_PASSWORD_MISMATCH), 새 비밀번호가 규칙을 만족하지 않으면
+ * 400(PASSWORD_POLICY_VIOLATION), 소셜 로그인만 쓰는 계정이면 409(PASSWORD_CHANGE_NOT_AVAILABLE)다.
+ */
+export async function changeMyPassword(
+  currentPassword: string,
+  newPassword: string,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<PasswordChangeResult> {
+  const response = await apiRequest<ApiEnvelope<unknown>>('/api/v1/users/me/password', {
+    method: 'PATCH',
+    authToken,
+    signal,
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+
+  if (!response.success || !isRecord(response.data)) {
+    throw new TypeError(translate('accountSecurity.invalidResponse'))
+  }
+
+  return {
+    changedAt: typeof response.data.changedAt === 'string' ? response.data.changedAt : '',
+    reloginRequired: response.data.reloginRequired !== false,
+  }
+}
+
+/**
  * 회원을 탈퇴 처리한다. 본인 확인을 위해 현재 비밀번호가 필요하다.
  *
  * 백엔드가 Authorization 헤더의 토큰까지 무효화하므로 성공 뒤에는 세션을 반드시 정리해야 한다.

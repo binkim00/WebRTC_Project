@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { getAvailableActions, normalizeDetailTab } from './meetingLifecycle'
+import {
+  deriveScheduleDefaults,
+  getAvailableActions,
+  getScheduleErrors,
+  normalizeDetailTab,
+} from './meetingLifecycle'
 
 const NOW = new Date('2026-08-03T12:00:00.000Z')
 
@@ -117,5 +122,61 @@ describe('normalizeDetailTab', () => {
   it('알 수 없는 탭이나 값이 없으면 개요로 보낸다', () => {
     expect(normalizeDetailTab('unknown-tab')).toBe('overview')
     expect(normalizeDetailTab(null)).toBe('overview')
+  })
+})
+
+describe('deriveScheduleDefaults - 예정 일시 기준 일정 자동 채움', () => {
+  const now = new Date('2026-08-03T12:00:00')
+
+  it('여유가 충분하면 표준 간격(마감 24시간 전, 발표 23시간 전, 오픈 30분 전)으로 채운다', () => {
+    const defaults = deriveScheduleDefaults('2026-08-20T19:00', now)
+
+    expect(defaults).toEqual({
+      applicationStartAt: '2026-08-13T19:00',
+      applicationEndAt: '2026-08-19T19:00',
+      resultAnnouncementAt: '2026-08-19T20:00',
+      queueOpenAt: '2026-08-20T18:30',
+    })
+  })
+
+  it('응모 시작이 과거가 되지 않도록 지금+10분을 하한으로 쓴다', () => {
+    const defaults = deriveScheduleDefaults('2026-08-05T19:00', now)
+
+    expect(defaults?.applicationStartAt).toBe('2026-08-03T12:10')
+    expect(defaults?.applicationEndAt).toBe('2026-08-04T19:00')
+  })
+
+  it('예정 일시가 임박하면 지금+10분~예정 일시 구간을 압축해 순서를 지킨다', () => {
+    const defaults = deriveScheduleDefaults('2026-08-03T15:00', now)
+
+    expect(defaults).not.toBeNull()
+    const points = [
+      defaults?.applicationStartAt,
+      defaults?.applicationEndAt,
+      defaults?.resultAnnouncementAt,
+      defaults?.queueOpenAt,
+      '2026-08-03T15:00',
+    ].map((value) => new Date(value ?? '').getTime())
+    for (let i = 1; i < points.length; i += 1) {
+      expect(points[i]).toBeGreaterThan(points[i - 1] ?? Number.NaN)
+    }
+    // 자동값은 공통 검증 규칙도 통과해야 한다.
+    expect(
+      getScheduleErrors({
+        scheduledStartAt: '2026-08-03T15:00',
+        applicationEnabled: true,
+        applicationStartAt: defaults?.applicationStartAt ?? null,
+        applicationEndAt: defaults?.applicationEndAt ?? null,
+        resultAnnouncementAt: defaults?.resultAnnouncementAt ?? null,
+        queueOpenAt: defaults?.queueOpenAt ?? '',
+      }),
+    ).toEqual([])
+  })
+
+  it('예정 일시가 너무 임박하거나 과거·비정상 값이면 채우지 않는다', () => {
+    expect(deriveScheduleDefaults('2026-08-03T12:15', now)).toBeNull()
+    expect(deriveScheduleDefaults('2026-08-01T12:00', now)).toBeNull()
+    expect(deriveScheduleDefaults('', now)).toBeNull()
+    expect(deriveScheduleDefaults('not-a-date', now)).toBeNull()
   })
 })

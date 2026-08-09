@@ -6,6 +6,8 @@ import {
   getApplicationForm,
   submitApplication,
   withdrawApplication,
+  type ApplicationAnswerRequest,
+  type ApplicationFormQuestionResponse,
   type ApplicationFormResponse,
 } from '../../api/applications'
 import { getAuthSession } from '../../api/authSession'
@@ -18,8 +20,10 @@ import { isEmailVerificationEnabled } from '../../config/features'
 import {
   AlertBanner,
   Button,
+  Checkbox,
   Dialog,
   EmailVerificationNotice,
+  RadioGroup,
   Spinner,
   TextField,
   Textarea,
@@ -36,6 +40,38 @@ const agreementItems = [
 ] as const satisfies readonly { id: string; labelKey: TranslationKey }[]
 
 type AgreementId = (typeof agreementItems)[number]['id']
+
+/** 질문에 실제로 답했는지 판정한다. 주관식은 공백만 남은 입력을 답변으로 보지 않는다. */
+function isAnswered(
+  question: ApplicationFormQuestionResponse,
+  texts: Record<number, string>,
+  choices: Record<number, number[]>,
+): boolean {
+  if (question.questionType === 'SINGLE_CHOICE' || question.questionType === 'MULTIPLE_CHOICE') {
+    return (choices[question.questionId] ?? []).length > 0
+  }
+  return Boolean((texts[question.questionId] ?? '').trim())
+}
+
+/**
+ * 응모 요청에 담을 답변을 만든다.
+ *
+ * 백엔드는 주관식이면 value만, 객관식이면 optionIds만 받는다. 답하지 않은 선택 질문은
+ * 아예 보내지 않는다.
+ */
+function toAnswerRequests(
+  questions: ApplicationFormQuestionResponse[],
+  texts: Record<number, string>,
+  choices: Record<number, number[]>,
+): ApplicationAnswerRequest[] {
+  return questions
+    .filter((question) => isAnswered(question, texts, choices))
+    .map((question) =>
+      question.questionType === 'SINGLE_CHOICE' || question.questionType === 'MULTIPLE_CHOICE'
+        ? { questionId: question.questionId, optionIds: choices[question.questionId] ?? [] }
+        : { questionId: question.questionId, value: (texts[question.questionId] ?? '').trim() },
+    )
+}
 
 function pad(part: number) {
   return String(part).padStart(2, '0')
@@ -133,6 +169,32 @@ function HeroSeam({ glowOpacity, lineOpacity, animate }: {
   )
 }
 
+/** 객관식 질문의 라벨과 선택 방식 안내를 한 덩어리로 묶어 legend 안에 넣는다. */
+function ChoiceLegend({ label, hint }: { label: string; hint: string }) {
+  return (
+    <>
+      {label}
+      <span className="mt-1 block text-xs font-normal text-[var(--color-text-muted)]">{hint}</span>
+    </>
+  )
+}
+
+/**
+ * 선택지가 없는 객관식 질문 자리에 놓는 안내다.
+ *
+ * 서버가 선택지 2개 이상을 강제하므로 정상 경로에서는 나오지 않지만, 고를 수단이 없는 질문이
+ * 조용히 사라져 응모 버튼만 계속 잠기는 상황을 막으려고 이유를 보여 준다.
+ */
+function MissingOptionsNotice({ label }: { label: string }) {
+  const { t } = useTranslation()
+  return (
+    <div className="grid gap-1">
+      <p className="mj-font-label text-sm text-[var(--color-text-primary)]">{label}</p>
+      <p className="text-xs text-[var(--color-error)]">{t('fanEvent.form.noOptions')}</p>
+    </div>
+  )
+}
+
 export function FanEventDetailPage() {
   const { t } = useTranslation()
   // 팬 화면 경로는 '이벤트'라고 부르지만 실제 식별자는 팬미팅 ID다.
@@ -151,6 +213,8 @@ export function FanEventDetailPage() {
   const [formError, setFormError] = useState<string>()
   const [formReloadKey, setFormReloadKey] = useState(0)
   const [answers, setAnswers] = useState<Record<number, string>>({})
+  // 객관식 답변은 질문마다 고른 선택지 식별자 목록으로 들고 있다. 단일 선택도 길이 1의 배열이다.
+  const [selectedOptions, setSelectedOptions] = useState<Record<number, number[]>>({})
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string>()
@@ -244,7 +308,7 @@ export function FanEventDetailPage() {
   async function reloadDetail() {
     const authToken = getAuthSession()?.accessToken
     try {
-      setDetail(await fetchPublicFanMeetingDetail(meetingId, authToken))
+      setDetail(await fetchPublicFanMeetingDetail(meetingId, authToken, undefined, true))
     } catch {
       // 갱신 실패는 치명적이지 않으므로 화면 상태를 유지한다.
     }
@@ -264,8 +328,9 @@ export function FanEventDetailPage() {
     }
 
     const questions = applicationForm?.questions ?? []
+    // 버튼이 이미 막고 있지만, 오류 패널의 재시도 경로로도 들어오므로 여기서도 한 번 더 본다.
     const missingRequired = questions.filter(
-      (question) => question.required && !(answers[question.questionId] ?? '').trim(),
+      (question) => question.required && !isAnswered(question, answers, selectedOptions),
     )
     if (missingRequired.length > 0) {
       setSubmitError(
@@ -282,15 +347,11 @@ export function FanEventDetailPage() {
       await submitApplication(
         meetingId,
         {
-          // 현재 백엔드 ApplicationSubmitRequest는 개인정보 동의만 저장한다.
-          // 녹화·참여 동의는 UI에서 필수 확인하지만 지원되지 않는 필드를 임의 전송하지 않는다.
           personalInformationConsent: agreements.privacy,
-          answers: questions
-            .map((question) => ({
-              questionId: question.questionId,
-              value: (answers[question.questionId] ?? '').trim(),
-            }))
-            .filter((answer) => answer.value),
+          // 녹화 동의는 녹화를 쓰는 팬미팅에서만 화면에 나오고 서버도 그때만 요구한다.
+          recordingConsent: agreements.recording,
+          participationConsent: agreements.participation,
+          answers: toAnswerRequests(questions, answers, selectedOptions),
         },
         token,
       )
@@ -304,7 +365,10 @@ export function FanEventDetailPage() {
           return
         }
         setSubmitError(
-          reason.status === 401
+          reason.code === 'APPLICATION_PARTICIPATION_CONSENT_REQUIRED' ||
+          reason.code === 'APPLICATION_RECORDING_CONSENT_REQUIRED'
+            ? t('fanEvent.submit.needConsent')
+            : reason.status === 401
             ? t('fanEvent.submit.sessionExpired')
             : reason.status === 403
               ? t('fanEvent.submit.fanOnly')
@@ -338,6 +402,7 @@ export function FanEventDetailPage() {
     try {
       await withdrawApplication(meetingId, token)
       setAnswers({})
+      setSelectedOptions({})
       setAgreements({ privacy: false, recording: false, participation: false })
       await reloadDetail()
     } catch (reason) {
@@ -417,7 +482,21 @@ export function FanEventDetailPage() {
   const showEmailGate =
     isEmailVerificationEnabled && panel === 'open' && emailVerified === false && viewer.canApply
 
-  const ctaDisabled = !viewer.canApply || !allAgreed || formLoading || Boolean(formError) || submitting
+  const questions = [...(applicationForm?.questions ?? [])].sort(
+    (a, b) => a.displayOrder - b.displayOrder,
+  )
+  // 필수 질문도 동의 항목과 똑같이 다룬다. 누른 뒤 오류를 띄우지 않고 버튼 자체를 막는다.
+  const missingRequiredQuestions = questions.filter(
+    (question) => question.required && !isAnswered(question, answers, selectedOptions),
+  )
+
+  const ctaDisabled =
+    !viewer.canApply ||
+    !allAgreed ||
+    missingRequiredQuestions.length > 0 ||
+    formLoading ||
+    Boolean(formError) ||
+    submitting
   // 비활성 사유를 우선순위대로 하나만 보여 준다. aria-live로 상태 변화를 함께 알린다.
   const helperText = !viewer.canApply
     ? t('fanEvent.helper.notOpen')
@@ -425,9 +504,11 @@ export function FanEventDetailPage() {
       ? t('fanEvent.helper.formLoading')
       : formError
         ? t('fanEvent.helper.formError')
-        : allAgreed
-          ? t('fanEvent.helper.allAgreed')
-          : t('fanEvent.helper.needAgree', { count: visibleAgreementItems.length })
+        : missingRequiredQuestions.length > 0
+          ? t('fanEvent.helper.needAnswer', { count: missingRequiredQuestions.length })
+          : allAgreed
+            ? t('fanEvent.helper.allAgreed')
+            : t('fanEvent.helper.needAgree', { count: visibleAgreementItems.length })
 
   const badge =
     panel === 'applied'
@@ -464,21 +545,18 @@ export function FanEventDetailPage() {
     t('fanEvent.caution.moderation'),
   ]
 
-  const questions = [...(applicationForm?.questions ?? [])].sort(
-    (a, b) => a.displayOrder - b.displayOrder,
-  )
-
   return (
     <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
       <section
         aria-label={t('fanEvent.sectionAria')}
-        className="grid items-stretch border-b border-[var(--color-divider)] min-[1081px]:grid-cols-[minmax(0,1fr)_444px]"
+        className="mx-auto grid max-w-[1180px] items-start border-b border-[var(--color-divider)] min-[1081px]:grid-cols-[420px_minmax(0,1fr)]"
       >
-        <div className="relative min-h-[min(52vw,420px)] overflow-hidden bg-[var(--color-surface-muted)] min-[1081px]:min-h-[640px]">
+        <div className="relative h-[clamp(210px,40vw,300px)] w-full overflow-hidden bg-[var(--color-surface-muted)] min-[1081px]:h-[420px]">
           {meeting.coverImageUrl ? (
             <img
               alt={t('fanEvent.coverAlt', { title: meeting.title })}
               className={`absolute inset-0 size-full object-cover ${panel === 'closed' ? 'saturate-[0.68] brightness-[1.03]' : ''}`}
+              decoding="async"
               src={meeting.coverImageUrl}
             />
           ) : (
@@ -561,12 +639,72 @@ export function FanEventDetailPage() {
                   ) : null}
                   {questions.length > 0 ? (
                     <div className="mb-6 grid gap-4">
-                      {questions.map((question) =>
-                        question.questionType === 'LONG_TEXT' ? (
+                      {questions.map((question) => {
+                        const label = `${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`
+                        const selected = selectedOptions[question.questionId] ?? []
+
+                        if (question.questionType === 'SINGLE_CHOICE') {
+                          return question.options.length > 0 ? (
+                            <RadioGroup
+                              disabled={!viewer.canApply}
+                              key={question.questionId}
+                              legend={
+                                <ChoiceLegend hint={t('fanEvent.form.chooseOne')} label={label} />
+                              }
+                              name={`application-question-${question.questionId}`}
+                              onValueChange={(value) =>
+                                setSelectedOptions((current) => ({
+                                  ...current,
+                                  [question.questionId]: [Number(value)],
+                                }))
+                              }
+                              options={question.options.map((option) => ({
+                                label: option.optionText,
+                                value: String(option.optionId),
+                              }))}
+                              value={selected.length > 0 ? String(selected[0]) : ''}
+                            />
+                          ) : (
+                            <MissingOptionsNotice key={question.questionId} label={label} />
+                          )
+                        }
+
+                        if (question.questionType === 'MULTIPLE_CHOICE') {
+                          return question.options.length > 0 ? (
+                            <fieldset className="grid gap-3" key={question.questionId}>
+                              <legend className="mj-font-label text-sm text-[var(--color-text-primary)]">
+                                <ChoiceLegend hint={t('fanEvent.form.chooseMany')} label={label} />
+                              </legend>
+                              {question.options.map((option) => (
+                                <Checkbox
+                                  checked={selected.includes(option.optionId)}
+                                  disabled={!viewer.canApply}
+                                  key={option.optionId}
+                                  label={option.optionText}
+                                  onChange={(event) =>
+                                    setSelectedOptions((current) => {
+                                      const previous = current[question.questionId] ?? []
+                                      return {
+                                        ...current,
+                                        [question.questionId]: event.target.checked
+                                          ? [...previous, option.optionId]
+                                          : previous.filter((id) => id !== option.optionId),
+                                      }
+                                    })
+                                  }
+                                />
+                              ))}
+                            </fieldset>
+                          ) : (
+                            <MissingOptionsNotice key={question.questionId} label={label} />
+                          )
+                        }
+
+                        return question.questionType === 'LONG_TEXT' ? (
                           <Textarea
                             disabled={!viewer.canApply}
                             key={question.questionId}
-                            label={`${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`}
+                            label={label}
                             rows={4}
                             value={answers[question.questionId] ?? ''}
                             onChange={(event) =>
@@ -580,7 +718,7 @@ export function FanEventDetailPage() {
                           <TextField
                             disabled={!viewer.canApply}
                             key={question.questionId}
-                            label={`${question.questionText}${question.required ? t('fanEvent.form.required') : ''}`}
+                            label={label}
                             value={answers[question.questionId] ?? ''}
                             onChange={(event) =>
                               setAnswers((current) => ({
@@ -589,8 +727,8 @@ export function FanEventDetailPage() {
                               }))
                             }
                           />
-                        ),
-                      )}
+                        )
+                      })}
                     </div>
                   ) : null}
                 </>
@@ -801,7 +939,36 @@ export function FanEventDetailPage() {
         onOpenChange={setConfirmOpen}
         open={confirmOpen}
         title={t('fanEvent.confirm.title')}
-      />
+      >
+        <div className="grid gap-4">
+          <section aria-labelledby="application-answer-review-title">
+            <h3 className="text-sm font-extrabold" id="application-answer-review-title">
+              {t('fanEvent.confirm.answersTitle')}
+            </h3>
+            {questions.length ? (
+              <dl className="mt-3 grid max-h-64 gap-3 overflow-y-auto rounded-lg bg-[var(--color-surface-subtle)] p-4">
+                {questions.map((question) => (
+                  <div className="min-w-0" key={question.questionId}>
+                    <dt className="text-xs font-bold text-[var(--color-text-muted)]">
+                      {question.questionText}
+                    </dt>
+                    <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold text-[var(--color-text-primary)]">
+                      {(answers[question.questionId] ?? '').trim() || t('fanEvent.confirm.noAnswer')}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p className="mt-2 text-sm text-[var(--color-text-muted)]">
+                {t('fanEvent.confirm.noQuestions')}
+              </p>
+            )}
+          </section>
+          <p className="text-sm font-semibold leading-6 text-[var(--color-text-body)]">
+            {t('fanEvent.confirm.agreementsChecked', { count: visibleAgreementItems.length })}
+          </p>
+        </div>
+      </Dialog>
     </div>
   )
 }

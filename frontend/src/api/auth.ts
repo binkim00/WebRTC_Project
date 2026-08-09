@@ -5,6 +5,7 @@ import {
   isLoginResponse,
   type LoginResponse,
 } from './authSession'
+import { buildQuery, unwrapEnvelope } from './envelope'
 import { translate } from '../i18n'
 
 export {
@@ -158,6 +159,96 @@ export async function signup(
   }
 
   return data
+}
+
+/** 가입 전에 중복을 확인할 수 있는 항목이다. 백엔드 `AvailabilityTarget` enum과 값을 맞춘다. */
+export type AvailabilityTarget = 'LOGIN_ID' | 'NICKNAME'
+
+/** 중복 확인 결과다. value는 백엔드가 앞뒤 공백을 제거한 뒤 실제로 확인한 값이다. */
+export type AvailabilityResult = {
+  target: AvailabilityTarget
+  value: string
+  available: boolean
+}
+
+/**
+ * 아이디·닉네임이 지금 가입에 쓸 수 있는 값인지 확인한다.
+ *
+ * 이메일은 확인 대상이 아니다(가입 여부를 그대로 알려 주는 통로가 되기 때문). 이메일 중복은
+ * 가입 요청 시점에 409로 돌아온다.
+ */
+export async function checkAvailability(
+  target: AvailabilityTarget,
+  value: string,
+  signal?: AbortSignal,
+): Promise<AvailabilityResult> {
+  const response = await apiRequest<unknown>(
+    `/api/v1/auth/availability${buildQuery({ type: target, value })}`,
+    { method: 'GET', signal },
+  )
+
+  const result = unwrapEnvelope<AvailabilityResult>(response)
+  if (typeof result?.available !== 'boolean') {
+    throw new TypeError(translate('accountSecurity.invalidResponse'))
+  }
+
+  return result
+}
+
+/**
+ * 비밀번호 재설정 메일 발송 결과다.
+ *
+ * 가입되지 않은 이메일이어도 같은 형태로 응답한다. devToken은 개발 프로파일에서만 채워진다.
+ */
+export type PasswordResetSendResult = {
+  email: string
+  expiresAt: string
+  resendAvailableAt: string
+  devToken?: string | null
+}
+
+/** 비밀번호 재설정 완료 결과다. loginId는 방금 비밀번호를 바꾼 계정의 아이디다. */
+export type PasswordResetConfirmResult = {
+  loginId: string
+  resetAt: string
+}
+
+/**
+ * 입력한 이메일로 비밀번호 재설정 링크를 보내 달라고 요청한다.
+ *
+ * 가입 여부를 응답으로 알 수 없다. 요청이 잦으면 429(TOO_MANY_REQUESTS)로 거부된다.
+ */
+export async function requestPasswordReset(
+  email: string,
+  signal?: AbortSignal,
+): Promise<PasswordResetSendResult> {
+  const response = await apiRequest<unknown>('/api/v1/auth/password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+    signal,
+  })
+
+  return unwrapEnvelope<PasswordResetSendResult>(response)
+}
+
+/**
+ * 메일 링크의 토큰으로 새 비밀번호를 확정한다.
+ *
+ * 백엔드는 만료·사용 완료·위조된 토큰을 구분하지 않고 모두
+ * 400(PASSWORD_RESET_TOKEN_INVALID) 하나로 응답한다.
+ */
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+  signal?: AbortSignal,
+): Promise<PasswordResetConfirmResult> {
+  const response = await apiRequest<unknown>('/api/v1/auth/password-reset/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword }),
+    signal,
+  })
+
+  return unwrapEnvelope<PasswordResetConfirmResult>(response)
 }
 
 export async function logout(signal?: AbortSignal): Promise<void> {

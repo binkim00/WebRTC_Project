@@ -29,6 +29,7 @@ export type NoticeDetailResponse = {
   content: string
   authorId: number
   authorNickname: string
+  /** 첨부한 이미지 중 표시 순서가 가장 앞선 것의 URL이고 이미지가 없으면 null이다. */
   thumbnailUrl: string | null
   /** 표시 순서대로 정렬된 첨부파일이며 없으면 빈 배열이다. */
   attachments: NoticeAttachmentResponse[]
@@ -48,7 +49,8 @@ export type NoticeCreateRequest = {
   /**
    * 연결할 첨부파일 식별자이며 보낸 순서가 표시 순서가 된다.
    *
-   * `POST /api/v1/attachments`로 먼저 업로드한 뒤 받은 식별자를 넘긴다.
+   * `POST /api/v1/attachments`에 **attachmentType=NOTICE**로 먼저 업로드한 뒤 받은 식별자를
+   * 넘긴다. 다른 용도로 올린 파일을 넘기면 `ATTACHMENT_TYPE_MISMATCH`로 거절된다.
    */
   attachmentIds?: number[]
 }
@@ -105,14 +107,21 @@ export async function getServiceNotices(
   return unwrapEnvelope<PageResponse<NoticeSummaryResponse>>(response)
 }
 
-/** 서비스 공지 상세를 조회한다. (인증 불필요) */
+/**
+ * 서비스 공지 상세를 조회한다.
+ *
+ * 비로그인도 읽을 수 있지만, 응답의 `canEdit`·`canDelete`는 **토큰을 보낸 경우에만** 채워진다.
+ * 서버는 로그인 정보가 없으면 두 값을 그냥 false로 내려 주므로, 수정·삭제 버튼을 이 값으로
+ * 정하는 화면은 토큰을 반드시 넘겨야 한다.
+ */
 export async function getServiceNotice(
   noticeId: string | number,
+  authToken?: string,
   signal?: AbortSignal,
 ): Promise<NoticeDetailResponse> {
   const response = await apiRequest<unknown>(
     `/api/v1/service-notices/${encodeURIComponent(String(noticeId))}`,
-    { method: 'GET', signal },
+    { method: 'GET', authToken, signal },
   )
 
   return unwrapEnvelope<NoticeDetailResponse>(response)

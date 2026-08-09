@@ -1,13 +1,23 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import {
+  clearAuthSession,
   getAuthSession,
   replaceAuthSession,
   type LoginRole,
 } from '../../api/authSession'
 import { PREFERRED_LANGUAGE_OPTIONS, preferredLanguageLabel } from '../../api/auth'
-import { getMyProfile, updateMyProfile, type UserProfile } from '../../api/users'
+import {
+  changeMyPassword,
+  getMyProfile,
+  updateMyProfile,
+  type UserProfile,
+} from '../../api/users'
+import {
+  getMyOrganization,
+  type MyOrganizationMembers,
+} from '../../api/organizations'
 import {
   AlertBanner,
   Button,
@@ -147,6 +157,7 @@ function errorMessage(reason: unknown, fallback: string) {
  */
 export function MyPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   // 소셜 연결 후 돌아올 경로로 쓴다. 역할마다 마이페이지 경로가 달라 현재 경로를 그대로 넘긴다.
   const location = useLocation()
   const authSession = getAuthSession()
@@ -164,6 +175,16 @@ export function MyPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string>()
   const [saveDone, setSaveDone] = useState(false)
+  const [organization, setOrganization] = useState<MyOrganizationMembers | null>()
+  const [organizationError, setOrganizationError] = useState<string>()
+
+  // 비밀번호 변경. 성공하면 백엔드가 모든 기기의 세션을 끊으므로 로그인 화면으로 되돌린다.
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordError, setPasswordError] = useState<string>()
 
   useEffect(() => {
     if (!authToken) {
@@ -193,6 +214,30 @@ export function MyPage() {
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken])
+
+  useEffect(() => {
+    if (!authToken || role !== 'INFLUENCER') {
+      setOrganization(undefined)
+      setOrganizationError(undefined)
+      return
+    }
+
+    const controller = new AbortController()
+    void getMyOrganization(authToken, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return
+        setOrganization(response)
+        setOrganizationError(undefined)
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        setOrganization(undefined)
+        setOrganizationError(errorMessage(reason, t('myPage.organization.loadFailed')))
+      })
+
+    return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, role])
 
   function openEdit() {
     if (!profile) return
@@ -239,6 +284,53 @@ export function MyPage() {
       .finally(() => setSaving(false))
   }
 
+  /** 비밀번호 변경 대화상자를 열거나 닫고, 닫을 때 입력값을 남기지 않는다. */
+  function handlePasswordOpenChange(open: boolean) {
+    if (!open) {
+      setCurrentPassword('')
+      setNewPassword('')
+      setNewPasswordConfirm('')
+      setPasswordError(undefined)
+    }
+    setPasswordOpen(open)
+  }
+
+  /**
+   * 현재 비밀번호를 확인해 새 비밀번호로 바꾼다.
+   *
+   * 성공하면 서버가 세션을 끊은 상태이므로 남은 토큰을 지우고 로그인 화면으로 안내한다.
+   */
+  function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!authToken || passwordSaving) return
+
+    if (!currentPassword) {
+      setPasswordError(t('accountSecurity.currentPasswordRequired'))
+      return
+    }
+    if (!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(newPassword)) {
+      setPasswordError(t('accountSecurity.passwordRule'))
+      return
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setPasswordError(t('accountSecurity.passwordMismatch'))
+      return
+    }
+
+    setPasswordSaving(true)
+    setPasswordError(undefined)
+
+    void changeMyPassword(currentPassword, newPassword, authToken)
+      .then(() => {
+        clearAuthSession()
+        navigate('/login', { replace: true, state: { notice: t('accountSecurity.changeDone') } })
+      })
+      .catch((reason: unknown) => {
+        setPasswordError(errorMessage(reason, t('accountSecurity.changeFailed')))
+      })
+      .finally(() => setPasswordSaving(false))
+  }
+
   const hasPhoto = Boolean(profile?.profileImageUrl)
 
   return (
@@ -274,6 +366,7 @@ export function MyPage() {
                 <img
                   alt={t('myPage.t63', { p0: profile.nickname })}
                   className="size-[104px] rounded-[10px] bg-[var(--color-surface-muted)] object-cover"
+                  decoding="async"
                   src={profile.profileImageUrl ?? undefined}
                 />
               ) : (
@@ -338,11 +431,10 @@ export function MyPage() {
                 </Button>
                 <Button
                   className="min-h-[50px] text-base"
-                  disabled
-                  title={t('myPage.t13')}
+                  onClick={() => setPasswordOpen(true)}
                   variant="secondary"
                 >
-                  {t('myPage.t14')}
+                  {t('accountSecurity.changeButton')}
                 </Button>
               </div>
             </div>
@@ -392,6 +484,63 @@ export function MyPage() {
             </div>
           </section>
 
+          {role === 'INFLUENCER' ? (
+            <section
+              aria-labelledby="mp-organization"
+              className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]"
+            >
+              <h2 className="text-lg font-extrabold tracking-[-0.028em]" id="mp-organization">
+                {t('myPage.organization.title')}
+              </h2>
+              {organizationError ? (
+                <AlertBanner className="mt-4" title={t('myPage.organization.errorTitle')} variant="warning">
+                  {organizationError}
+                </AlertBanner>
+              ) : organization === undefined ? (
+                <div className="mt-4 flex min-h-24 items-center justify-center rounded-[10px] bg-[var(--color-surface-subtle)]">
+                  <Spinner label={t('myPage.organization.loading')} size="sm" />
+                </div>
+              ) : organization === null ? (
+                <AlertBanner className="mt-4" title={t('myPage.organization.noneTitle')} variant="info">
+                  {t('myPage.organization.noneDescription')}
+                </AlertBanner>
+              ) : (
+                <div className="mt-4 grid gap-4 rounded-[10px] border border-[var(--color-divider)] p-[18px] sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">{t('myPage.organization.name')}</p>
+                    <p className="mt-1 break-words text-lg font-extrabold">{organization.organization.name}</p>
+                    {organization.organization.representativeName ? (
+                      <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                        {t('myPage.organization.representative', { name: organization.organization.representativeName })}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">{t('myPage.organization.managers')}</p>
+                    <p className="mt-1 break-words text-base font-bold">
+                      {organization.members
+                        .filter((member) => member.status === 'ACTIVE' && member.userRole === 'MANAGER')
+                        .map((member) => member.nickname)
+                        .join(', ') || t('myPage.organization.managerUnknown')}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">{t('myPage.organization.contactEmail')}</p>
+                    <a className="mt-1 block break-all text-base font-bold text-[var(--color-primary-coral)] hover:underline" href={`mailto:${organization.organization.contactEmail}`}>
+                      {organization.organization.contactEmail}
+                    </a>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">{t('myPage.organization.contactPhone')}</p>
+                    <a className="mt-1 block break-all text-base font-bold text-[var(--color-primary-coral)] hover:underline" href={`tel:${organization.organization.contactPhone}`}>
+                      {organization.organization.contactPhone}
+                    </a>
+                  </div>
+                </div>
+              )}
+            </section>
+          ) : null}
+
           {/*
             소셜 계정 연결 관리. 연결 흐름은 공급자 왕복이 필요하므로 돌아올 경로를 넘긴다.
             (콜백 화면이 이 값으로 '로그인 흐름'과 '연결 흐름'을 구분한다)
@@ -439,6 +588,60 @@ export function MyPage() {
           {saveError ? (
             <AlertBanner title={t('myPage.t21')} variant="error">
               {saveError}
+            </AlertBanner>
+          ) : null}
+        </form>
+      </Dialog>
+
+      <Dialog
+        description={t('accountSecurity.changeDescription')}
+        footer={
+          <>
+            <Button
+              disabled={passwordSaving}
+              onClick={() => handlePasswordOpenChange(false)}
+              variant="secondary"
+            >
+              {t('accountSecurity.close')}
+            </Button>
+            <Button form="mypage-password-form" loading={passwordSaving} type="submit">
+              {passwordSaving ? t('accountSecurity.changing') : t('accountSecurity.changeSubmit')}
+            </Button>
+          </>
+        }
+        onOpenChange={handlePasswordOpenChange}
+        open={passwordOpen}
+        title={t('accountSecurity.changeTitle')}
+      >
+        <form className="grid gap-4" id="mypage-password-form" onSubmit={handlePasswordSubmit}>
+          <TextField
+            autoComplete="current-password"
+            label={t('accountSecurity.currentPassword')}
+            onChange={(event) => setCurrentPassword(event.currentTarget.value)}
+            required
+            type="password"
+            value={currentPassword}
+          />
+          <TextField
+            autoComplete="new-password"
+            helperText={t('accountSecurity.passwordHint')}
+            label={t('accountSecurity.newPassword')}
+            onChange={(event) => setNewPassword(event.currentTarget.value)}
+            required
+            type="password"
+            value={newPassword}
+          />
+          <TextField
+            autoComplete="new-password"
+            label={t('accountSecurity.newPasswordConfirm')}
+            onChange={(event) => setNewPasswordConfirm(event.currentTarget.value)}
+            required
+            type="password"
+            value={newPasswordConfirm}
+          />
+          {passwordError ? (
+            <AlertBanner title={t('accountSecurity.errorTitle')} variant="error">
+              {passwordError}
             </AlertBanner>
           ) : null}
         </form>

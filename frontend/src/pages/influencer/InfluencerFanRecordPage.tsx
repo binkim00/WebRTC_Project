@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { parseServerDate } from '../../api/serverTime'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
-import { getCallSummary } from '../../api/aiSummaries'
+import { CALL_SUMMARY_POLL_INTERVAL_MS, getCallSummary } from '../../api/aiSummaries'
 import { getAuthSession } from '../../api/authSession'
 import { recallFanCallSession } from '../../api/callSessionLog'
 import {
@@ -12,8 +12,8 @@ import {
   type FanMeetingParticipant,
   type FanMemo,
 } from '../../api/fanMeetingParticipants'
-import { createFanMemo, updateFanMemo } from '../../api/fanMemos'
-import { Button } from '../../components'
+import { createFanMemo, deleteFanMemo, updateFanMemo } from '../../api/fanMemos'
+import { Button, Dialog } from '../../components'
 import { useTranslation } from '../../i18n'
 
 /** 백엔드 팬 메모 계약의 상한이다. */
@@ -75,6 +75,7 @@ function errorMessage(reason: unknown, fallback: string) {
 export function InfluencerFanRecordPage() {
   const { t } = useTranslation()
   const { fanMeetingId, fanId } = useParams<{ fanMeetingId: string; fanId: string }>()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const authToken = getAuthSession()?.accessToken
   // 통화 화면에서 넘어온 경우에만 세션을 알 수 있다. 참가자 응답에는 통화 세션이 없다.
@@ -92,6 +93,10 @@ export function InfluencerFanRecordPage() {
   const [draft, setDraft] = useState('')
   const [savedMeetingId, setSavedMeetingId] = useState<string>()
   const [saving, setSaving] = useState(false)
+  /** 방금 메모를 지운 회차다. 안내 문구를 그 회차를 보고 있는 동안에만 띄운다. */
+  const [deletedMeetingId, setDeletedMeetingId] = useState<string>()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [summaryLines, setSummaryLines] = useState<string[]>([])
   /** 요약을 보여 줄 수 없을 때의 이유 안내다. 요약이 표시되면 비운다. */
   const [summaryNotice, setSummaryNotice] = useState<string>()
@@ -263,11 +268,15 @@ export function InfluencerFanRecordPage() {
       return
     }
 
+    const callSessionId = summarySessionId
+    const token = authToken
     const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
     setSummaryNotice(undefined)
 
-    void getCallSummary(summarySessionId, authToken, controller.signal)
-      .then((result) => {
+    async function loadSummary() {
+      try {
+        const result = await getCallSummary(callSessionId, token, controller.signal)
         if (controller.signal.aborted) return
         if (result.state === 'COMPLETED') {
           setSummaryLines(
@@ -281,15 +290,21 @@ export function InfluencerFanRecordPage() {
         }
         setSummaryLines([])
         setSummaryNotice(t('influencerFanRecordPage.summary.generating'))
-      })
-      .catch(() => {
+        timer = setTimeout(() => void loadSummary(), CALL_SUMMARY_POLL_INTERVAL_MS)
+      } catch {
         // 요약이 아직 없거나 조회에 실패하면 줄을 비워 두고 안내 문구만 남긴다.
         if (controller.signal.aborted) return
         setSummaryLines([])
         setSummaryNotice(t('influencerFanRecordPage.summary.failed'))
-      })
+      }
+    }
 
-    return () => controller.abort()
+    void loadSummary()
+
+    return () => {
+      controller.abort()
+      if (timer) clearTimeout(timer)
+    }
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, selected, summarySessionId])
@@ -298,6 +313,7 @@ export function InfluencerFanRecordPage() {
   const hasMemo = Boolean(selected?.memo.trim())
   const canSave = draft.trim().length > 0
   const justSaved = Boolean(selected && savedMeetingId === selected.meetingId)
+  const justDeleted = Boolean(selected && deletedMeetingId === selected.meetingId)
 
   function selectSession(meetingId: string) {
     setSessionPicked(true)
@@ -305,6 +321,7 @@ export function InfluencerFanRecordPage() {
     setEditingMeetingId(undefined)
     setDraft('')
     setSavedMeetingId(undefined)
+    setDeletedMeetingId(undefined)
   }
 
   function startEdit() {
@@ -312,11 +329,25 @@ export function InfluencerFanRecordPage() {
     setEditingMeetingId(selected.meetingId)
     setDraft(selected.memo)
     setSavedMeetingId(undefined)
+    setDeletedMeetingId(undefined)
   }
 
   function cancelEdit() {
     setEditingMeetingId(undefined)
     setDraft('')
+  }
+
+  /**
+   * AI 통화 요약을 메모 입력란에 그대로 붙여 넣는다.
+   * 이미 쓰던 내용이 있으면 줄을 바꿔 뒤에 잇고, 백엔드 상한(300자)에 맞춰 자른다.
+   */
+  function pasteSummaryIntoDraft() {
+    const summaryText = summaryLines.join('\n')
+    if (!summaryText) return
+    setDraft((current) => {
+      const merged = current.trim() ? `${current.trimEnd()}\n${summaryText}` : summaryText
+      return merged.slice(0, MEMO_MAX_LENGTH)
+    })
   }
 
   function save() {
@@ -343,12 +374,42 @@ export function InfluencerFanRecordPage() {
         setEditingMeetingId(undefined)
         setDraft('')
         setSavedMeetingId(target)
+        setDeletedMeetingId(undefined)
         return loadMemos()
       })
       .catch((reason: unknown) => {
         setPageError(errorMessage(reason, t('influencerFanRecordPage.t21')))
       })
       .finally(() => setSaving(false))
+  }
+
+  /**
+   * 선택한 회차의 메모를 지운다.
+   *
+   * 잘못 적은 메모를 되돌릴 방법이 화면에 없어 덮어쓰기밖에 할 수 없었다. 지운 뒤에는 같은
+   * 회차에 다시 쓸 수 있고, 지난 회차는 메모가 곧 회차 기록이므로 목록에서도 함께 사라진다.
+   */
+  function removeMemo() {
+    const memoId = selected?.memoId
+    const target = selected?.meetingId
+    if (!memoId || !target || !authToken || deleting) return
+
+    setDeleting(true)
+    setPageError(undefined)
+
+    void deleteFanMemo(memoId, authToken)
+      .then(() => {
+        setDeleteOpen(false)
+        setEditingMeetingId(undefined)
+        setDraft('')
+        setSavedMeetingId(undefined)
+        setDeletedMeetingId(target)
+        return loadMemos()
+      })
+      .catch((reason: unknown) => {
+        setPageError(errorMessage(reason, t('influencerFanRecordPage.s1DeleteFailed')))
+      })
+      .finally(() => setDeleting(false))
   }
 
   const fanName = participant?.nickname ?? t('influencerFanRecordPage.t32', { p0: fanId ?? '' }).trim()
@@ -363,13 +424,15 @@ export function InfluencerFanRecordPage() {
     ? pageError
     : justSaved
       ? t('influencerFanRecordPage.t24')
-      : editing
-        ? canSave
-          ? t('influencerFanRecordPage.t25')
-          : t('influencerFanRecordPage.t26')
-        : hasMemo
-          ? t('influencerFanRecordPage.t27')
-          : ''
+      : justDeleted
+        ? t('influencerFanRecordPage.s1Deleted')
+        : editing
+          ? canSave
+            ? t('influencerFanRecordPage.t25')
+            : t('influencerFanRecordPage.t26')
+          : hasMemo
+            ? t('influencerFanRecordPage.t27')
+            : ''
   const hintClassName = pageError
     ? 'text-[var(--color-error)]'
     : justSaved
@@ -394,6 +457,8 @@ export function InfluencerFanRecordPage() {
           <img
             alt={t('influencerFanRecordPage.t33', { p0: fanName })}
             className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+            decoding="async"
+            loading="lazy"
             src={participant.profileImageUrl}
           />
         ) : (
@@ -540,13 +605,25 @@ export function InfluencerFanRecordPage() {
                   </p>
                 </div>
                 {editing ? null : (
-                  <Button
-                    className="hover:border-[var(--color-primary-coral)] hover:bg-[var(--color-surface-panel)] hover:text-[var(--color-primary-coral)]"
-                    onClick={startEdit}
-                    variant="secondary"
-                  >
-                    {hasMemo ? t('influencerFanRecordPage.t30') : t('influencerFanRecordPage.t31')}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      className="hover:border-[var(--color-primary-coral)] hover:bg-[var(--color-surface-panel)] hover:text-[var(--color-primary-coral)]"
+                      onClick={startEdit}
+                      variant="secondary"
+                    >
+                      {hasMemo ? t('influencerFanRecordPage.t30') : t('influencerFanRecordPage.t31')}
+                    </Button>
+                    {/* 저장된 메모가 있는 회차에서만 지울 수 있다. */}
+                    {selected?.memoId ? (
+                      <Button
+                        className="hover:border-[var(--color-error)] hover:bg-[var(--color-surface-panel)] hover:text-[var(--color-error)]"
+                        onClick={() => setDeleteOpen(true)}
+                        variant="secondary"
+                      >
+                        {t('influencerFanRecordPage.s1Delete')}
+                      </Button>
+                    ) : null}
+                  </div>
                 )}
               </div>
 
@@ -569,6 +646,15 @@ export function InfluencerFanRecordPage() {
                     >
                       {t('influencerFanRecordPage.t15')}
                     </Button>
+                    {summaryLines.length > 0 ? (
+                      <Button
+                        className="hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+                        onClick={pasteSummaryIntoDraft}
+                        variant="secondary"
+                      >
+                        {t('influencerFanRecordPage.pasteSummary')}
+                      </Button>
+                    ) : null}
                     <Button
                       className="hover:border-[var(--color-text-muted)]"
                       onClick={cancelEdit}
@@ -594,10 +680,42 @@ export function InfluencerFanRecordPage() {
               <p aria-live="polite" className={`mt-[14px] text-sm font-semibold ${hintClassName}`}>
                 {hint}
               </p>
+
+              {/* 저장 직후에는 참가 팬 화면으로 돌아가 다음 팬을 이어서 정리하는 동선을 바로 연다. */}
+              {justSaved && fanMeetingId ? (
+                <button
+                  className="mt-3 inline-flex min-h-11 items-center rounded-[10px] bg-[var(--color-primary-coral)] px-5 text-sm font-extrabold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                  onClick={() =>
+                    navigate(`/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/fans`)
+                  }
+                  type="button"
+                >
+                  {t('influencerFanRecordPage.backToFans')}
+                </button>
+              ) : null}
             </section>
           </article>
         </div>
       )}
+
+      <Dialog
+        description={t('influencerFanRecordPage.s1DeleteDesc', { p0: selected?.title ?? '' })}
+        footer={
+          <>
+            <Button disabled={deleting} onClick={() => setDeleteOpen(false)} variant="secondary">
+              {t('influencerFanRecordPage.t16')}
+            </Button>
+            <Button loading={deleting} onClick={removeMemo} variant="danger">
+              {t('influencerFanRecordPage.s1DeleteConfirm')}
+            </Button>
+          </>
+        }
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteOpen(false)
+        }}
+        open={deleteOpen}
+        title={t('influencerFanRecordPage.s1DeleteTitle')}
+      />
     </div>
   )
 }

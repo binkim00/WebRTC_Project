@@ -7,6 +7,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
+  compareMeetingsNewestFirst,
   fetchMyMeetings,
   type ManagerMeetingPage,
   type ManagerMeetingSummary,
@@ -102,14 +103,7 @@ export function ManagerMeetingListPage() {
       )
       if (signal?.aborted) return
       // 서버 정렬이 보장되지 않는 환경에서도 최근 생성한 팬미팅이 먼저 보이도록 보정한다.
-      result.content.sort((left, right) => {
-        const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : Number.NaN
-        const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : Number.NaN
-        if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
-          return rightTime - leftTime
-        }
-        return Number(right.meetingId) - Number(left.meetingId)
-      })
+      result.content.sort(compareMeetingsNewestFirst)
       setMeetingPage(result)
       setError(undefined)
     } catch (cause) {

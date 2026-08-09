@@ -82,6 +82,7 @@ export function FanCardStickerPanel({
               <img
                 alt={sticker.name}
                 className="block aspect-square w-full"
+                decoding="async"
                 loading="lazy"
                 src={cardStickerUrl(sticker.code)}
               />
