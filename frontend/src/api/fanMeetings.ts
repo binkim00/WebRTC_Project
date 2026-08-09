@@ -70,6 +70,8 @@ export type PublicFanMeetingDetail = {
     operation: {
       /** 대기실 개방 시각이며 아직 설정되지 않았으면 null이다. */
       queueOpenAt: string | null
+      /** 서버 시각 기준 대기실 개방 여부다. 이 필드를 내려주지 않는 서버에서는 없을 수 있다. */
+      waitingRoomOpen?: boolean
       callDurationSec: number
       recordingEnabled: boolean
       translationEnabled: boolean
@@ -288,6 +290,12 @@ function parseDetail(value: unknown): PublicFanMeetingDetail {
           operation.queueOpenAt,
           'meeting.operation.queueOpenAt',
         ),
+        // 이 필드를 아직 내려주지 않는 서버에서도 상세 조회가 통째로 실패하지 않도록,
+        // 값이 없으면 없는 대로 둔다. (없으면 오픈 시각으로 판단한다)
+        waitingRoomOpen:
+          typeof operation.waitingRoomOpen === 'boolean'
+            ? operation.waitingRoomOpen
+            : undefined,
         callDurationSec: readNumber(
           operation.callDurationSec,
           'meeting.operation.callDurationSec',

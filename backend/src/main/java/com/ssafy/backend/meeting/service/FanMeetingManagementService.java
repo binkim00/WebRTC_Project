@@ -173,7 +173,7 @@ public class FanMeetingManagementService {
                 operationValues.reconnectGraceSec(), operationValues.earlyStartMinutes(),
                 operationValues.maxRecallCount());
         fanMeetingRepository.flush();
-        return FanMeetingManagementResponse.of(meeting, application, operation);
+        return response(meeting, application, operation);
     }
 
     /** 테스트용 상태와 주요 일정을 강제로 변경한다. */
@@ -190,7 +190,7 @@ public class FanMeetingManagementService {
         controlApplication(application, request);
         controlOperation(operation, request);
         fanMeetingRepository.flush();
-        return FanMeetingManagementResponse.of(meeting, application, operation);
+        return response(meeting, application, operation);
     }
 
     /** 테스트 요청의 응모 일정을 기존 값과 병합해 반영한다. */
@@ -529,9 +529,28 @@ public class FanMeetingManagementService {
 
     /** 팬미팅과 두 운영 설정을 관리 응답으로 변환한다. */
     private FanMeetingManagementResponse response(FanMeeting meeting) {
-        return FanMeetingManagementResponse.of(meeting,
+        return response(meeting,
                 requireApplicationSetting(meeting.getId()),
                 requireOperationSetting(meeting.getId()));
+    }
+
+    /**
+     * 이미 읽어 둔 설정으로 관리 응답을 만든다.
+     *
+     * <p>대기실 개방 여부는 서버 시각으로 판단해야 하므로 응답 변환을 이 한 곳으로 모아
+     * 같은 시계를 쓰게 한다.
+     *
+     * @param meeting 팬미팅 엔티티
+     * @param application 응모 설정
+     * @param operation 운영 설정
+     * @return 최신 팬미팅 관리 응답
+     */
+    private FanMeetingManagementResponse response(
+            FanMeeting meeting, MeetingApplicationSetting application,
+            MeetingOperationSetting operation
+    ) {
+        return FanMeetingManagementResponse.of(
+                meeting, application, operation, LocalDateTime.now(clock));
     }
 
     /** 팬미팅을 쓰기 잠금으로 조회한다. */

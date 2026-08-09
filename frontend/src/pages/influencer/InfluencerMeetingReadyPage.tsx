@@ -6,8 +6,8 @@ import { getAuthSession } from '../../api/authSession'
 import { ApiError } from '../../api/ApiError'
 import {
   endFanMeeting,
+  isWaitingRoomOpen,
   openWaitingRoomImmediately,
-  serverLocalDateTimeMs,
 } from '../../api/meetingManagement'
 import {
   callQueueEntry,
@@ -241,15 +241,14 @@ export function InfluencerMeetingReadyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanMeetingId])
 
-  /** 대기열 오픈 시각(밀리초). 상세 정보를 아직 불러오지 못했으면 undefined다. */
-  const queueOpenAtMs = useMemo(() => {
-    // 서버는 offset 없는 LocalDateTime을 보내므로 KST 기준으로 해석해야 한다.
-    const time = serverLocalDateTimeMs(detail?.meeting.operation.queueOpenAt ?? undefined)
-    return Number.isFinite(time) ? time : undefined
-  }, [detail?.meeting.operation.queueOpenAt])
-
-  /** 대기열 오픈 전인지 여부. 오픈 시각 정보가 없으면 기존처럼 바로 폴링한다. */
-  const isBeforeQueueOpen = queueOpenAtMs !== undefined && now < queueOpenAtMs
+  /**
+   * 대기열 오픈 전인지 여부다.
+   *
+   * 서버가 계산해 준 개방 여부를 먼저 본다. 브라우저 시각으로만 재면 "대기열 열기" 직후
+   * 서버는 이미 열어 뒀는데 화면은 아직 닫힌 것으로 보고 폴링을 시작하지 않는다.
+   * 개방 여부가 없는 응답에서는 예전처럼 오픈 시각과 현재 시각을 비교한다.
+   */
+  const isBeforeQueueOpen = !isWaitingRoomOpen(detail?.meeting.operation, now)
 
   // 대기열 정보를 3초마다 폴링한다. 오픈 전에는 백엔드가 QUEUE_NOT_INITIALIZED 오류를
   // 반환하므로 폴링하지 않고, 오픈 시각이 지나면 자동으로 폴링을 시작한다.

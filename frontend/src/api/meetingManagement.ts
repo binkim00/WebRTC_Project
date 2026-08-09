@@ -89,6 +89,8 @@ export type FanMeetingApplicationSetting = {
 
 export type FanMeetingOperationSetting = {
   queueOpenAt: string | null
+  /** 서버 시각 기준 대기실 개방 여부다. 이 필드를 내려주지 않는 서버에서는 없을 수 있다. */
+  waitingRoomOpen?: boolean
   callDurationSec: number
   recordingEnabled: boolean
   translationEnabled: boolean
@@ -175,15 +177,34 @@ export async function controlFanMeetingForTest(
 // 화면이 많아 이름 그대로 다시 내보낸다.
 export { serverLocalDateTimeMs }
 
+/** 대기실 개방 여부를 판단할 때 보는 운영 설정 조각이다. */
+export type WaitingRoomOpenState = {
+  /** 서버가 자기 시계로 계산해 내려준 개방 여부다. */
+  waitingRoomOpen?: boolean | null
+  /** 운영 설정의 대기열 오픈 일시다. */
+  queueOpenAt?: string | null
+}
+
 /**
- * 대기실 오픈 시각이 이미 지났는지 확인한다.
+ * 대기실이 열려 있는지 확인한다.
  *
- * 백엔드 `QueueCommandService.enter()`와 같은 기준이다. 오픈 시각이 없으면 제한이 없다고 본다.
+ * **서버가 내려준 `waitingRoomOpen`을 그대로 믿는다.** 입장 허용을 실제로 판정하는 쪽이
+ * 서버(`QueueCommandService.enter()`)이므로, 프론트가 브라우저 시각으로 따로 계산하면
+ * 시계 차이와 아직 갱신되지 않은 `queueOpenAt` 때문에 "서버는 열렸는데 화면만 닫힘"이 된다.
+ * 대기열을 막 연 직후가 정확히 그 상황이다.
  *
- * @param queueOpenAt 운영 설정의 대기열 오픈 일시
- * @param now 비교 기준 시각이며 기본값은 현재다
+ * 값이 없는 응답(그 필드를 아직 내려주지 않는 서버)에서만 예전처럼 시각을 비교한다.
+ *
+ * @param operation 팬미팅 운영 설정
+ * @param now 오픈 시각으로 대신 판단할 때 쓰는 기준 시각이며 기본값은 현재다
  */
-export function isWaitingRoomOpen(queueOpenAt?: string | null, now = Date.now()): boolean {
+export function isWaitingRoomOpen(
+  operation: WaitingRoomOpenState | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (typeof operation?.waitingRoomOpen === 'boolean') return operation.waitingRoomOpen
+
+  const queueOpenAt = operation?.queueOpenAt
   if (!queueOpenAt) return true
   const openAt = serverLocalDateTimeMs(queueOpenAt)
   return Number.isFinite(openAt) && now >= openAt
@@ -306,8 +327,8 @@ export function openWaitingRoomImmediately(
  * 어긋나면 팬미팅이 진행 중인데도 팬은 `WAITING_ROOM_NOT_OPEN`으로 계속 막히므로 시작과
  * 동시에 오픈 시각을 현재로 당긴다.
  *
- * 오픈 요청이 실패해도 시작 자체는 막지 않는다. 실제 오픈 여부는 응답의
- * `operation.queueOpenAt`을 {@link isWaitingRoomOpen}으로 다시 확인해 호출자가 안내한다.
+ * 오픈 요청이 실패해도 시작 자체는 막지 않는다. 실제 오픈 여부는 응답의 `operation`을
+ * {@link isWaitingRoomOpen}으로 다시 확인해 호출자가 안내한다.
  */
 export async function startFanMeetingWithOpenWaitingRoom(
   meetingId: string | number,

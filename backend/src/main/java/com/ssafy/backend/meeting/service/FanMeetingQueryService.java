@@ -167,7 +167,8 @@ public class FanMeetingQueryService {
         boolean canEnter = canEnter(meeting, operation, participant);
         return FanMeetingDetailResponse.of(
                 meeting, application, operation, applicationStatus,
-                participant == null ? null : participant.getStatus(), canApply, canEnter
+                participant == null ? null : participant.getStatus(), canApply, canEnter,
+                LocalDateTime.now(clock)
         );
     }
 
@@ -277,8 +278,7 @@ public class FanMeetingQueryService {
                 || meeting.getStatus() == FanMeetingStatus.ENDED) {
             return false;
         }
-        LocalDateTime openAt = operation.getWaitingRoomOpenAt();
-        return openAt == null || !LocalDateTime.now(clock).isBefore(openAt);
+        return operation.isWaitingRoomOpenAt(LocalDateTime.now(clock));
     }
 
     /**

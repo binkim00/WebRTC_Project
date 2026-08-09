@@ -32,19 +32,21 @@ public record FanMeetingManagementResponse(
      * @param meeting 팬미팅 엔티티
      * @param application 응모 설정
      * @param operation 운영 설정
+     * @param now 대기실 개방 여부를 판단할 서버 시각
      * @return 최신 팬미팅 관리 응답
      */
     public static FanMeetingManagementResponse of(
             FanMeeting meeting,
             MeetingApplicationSetting application,
-            MeetingOperationSetting operation
+            MeetingOperationSetting operation,
+            LocalDateTime now
     ) {
         return new FanMeetingManagementResponse(
                 meeting.getId(), meeting.getStatus(), meeting.getInfluencer().getId(),
                 meeting.getTitle(), meeting.getDescription(), meeting.getCoverImageUrl(),
                 meeting.getScheduledStartAt(), meeting.getPublishedAt(), meeting.getCanceledAt(),
                 meeting.getActualStartAt(), meeting.getActualEndAt(), meeting.getDeletedAt(),
-                ApplicationSetting.from(application), OperationSetting.from(operation)
+                ApplicationSetting.from(application), OperationSetting.from(operation, now)
         );
     }
 
@@ -71,14 +73,22 @@ public record FanMeetingManagementResponse(
         }
     }
 
-    /** 팬미팅 대기실과 개별 영상통화 운영 설정 응답이다. */
-    public record OperationSetting(LocalDateTime queueOpenAt, int callDurationSec,
+    /**
+     * 팬미팅 대기실과 개별 영상통화 운영 설정 응답이다.
+     *
+     * <p>{@code waitingRoomOpen}은 서버 시계로 판단한 대기실 개방 여부다. 클라이언트가
+     * {@code queueOpenAt}과 브라우저 시각을 직접 비교하면 시계 차이와 캐시된 이전 값 때문에
+     * 서버는 열렸다고 보는데 화면만 닫힌 것으로 안내하는 일이 생겨, 판단 결과를 함께 내려준다.
+     */
+    public record OperationSetting(LocalDateTime queueOpenAt, boolean waitingRoomOpen,
+                                   int callDurationSec,
                                    boolean recordingEnabled, boolean translationEnabled,
                                    int reconnectGraceSec, int earlyStartMinutes,
                                    int maxRecallCount) {
         /** 운영 설정 엔티티를 응답으로 변환한다. */
-        private static OperationSetting from(MeetingOperationSetting setting) {
+        private static OperationSetting from(MeetingOperationSetting setting, LocalDateTime now) {
             return new OperationSetting(setting.getWaitingRoomOpenAt(),
+                    setting.isWaitingRoomOpenAt(now),
                     setting.getCallDurationSec(), setting.isRecordingEnabled(),
                     setting.isTranslationEnabled(), setting.getReconnectGraceSec(),
                     setting.getEarlyStartMinutes(), setting.getMaxRecallCount());

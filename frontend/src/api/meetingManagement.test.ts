@@ -27,17 +27,32 @@ function stubFetch(status = 'APPLICATION_OPEN') {
 }
 
 describe('isWaitingRoomOpen', () => {
-  it('offset이 없는 서버 시각을 KST로 해석해 브라우저 시간대와 무관하게 판정한다', () => {
+  it('서버가 내려준 개방 여부를 오픈 시각보다 먼저 본다', () => {
+    // 대기열을 방금 연 직후다. 응답의 queueOpenAt이 아직 예전 값이어도 서버는 열렸다고 본다.
+    const beforeOpenAt = Date.parse('2026-08-03T02:59:59.000Z')
+
+    expect(
+      isWaitingRoomOpen(
+        { waitingRoomOpen: true, queueOpenAt: '2026-08-03T12:00:00' },
+        beforeOpenAt,
+      ),
+    ).toBe(true)
+    expect(
+      isWaitingRoomOpen({ waitingRoomOpen: false, queueOpenAt: null }, beforeOpenAt),
+    ).toBe(false)
+  })
+
+  it('개방 여부가 없으면 offset이 없는 서버 시각을 KST로 해석해 판정한다', () => {
     // 2026-08-03T12:00:00+09:00 === 2026-08-03T03:00:00Z
     const justBefore = Date.parse('2026-08-03T02:59:59.000Z')
     const justAfter = Date.parse('2026-08-03T03:00:01.000Z')
 
-    expect(isWaitingRoomOpen('2026-08-03T12:00:00', justBefore)).toBe(false)
-    expect(isWaitingRoomOpen('2026-08-03T12:00:00', justAfter)).toBe(true)
+    expect(isWaitingRoomOpen({ queueOpenAt: '2026-08-03T12:00:00' }, justBefore)).toBe(false)
+    expect(isWaitingRoomOpen({ queueOpenAt: '2026-08-03T12:00:00' }, justAfter)).toBe(true)
   })
 
   it('오픈 시각이 없으면 제한이 없다고 본다', () => {
-    expect(isWaitingRoomOpen(null)).toBe(true)
+    expect(isWaitingRoomOpen({ queueOpenAt: null })).toBe(true)
     expect(isWaitingRoomOpen(undefined)).toBe(true)
   })
 })

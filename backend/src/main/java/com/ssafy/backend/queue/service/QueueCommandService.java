@@ -106,7 +106,7 @@ public class QueueCommandService {
         LocalDateTime now = LocalDateTime.now(clock);
         MeetingOperationSetting setting = operationSettingRepository.findById(meetingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OPERATION_SETTING_NOT_FOUND));
-        if (setting.getWaitingRoomOpenAt() != null && now.isBefore(setting.getWaitingRoomOpenAt())) {
+        if (!setting.isWaitingRoomOpenAt(now)) {
             throw new BusinessException(ErrorCode.WAITING_ROOM_NOT_OPEN);
         }
         // 초기화는 별도 트랜잭션에서 커밋되므로 이 트랜잭션의 스냅샷 조회로는 보이지 않는다.

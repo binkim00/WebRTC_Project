@@ -444,8 +444,10 @@ export function ManagerMeetingMonitorPage() {
           : await endFanMeeting(fanMeetingId, token)
       setMeetingStatus(updated.status)
       // 시작했는데 대기열이 아직 닫혀 있으면 팬은 입장 시 409로 막힌다. 조용히 넘기지 않고 알린다.
+      // 서버가 계산해 준 개방 여부를 그대로 본다. 브라우저 시각으로 다시 재면 방금 연
+      // 대기열을 아직 닫힌 것으로 오해해 경고가 뜬다.
       setWaitingRoomWarning(
-        action !== 'end' && !isWaitingRoomOpen(updated.operation.queueOpenAt)
+        action !== 'end' && !isWaitingRoomOpen(updated.operation)
           ? t('managerMeetingMonitorPage.t62')
           : undefined,
       )

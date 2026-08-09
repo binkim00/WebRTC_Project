@@ -131,4 +131,17 @@ public class MeetingOperationSetting extends BaseTimeEntity {
         this.earlyStartMinutes = earlyStartMinutes;
         this.maxRecallCount = maxRecallCount;
     }
+
+    /**
+     * 주어진 서버 시각 기준으로 대기실이 열려 있는지 판단한다.
+     *
+     * <p>대기실 입장 검증과 조회 응답이 같은 기준을 쓰도록 판단을 여기 한 곳에 둔다. 개방 시각이
+     * 비어 있으면 시간 제한이 없는 팬미팅이므로 열린 것으로 본다.
+     *
+     * @param now 판단 기준이 되는 서버 시각
+     * @return 대기실이 열려 있으면 true
+     */
+    public boolean isWaitingRoomOpenAt(LocalDateTime now) {
+        return waitingRoomOpenAt == null || !now.isBefore(waitingRoomOpenAt);
+    }
 }
