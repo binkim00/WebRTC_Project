@@ -216,6 +216,20 @@ public class LiveKitWebhookService {
     /**
      * 팬과 호스트가 모두 접속했으면 세션 시간과 대기열 상태를 함께 시작한다.
      *
+     * <p>LiveKit webhook은 중복·지연 도착이 잦아 같은 통화에 입장 이벤트가 여러 번 들어온다.
+     * 그래서 세션 상태를 명시적으로 갈라 각각 한 번씩만 반응한다.
+     * <ul>
+     *   <li>{@code CONNECTING}: 최초 연결이므로 통화를 시작한다.</li>
+     *   <li>{@code ACTIVE}: 순간 재접속이므로 시작을 다시 하지 않고 재접속 유예만 해제한다.</li>
+     *   <li>{@code ENDED}·{@code FAILED}: 이미 끝난 통화에 늦게 도착한 이벤트이므로 아무것도
+     *       하지 않는다.</li>
+     * </ul>
+     *
+     * <p>종료된 세션에서 {@code activate()}를 부르면 도메인이 {@code IllegalStateException}을
+     * 올리고 webhook 응답이 500이 된다. 그러면 LiveKit이 같은 이벤트를 계속 재전송하고, 그때마다
+     * {@link #handle}이 멱등 표시를 되돌려 놓아 오류가 반복된다. 도메인 검증을 느슨하게 하는 대신
+     * 올바른 상태일 때만 호출해 끊는다.
+     *
      * @param callSession 시작 조건을 확인할 통화 세션
      * @throws BusinessException 팬미팅 운영 설정이 없는 경우
      */
@@ -225,9 +239,15 @@ public class LiveKitWebhookService {
             return;
         }
 
-        if (callSession.getStatus() == CallSessionStatus.ACTIVE) {
+        CallSessionStatus status = callSession.getStatus();
+        if (status == CallSessionStatus.ACTIVE) {
             callSession.resumeConnection();
             realtimeStore.clearDisconnectRole(callSession.getId());
+            return;
+        }
+        if (status != CallSessionStatus.CONNECTING) {
+            log.info("종료된 통화 세션의 입장 webhook을 무시한다. callSessionId={} status={}",
+                    callSession.getId(), status);
             return;
         }
 

@@ -612,6 +612,15 @@ async def generate_and_save_summary(
     """
     logger.info("요약 생성 시작 call_session_id=%s", call_session_id)
 
+    # 이미 완성된 요약이 있으면 손대지 않는다. 재접속처럼 종료 경로가 두 번 밟히면 같은 통화의
+    # 요약이 다시 시작되는데, 그때 start_call_summary가 완성본을 GENERATING으로 되돌려
+    # 조회 화면에서 보이던 요약이 사라진다.
+    if await _already_completed(pool, call_session_id):
+        logger.info(
+            "이미 완료된 요약이 있어 다시 만들지 않는다 call_session_id=%s", call_session_id
+        )
+        return
+
     # 자막 행이 있어도 원문이 전부 비어 있으면 모델에 넘길 소재가 없다. 몇 번을 다시
     # 물어도 결과가 달라지지 않으므로 재시도 없이 곧바로 실패로 확정한다. 조용히 끝내면
     # 행이 GENERATING으로 남아 조회 API가 계속 202를 돌려준다.
@@ -659,14 +668,43 @@ async def generate_and_save_summary(
         card_candidates,
     )
 
-    await queries.complete_call_summary(
+    updated = await queries.complete_call_summary(
         pool=pool,
         call_session_id=call_session_id,
         summary=summary,
         keywords=keywords,
         card_candidates=card_candidates,
     )
-    logger.info("요약 저장 완료 call_session_id=%s", call_session_id)
+    if updated == 0:
+        # 갱신된 행이 없다. 저장에 실패했는데 완료 로그만 남으면 화면에 요약이 안 보이는
+        # 이유를 로그에서 찾을 수 없으므로, 성공으로 기록하지 않는다.
+        logger.error(
+            "요약을 저장하지 못했다 — 갱신된 행이 없다 call_session_id=%s", call_session_id
+        )
+        return
+
+    logger.info(
+        "요약 저장 완료 call_session_id=%s rows=%s", call_session_id, updated
+    )
+
+
+async def _already_completed(pool, call_session_id: int) -> bool:
+    """이 통화의 요약이 이미 COMPLETED로 저장돼 있는지 확인한다.
+
+    상태 조회가 실패하면 요약을 만들지 못하게 막는 대신 진행한다. 조회 장애 때문에 아직 없는
+    요약까지 건너뛰면 화면에 아무것도 뜨지 않기 때문이다.
+
+    :param pool: DB 커넥션 풀
+    :param call_session_id: 통화 세션 식별자
+    :return: 이미 완료된 요약이 있으면 True
+    """
+    try:
+        return await queries.get_call_summary_status(pool, call_session_id) == "COMPLETED"
+    except Exception:
+        logger.exception(
+            "요약 상태 조회 실패 — 생성을 계속한다 call_session_id=%s", call_session_id
+        )
+        return False
 
 
 async def _load_fan_lang(pool, call_session_id: int) -> str | None:

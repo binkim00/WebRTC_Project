@@ -74,6 +74,29 @@ SUMMARY_WAIT_TIMEOUT_SECONDS = 90
 # 이 시간 안에 안 끝나면 그때 task를 cancel한다(안전장치).
 STT_DRAIN_TIMEOUT_SECONDS = 5
 
+# 팬 연결이 끊긴 뒤 실제 종료로 확정하기까지 기다리는 최대 시간의 기본값(초).
+#
+# LiveKit은 순간적인 네트워크 끊김에도 participant_disconnected를 보내고, 팬은 보통 1~2초 안에
+# 같은 통화로 돌아온다. 곧바로 종료하면 그 통화의 요약이 재접속 전후로 두 번 만들어지고
+# 자막도 끊긴다.
+#
+# 실제로는 통화마다 백엔드의 meeting_operation_settings.reconnect_grace_sec 를 읽어 쓴다.
+# 백엔드가 "아직 재접속할 수 있는 통화"로 보고 있는데 Agent가 먼저 끝내 요약을 만들어 버리면
+# 두 서비스의 판단이 어긋나기 때문이다. 이 상수는 그 값을 읽지 못했을 때만 쓰는 폴백이며
+# backend MeetingOperationSetting.DEFAULT_RECONNECT_GRACE_SEC 와 같은 값이다.
+DEFAULT_RECONNECT_GRACE_SECONDS = 60
+
+# 유예를 기다리는 동안 백엔드의 통화 상태를 다시 확인하는 간격(초).
+# 인플루언서가 통화를 끝내면 백엔드가 곧바로 세션을 ENDED로 바꾸므로, 유예를 끝까지 기다리지
+# 않고 이 주기로 알아채 요약을 시작한다. 백엔드 만료 스케줄러도 1초 주기로 돈다.
+BACKEND_STATE_POLL_SECONDS = 2
+
+# 백엔드 유예가 만료된 뒤 백엔드가 실제로 통화를 끝낼 때까지 더 기다려 주는 여유(초).
+# 백엔드는 만료 스케줄러가 도는 시점에 세션을 끝내므로 유예 시각보다 조금 늦다. 이 여유가
+# 없으면 Agent가 근소하게 먼저 요약을 만들고, 그 사이 팬이 돌아오면 마지막 대화가 요약에서
+# 빠진다. 백엔드가 끝내 응답하지 않을 때를 대비해 무한정 기다리지는 않는다.
+BACKEND_END_MARGIN_SECONDS = 5
+
 
 # ── 팬 1명과의 통화 상태 ─────────────────────────────────────────────────────
 
@@ -90,6 +113,8 @@ class CallState:
     assumed_influencer_lang: str
     need_translation: bool
     processor: SubtitleProcessor
+    # 이 통화가 속한 팬미팅의 재접속 유예시간(초). 백엔드 운영 설정에서 읽어 굳힌다.
+    reconnect_grace_sec: int = DEFAULT_RECONNECT_GRACE_SECONDS
     fan_audio_task: asyncio.Task | None = None
     influencer_audio_task: asyncio.Task | None = None
     influencer_adapter: DeepLVoiceAdapter | GoogleSTTAdapter | None = None
@@ -167,6 +192,14 @@ async def my_agent(ctx: JobContext) -> None:
     # 대기 시간을 초과한 통화는 상태를 실패로 남겨야 하므로 통화 식별자를 함께 보관한다.
     pending_summaries: dict[asyncio.Task, int] = {}
 
+    # 재접속 유예 중인 종료 예약이며 (통화 식별자, task) 형태다.
+    # 같은 팬이 유예 안에 돌아오면 취소하고, 유예를 넘기면 그때 실제 종료를 진행한다.
+    pending_end: tuple[int, asyncio.Task] | None = None
+
+    # 팬 입장 이벤트와 오디오 트랙 구독이 각각 통화 등록을 시도한다. 둘이 동시에 들어오면
+    # 같은 통화의 상태가 두 벌 만들어져 프로세서가 새는데, 이 잠금으로 등록을 직렬화한다.
+    call_setup_lock = asyncio.Lock()
+
     # 4. 인플루언서 트랙 저장용 (팬 입장 전에 트랙만 보관)
     influencer_track: rtc.Track | None = None
     influencer_participant: rtc.RemoteParticipant | None = None
@@ -228,17 +261,53 @@ async def my_agent(ctx: JobContext) -> None:
 
     # ── 팬 입장 처리 ──────────────────────────────────────────────────────
 
-    async def start_fan_call(participant: rtc.RemoteParticipant) -> None:
-        nonlocal current_call
+    def _create_adapter(target_lang: str, need_translation: bool):
+        """언어 조합에 맞는 STT 어댑터를 만든다.
 
-        # 퇴장 이벤트가 새 팬 입장보다 늦게 도착하면 이전 통화가 정리되지 않은 채 덮여
-        # 어댑터·STT task가 누수되고 그 통화의 요약도 트리거되지 않는다.
-        if current_call is not None:
-            logger.warning(
-                "이전 통화가 정리되지 않은 상태에서 새 팬 입장 — 먼저 정리한다 prev_call_session_id=%s",
-                current_call.call_session_id,
+        :param target_lang: 번역할 상대 언어 코드
+        :param need_translation: 두 참가자의 언어가 달라 번역이 필요한지 여부
+        :return: 번역이 필요하면 DeepL, 아니면 Google STT 어댑터
+        """
+        if need_translation:
+            return DeepLVoiceAdapter(api_key=DEEPL_API_KEY, target_lang=target_lang)
+        return GoogleSTTAdapter()
+
+    async def _load_reconnect_grace_sec(call_session_id: int) -> int:
+        """이 통화가 속한 팬미팅의 재접속 유예시간을 백엔드 설정에서 읽는다.
+
+        읽지 못하면 기본값으로 돌아간다. 유예를 몰라 통화를 시작조차 못 하는 것보다는
+        백엔드 기본값과 같은 값으로 진행하는 편이 낫다.
+
+        :param call_session_id: 통화 세션 식별자
+        :return: 재접속 유예시간(초)
+        """
+        try:
+            value = await queries.get_reconnect_grace_sec(pool, call_session_id)
+        except Exception:
+            logger.exception(
+                "재접속 유예시간 조회 실패 — 기본값 %s초를 쓴다 call_session_id=%s",
+                DEFAULT_RECONNECT_GRACE_SECONDS, call_session_id,
             )
-            await end_fan_call()
+            return DEFAULT_RECONNECT_GRACE_SECONDS
+
+        if not isinstance(value, int) or value <= 0:
+            return DEFAULT_RECONNECT_GRACE_SECONDS
+        return value
+
+    async def ensure_fan_call(participant: rtc.RemoteParticipant) -> CallState | None:
+        """팬 통화 상태를 등록하고 반환한다. 이미 같은 통화가 있으면 그대로 쓴다.
+
+        **오디오 트랙을 기다리지 않는다.** 통화 세션 등록은 팬이 입장한 시점의 attributes만으로
+        가능하고, 팬이 마이크를 켜지 않아 트랙 구독이 오지 않아도 통화는 진행되기 때문이다.
+        예전에는 트랙 구독 시점에만 상태를 만들어, 마이크를 켜지 않은 팬은 통화 상태가 아예
+        등록되지 않았고 종료 시 요약 흐름도 돌지 않았다.
+
+        STT는 여기서 시작하지 않는다. 실제 오디오 트랙이 도착했을 때 start_fan_stt가 건다.
+
+        :param participant: 입장한 팬 참가자
+        :return: 등록된 통화 상태이며 attributes가 올바르지 않으면 None
+        """
+        nonlocal current_call
 
         attributes = participant.attributes
         try:
@@ -250,63 +319,184 @@ async def my_agent(ctx: JobContext) -> None:
                 "팬 attributes 오류 participant=%s attributes=%s",
                 participant.identity, attributes,
             )
-            return
-        # 이 통화 동안 쓸 인플루언서 언어를 여기서 한 번 고정한다.
-        # 아래 need_translation 판정과 어댑터의 번역 방향이 모두 같은 값을 봐야 하며,
-        # 어댑터는 생성 시점 값을 그대로 굳히므로 나중에 influencer_lang이 바뀌어도
-        # 이 통화의 판정과 어긋나지 않게 한다.
-        assumed_influencer_lang = influencer_lang
-        need_translation = (assumed_influencer_lang != fan_lang)
+            return None
 
-        logger.info(
-            "팬 입장 fan=%s call_session_id=%s fan_lang=%s influencer_lang=%s need_translation=%s",
-            participant.identity, call_session_id, fan_lang,
-            assumed_influencer_lang, need_translation,
-        )
+        # 팬이 (다시) 들어왔으므로 예약해 둔 종료를 되돌린다.
+        cancel_pending_end("팬 입장")
 
-        # 시퀀스 카운터
-        seq_counters: dict[str, int] = {}
+        async with call_setup_lock:
+            if current_call is not None:
+                if current_call.call_session_id == call_session_id:
+                    # 같은 통화다. 입장 이벤트와 트랙 구독이 각각 부르므로 여기로 자주 들어온다.
+                    # 이미 만들어 둔 프로세서·시퀀스를 유지해야 자막 번호가 이어지고, 요약도
+                    # 한 번만 만들어진다.
+                    current_call.fan_identity = participant.identity
+                    return current_call
 
-        # 프로세서 생성
-        # 프로세서: 자막 표시
-        processor = SubtitleProcessor(
-            call_session_id=call_session_id,
-            local_participant=ctx.room.local_participant,
-            pool=pool,
-            sequence_counters=seq_counters,
-        )
+                # 퇴장 이벤트가 새 팬 입장보다 늦게 도착하면 이전 통화가 정리되지 않은 채 덮여
+                # 어댑터·STT task가 누수되고 그 통화의 요약도 트리거되지 않는다.
+                logger.warning(
+                    "이전 통화가 정리되지 않은 상태에서 새 팬 입장 — 먼저 정리한다 "
+                    "prev_call_session_id=%s",
+                    current_call.call_session_id,
+                )
+                await end_fan_call()
 
-        # 어댑터 생성 (언어 조합에 따라 분기)
-        if need_translation:
-            fan_adapter = DeepLVoiceAdapter(
-                api_key=DEEPL_API_KEY, target_lang=assumed_influencer_lang)
-            influencer_adapter = DeepLVoiceAdapter(api_key=DEEPL_API_KEY, target_lang=fan_lang)
-        else:
-            fan_adapter = GoogleSTTAdapter()
-            influencer_adapter = GoogleSTTAdapter()
+            # 이 통화 동안 쓸 인플루언서 언어를 여기서 한 번 고정한다.
+            # 아래 need_translation 판정과 어댑터의 번역 방향이 모두 같은 값을 봐야 하며,
+            # 어댑터는 생성 시점 값을 그대로 굳히므로 나중에 influencer_lang이 바뀌어도
+            # 이 통화의 판정과 어긋나지 않게 한다.
+            assumed_influencer_lang = influencer_lang
+            need_translation = (assumed_influencer_lang != fan_lang)
+            reconnect_grace_sec = await _load_reconnect_grace_sec(call_session_id)
 
-        current_call = CallState(
-            call_session_id=call_session_id,
-            user_id=user_id,
-            fan_identity=participant.identity,
-            fan_lang=fan_lang,
-            assumed_influencer_lang=assumed_influencer_lang,
-            need_translation=need_translation,
-            processor=processor,
-            influencer_adapter=influencer_adapter,
-            fan_adapter=fan_adapter,
-            sequence_counters=seq_counters,
-        )
-
-        # 인플루언서 트랙이 이미 있으면 인플루언서 STT 시작
-        if influencer_track is not None:
-            current_call.influencer_audio_task = asyncio.create_task(
-                _run_influencer_stt()
+            logger.info(
+                "팬 입장 fan=%s call_session_id=%s fan_lang=%s influencer_lang=%s "
+                "need_translation=%s reconnect_grace_sec=%s",
+                participant.identity, call_session_id, fan_lang,
+                assumed_influencer_lang, need_translation, reconnect_grace_sec,
             )
+
+            # 시퀀스 카운터
+            seq_counters: dict[str, int] = {}
+
+            # 프로세서 생성
+            # 프로세서: 자막 표시
+            processor = SubtitleProcessor(
+                call_session_id=call_session_id,
+                local_participant=ctx.room.local_participant,
+                pool=pool,
+                sequence_counters=seq_counters,
+            )
+
+            current_call = CallState(
+                call_session_id=call_session_id,
+                user_id=user_id,
+                fan_identity=participant.identity,
+                fan_lang=fan_lang,
+                assumed_influencer_lang=assumed_influencer_lang,
+                need_translation=need_translation,
+                processor=processor,
+                reconnect_grace_sec=reconnect_grace_sec,
+                influencer_adapter=_create_adapter(fan_lang, need_translation),
+                fan_adapter=None,
+                sequence_counters=seq_counters,
+            )
+
+            # 인플루언서 트랙이 이미 있으면 인플루언서 STT 시작
+            if influencer_track is not None:
+                current_call.influencer_audio_task = asyncio.create_task(
+                    _run_influencer_stt()
+                )
+
+            return current_call
+
+    async def register_fan_call(participant: rtc.RemoteParticipant) -> None:
+        """입장 이벤트에서 통화 상태만 등록한다.
+
+        여기서 실패해도 트랙 구독 경로가 다시 등록을 시도하므로 예외를 삼키고 남기기만 한다.
+
+        :param participant: 입장한 팬 참가자
+        """
+        try:
+            await ensure_fan_call(participant)
+        except Exception:
+            logger.exception("팬 통화 등록 실패 participant=%s", participant.identity)
 
     # ── 팬 퇴장 처리 ──────────────────────────────────────────────────────
 
+    def cancel_pending_end(reason: str) -> None:
+        """예약해 둔 종료를 취소한다. 예약이 없으면 아무것도 하지 않는다.
+
+        :param reason: 취소 사유이며 로그에만 쓴다
+        """
+        nonlocal pending_end
+        if pending_end is None:
+            return
+
+        call_session_id, task = pending_end
+        pending_end = None
+        task.cancel()
+        logger.info(
+            "재접속 유예 취소(%s) call_session_id=%s", reason, call_session_id
+        )
+
+    async def _backend_call_finished(call_session_id: int) -> bool:
+        """백엔드가 이 통화를 이미 끝냈는지 확인한다.
+
+        조회에 실패하면 아직 끝나지 않은 것으로 본다. 통화가 살아 있는데 끝났다고 단정해
+        요약을 먼저 만들어 버리는 쪽이 더 나쁘기 때문이다.
+
+        :param call_session_id: 통화 세션 식별자
+        :return: 통화 세션이 ENDED 또는 FAILED면 True
+        """
+        try:
+            status = await queries.get_call_session_status(pool, call_session_id)
+        except Exception:
+            logger.exception(
+                "통화 상태 조회 실패 — 유예를 계속 기다린다 call_session_id=%s", call_session_id
+            )
+            return False
+        return status in ("ENDED", "FAILED")
+
+    def schedule_end_after_grace(call_session_id: int, grace_seconds: int) -> None:
+        """재접속 유예가 지나도 팬이 돌아오지 않으면 통화를 종료하도록 예약한다.
+
+        유예를 그냥 세고만 있지 않는다. 백엔드가 통화를 끝냈으면(인플루언서가 종료했거나
+        통화 시간이 다 됐거나 백엔드 쪽 유예가 만료된 경우) 더 기다릴 이유가 없으므로
+        그 시점에 곧바로 마무리한다. 덕분에 정상 종료의 요약이 유예만큼 늦어지지 않는다.
+
+        :param call_session_id: 연결이 끊긴 통화의 식별자
+        :param grace_seconds: 이 팬미팅의 재접속 유예시간(초)
+        """
+        nonlocal pending_end
+        if pending_end is not None:
+            # 같은 통화에 퇴장 이벤트가 여러 번 와도 예약은 하나만 둔다.
+            return
+
+        async def end_after_grace() -> None:
+            nonlocal pending_end
+            # 백엔드가 유예 만료를 확정할 시간까지 조금 더 기다린다. 판단은 백엔드가 먼저 하고
+            # Agent는 그 결과를 따라가야 두 서비스가 어긋나지 않는다.
+            limit = grace_seconds + BACKEND_END_MARGIN_SECONDS
+            waited = 0
+            while waited < limit:
+                step = min(BACKEND_STATE_POLL_SECONDS, limit - waited)
+                await asyncio.sleep(step)
+                waited += step
+                if await _backend_call_finished(call_session_id):
+                    logger.info(
+                        "백엔드가 통화를 종료했다 — 유예를 더 기다리지 않는다 call_session_id=%s",
+                        call_session_id,
+                    )
+                    break
+            else:
+                logger.warning(
+                    "재접속 유예 %s초가 지나도 백엔드가 통화를 끝내지 않았다 — "
+                    "Agent 쪽에서 마무리한다 call_session_id=%s",
+                    limit, call_session_id,
+                )
+
+            # 여기서부터는 취소되지 않아야 한다. 유예가 끝난 뒤 팬이 돌아와도 정리는 그대로
+            # 마치고, 새 입장은 다음 통화로 다뤄야 요약이 빠지지 않는다.
+            pending_end = None
+            if current_call is None or current_call.call_session_id != call_session_id:
+                # 유예 중에 통화가 이미 정리됐거나 다른 팬으로 교체됐다.
+                return
+            await end_fan_call()
+
+        pending_end = (call_session_id, asyncio.create_task(end_after_grace()))
+        logger.info(
+            "팬 연결 끊김 — 최대 %s초 재접속 유예 후 종료한다 call_session_id=%s",
+            grace_seconds, call_session_id,
+        )
+
     async def end_fan_call() -> None:
+        """진행 중인 팬 통화를 정리하고 요약 생성을 예약한다.
+
+        재접속은 여기까지 오지 않는다. 같은 통화로 다시 붙은 경우 ensure_fan_call이 기존
+        상태를 그대로 쓰므로, 이 함수는 통화가 실제로 끝났을 때만 불린다.
+        """
         nonlocal current_call
         if current_call is None:
             return
@@ -315,7 +505,7 @@ async def my_agent(ctx: JobContext) -> None:
         current_call = None
 
         logger.info(
-            "팬 퇴장 처리 fan=%s call_session_id=%s",
+            "팬 통화 정리 fan=%s call_session_id=%s",
             call.fan_identity, call.call_session_id,
         )
 
@@ -344,6 +534,15 @@ async def my_agent(ctx: JobContext) -> None:
 
         # 3) 프로세서 정리 (httpx.AsyncClient close)
         await call.processor.close()
+
+        # 같은 통화의 요약이 이미 돌고 있으면 다시 걸지 않는다. 재접속처럼 종료 경로가 여러 번
+        # 밟히는 상황에서 같은 call_session_id의 요약이 동시에 두 번 실행되는 것을 막는다.
+        if call.call_session_id in pending_summaries.values():
+            logger.info(
+                "이미 진행 중인 요약이 있어 건너뛴다 call_session_id=%s",
+                call.call_session_id,
+            )
+            return
 
         # 이 통화에서 실제로 쓰던 언어를 그대로 넘긴다. 메모 초안은 인플루언서 언어로,
         # 팬 카드 문구는 팬 언어로 나와야 하는데 요약 시점에는 팬이 이미 나가서
@@ -385,6 +584,89 @@ async def my_agent(ctx: JobContext) -> None:
                 "요약 실패 상태 기록 실패 call_session_id=%s reason=%s",
                 call_session_id, reason,
             )
+
+    # ── 팬 STT 루프 ───────────────────────────────────────────────────────
+
+    async def start_fan_stt(participant: rtc.RemoteParticipant, track: rtc.Track) -> None:
+        """등록된 팬 통화에 실제 오디오 트랙을 붙여 STT를 시작한다.
+
+        통화 상태 등록(ensure_fan_call)과 분리돼 있다. 팬이 마이크를 켜지 않으면 이 함수는
+        아예 불리지 않지만, 통화 자체는 등록된 채로 진행되고 종료 시 요약 흐름도 돈다.
+
+        재접속으로 새 트랙이 오면 죽은 트랙에 물려 있던 이전 어댑터와 task를 먼저 정리하고
+        새 어댑터로 다시 건다. 프로세서와 시퀀스 카운터는 통화 것이므로 그대로 유지된다.
+
+        :param participant: 오디오를 발행한 팬 참가자
+        :param track: 구독된 팬 오디오 트랙
+        """
+        try:
+            call = await ensure_fan_call(participant)
+        except Exception:
+            logger.exception(
+                "팬 통화 시작 실패 — 이 팬의 자막을 만들 수 없다 participant=%s",
+                participant.identity,
+            )
+            return
+
+        if call is None:
+            return
+
+        # 재접속처럼 이전 트랙의 STT가 남아 있으면 먼저 끊는다. 죽은 오디오 스트림을 붙잡은
+        # 채로 두면 task가 계속 살아 있고, 어댑터도 정리되지 않는다.
+        previous_task = call.fan_audio_task
+        if previous_task is not None and not previous_task.done():
+            logger.info(
+                "이전 팬 STT를 정리하고 새 트랙으로 다시 시작한다 call_session_id=%s",
+                call.call_session_id,
+            )
+            if call.fan_adapter is not None:
+                try:
+                    await call.fan_adapter.close()
+                except Exception:
+                    logger.exception("이전 팬 STT 어댑터 close 실패")
+            previous_task.cancel()
+
+        adapter = _create_adapter(call.assumed_influencer_lang, call.need_translation)
+        call.fan_adapter = adapter
+        # 실행 중인 자기 자신을 등록한다.
+        # 별도 task에서 나중에 넣으면 ensure_fan_call의 await 지점에 따라 누락될 수 있다.
+        call.fan_audio_task = asyncio.current_task()
+
+        audio_stream = rtc.AudioStream(track)
+
+        async def on_final(transcript: FinalTranscript) -> None:
+            if current_call is call:
+                await call.processor.handle_final(
+                    transcript=transcript,
+                    speaker_id=call.user_id,
+                    speaker_role="FAN",
+                    target_lang=call.assumed_influencer_lang,
+                )
+
+        # 확정 전 부분 자막(번역 지연 감소용). DeepL만 호출하고 Google은 무시한다.
+        async def on_interim(text: str, translated_text: str | None, segment_id: int) -> None:
+            if current_call is call:
+                await call.processor.push_interim(
+                    speaker_role="FAN",
+                    segment_id=segment_id,
+                    text=text,
+                    original_lang=call.fan_lang,
+                    translated_text=translated_text,
+                    translated_lang=call.assumed_influencer_lang,
+                )
+
+        # 예외를 잡지 않으면 task가 조용히 죽어 자막이 멈춘 이유를 알 수 없다.
+        try:
+            await adapter.transcribe(
+                audio_stream=audio_stream,
+                language=call.fan_lang,
+                on_final=on_final,
+                on_interim=on_interim,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("팬 STT 중단 participant=%s", participant.identity)
 
     # ── 인플루언서 STT 루프 ───────────────────────────────────────────────
 
@@ -491,7 +773,7 @@ async def my_agent(ctx: JobContext) -> None:
                 participant.identity, influencer_lang,
             )
 
-            # 팬이 인플루언서보다 먼저 입장한 경우: start_fan_call 시점엔 트랙이 없어
+            # 팬이 인플루언서보다 먼저 입장한 경우: ensure_fan_call 시점엔 트랙이 없어
             # 인플루언서 STT가 시작되지 못했다. 활성 통화가 있고 STT가 아직 없으면 여기서 한 번만 시작.
             if current_call and (
                 current_call.influencer_audio_task is None
@@ -503,64 +785,9 @@ async def my_agent(ctx: JobContext) -> None:
                 logger.info("인플루언서 STT 지연 시작 (팬 먼저 입장 케이스)")
 
         elif role == "FAN":
-            # 팬 입장 → 통화 상태 생성 후 STT 시작
-            async def fan_stt_loop() -> None:
-                # start_fan_call()이 팬 attributes에서 call_session_id, fan_lang 읽고, 어댑터 생성하고, CallState 만듬
-                # 예외를 잡지 않으면 이 task가 조용히 죽어 자막이 하나도 안 나온 이유를 알 수 없다.
-                # (예: 같은 언어 통화에서 쓰는 Google STT 자격증명 파일을 읽지 못한 경우)
-                try:
-                    await start_fan_call(participant) # 여기서 _run_influencer_stt()도 실행됨
-                except Exception:
-                    logger.exception(
-                        "팬 통화 시작 실패 — 이 팬의 자막을 만들 수 없다 participant=%s",
-                        participant.identity,
-                    )
-                    return
-
-                if current_call is None:
-                    return
-
-                # 실행 중인 자기 자신을 등록한다.
-                # 별도 task에서 나중에 넣으면 start_fan_call의 await 지점에 따라 누락될 수 있다.
-                current_call.fan_audio_task = asyncio.current_task()
-
-                audio_stream = rtc.AudioStream(track)
-
-                async def on_final(transcript: FinalTranscript) -> None:
-                    if current_call and current_call.fan_identity == participant.identity:
-                        await current_call.processor.handle_final(
-                            transcript=transcript,
-                            speaker_id=current_call.user_id,
-                            speaker_role="FAN",
-                            target_lang=current_call.assumed_influencer_lang,
-                        )
-
-                # 확정 전 부분 자막(번역 지연 감소용). DeepL만 호출하고 Google은 무시한다.
-                async def on_interim(text: str, translated_text: str | None, segment_id: int) -> None:
-                    if current_call and current_call.fan_identity == participant.identity:
-                        await current_call.processor.push_interim(
-                            speaker_role="FAN",
-                            segment_id=segment_id,
-                            text=text,
-                            original_lang=current_call.fan_lang,
-                            translated_text=translated_text,
-                            translated_lang=current_call.assumed_influencer_lang,
-                        )
-
-                # 예외를 잡지 않으면 task가 조용히 죽어 자막이 멈춘 이유를 알 수 없다.
-                try:
-                    await current_call.fan_adapter.transcribe(
-                        audio_stream=audio_stream,
-                        language=current_call.fan_lang,
-                        on_final=on_final,
-                        on_interim=on_interim,
-                    )
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    logger.exception("팬 STT 중단 participant=%s", participant.identity)
-
-            asyncio.create_task(fan_stt_loop())
+            # 통화 상태는 입장 이벤트에서 이미 등록됐을 수 있다. 여기서는 그 상태에
+            # 실제 오디오를 붙여 STT만 시작한다. (입장 이벤트를 놓쳤다면 여기서 등록된다)
+            asyncio.create_task(start_fan_stt(participant, track))
             logger.info("팬 오디오 처리 시작 participant=%s", participant.identity)
 
     ctx.room.on("track_subscribed", on_track_subscribed)
@@ -571,6 +798,11 @@ async def my_agent(ctx: JobContext) -> None:
 
     def on_participant_connected(participant: rtc.RemoteParticipant) -> None:
         apply_influencer_language(participant)
+        # 팬은 마이크를 켜지 않을 수도 있고 트랙 구독이 늦게 올 수도 있다. 통화 등록을
+        # 트랙에 걸어 두면 그런 팬은 통화 상태가 만들어지지 않아 종료 시 요약도 돌지 않는다.
+        # attributes만으로 등록할 수 있으므로 여기서 먼저 등록하고, STT는 트랙이 올 때 건다.
+        if participant.attributes.get("role") == "FAN":
+            asyncio.create_task(register_fan_call(participant))
 
     ctx.room.on("participant_connected", on_participant_connected)
 
@@ -580,7 +812,12 @@ async def my_agent(ctx: JobContext) -> None:
         attributes = participant.attributes
         role = attributes.get("role")
         if role == "FAN" and current_call and current_call.fan_identity == participant.identity:
-            asyncio.create_task(end_fan_call())
+            # 곧바로 끝내지 않는다. 순간적인 네트워크 끊김과 실제 퇴장을 여기서는 구분할 수
+            # 없으므로, 유예 시간 안에 같은 팬이 돌아오면 ensure_fan_call이 이 예약을 취소한다.
+            # 유예 길이는 백엔드 운영 설정을 그대로 따른다.
+            schedule_end_after_grace(
+                current_call.call_session_id, current_call.reconnect_grace_sec
+            )
 
     ctx.room.on("participant_disconnected", on_participant_disconnected)
 
@@ -588,6 +825,8 @@ async def my_agent(ctx: JobContext) -> None:
 
     async def on_shutdown() -> None:
         logger.info("이벤트 종료 — shutdown 시작")
+        # 이벤트가 끝나면 팬이 돌아올 자리가 없다. 유예를 기다리지 않고 지금 확정한다.
+        cancel_pending_end("이벤트 종료")
         await end_fan_call()
         # 진행 중인 요약(방금 트리거된 것 포함)이 끝날 때까지 기다린 뒤 pool 종료.
         if pending_summaries:
@@ -623,14 +862,18 @@ async def my_agent(ctx: JobContext) -> None:
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     logger.info("Room 연결 완료 room=%s", ctx.room.name)
 
-    # Agent는 팬 호출 시점에 배치되므로 인플루언서가 이미 방에 있는 경우가 많다.
-    # 그때는 participant_connected가 오지 않으니 지금 있는 참가자를 한 번 훑어 언어를 확정한다.
+    # Agent는 팬 호출 시점에 배치되므로 인플루언서와 팬이 이미 방에 있는 경우가 많다.
+    # 그때는 participant_connected가 오지 않으니 지금 있는 참가자를 한 번 훑는다.
+    # 인플루언서는 언어를 확정하고, 팬은 통화 상태를 등록한다(마이크를 켜지 않아 트랙 구독이
+    # 오지 않는 팬도 이 경로로 등록된다).
     # 여기서 실패해도 통화는 계속돼야 하므로 예외를 삼키고 로그만 남긴다.
     try:
         for participant in list(ctx.room.remote_participants.values()):
             apply_influencer_language(participant)
+            if participant.attributes.get("role") == "FAN":
+                await register_fan_call(participant)
     except Exception:
-        logger.exception("기존 참가자에서 인플루언서 언어를 확정하지 못했다")
+        logger.exception("기존 참가자를 확인하지 못했다")
 
     logger.info("인플루언서 언어 확정 결과 influencer_lang=%s", influencer_lang)
 

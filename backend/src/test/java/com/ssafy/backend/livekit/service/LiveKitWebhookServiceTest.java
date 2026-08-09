@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -199,6 +201,29 @@ class LiveKitWebhookServiceTest {
         verify(realtimeStore).clearDisconnectRole(CALL_SESSION_ID);
         verify(callSession, never()).activate(STARTED_AT, 60);
         verifyNoInteractions(operationSettingRepository);
+    }
+
+    /**
+     * 이미 종료된 통화에 늦게 도착한 입장 webhook이 통화를 다시 시작하지 않는지 검증한다.
+     *
+     * <p>순간 재접속으로 퇴장과 입장이 1초 안에 오가면 종료 처리가 먼저 끝난 뒤 입장 이벤트가
+     * 도착할 수 있다. 그때 {@code activate()}를 부르면 도메인이 예외를 올려 webhook이 500이 된다.
+     */
+    @Test
+    void ignoresJoinWebhookForEndedCallSession() {
+        when(realtimeStore.claimWebhookEvent("fan-late-join-event")).thenReturn(true);
+        when(callSession.getStatus()).thenReturn(CallSessionStatus.ENDED);
+        when(callSessionRepository.findWebhookContextById(CALL_SESSION_ID))
+                .thenReturn(Optional.of(callSession));
+        when(realtimeStore.isHostConnected(ROOM_ID)).thenReturn(true);
+        when(realtimeStore.isFanConnected(CALL_SESSION_ID)).thenReturn(true);
+
+        service.handle(fanJoinedEvent("fan-late-join-event"));
+
+        verify(callSession, never()).activate(any(), anyInt());
+        verify(callSession, never()).resumeConnection();
+        verifyNoInteractions(operationSettingRepository);
+        verifyNoInteractions(recordingEgressCoordinator);
     }
 
     /**

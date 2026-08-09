@@ -69,6 +69,46 @@ async def get_call_session_fan_lang(pool, call_session_id: int) -> str | None:
             return row[0] if row else None
 
 
+# 통화 세션의 현재 상태 조회
+# 백엔드가 통화를 끝냈는지(ENDED/FAILED) 확인하는 용도다. 팬 연결이 끊겼을 때 Agent가
+# 재접속 유예를 끝까지 기다릴지, 아니면 곧바로 마무리할지 여기서 판단한다.
+async def get_call_session_status(pool, call_session_id: int) -> str | None:
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT status
+                FROM call_sessions
+                WHERE call_session_id = %s
+                """,
+                (call_session_id,),
+            )
+            row = await cur.fetchone()
+            return row[0] if row else None
+
+
+# 통화가 속한 팬미팅의 재접속 유예시간(초) 조회
+# 백엔드가 meeting_operation_settings.reconnect_grace_sec 로 관리하는 값이며,
+# 같은 끊김을 백엔드와 Agent가 다른 기준으로 판단하지 않도록 Agent도 이 값을 따른다.
+async def get_reconnect_grace_sec(pool, call_session_id: int) -> int | None:
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT setting.reconnect_grace_sec
+                FROM call_sessions AS call_session
+                JOIN queue_entries AS entry
+                  ON entry.queue_entry_id = call_session.queue_entry_id
+                JOIN meeting_operation_settings AS setting
+                  ON setting.meeting_id = entry.meeting_id
+                WHERE call_session.call_session_id = %s
+                """,
+                (call_session_id,),
+            )
+            row = await cur.fetchone()
+            return row[0] if row else None
+
+
 # 요약 생성 시작 표시
 # 백엔드가 "생성 중"과 "실패"를 구분하려면 성공 후가 아니라 시작 시점에 행이 있어야 한다.
 async def start_call_summary(pool, call_session_id: int) -> None:
@@ -96,13 +136,15 @@ async def start_call_summary(pool, call_session_id: int) -> None:
 # 요약 생성 성공
 # card_candidates는 팬이 기념 카드 문구를 고를 때 백엔드가 그대로 내려주는 후보 목록이다.
 # 요약과 같은 모델 호출에서 함께 받으므로 여기서 한 번에 저장한다.
+# 반환값은 실제로 갱신된 행 수다. 0이면 저장할 행이 없었다는 뜻이므로 호출 측이
+# "저장 완료"로 오해하지 않도록 반드시 확인해야 한다.
 async def complete_call_summary(
     pool,
     call_session_id: int,
     summary: str,
     keywords: list[str],
     card_candidates: list[str] | None = None,
-) -> None:
+) -> int:
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -120,7 +162,27 @@ async def complete_call_summary(
                  json.dumps(card_candidates or [], ensure_ascii=False),
                  now_kst(), call_session_id),
             )
+            updated = cur.rowcount
             await conn.commit()
+            return updated
+
+
+# 요약 생성 상태 조회
+# 같은 통화의 요약을 다시 만들려는 요청이 이미 완료된 결과를 GENERATING으로 되돌리지
+# 않도록, 생성 시작 전에 현재 상태를 확인하는 용도다.
+async def get_call_summary_status(pool, call_session_id: int) -> str | None:
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT status
+                FROM ai_call_summary
+                WHERE call_session_id = %s
+                """,
+                (call_session_id,),
+            )
+            row = await cur.fetchone()
+            return row[0] if row else None
 
 
 # 요약 생성 최종 실패
