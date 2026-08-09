@@ -1,8 +1,6 @@
 package com.ssafy.backend.post.dto;
 
-import com.ssafy.backend.post.domain.Attachment;
 import com.ssafy.backend.post.domain.Post;
-import com.ssafy.backend.post.support.AttachmentUrls;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,8 +14,8 @@ import java.util.List;
  * @param content 게시글 본문
  * @param authorId 작성자 식별자
  * @param authorNickname 작성자 닉네임
- * @param thumbnailUrl 첨부한 이미지 중 표시 순서가 가장 앞선 것의 URL이며 이미지가 없으면 null
- * @param attachments 표시 순서대로 정렬한 첨부파일 목록
+ * @param thumbnailUrl 썸네일 URL이며 첨부파일(ATTACH-001) 구현 전까지 항상 null
+ * @param attachments 첨부파일 목록이며 첨부파일 구현 전까지 항상 빈 배열
  * @param commentCount 삭제·숨김되지 않은 댓글 수
  * @param createdAt 작성 시각
  * @param updatedAt 최종 수정 시각
@@ -42,17 +40,15 @@ public record CommunityPostDetailResponse(
         boolean canDelete
 ) {
     /**
-     * 커뮤니티 게시글과 첨부파일, 조회자 권한을 상세 응답으로 변환한다.
+     * 커뮤니티 게시글과 조회자 권한을 상세 응답으로 변환한다.
      *
      * @param post 작성자·팬미팅을 함께 조회한 커뮤니티 게시글
-     * @param attachments 게시글에 연결된 첨부파일이며 표시 순서대로 정렬되어 있어야 한다
      * @param commentCount 노출 가능한 댓글 수
      * @param canEdit 조회자의 수정 가능 여부
      * @param canDelete 조회자의 삭제 가능 여부
      * @return 커뮤니티 게시글 상세 응답
      */
-    public static CommunityPostDetailResponse of(Post post, List<Attachment> attachments,
-                                                 long commentCount,
+    public static CommunityPostDetailResponse of(Post post, long commentCount,
                                                  boolean canEdit, boolean canDelete) {
         return new CommunityPostDetailResponse(
                 post.getId(),
@@ -61,9 +57,10 @@ public record CommunityPostDetailResponse(
                 post.getContent(),
                 post.getAuthor().getId(),
                 post.getAuthor().getNickname(),
-                // posts 테이블에 썸네일 컬럼이 없으므로 첨부 이미지를 대표로 승격한다.
-                AttachmentUrls.thumbnailUrl(attachments),
-                attachments.stream().map(NoticeAttachmentResponse::from).toList(),
+                // posts 테이블에 썸네일 컬럼이 없고 첨부파일이 아직 없으므로 항상 null이다.
+                null,
+                // 첨부파일 업로드(ATTACH-001)가 구현되기 전까지 첨부 목록은 항상 비어 있다.
+                List.of(),
                 commentCount,
                 post.getCreatedAt(),
                 post.getUpdatedAt(),

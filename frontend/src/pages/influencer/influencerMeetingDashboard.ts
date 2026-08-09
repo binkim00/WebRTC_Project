@@ -24,7 +24,10 @@ export function selectRecentMeeting(
   now = new Date(),
 ): ManagerMeetingSummary | undefined {
   const available = meetings.filter(
-    (meeting) => meeting.status !== 'CANCELED' && Number.isFinite(scheduledTime(meeting)),
+    (meeting) =>
+      meeting.status !== 'CANCELED' &&
+      meeting.status !== 'ENDED' &&
+      Number.isFinite(scheduledTime(meeting)),
   )
   const live = available
     .filter((meeting) => meeting.status === 'LIVE')
@@ -37,6 +40,7 @@ export function selectRecentMeeting(
     .sort((left, right) => scheduledTime(left) - scheduledTime(right))[0]
   if (upcoming) return upcoming
 
+  // 예정 시간을 지났더라도 READY 등 서버 상태가 아직 끝나지 않았다면 운영할 일정으로 유지한다.
   return available.sort((left, right) => scheduledTime(right) - scheduledTime(left))[0]
 }
 

@@ -308,7 +308,7 @@ export function FanEventDetailPage() {
   async function reloadDetail() {
     const authToken = getAuthSession()?.accessToken
     try {
-      setDetail(await fetchPublicFanMeetingDetail(meetingId, authToken))
+      setDetail(await fetchPublicFanMeetingDetail(meetingId, authToken, undefined, true))
     } catch {
       // 갱신 실패는 치명적이지 않으므로 화면 상태를 유지한다.
     }
@@ -549,9 +549,9 @@ export function FanEventDetailPage() {
     <div className="-mx-4 -mt-8 sm:-mx-6 lg:-mx-10 lg:-mt-10">
       <section
         aria-label={t('fanEvent.sectionAria')}
-        className="grid items-stretch border-b border-[var(--color-divider)] min-[1081px]:grid-cols-[minmax(0,1fr)_444px]"
+        className="mx-auto grid max-w-[1180px] items-start border-b border-[var(--color-divider)] min-[1081px]:grid-cols-[420px_minmax(0,1fr)]"
       >
-        <div className="relative min-h-[min(52vw,420px)] overflow-hidden bg-[var(--color-surface-muted)] min-[1081px]:min-h-[640px]">
+        <div className="relative h-[clamp(210px,40vw,300px)] w-full overflow-hidden bg-[var(--color-surface-muted)] min-[1081px]:h-[420px]">
           {meeting.coverImageUrl ? (
             <img
               alt={t('fanEvent.coverAlt', { title: meeting.title })}
@@ -939,7 +939,36 @@ export function FanEventDetailPage() {
         onOpenChange={setConfirmOpen}
         open={confirmOpen}
         title={t('fanEvent.confirm.title')}
-      />
+      >
+        <div className="grid gap-4">
+          <section aria-labelledby="application-answer-review-title">
+            <h3 className="text-sm font-extrabold" id="application-answer-review-title">
+              {t('fanEvent.confirm.answersTitle')}
+            </h3>
+            {questions.length ? (
+              <dl className="mt-3 grid max-h-64 gap-3 overflow-y-auto rounded-lg bg-[var(--color-surface-subtle)] p-4">
+                {questions.map((question) => (
+                  <div className="min-w-0" key={question.questionId}>
+                    <dt className="text-xs font-bold text-[var(--color-text-muted)]">
+                      {question.questionText}
+                    </dt>
+                    <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold text-[var(--color-text-primary)]">
+                      {(answers[question.questionId] ?? '').trim() || t('fanEvent.confirm.noAnswer')}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p className="mt-2 text-sm text-[var(--color-text-muted)]">
+                {t('fanEvent.confirm.noQuestions')}
+              </p>
+            )}
+          </section>
+          <p className="text-sm font-semibold leading-6 text-[var(--color-text-body)]">
+            {t('fanEvent.confirm.agreementsChecked', { count: visibleAgreementItems.length })}
+          </p>
+        </div>
+      </Dialog>
     </div>
   )
 }

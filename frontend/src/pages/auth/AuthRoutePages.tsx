@@ -1139,6 +1139,20 @@ export function SignupPage() {
         </p>
       </form>
 
+      <div className="mt-7">
+        <div className="mb-4 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-[var(--color-divider)]" />
+          <span className="text-sm font-semibold text-[var(--color-text-tertiary)]">
+            {t('signup.socialDivider')}
+          </span>
+          <span className="h-px flex-1 bg-[var(--color-divider)]" />
+        </div>
+        <SocialLoginButtons labelPrefix={t('signup.socialButton')} />
+        <p className="mt-3 text-sm font-medium leading-6 text-[var(--color-text-tertiary)]">
+          {t('signup.socialNotice')}
+        </p>
+      </div>
+
       <p className="mt-6 border-t border-[var(--color-divider)] pt-[18px] text-[15px] font-medium text-[var(--color-text-tertiary)]">
         {t('signup.hasAccount')}{' '}
         <Link className="font-extrabold text-[var(--color-primary-coral)]" to="/login">

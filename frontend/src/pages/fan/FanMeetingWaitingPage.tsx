@@ -226,6 +226,7 @@ export function FanMeetingWaitingPage() {
         Number(fanMeetingId),
         session.accessToken,
         signal,
+        true,
       )
       setDetail(nextDetail)
       setMeetingError(undefined)

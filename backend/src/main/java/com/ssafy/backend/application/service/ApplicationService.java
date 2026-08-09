@@ -3,8 +3,8 @@ package com.ssafy.backend.application.service;
 import com.ssafy.backend.application.domain.Application;
 import com.ssafy.backend.application.domain.ApplicationAnswer;
 import com.ssafy.backend.application.domain.ApplicationForm;
-import com.ssafy.backend.application.domain.ApplicationOption;
 import com.ssafy.backend.application.domain.ApplicationQuestion;
+import com.ssafy.backend.application.domain.ApplicationQuestionType;
 import com.ssafy.backend.application.domain.ApplicationStatus;
 import com.ssafy.backend.application.domain.DeviceDuplicatePolicy;
 import com.ssafy.backend.application.dto.ApplicationSubmitRequest;
@@ -12,7 +12,6 @@ import com.ssafy.backend.application.dto.ApplicationSubmitResponse;
 import com.ssafy.backend.application.dto.ApplicationWithdrawResponse;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
-import com.ssafy.backend.application.repository.ApplicationOptionRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
@@ -22,10 +21,8 @@ import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.domain.FanMeetingStatus;
 import com.ssafy.backend.meeting.domain.MeetingApplicationSetting;
-import com.ssafy.backend.meeting.domain.MeetingOperationSetting;
 import com.ssafy.backend.meeting.repository.FanMeetingRepository;
 import com.ssafy.backend.meeting.repository.MeetingApplicationSettingRepository;
-import com.ssafy.backend.meeting.repository.MeetingOperationSettingRepository;
 import com.ssafy.backend.user.domain.User;
 import com.ssafy.backend.user.domain.UserRole;
 import org.slf4j.Logger;
@@ -34,14 +31,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,11 +52,9 @@ public class ApplicationService {
     private final CurrentUserService currentUserService;
     private final FanMeetingRepository fanMeetingRepository;
     private final MeetingApplicationSettingRepository applicationSettingRepository;
-    private final MeetingOperationSettingRepository operationSettingRepository;
     private final ApplicationRepository applicationRepository;
     private final ApplicationFormRepository applicationFormRepository;
     private final ApplicationQuestionRepository applicationQuestionRepository;
-    private final ApplicationOptionRepository applicationOptionRepository;
     private final ApplicationAnswerRepository applicationAnswerRepository;
     private final Clock clock;
     private final boolean emailVerificationRequired;
@@ -74,11 +66,9 @@ public class ApplicationService {
      * @param currentUserService 현재 사용자 조회 서비스
      * @param fanMeetingRepository 팬미팅 저장소
      * @param applicationSettingRepository 응모 설정 저장소
-     * @param operationSettingRepository 팬미팅 운영 설정 저장소
      * @param applicationRepository 응모 저장소
      * @param applicationFormRepository 응모 폼 저장소
      * @param applicationQuestionRepository 응모 질문 저장소
-     * @param applicationOptionRepository 응모 선택지 저장소
      * @param applicationAnswerRepository 응모 답변 저장소
      * @param clock 현재 시각 공급자
      * @param emailVerificationRequired 응모 전 이메일 인증을 강제할지 여부
@@ -88,11 +78,9 @@ public class ApplicationService {
             CurrentUserService currentUserService,
             FanMeetingRepository fanMeetingRepository,
             MeetingApplicationSettingRepository applicationSettingRepository,
-            MeetingOperationSettingRepository operationSettingRepository,
             ApplicationRepository applicationRepository,
             ApplicationFormRepository applicationFormRepository,
             ApplicationQuestionRepository applicationQuestionRepository,
-            ApplicationOptionRepository applicationOptionRepository,
             ApplicationAnswerRepository applicationAnswerRepository,
             Clock clock,
             @Value("${app.application.email-verification-required:true}")
@@ -103,11 +91,9 @@ public class ApplicationService {
         this.currentUserService = currentUserService;
         this.fanMeetingRepository = fanMeetingRepository;
         this.applicationSettingRepository = applicationSettingRepository;
-        this.operationSettingRepository = operationSettingRepository;
         this.applicationRepository = applicationRepository;
         this.applicationFormRepository = applicationFormRepository;
         this.applicationQuestionRepository = applicationQuestionRepository;
-        this.applicationOptionRepository = applicationOptionRepository;
         this.applicationAnswerRepository = applicationAnswerRepository;
         this.clock = clock;
         this.emailVerificationRequired = emailVerificationRequired;
@@ -118,7 +104,7 @@ public class ApplicationService {
      * 팬의 최초 응모를 생성하거나 취소된 기존 응모를 새 답변으로 다시 접수한다.
      *
      * @param meetingId 응모 대상 팬미팅 식별자
-     * @param request 응모 동의 항목과 질문 답변
+     * @param request 개인정보 동의와 질문 답변
      * @param principal JWT 인증 사용자 정보
      * @param deviceHash 서버가 발급한 기기 토큰의 HMAC 해시이며 쿠키가 없으면 {@code null}
      * @return 접수된 응모 정보
@@ -134,16 +120,16 @@ public class ApplicationService {
         LocalDateTime now = LocalDateTime.now(clock);
         requireApplicationPeriod(meeting, now);
         requireVerifiedEmail(fan);
-        boolean recordingEnabled = requireConsents(meetingId, request);
+        if (!request.personalInformationConsent()) {
+            throw new BusinessException(ErrorCode.APPLICATION_CONSENT_REQUIRED);
+        }
 
         List<ApplicationQuestion> questions = activeQuestions(meetingId);
-        Map<Long, ValidatedAnswer> answers = validateAnswers(questions, request.answers());
+        Map<Long, String> answers = validateAnswers(questions, request.answers());
         Application application = applicationRepository
                 .findByMeeting_IdAndFan_Id(meetingId, fan.getId())
                 .map(existing -> resubmit(existing, now))
                 .orElseGet(() -> saveNewApplication(meeting, fan, now));
-        // 녹화를 쓰지 않는 팬미팅은 화면에서도 녹화 동의를 받지 않으므로 시각을 남기지 않는다.
-        application.recordConsents(recordingEnabled ? now : null, now);
         applyDeviceRisk(application, meetingId, fan, deviceHash);
         saveAnswers(application, questions, answers);
         return ApplicationSubmitResponse.from(application);
@@ -289,40 +275,8 @@ public class ApplicationService {
                 .orElseGet(List::of);
     }
 
-    /**
-     * 화면에서 필수로 받는 동의 세 가지를 검증한다.
-     *
-     * <p>녹화 동의는 녹화를 사용하는 팬미팅에서만 요구한다. 녹화를 끈 팬미팅에서는 화면에도
-     * 항목이 나오지 않으므로 동의를 강제하면 응모 자체가 막힌다.
-     *
-     * @param meetingId 응모 대상 팬미팅 식별자
-     * @param request 응모 제출 요청
-     * @return 이 팬미팅이 녹화를 사용하는지 여부
-     * @throws BusinessException 필수 동의가 빠진 경우
-     */
-    private boolean requireConsents(Long meetingId, ApplicationSubmitRequest request) {
-        if (!agreed(request.personalInformationConsent())) {
-            throw new BusinessException(ErrorCode.APPLICATION_CONSENT_REQUIRED);
-        }
-        if (!agreed(request.participationConsent())) {
-            throw new BusinessException(ErrorCode.APPLICATION_PARTICIPATION_CONSENT_REQUIRED);
-        }
-        boolean recordingEnabled = operationSettingRepository.findById(meetingId)
-                .map(MeetingOperationSetting::isRecordingEnabled)
-                .orElse(false);
-        if (recordingEnabled && !agreed(request.recordingConsent())) {
-            throw new BusinessException(ErrorCode.APPLICATION_RECORDING_CONSENT_REQUIRED);
-        }
-        return recordingEnabled;
-    }
-
-    /** 동의 값이 오지 않았으면 미동의로 본다. */
-    private boolean agreed(Boolean consent) {
-        return Boolean.TRUE.equals(consent);
-    }
-
-    /** 제출 답변의 중복, 소속, 질문 유형별 형식과 필수 질문 누락 여부를 검증한다. */
-    private Map<Long, ValidatedAnswer> validateAnswers(
+    /** 제출 답변의 중복, 소속, 질문 유형과 필수 질문 누락 여부를 검증한다. */
+    private Map<Long, String> validateAnswers(
             List<ApplicationQuestion> questions,
             List<ApplicationSubmitRequest.AnswerRequest> requests
     ) {
@@ -330,81 +284,25 @@ public class ApplicationService {
         for (ApplicationQuestion question : questions) {
             questionById.put(question.getId(), question);
         }
-        Map<Long, List<ApplicationOption>> optionsByQuestionId = activeOptions(questions);
-        Map<Long, ValidatedAnswer> answers = new LinkedHashMap<>();
+        Map<Long, String> answers = new HashMap<>();
+        Set<Long> submittedQuestionIds = new HashSet<>();
         for (ApplicationSubmitRequest.AnswerRequest request : requests) {
             ApplicationQuestion question = questionById.get(request.questionId());
-            if (question == null || answers.containsKey(request.questionId())) {
+            if (question == null
+                    || !submittedQuestionIds.add(request.questionId())
+                    || question.getQuestionType() != ApplicationQuestionType.SHORT_TEXT
+                    && question.getQuestionType() != ApplicationQuestionType.LONG_TEXT) {
                 throw new BusinessException(ErrorCode.APPLICATION_ANSWER_INVALID);
             }
-            answers.put(request.questionId(), question.getQuestionType().isChoice()
-                    ? choiceAnswer(
-                            question, request,
-                            optionsByQuestionId.getOrDefault(question.getId(), List.of()))
-                    : textAnswer(request));
+            answers.put(request.questionId(), request.value().trim());
         }
         boolean missingRequired = questions.stream()
                 .anyMatch(question -> question.isRequired()
-                        && !answers.containsKey(question.getId()));
+                        && !submittedQuestionIds.contains(question.getId()));
         if (missingRequired) {
             throw new BusinessException(ErrorCode.APPLICATION_ANSWER_INVALID);
         }
         return answers;
-    }
-
-    /** 주관식 답변이 비어 있지 않고 선택지를 함께 보내지 않았는지 검증한다. */
-    private ValidatedAnswer textAnswer(ApplicationSubmitRequest.AnswerRequest request) {
-        if (!StringUtils.hasText(request.value()) || !request.optionIdsOrEmpty().isEmpty()) {
-            throw new BusinessException(ErrorCode.APPLICATION_ANSWER_INVALID);
-        }
-        return new ValidatedAnswer(request.value().trim(), List.of());
-    }
-
-    /**
-     * 객관식 답변이 이 질문의 선택지만 골랐는지, 단일 선택 개수를 지켰는지 검증한다.
-     *
-     * <p>고른 순서가 아니라 선택지 표시 순서대로 저장해 운영자 화면의 나열 순서를 고정한다.
-     */
-    private ValidatedAnswer choiceAnswer(
-            ApplicationQuestion question,
-            ApplicationSubmitRequest.AnswerRequest request,
-            List<ApplicationOption> options
-    ) {
-        Set<Long> selectedIds = new LinkedHashSet<>(request.optionIdsOrEmpty());
-        if (StringUtils.hasText(request.value())
-                || selectedIds.isEmpty()
-                || selectedIds.size() != request.optionIdsOrEmpty().size()
-                || question.getQuestionType().isSingleChoice() && selectedIds.size() != 1) {
-            throw new BusinessException(ErrorCode.APPLICATION_ANSWER_INVALID);
-        }
-        List<ApplicationOption> selected = options.stream()
-                .filter(option -> selectedIds.contains(option.getId()))
-                .toList();
-        if (selected.size() != selectedIds.size()) {
-            throw new BusinessException(ErrorCode.APPLICATION_ANSWER_INVALID);
-        }
-        return new ValidatedAnswer(null, selected);
-    }
-
-    /** 객관식 질문의 삭제되지 않은 선택지를 질문 식별자별로 모아 조회한다. */
-    private Map<Long, List<ApplicationOption>> activeOptions(
-            List<ApplicationQuestion> questions
-    ) {
-        List<Long> choiceQuestionIds = questions.stream()
-                .filter(question -> question.getQuestionType().isChoice())
-                .map(ApplicationQuestion::getId)
-                .toList();
-        if (choiceQuestionIds.isEmpty()) {
-            return Map.of();
-        }
-        Map<Long, List<ApplicationOption>> result = new HashMap<>();
-        for (ApplicationOption option : applicationOptionRepository
-                .findAllByQuestion_IdInAndDeletedAtIsNullOrderByDisplayOrderAsc(
-                        choiceQuestionIds)) {
-            result.computeIfAbsent(option.getQuestion().getId(), key -> new ArrayList<>())
-                    .add(option);
-        }
-        return result;
     }
 
     /** 취소 상태만 재접수하고 기존 답변을 새 답변으로 교체할 수 있도록 삭제한다. */
@@ -420,44 +318,18 @@ public class ApplicationService {
         return application;
     }
 
-    /**
-     * 검증된 질문 순서에 따라 제출된 답변을 저장한다.
-     *
-     * <p>객관식은 고른 선택지 수만큼 답변 행을 만들고 같은 질문 안에서 1부터 순번을 매긴다.
-     */
+    /** 검증된 질문 순서에 따라 제출된 텍스트 답변을 저장한다. */
     private void saveAnswers(
             Application application,
             List<ApplicationQuestion> questions,
-            Map<Long, ValidatedAnswer> answers
+            Map<Long, String> answers
     ) {
-        List<ApplicationAnswer> entities = new ArrayList<>();
-        for (ApplicationQuestion question : questions) {
-            ValidatedAnswer answer = answers.get(question.getId());
-            if (answer == null) {
-                continue;
-            }
-            if (answer.options().isEmpty()) {
-                entities.add(ApplicationAnswer.createTextAnswer(
-                        application, question, answer.text()
-                ));
-                continue;
-            }
-            int sequence = 1;
-            for (ApplicationOption option : answer.options()) {
-                entities.add(ApplicationAnswer.createChoiceAnswer(
-                        application, question, option, sequence++
-                ));
-            }
-        }
+        List<ApplicationAnswer> entities = questions.stream()
+                .filter(question -> answers.containsKey(question.getId()))
+                .map(question -> ApplicationAnswer.createTextAnswer(
+                        application, question, answers.get(question.getId())
+                ))
+                .toList();
         applicationAnswerRepository.saveAll(entities);
-    }
-
-    /**
-     * 저장 직전까지 검증을 마친 질문 하나의 답변이다.
-     *
-     * @param text 주관식 답변 본문이며 객관식이면 null
-     * @param options 객관식에서 고른 선택지이며 주관식이면 빈 목록
-     */
-    private record ValidatedAnswer(String text, List<ApplicationOption> options) {
     }
 }

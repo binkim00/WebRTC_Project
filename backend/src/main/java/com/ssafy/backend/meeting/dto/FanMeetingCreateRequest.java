@@ -14,15 +14,10 @@ import java.time.LocalDateTime;
 /**
  * 팬미팅 기본 정보와 응모·운영 설정 생성 값을 전달한다.
  *
- * <p>커버 이미지는 외부 URL을 그대로 넣거나, 파일을 직접 올리고 싶으면
- * {@code POST /api/v1/attachments}에 {@code attachmentType=MEETING_COVER}로 업로드한 뒤
- * 응답의 {@code fileUrl}을 {@code coverImageUrl}로 보낸다. 두 경우 모두 서버에는 URL
- * 문자열 하나만 저장되므로 팬미팅 쪽에 별도 첨부 연결은 없다.
- *
  * @param influencerId 진행 인플루언서 식별자
  * @param title 팬미팅 제목
  * @param description 팬미팅 설명
- * @param coverImageUrl 커버 이미지 URL이며 외부 주소나 업로드한 첨부의 콘텐츠 URL을 쓴다
+ * @param coverImageUrl 커버 이미지 URL
  * @param scheduledStartAt 예정 시작 시각
  * @param participantSelectionType 참가자 선별 방식이며 생략하면 응모 방식으로 생성한다
  * @param application 응모 설정

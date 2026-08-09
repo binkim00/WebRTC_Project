@@ -16,7 +16,11 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../api/authSession', () => ({ getAuthSession: mocks.getAuthSession }))
-vi.mock('../../api/aiSummaries', () => ({ getCallSummary: mocks.getCallSummary }))
+// 요약 훅이 폴링 간격 상수도 이 모듈에서 읽으므로 mock에도 함께 둔다.
+vi.mock('../../api/aiSummaries', () => ({
+  getCallSummary: mocks.getCallSummary,
+  CALL_SUMMARY_POLL_INTERVAL_MS: 5000,
+}))
 vi.mock('../../api/fanMeetingParticipants', () => ({
   fetchFanMemos: mocks.fetchFanMemos,
   fetchMeetingDetail: mocks.fetchMeetingDetail,

@@ -143,7 +143,12 @@ export function InfluencerMeetingReadyPage() {
 
     try {
       setDetail(
-        await fetchPublicFanMeetingDetail(Number(fanMeetingId), session.accessToken, signal),
+        await fetchPublicFanMeetingDetail(
+          Number(fanMeetingId),
+          session.accessToken,
+          signal,
+          true,
+        ),
       )
     } catch (reason: unknown) {
       if (signal?.aborted) return
@@ -343,6 +348,8 @@ export function InfluencerMeetingReadyPage() {
       const refreshed = await fetchPublicFanMeetingDetail(
         Number(fanMeetingId),
         session.accessToken,
+        undefined,
+        true,
       )
       setDetail(refreshed)
       setOpenQueueConfirm(false)

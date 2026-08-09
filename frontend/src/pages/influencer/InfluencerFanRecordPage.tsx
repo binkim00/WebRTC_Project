@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { parseServerDate } from '../../api/serverTime'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import { recallFanCallSession } from '../../api/callSessionLog'
@@ -75,6 +75,7 @@ function errorMessage(reason: unknown, fallback: string) {
 export function InfluencerFanRecordPage() {
   const { t } = useTranslation()
   const { fanMeetingId, fanId } = useParams<{ fanMeetingId: string; fanId: string }>()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const authToken = getAuthSession()?.accessToken
   // 통화 화면에서 넘어온 경우에만 세션을 알 수 있다. 참가자 응답에는 통화 세션이 없다.
@@ -326,6 +327,19 @@ export function InfluencerFanRecordPage() {
   function cancelEdit() {
     setEditingMeetingId(undefined)
     setDraft('')
+  }
+
+  /**
+   * AI 통화 요약을 메모 입력란에 그대로 붙여 넣는다.
+   * 이미 쓰던 내용이 있으면 줄을 바꿔 뒤에 잇고, 백엔드 상한(300자)에 맞춰 자른다.
+   */
+  function pasteSummaryIntoDraft() {
+    const summaryText = summaryLines.join('\n')
+    if (!summaryText) return
+    setDraft((current) => {
+      const merged = current.trim() ? `${current.trimEnd()}\n${summaryText}` : summaryText
+      return merged.slice(0, MEMO_MAX_LENGTH)
+    })
   }
 
   function save() {
@@ -624,6 +638,15 @@ export function InfluencerFanRecordPage() {
                     >
                       {t('influencerFanRecordPage.t15')}
                     </Button>
+                    {summaryLines.length > 0 ? (
+                      <Button
+                        className="hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]"
+                        onClick={pasteSummaryIntoDraft}
+                        variant="secondary"
+                      >
+                        {t('influencerFanRecordPage.pasteSummary')}
+                      </Button>
+                    ) : null}
                     <Button
                       className="hover:border-[var(--color-text-muted)]"
                       onClick={cancelEdit}
@@ -649,6 +672,19 @@ export function InfluencerFanRecordPage() {
               <p aria-live="polite" className={`mt-[14px] text-sm font-semibold ${hintClassName}`}>
                 {hint}
               </p>
+
+              {/* 저장 직후에는 참가 팬 화면으로 돌아가 다음 팬을 이어서 정리하는 동선을 바로 연다. */}
+              {justSaved && fanMeetingId ? (
+                <button
+                  className="mt-3 inline-flex min-h-11 items-center rounded-[10px] bg-[var(--color-primary-coral)] px-5 text-sm font-extrabold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                  onClick={() =>
+                    navigate(`/influencer/fan-meetings/${encodeURIComponent(fanMeetingId)}/fans`)
+                  }
+                  type="button"
+                >
+                  {t('influencerFanRecordPage.backToFans')}
+                </button>
+              ) : null}
             </section>
           </article>
         </div>

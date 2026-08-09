@@ -60,7 +60,16 @@ describe('influencer meeting dashboard', () => {
       new Date('2026-08-04T10:00:00'),
     )
 
-    expect(selected?.meetingId).toBe('recent')
+    expect(selected).toBeUndefined()
+  })
+
+  it('예정 시간을 지났어도 종료되지 않은 팬미팅은 선택한다', () => {
+    const selected = selectRecentMeeting(
+      [meeting('ready-past', 'READY', '2026-08-03T12:00:00')],
+      new Date('2026-08-04T10:00:00'),
+    )
+
+    expect(selected?.meetingId).toBe('ready-past')
   })
 
   it('진행 중이면 1인 운영자에게 대기실 입장 명칭으로 안내한다', () => {

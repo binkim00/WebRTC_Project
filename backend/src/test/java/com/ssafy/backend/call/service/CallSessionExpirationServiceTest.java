@@ -87,18 +87,6 @@ class CallSessionExpirationServiceTest {
         verify(finalizer).failConnecting(callSession, now, CallEndReason.CONNECTION_FAILED, null);
     }
 
-    /** 팬이 접속해 기다리는 동안에는 연결 시간이 지나도 노쇼로 마감하지 않는지 검증한다. */
-    @Test
-    void keepsConnectingCallWhileFanWaitsForHost() {
-        when(callSession.getStatus()).thenReturn(CallSessionStatus.CONNECTING);
-        when(callSession.getCreatedAt()).thenReturn(now.minusSeconds(CONNECT_TIMEOUT_SEC * 2));
-        when(realtimeStore.isFanConnected(CALL_SESSION_ID)).thenReturn(true);
-
-        service.failIfConnectTimedOut(CALL_SESSION_ID);
-
-        verifyNoInteractions(finalizer);
-    }
-
     /** 연결 대기 시간이 남은 세션은 그대로 두는지 검증한다. */
     @Test
     void keepsConnectingCallBeforeConnectTimeout() {

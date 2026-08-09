@@ -42,50 +42,13 @@ public class FanMeetingStatisticsService {
     /** 엑셀이 UTF-8로 인식하도록 내보내기 파일 앞에 붙이는 BOM이다. */
     private static final String CSV_BOM = "﻿";
 
-    /** 참가자 운영 결과 내보내기 CSV의 헤더이며 엑셀에서 그대로 읽도록 한글로 적는다. */
+    /** 참가자 운영 결과 내보내기 CSV의 헤더다. */
     private static final String EXPORT_HEADER =
-            "참가자 ID,참가 경로,통화 순번,닉네임,"
-                    + "참가 상태,대기열 상태,통화 상태,통화 시간(초)";
+            "participantId,participantSource,callOrder,nickname,"
+                    + "participantStatus,queueStatus,callStatus,callDurationSec";
 
-    /** 참가 경로 enum을 운영자가 읽는 한글 이름으로 바꾼다. */
-    private static final Map<ParticipantSource, String> PARTICIPANT_SOURCE_LABELS = Map.of(
-            ParticipantSource.APPLICATION, "응모 선정",
-            ParticipantSource.EXTERNAL_SELECTION, "외부 선별"
-    );
-
-    /**
-     * 참가자 상태 문자열을 한글 이름으로 바꾼다.
-     *
-     * <p>참가자 상태는 enum이 아니라 문자열 컬럼이며 현재 저장되는 값은 참가 확정뿐이다.
-     */
-    private static final Map<String, String> PARTICIPANT_STATUS_LABELS = Map.of(
-            Participant.READY_STATUS, "참가 확정"
-    );
-
-    /**
-     * 대기열 상태 enum을 한글 이름으로 바꾼다.
-     *
-     * <p>{@link QueueEntryStatus#DONE}은 운영 API가 완료로 부르는 상태와 같은 뜻이므로
-     * "통화 완료"로 적는다.
-     */
-    private static final Map<QueueEntryStatus, String> QUEUE_STATUS_LABELS = Map.of(
-            QueueEntryStatus.NOT_ENTERED, "미입장",
-            QueueEntryStatus.WAITING, "대기 중",
-            QueueEntryStatus.CALLED, "호출됨",
-            QueueEntryStatus.IN_CALL, "통화 중",
-            QueueEntryStatus.DONE, "통화 완료",
-            QueueEntryStatus.NO_SHOW, "노쇼",
-            QueueEntryStatus.SKIPPED, "건너뜀",
-            QueueEntryStatus.REMOVED, "제외됨"
-    );
-
-    /** 영상통화 세션 상태 enum을 한글 이름으로 바꾼다. */
-    private static final Map<CallSessionStatus, String> CALL_STATUS_LABELS = Map.of(
-            CallSessionStatus.CONNECTING, "연결 중",
-            CallSessionStatus.ACTIVE, "통화 중",
-            CallSessionStatus.ENDED, "통화 종료",
-            CallSessionStatus.FAILED, "통화 실패"
-    );
+    /** 완료 상태를 운영 API와 동일한 이름으로 노출하기 위한 값이다. */
+    private static final String COMPLETED_QUEUE_STATUS = "COMPLETED";
 
     private final CurrentUserService currentUserService;
     private final MeetingAccessService meetingAccessService;
@@ -195,12 +158,12 @@ public class FanMeetingStatisticsService {
             QueueEntry entry = entriesByParticipantId.get(participant.getId());
             CallSession session = entry == null ? null : lastSessionByEntryId.get(entry.getId());
             csv.append(escape(String.valueOf(participant.getId()))).append(',')
-                    .append(escape(participantSourceLabel(participant))).append(',')
+                    .append(escape(participant.getParticipantSource().name())).append(',')
                     .append(escape(String.valueOf(participant.getAssignedOrder()))).append(',')
                     .append(escape(participant.getFan().getNickname())).append(',')
-                    .append(escape(participantStatusLabel(participant))).append(',')
-                    .append(escape(queueStatusLabel(entry))).append(',')
-                    .append(escape(callStatusLabel(session))).append(',')
+                    .append(escape(participant.getStatus())).append(',')
+                    .append(escape(queueStatus(entry))).append(',')
+                    .append(escape(session == null ? "" : session.getStatus().name())).append(',')
                     .append(escape(callDurationSec(session)))
                     .append('\n');
         }
@@ -229,57 +192,17 @@ public class FanMeetingStatisticsService {
     }
 
     /**
-     * 참가자의 참가 경로를 한글 이름으로 변환한다.
-     *
-     * @param participant 내보낼 참가자
-     * @return 참가 경로 한글 이름이며 사전에 없는 값은 원래 이름 그대로
-     */
-    private String participantSourceLabel(Participant participant) {
-        ParticipantSource source = participant.getParticipantSource();
-        if (source == null) {
-            return "";
-        }
-        return PARTICIPANT_SOURCE_LABELS.getOrDefault(source, source.name());
-    }
-
-    /**
-     * 참가자의 상태 문자열을 한글 이름으로 변환한다.
-     *
-     * @param participant 내보낼 참가자
-     * @return 참가 상태 한글 이름이며 사전에 없는 값은 저장된 문자열 그대로
-     */
-    private String participantStatusLabel(Participant participant) {
-        String status = participant.getStatus();
-        if (status == null) {
-            return "";
-        }
-        return PARTICIPANT_STATUS_LABELS.getOrDefault(status, status);
-    }
-
-    /**
-     * 대기열 항목의 상태를 한글 이름으로 변환한다.
+     * 대기열 항목의 상태를 운영 API와 같은 이름으로 변환한다.
      *
      * @param entry 대기열 항목이며 없으면 null
-     * @return 대기열 상태 한글 이름이며 항목이 없으면 빈 문자열
+     * @return 대기열 상태 이름이며 항목이 없으면 빈 문자열
      */
-    private String queueStatusLabel(QueueEntry entry) {
+    private String queueStatus(QueueEntry entry) {
         if (entry == null || entry.getStatus() == null) {
             return "";
         }
-        return QUEUE_STATUS_LABELS.getOrDefault(entry.getStatus(), entry.getStatus().name());
-    }
-
-    /**
-     * 대표 통화의 세션 상태를 한글 이름으로 변환한다.
-     *
-     * @param session 대표 통화 세션이며 없으면 null
-     * @return 통화 상태 한글 이름이며 통화가 없으면 빈 문자열
-     */
-    private String callStatusLabel(CallSession session) {
-        if (session == null || session.getStatus() == null) {
-            return "";
-        }
-        return CALL_STATUS_LABELS.getOrDefault(session.getStatus(), session.getStatus().name());
+        return entry.getStatus() == QueueEntryStatus.DONE
+                ? COMPLETED_QUEUE_STATUS : entry.getStatus().name();
     }
 
     /**

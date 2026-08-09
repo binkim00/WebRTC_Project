@@ -7,7 +7,6 @@ import com.ssafy.backend.auth.jwt.RevokedAccessTokenStore;
 import com.ssafy.backend.auth.jwt.TokenSessionStore;
 import com.ssafy.backend.common.security.RestAccessDeniedHandler;
 import com.ssafy.backend.config.SecurityConfig;
-import com.ssafy.backend.user.service.UserPasswordService;
 import com.ssafy.backend.user.service.UserProfileService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,9 +36,6 @@ class UserSecurityTest {
 
     @MockitoBean
     private UserProfileService userProfileService;
-
-    @MockitoBean
-    private UserPasswordService userPasswordService;
 
     @MockitoBean
     private JwtTokenProvider jwtTokenProvider;
@@ -72,18 +68,5 @@ class UserSecurityTest {
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(userProfileService);
-    }
-
-    /** 미인증 사용자의 비밀번호 변경 요청이 HTTP 401로 거부되는지 검증한다. */
-    @Test
-    void rejectsUnauthenticatedPasswordChangeRequest() throws Exception {
-        mockMvc.perform(patch("/api/v1/users/me/password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"currentPassword":"current123","newPassword":"newPass123"}
-                                """))
-                .andExpect(status().isUnauthorized());
-
-        verifyNoInteractions(userPasswordService);
     }
 }

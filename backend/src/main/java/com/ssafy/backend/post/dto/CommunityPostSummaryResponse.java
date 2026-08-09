@@ -1,11 +1,8 @@
 package com.ssafy.backend.post.dto;
 
-import com.ssafy.backend.post.domain.Attachment;
 import com.ssafy.backend.post.domain.Post;
-import com.ssafy.backend.post.support.AttachmentUrls;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 커뮤니티 게시글 목록 한 건의 요약 정보를 전달한다.
@@ -18,7 +15,7 @@ import java.util.List;
  * @param title 게시글 제목
  * @param authorId 작성자 식별자
  * @param authorNickname 작성자 닉네임
- * @param thumbnailUrl 첨부한 이미지 중 표시 순서가 가장 앞선 것의 URL이며 이미지가 없으면 null
+ * @param thumbnailUrl 목록 썸네일 URL이며 첨부파일(ATTACH-001) 구현 전까지 항상 null
  * @param createdAt 작성 시각
  * @param pinned 상단 고정 여부
  */
@@ -33,21 +30,20 @@ public record CommunityPostSummaryResponse(
         boolean pinned
 ) {
     /**
-     * 커뮤니티 게시글과 연결된 첨부파일을 목록 요약 응답으로 변환한다.
+     * 커뮤니티 게시글을 목록 요약 응답으로 변환한다.
      *
      * @param post 작성자·팬미팅을 함께 조회한 커뮤니티 게시글
-     * @param attachments 게시글에 연결된 첨부파일이며 표시 순서대로 정렬되어 있어야 한다
      * @return 커뮤니티 게시글 목록 요약 응답
      */
-    public static CommunityPostSummaryResponse of(Post post, List<Attachment> attachments) {
+    public static CommunityPostSummaryResponse from(Post post) {
         return new CommunityPostSummaryResponse(
                 post.getId(),
                 post.getMeeting() == null ? null : post.getMeeting().getId(),
                 post.getTitle(),
                 post.getAuthor().getId(),
                 post.getAuthor().getNickname(),
-                // posts 테이블에 썸네일 컬럼이 없으므로 첨부 이미지를 대표로 승격한다.
-                AttachmentUrls.thumbnailUrl(attachments),
+                // posts 테이블에 썸네일 컬럼이 없고 첨부파일이 아직 없으므로 항상 null이다.
+                null,
                 post.getCreatedAt(),
                 post.isPinned()
         );

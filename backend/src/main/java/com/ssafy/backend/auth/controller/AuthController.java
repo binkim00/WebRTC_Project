@@ -1,14 +1,11 @@
 package com.ssafy.backend.auth.controller;
 
-import com.ssafy.backend.auth.dto.AvailabilityResponse;
 import com.ssafy.backend.auth.dto.LoginRequest;
 import com.ssafy.backend.auth.dto.LoginResponse;
 import com.ssafy.backend.auth.dto.RefreshTokenRequest;
 import com.ssafy.backend.auth.dto.SignupRequest;
 import com.ssafy.backend.auth.dto.SignupResponse;
-import com.ssafy.backend.auth.service.AccountAvailabilityService;
 import com.ssafy.backend.auth.service.LoginService;
-import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.auth.service.LogoutService;
 import com.ssafy.backend.auth.service.RefreshTokenService;
 import com.ssafy.backend.auth.service.SignupService;
@@ -29,7 +26,6 @@ public class AuthController {
     private final LogoutService logoutService;
     private final RefreshTokenService refreshTokenService;
     private final DeviceTokenService deviceTokenService;
-    private final AccountAvailabilityService accountAvailabilityService;
 
     /**
      * 회원가입, 로그인과 로그아웃 비즈니스 로직을 처리할 서비스를 주입받는다.
@@ -39,34 +35,15 @@ public class AuthController {
      * @param logoutService 로그아웃 서비스
      * @param refreshTokenService 토큰 재발급 서비스
      * @param deviceTokenService 기기 토큰 쿠키 발급 서비스
-     * @param accountAvailabilityService 아이디·닉네임 중복 확인 서비스
      */
     public AuthController(SignupService signupService, LoginService loginService,
                           LogoutService logoutService, RefreshTokenService refreshTokenService,
-                          DeviceTokenService deviceTokenService,
-                          AccountAvailabilityService accountAvailabilityService) {
+                          DeviceTokenService deviceTokenService) {
         this.signupService = signupService;
         this.loginService = loginService;
         this.logoutService = logoutService;
         this.refreshTokenService = refreshTokenService;
         this.deviceTokenService = deviceTokenService;
-        this.accountAvailabilityService = accountAvailabilityService;
-    }
-
-    /**
-     * 가입 전에 아이디·닉네임이 이미 쓰이고 있는지 확인한다.
-     *
-     * <p>가입 화면은 이 확인을 통과해야 가입 버튼을 열어 준다. 확인 결과는 그 순간의 상태이므로
-     * 가입 요청 시점에 서버가 같은 검사를 다시 수행한다.
-     *
-     * @param type 확인할 항목(LOGIN_ID·NICKNAME)
-     * @param value 확인할 값
-     * @return 공통 성공 형식으로 감싼 사용 가능 여부
-     */
-    @GetMapping("/availability")
-    public ApiResponse<AvailabilityResponse> checkAvailability(@RequestParam("type") String type,
-                                                               @RequestParam("value") String value) {
-        return ApiResponse.success(accountAvailabilityService.check(type, value));
     }
 
     /**

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { getAuthSession } from '../api/authSession'
-import { getCallSummary, type AiCallSummary } from '../api/aiSummaries'
-
-/** 생성 중일 때 다시 물어보는 간격이다. 요약은 통화 종료 직후 수 초~수십 초가 걸린다. */
-export const CALL_SUMMARY_POLL_INTERVAL_MS = 5000
+import {
+  CALL_SUMMARY_POLL_INTERVAL_MS,
+  getCallSummary,
+  type AiCallSummary,
+} from '../api/aiSummaries'
 
 /**
  * 요약 조회 상태다.

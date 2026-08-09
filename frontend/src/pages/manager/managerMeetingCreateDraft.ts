@@ -14,6 +14,10 @@ export type DraftFormQuestion = {
 const LOCAL_DRAFT_VERSION = 1
 const LOCAL_DRAFT_PREFIX = 'melly-manager-meeting-create'
 
+/** 백엔드 생성 기본값과 동일하게 화면에도 미리 채워 두는 운영 정책 값이다. */
+export const DEFAULT_RECONNECT_GRACE_SECONDS = 60
+export const DEFAULT_MAX_RECALL_COUNT = 1
+
 export type MeetingCreateLocalDraft = {
   version: typeof LOCAL_DRAFT_VERSION
   savedAt: string
@@ -136,9 +140,9 @@ export function createInitialMeetingForm(influencerId?: number): FanMeetingForm 
       // 번역 자막은 화면에서 켜고 끄는 항목이 아니다. 자막은 AI 워커가 참가자 언어를 보고
       // 알아서 제공하므로 API가 요구하는 값은 항상 켬으로 보낸다.
       translationEnabled: true,
-      reconnectGraceSec: null,
+      reconnectGraceSec: DEFAULT_RECONNECT_GRACE_SECONDS,
       earlyStartMinutes: null,
-      maxRecallCount: null,
+      maxRecallCount: DEFAULT_MAX_RECALL_COUNT,
     },
   }
 }
@@ -195,7 +199,14 @@ export function readMeetingCreateLocalDraft(userId?: number): MeetingCreateLocal
         ...parsed,
         form: {
           ...parsed.form,
-          operation: { ...parsed.form.operation, translationEnabled: true },
+          operation: {
+            ...parsed.form.operation,
+            translationEnabled: true,
+            reconnectGraceSec:
+              parsed.form.operation.reconnectGraceSec ?? DEFAULT_RECONNECT_GRACE_SECONDS,
+            maxRecallCount:
+              parsed.form.operation.maxRecallCount ?? DEFAULT_MAX_RECALL_COUNT,
+          },
         },
       }
     }

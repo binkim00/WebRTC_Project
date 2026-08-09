@@ -7,6 +7,7 @@ import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import {
   fetchPublicFanMeetings,
+  prefetchPublicFanMeetingDetail,
   type PublicFanMeetingStatus,
   type PublicFanMeetingSummary,
 } from '../../api/fanMeetings'
@@ -121,6 +122,42 @@ type AppliedFilters = {
   influencerName: string
 }
 
+/**
+ * 목록 정렬 기준이다. 응모 마감 임박순(기본) 외에 최신 등록순과 팬미팅 일정순을 제공한다.
+ * 요약 응답에 생성 시각이 없어 최신 등록순은 meetingId 내림차순(생성 순서)으로 근사한다.
+ */
+type SortOption = 'DEADLINE' | 'NEWEST' | 'SCHEDULE'
+
+const sortOptions = [
+  { labelKey: 'fanEvents.sort.deadline', value: 'DEADLINE' },
+  { labelKey: 'fanEvents.sort.newest', value: 'NEWEST' },
+  { labelKey: 'fanEvents.sort.schedule', value: 'SCHEDULE' },
+] as const satisfies readonly { labelKey: TranslationKey; value: SortOption }[]
+
+/** 정렬 기준에 맞는 비교 함수를 돌려준다. */
+function compareMeetings(
+  sortBy: SortOption,
+): (left: PublicFanMeetingSummary, right: PublicFanMeetingSummary) => number {
+  if (sortBy === 'NEWEST') {
+    return (left, right) => right.meetingId - left.meetingId
+  }
+  if (sortBy === 'SCHEDULE') {
+    return (left, right) =>
+      parseServerDate(left.scheduledStartAt).getTime() -
+      parseServerDate(right.scheduledStartAt).getTime()
+  }
+  // 응모 마감이 가까운 순서로 보여준다. 응모 기간이 없는 항목은 뒤로 보낸다.
+  return (left, right) => {
+    if (!left.applicationEndAt && !right.applicationEndAt) return 0
+    if (!left.applicationEndAt) return 1
+    if (!right.applicationEndAt) return -1
+    return (
+      parseServerDate(left.applicationEndAt).getTime() -
+      parseServerDate(right.applicationEndAt).getTime()
+    )
+  }
+}
+
 const initialFilters: AppliedFilters = {
   keyword: '',
   status: 'ALL',
@@ -149,6 +186,8 @@ export function FanEventListPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [filters, setFilters] = useState<AppliedFilters>(initialFilters)
+  // 정렬은 결과를 다시 조회할 필요가 없어 검색 폼과 달리 고르는 즉시 반영한다.
+  const [sortBy, setSortBy] = useState<SortOption>('DEADLINE')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -206,13 +245,7 @@ export function FanEventListPage() {
       const scheduled = parseServerDate(meeting.scheduledStartAt)
       return scheduled >= dateBounds.start && scheduled < dateBounds.end
     })
-    .sort((left, right) => {
-      // 응모 마감이 가까운 순서로 보여준다. 응모 기간이 없는 항목은 뒤로 보낸다.
-      if (!left.applicationEndAt && !right.applicationEndAt) return 0
-      if (!left.applicationEndAt) return 1
-      if (!right.applicationEndAt) return -1
-      return new Date(left.applicationEndAt).getTime() - parseServerDate(right.applicationEndAt).getTime()
-    })
+    .sort(compareMeetings(sortBy))
 
   const soonestOpenMeetingId = visibleMeetings.find(
     (meeting) => meeting.status === 'APPLICATION_OPEN' && meeting.applicationEndAt,
@@ -285,9 +318,25 @@ export function FanEventListPage() {
         </div>
       ) : (
         <>
-          <p className="mt-[22px] text-[15px] font-extrabold tabular-nums">
-            {t('fanEvents.count', { count: visibleMeetings.length })}
-          </p>
+          <div className="mt-[22px] flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[15px] font-extrabold tabular-nums">
+              {t('fanEvents.count', { count: visibleMeetings.length })}
+            </p>
+            <label className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-secondary)]">
+              {t('fanEvents.sort.label')}
+              <select
+                className="min-h-9 rounded-[var(--radius-control)] border border-[var(--color-border-control)] bg-[var(--color-surface-panel)] px-2.5 text-sm font-bold text-[var(--color-text-primary)]"
+                onChange={(event) => setSortBy(event.target.value as SortOption)}
+                value={sortBy}
+              >
+                {sortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {t(option.labelKey)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <div className="mt-3.5 grid grid-cols-1 gap-x-[26px] gap-y-[30px] sm:grid-cols-2 lg:grid-cols-3">
             {visibleMeetings.map((meeting) => {
@@ -305,7 +354,13 @@ export function FanEventListPage() {
 
               return (
                 <article className="min-w-0" key={meeting.meetingId}>
-                  <Link className="block text-inherit no-underline" to={`/fan/events/${meeting.meetingId}`}>
+                  <Link
+                    className="block text-inherit no-underline"
+                    onFocus={() => void prefetchPublicFanMeetingDetail(meeting.meetingId, getAuthSession()?.accessToken)}
+                    onMouseEnter={() => void prefetchPublicFanMeetingDetail(meeting.meetingId, getAuthSession()?.accessToken)}
+                    onTouchStart={() => void prefetchPublicFanMeetingDetail(meeting.meetingId, getAuthSession()?.accessToken)}
+                    to={`/fan/events/${meeting.meetingId}`}
+                  >
                     <figure className="relative m-0 overflow-hidden rounded-[10px] bg-[var(--color-surface-muted)]">
                       {meeting.coverImageUrl ? (
                         <img

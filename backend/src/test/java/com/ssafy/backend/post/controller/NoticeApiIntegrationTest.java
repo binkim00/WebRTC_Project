@@ -444,11 +444,9 @@ class NoticeApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(5));
 
-        // 팬미팅 조회 1건, 목록 조회 1건, 썸네일용 첨부 일괄 조회 1건뿐이며
-        // 작성자별·공지별 추가 조회는 없어야 한다. 첨부는 공지마다 따로 읽지 않고
-        // 페이지에 담긴 식별자를 한 번에 넘겨 읽으므로 공지 수가 늘어도 3건 그대로다.
+        // 팬미팅 조회 1건과 목록 조회 1건뿐이며 작성자별 추가 조회는 없어야 한다.
         // 전체 결과가 첫 페이지에 담기면 Spring Data가 count 쿼리를 생략한다.
-        assertThat(statistics.getPrepareStatementCount()).isEqualTo(3L);
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(2L);
     }
 
     /** 공지 작성 API 경로를 만든다. */

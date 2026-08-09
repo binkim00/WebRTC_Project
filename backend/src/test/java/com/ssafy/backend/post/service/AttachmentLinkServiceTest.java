@@ -4,7 +4,6 @@ import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.post.domain.Attachment;
-import com.ssafy.backend.post.domain.AttachmentType;
 import com.ssafy.backend.post.domain.Post;
 import com.ssafy.backend.post.domain.PostType;
 import com.ssafy.backend.post.repository.AttachmentRepository;
@@ -166,57 +165,16 @@ class AttachmentLinkServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_ALREADY_ATTACHED);
     }
 
-    /** 커뮤니티용으로 올린 첨부를 공지에 붙이려 하면 용도 불일치로 거부하는지 검증한다. */
-    @Test
-    void rejectsAttachmentWithMismatchedType() {
-        Attachment community = attachment(10L, author, AttachmentType.COMMUNITY);
-        stubRequested(List.of(community));
-
-        assertThatThrownBy(() -> service.replaceLinks(notice, List.of(10L), author, NOW))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_TYPE_MISMATCH);
-        assertThat(community.isAttached()).isFalse();
-    }
-
-    /** 커버 이미지 첨부는 어떤 게시글에도 붙일 수 없는지 검증한다. */
-    @Test
-    void rejectsMeetingCoverAttachment() {
-        stubRequested(List.of(attachment(10L, author, AttachmentType.MEETING_COVER)));
-
-        assertThatThrownBy(() -> service.replaceLinks(notice, List.of(10L), author, NOW))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_TYPE_MISMATCH);
-    }
-
-    /** 한 게시글에 붙일 수 있는 개수를 넘기면 조회하기 전에 거부하는지 검증한다. */
-    @Test
-    void rejectsMoreAttachmentsThanLimit() {
-        List<Long> tooMany = java.util.stream.LongStream
-                .rangeClosed(1, AttachmentLinkService.MAX_ATTACHMENT_COUNT + 1)
-                .boxed()
-                .toList();
-
-        assertThatThrownBy(() -> service.replaceLinks(notice, tooMany, author, NOW))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_TOO_MANY);
-    }
-
     /** 요청한 첨부파일을 저장소가 반환하도록 대역을 설정한다. */
     private void stubRequested(List<Attachment> attachments) {
         when(attachmentRepository.findAllByIdInAndDeletedAtIsNull(anyCollection()))
                 .thenReturn(attachments);
     }
 
-    /** 식별자와 업로더를 가진 공지용 테스트 첨부파일을 만든다. */
+    /** 식별자와 업로더를 가진 테스트용 첨부파일을 만든다. */
     private Attachment attachment(Long id, User uploader) {
-        return attachment(id, uploader, AttachmentType.NOTICE);
-    }
-
-    /** 식별자·업로더·용도를 지정한 테스트용 첨부파일을 만든다. */
-    private Attachment attachment(Long id, User uploader, AttachmentType attachmentType) {
         Attachment attachment = Attachment.createUploaded(
-                uploader, attachmentType, "cover.png",
-                "2026/08/02/" + id + ".png", 1024L, "image/png");
+                uploader, "cover.png", "2026/08/02/" + id + ".png", 1024L, "image/png");
         ReflectionTestUtils.setField(attachment, "id", id);
         return attachment;
     }

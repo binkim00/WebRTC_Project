@@ -64,18 +64,6 @@ public class Application extends BaseTimeEntity {
     @Column(name = "personal_information_consent_at", nullable = false)
     private LocalDateTime personalInformationConsentAt;
 
-    /**
-     * 녹화·보관 동의 시각이며 녹화를 쓰지 않는 팬미팅과 이 항목을 받기 전 응모는 null이다.
-     */
-    @Column(name = "recording_consent_at")
-    private LocalDateTime recordingConsentAt;
-
-    /**
-     * 팬미팅 참여 규칙 동의 시각이며 이 항목을 받기 전 응모는 null이다.
-     */
-    @Column(name = "participation_consent_at")
-    private LocalDateTime participationConsentAt;
-
     @Column(name = "submitted_at", nullable = false)
     private LocalDateTime submittedAt;
 
@@ -127,25 +115,9 @@ public class Application extends BaseTimeEntity {
         this.submittedAt = submittedAt;
         this.resultDecidedAt = null;
         this.withdrawnAt = null;
-        // 재응모는 동의도 다시 받으므로 이전 동의 시각을 비우고 새 값으로 다시 채운다.
-        this.recordingConsentAt = null;
-        this.participationConsentAt = null;
         // 재응모는 기기와 위험 판단을 다시 하므로 이전 판정을 초기화한다.
         this.riskStatus = ApplicationRiskStatus.NONE;
         this.riskReason = null;
-    }
-
-    /**
-     * 개인정보 동의 외에 화면에서 함께 받은 동의 시각을 기록한다.
-     *
-     * @param recordingConsentAt 녹화·보관 동의 시각이며 녹화를 쓰지 않는 팬미팅이면 {@code null}
-     * @param participationConsentAt 팬미팅 참여 규칙 동의 시각
-     */
-    public void recordConsents(
-            LocalDateTime recordingConsentAt, LocalDateTime participationConsentAt
-    ) {
-        this.recordingConsentAt = recordingConsentAt;
-        this.participationConsentAt = participationConsentAt;
     }
 
     /**

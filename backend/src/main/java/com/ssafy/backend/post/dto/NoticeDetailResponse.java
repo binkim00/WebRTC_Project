@@ -2,7 +2,6 @@ package com.ssafy.backend.post.dto;
 
 import com.ssafy.backend.post.domain.Attachment;
 import com.ssafy.backend.post.domain.Post;
-import com.ssafy.backend.post.support.AttachmentUrls;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,7 +15,7 @@ import java.util.List;
  * @param content 공지 본문
  * @param authorId 작성자 식별자
  * @param authorNickname 작성자 닉네임
- * @param thumbnailUrl 첨부한 이미지 중 표시 순서가 가장 앞선 것의 URL이며 이미지가 없으면 null
+ * @param thumbnailUrl 썸네일 URL이며 posts 테이블에 썸네일 컬럼이 없어 항상 null
  * @param attachments 표시 순서대로 정렬한 첨부파일 목록
  * @param createdAt 작성 시각
  * @param updatedAt 최종 수정 시각
@@ -57,8 +56,8 @@ public record NoticeDetailResponse(
                 post.getContent(),
                 post.getAuthor().getId(),
                 post.getAuthor().getNickname(),
-                // posts 테이블에 썸네일 컬럼이 없으므로 첨부 이미지를 대표로 승격한다.
-                AttachmentUrls.thumbnailUrl(attachments),
+                // posts 테이블에 썸네일 컬럼이 없으므로 항상 null이다.
+                null,
                 attachments.stream().map(NoticeAttachmentResponse::from).toList(),
                 post.getCreatedAt(),
                 post.getUpdatedAt(),
