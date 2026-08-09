@@ -448,6 +448,9 @@ export function ManagerMeetingDetailPage() {
     setBusy(true)
     setError(undefined)
     setMessage(undefined)
+    // 운영 모니터로 넘어가는 경우에는 이 화면을 다시 읽지 않는다. 떠난 화면의 상태를 갱신하는
+    // 요청일 뿐이다.
+    let navigatedAway = false
     try {
       if (action === 'publish') {
         await publishFanMeeting(Number(meetingId), token)
@@ -463,6 +466,7 @@ export function ManagerMeetingDetailPage() {
         // 시작 직후 해야 할 일(대기열 확인·통화 배정)은 운영 모니터에 있으므로 바로 이동한다.
         // 솔로 인플루언서에게는 모니터 화면이 없어 상세에 남는다.
         if (!isSolo) {
+          navigatedAway = true
           navigate(`/manager/fan-meetings/${encodeURIComponent(meetingId)}/monitor`)
           return
         }
@@ -496,6 +500,7 @@ export function ManagerMeetingDetailPage() {
         })
         // "지금 시작"으로 LIVE가 됐다면 시작 버튼과 같은 이유로 운영 모니터로 바로 넘어간다.
         if (targetStatus === 'LIVE' && !isSolo) {
+          navigatedAway = true
           navigate(`/manager/fan-meetings/${encodeURIComponent(meetingId)}/monitor`)
           return
         }
@@ -507,12 +512,22 @@ export function ManagerMeetingDetailPage() {
               : t('managerMeetingDetailPage.t90'),
         )
       }
-      await load()
-      setPendingAction(undefined)
     } catch (cause) {
       setError(toErrorMessage(cause, t('managerMeetingDetailPage.t91')))
     } finally {
       setBusy(false)
+      /*
+       * 성공·실패와 상관없이 확인 대화상자를 닫고 서버 상태를 다시 읽는다.
+       *
+       * 예전에는 둘 다 성공 경로에만 있었다. 그래서 명령이 서버에 반영된 뒤 응답을 다루다
+       * 실패하면(응모 즉시 시작·마감이 그랬다) 화면은 예전 상태 그대로에 확인 대화상자만
+       * 열려 있어, 이미 처리된 일을 다시 누르게 됐다. 새로고침하면 제대로 넘어가 있는 것도
+       * 화면만 갱신되지 않았다는 뜻이다.
+       *
+       * 실패 사유는 위에서 setError로 따로 알리므로, 대화상자를 닫아도 원인은 남는다.
+       */
+      setPendingAction(undefined)
+      if (!navigatedAway) await load()
     }
   }
 
