@@ -386,7 +386,14 @@ export function ManagerMeetingDetailPage() {
 
     setLoading(true)
     try {
-      const loaded = await fetchPublicFanMeetingDetail(Number(meetingId), token, signal)
+      // 운영 상태는 명령 직후 바뀌므로 공개 상세의 30초 캐시를 사용하면
+      // PUBLISHED → APPLICATION_OPEN → APPLICATION_CLOSED 흐름이 이전 상태에 멈춘다.
+      const loaded = await fetchPublicFanMeetingDetail(
+        Number(meetingId),
+        token,
+        signal,
+        true,
+      )
       if (signal?.aborted) return
       setDetail(loaded)
       setLoadError(undefined)
@@ -495,9 +502,32 @@ export function ManagerMeetingDetailPage() {
             : 'LIVE'
         // 응모 열기·마감은 서버가 일정을 계산한다. "지금 시작"만 예정 시각이 필요하다
         // (그 시각 전에 시작하려면 조기 시작 폭을 넓혀야 서버가 허용한다).
-        await transitionFanMeetingImmediately(meetingId, currentStatus, targetStatus, token, {
-          scheduledStartAt: detail.meeting.scheduledStartAt,
-        })
+        const transitioned = await transitionFanMeetingImmediately(
+          meetingId,
+          currentStatus,
+          targetStatus,
+          token,
+          { scheduledStartAt: detail.meeting.scheduledStartAt },
+        )
+        // 명령 응답을 즉시 반영해 별도 새로고침 없이 다음 단계 버튼으로 전환한다.
+        setDetail((current) => current ? {
+          ...current,
+          meeting: {
+            ...current.meeting,
+            status: transitioned.status,
+            scheduledStartAt:
+              transitioned.scheduledStartAt ?? current.meeting.scheduledStartAt,
+            application: {
+              ...current.meeting.application,
+              enabled: transitioned.application.enabled,
+              startAt: transitioned.application.startAt,
+              endAt: transitioned.application.endAt,
+              resultAnnouncementAt: transitioned.application.resultAnnouncementAt,
+              capacity: transitioned.application.capacity,
+            },
+            operation: transitioned.operation,
+          },
+        } : current)
         // "지금 시작"으로 LIVE가 됐다면 시작 버튼과 같은 이유로 운영 모니터로 바로 넘어간다.
         if (targetStatus === 'LIVE' && !isSolo) {
           navigatedAway = true
