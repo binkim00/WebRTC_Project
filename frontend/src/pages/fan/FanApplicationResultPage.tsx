@@ -12,6 +12,11 @@ import {
   isClosedFanMeetingStatus,
   type PublicFanMeetingDetail,
 } from '../../api/fanMeetings'
+import {
+  followInfluencer,
+  getInfluencer,
+  unfollowInfluencer,
+} from '../../api/influencers'
 import { markApplicationResultRevealed } from './applicationResultReveal'
 import { JellyCelebration } from '../../components/celebration/JellyCelebration'
 import { InvalidRouteState } from '../../components/routing/ScreenPage'
@@ -73,6 +78,12 @@ export function FanApplicationResultPage() {
   const [resultPublished, setResultPublished] = useState<boolean>()
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
+  // 낙첨 화면의 "다음 팬미팅 알림 받기"는 인플루언서 팔로우와 같은 기능이다. 백엔드는 팬미팅을
+  // 공개할 때 팔로워에게 알림을 만들므로 팔로우 여부를 그대로 체크 상태로 쓴다.
+  // undefined는 아직 팔로우 여부를 모른다는 뜻이며, 이때는 체크박스를 아예 그리지 않는다.
+  const [following, setFollowing] = useState<boolean>()
+  const [followPending, setFollowPending] = useState(false)
+  const [followError, setFollowError] = useState<string>()
 
   useEffect(() => {
     if (!meetingId?.trim()) return
@@ -143,6 +154,57 @@ export function FanApplicationResultPage() {
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId, reloadKey])
+
+  const showsNotSelected =
+    resultPublished === true && application?.applicationStatus === 'NOT_SELECTED'
+  const influencerId = detail?.influencer.influencerId
+
+  // 팔로우 여부는 응모·팬미팅 응답에 없어 인플루언서 상세에서 따로 읽는다. 낙첨 화면에서만
+  // 쓰는 값이라 그 화면을 그릴 때만 조회한다. 실패하면 체크박스를 숨기고 결과 표시는 그대로 둔다.
+  useEffect(() => {
+    if (!showsNotSelected || influencerId === undefined) return
+
+    const controller = new AbortController()
+    const session = getAuthSession()
+    if (!session) return () => controller.abort()
+
+    void getInfluencer(influencerId, session.accessToken, controller.signal)
+      .then((result) => setFollowing(result.isFollowing))
+      .catch(() => undefined)
+
+    return () => controller.abort()
+  }, [showsNotSelected, influencerId])
+
+  /**
+   * 다음 팬미팅 알림 수신(= 인플루언서 팔로우)을 켜고 끈다.
+   *
+   * 이 화면은 팔로워 수를 보여 주지 않으므로 응답에서 팔로우 여부만 반영한다.
+   */
+  async function toggleFollow() {
+    if (influencerId === undefined || following === undefined) return
+
+    // 이 화면은 팬 세션이 없으면 위에서 오류 화면으로 대체되므로 여기까지 오는 일은 거의 없다.
+    const session = getAuthSession()
+    if (!session) {
+      setFollowError(t('fanApplicationResultPage.t53'))
+      return
+    }
+
+    setFollowPending(true)
+    setFollowError(undefined)
+    try {
+      const result = following
+        ? await unfollowInfluencer(influencerId, session.accessToken)
+        : await followInfluencer(influencerId, session.accessToken)
+      setFollowing(result.isFollowing)
+    } catch (reason: unknown) {
+      setFollowError(
+        reason instanceof ApiError ? reason.message : t('fanApplicationResultPage.t53'),
+      )
+    } finally {
+      setFollowPending(false)
+    }
+  }
 
   if (!meetingId?.trim()) {
     return (
@@ -359,21 +421,37 @@ export function FanApplicationResultPage() {
             >
               {t('fanApplicationResultPage.t27')}
             </Link>
-            <label className="mt-3.5 flex min-h-[52px] cursor-not-allowed items-center gap-3">
-              <input
-                checked={false}
-                className="m-0 size-[21px] flex-none accent-[var(--color-primary-coral)]"
-                disabled
-                readOnly
-                type="checkbox"
-              />
-              <span className="text-base font-semibold text-[var(--color-text-muted)]">
-                {application.influencerName}{t('fanApplicationResultPage.t28')}
-              </span>
-            </label>
-            <p aria-live="polite" className="mt-1.5 text-[15px] font-medium leading-[1.6] text-[var(--color-text-muted)]">
-              {t('fanApplicationResultPage.t29')}
-            </p>
+            {following === undefined ? null : (
+              <>
+                <label
+                  className={`mt-3.5 flex min-h-[52px] items-center gap-3 ${
+                    followPending ? 'cursor-progress' : 'cursor-pointer'
+                  }`}
+                >
+                  <input
+                    checked={following}
+                    className="m-0 size-[21px] flex-none accent-[var(--color-primary-coral)]"
+                    disabled={followPending}
+                    onChange={() => void toggleFollow()}
+                    type="checkbox"
+                  />
+                  <span className="text-base font-semibold text-[var(--color-text-muted)]">
+                    {application.influencerName}{t('fanApplicationResultPage.t28')}
+                  </span>
+                </label>
+                <p
+                  aria-live="polite"
+                  className={`mt-1.5 text-[15px] font-medium leading-[1.6] ${
+                    followError ? 'text-[var(--color-error)]' : 'text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  {followError ??
+                    (following
+                      ? t('fanApplicationResultPage.t51')
+                      : t('fanApplicationResultPage.t52'))}
+                </p>
+              </>
+            )}
           </section>
         </div>
       </div>

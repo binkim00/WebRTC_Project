@@ -12,8 +12,8 @@ import {
   type FanMeetingParticipant,
   type FanMemo,
 } from '../../api/fanMeetingParticipants'
-import { createFanMemo, updateFanMemo } from '../../api/fanMemos'
-import { Button } from '../../components'
+import { createFanMemo, deleteFanMemo, updateFanMemo } from '../../api/fanMemos'
+import { Button, Dialog } from '../../components'
 import { useTranslation } from '../../i18n'
 
 /** 백엔드 팬 메모 계약의 상한이다. */
@@ -93,6 +93,10 @@ export function InfluencerFanRecordPage() {
   const [draft, setDraft] = useState('')
   const [savedMeetingId, setSavedMeetingId] = useState<string>()
   const [saving, setSaving] = useState(false)
+  /** 방금 메모를 지운 회차다. 안내 문구를 그 회차를 보고 있는 동안에만 띄운다. */
+  const [deletedMeetingId, setDeletedMeetingId] = useState<string>()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [summaryLines, setSummaryLines] = useState<string[]>([])
   /** 요약을 보여 줄 수 없을 때의 이유 안내다. 요약이 표시되면 비운다. */
   const [summaryNotice, setSummaryNotice] = useState<string>()
@@ -299,6 +303,7 @@ export function InfluencerFanRecordPage() {
   const hasMemo = Boolean(selected?.memo.trim())
   const canSave = draft.trim().length > 0
   const justSaved = Boolean(selected && savedMeetingId === selected.meetingId)
+  const justDeleted = Boolean(selected && deletedMeetingId === selected.meetingId)
 
   function selectSession(meetingId: string) {
     setSessionPicked(true)
@@ -306,6 +311,7 @@ export function InfluencerFanRecordPage() {
     setEditingMeetingId(undefined)
     setDraft('')
     setSavedMeetingId(undefined)
+    setDeletedMeetingId(undefined)
   }
 
   function startEdit() {
@@ -313,6 +319,7 @@ export function InfluencerFanRecordPage() {
     setEditingMeetingId(selected.meetingId)
     setDraft(selected.memo)
     setSavedMeetingId(undefined)
+    setDeletedMeetingId(undefined)
   }
 
   function cancelEdit() {
@@ -357,12 +364,42 @@ export function InfluencerFanRecordPage() {
         setEditingMeetingId(undefined)
         setDraft('')
         setSavedMeetingId(target)
+        setDeletedMeetingId(undefined)
         return loadMemos()
       })
       .catch((reason: unknown) => {
         setPageError(errorMessage(reason, t('influencerFanRecordPage.t21')))
       })
       .finally(() => setSaving(false))
+  }
+
+  /**
+   * 선택한 회차의 메모를 지운다.
+   *
+   * 잘못 적은 메모를 되돌릴 방법이 화면에 없어 덮어쓰기밖에 할 수 없었다. 지운 뒤에는 같은
+   * 회차에 다시 쓸 수 있고, 지난 회차는 메모가 곧 회차 기록이므로 목록에서도 함께 사라진다.
+   */
+  function removeMemo() {
+    const memoId = selected?.memoId
+    const target = selected?.meetingId
+    if (!memoId || !target || !authToken || deleting) return
+
+    setDeleting(true)
+    setPageError(undefined)
+
+    void deleteFanMemo(memoId, authToken)
+      .then(() => {
+        setDeleteOpen(false)
+        setEditingMeetingId(undefined)
+        setDraft('')
+        setSavedMeetingId(undefined)
+        setDeletedMeetingId(target)
+        return loadMemos()
+      })
+      .catch((reason: unknown) => {
+        setPageError(errorMessage(reason, t('influencerFanRecordPage.s1DeleteFailed')))
+      })
+      .finally(() => setDeleting(false))
   }
 
   const fanName = participant?.nickname ?? t('influencerFanRecordPage.t32', { p0: fanId ?? '' }).trim()
@@ -377,13 +414,15 @@ export function InfluencerFanRecordPage() {
     ? pageError
     : justSaved
       ? t('influencerFanRecordPage.t24')
-      : editing
-        ? canSave
-          ? t('influencerFanRecordPage.t25')
-          : t('influencerFanRecordPage.t26')
-        : hasMemo
-          ? t('influencerFanRecordPage.t27')
-          : ''
+      : justDeleted
+        ? t('influencerFanRecordPage.s1Deleted')
+        : editing
+          ? canSave
+            ? t('influencerFanRecordPage.t25')
+            : t('influencerFanRecordPage.t26')
+          : hasMemo
+            ? t('influencerFanRecordPage.t27')
+            : ''
   const hintClassName = pageError
     ? 'text-[var(--color-error)]'
     : justSaved
@@ -408,6 +447,8 @@ export function InfluencerFanRecordPage() {
           <img
             alt={t('influencerFanRecordPage.t33', { p0: fanName })}
             className="size-14 flex-none rounded-lg bg-[var(--color-surface-muted)] object-cover"
+            decoding="async"
+            loading="lazy"
             src={participant.profileImageUrl}
           />
         ) : (
@@ -554,13 +595,25 @@ export function InfluencerFanRecordPage() {
                   </p>
                 </div>
                 {editing ? null : (
-                  <Button
-                    className="hover:border-[var(--color-primary-coral)] hover:bg-[var(--color-surface-panel)] hover:text-[var(--color-primary-coral)]"
-                    onClick={startEdit}
-                    variant="secondary"
-                  >
-                    {hasMemo ? t('influencerFanRecordPage.t30') : t('influencerFanRecordPage.t31')}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      className="hover:border-[var(--color-primary-coral)] hover:bg-[var(--color-surface-panel)] hover:text-[var(--color-primary-coral)]"
+                      onClick={startEdit}
+                      variant="secondary"
+                    >
+                      {hasMemo ? t('influencerFanRecordPage.t30') : t('influencerFanRecordPage.t31')}
+                    </Button>
+                    {/* 저장된 메모가 있는 회차에서만 지울 수 있다. */}
+                    {selected?.memoId ? (
+                      <Button
+                        className="hover:border-[var(--color-error)] hover:bg-[var(--color-surface-panel)] hover:text-[var(--color-error)]"
+                        onClick={() => setDeleteOpen(true)}
+                        variant="secondary"
+                      >
+                        {t('influencerFanRecordPage.s1Delete')}
+                      </Button>
+                    ) : null}
+                  </div>
                 )}
               </div>
 
@@ -634,6 +687,25 @@ export function InfluencerFanRecordPage() {
           </article>
         </div>
       )}
+
+      <Dialog
+        description={t('influencerFanRecordPage.s1DeleteDesc', { p0: selected?.title ?? '' })}
+        footer={
+          <>
+            <Button disabled={deleting} onClick={() => setDeleteOpen(false)} variant="secondary">
+              {t('influencerFanRecordPage.t16')}
+            </Button>
+            <Button loading={deleting} onClick={removeMemo} variant="danger">
+              {t('influencerFanRecordPage.s1DeleteConfirm')}
+            </Button>
+          </>
+        }
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteOpen(false)
+        }}
+        open={deleteOpen}
+        title={t('influencerFanRecordPage.s1DeleteTitle')}
+      />
     </div>
   )
 }

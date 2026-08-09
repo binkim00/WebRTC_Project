@@ -2,13 +2,21 @@ import { ApiError } from './ApiError'
 import { apiRequest } from './client'
 import { translate } from '../i18n'
 
+/**
+ * 조직 정보다.
+ *
+ * 이름 말고는 모두 비어 있을 수 있다. 엔티티의 `business_number`·`representative_name`·
+ * `contact_email`·`contact_phone` 컬럼에 NOT NULL이 없고, 서비스가 공백 입력을 null로 눕혀
+ * 저장하기 때문이다. 이 필드들을 문자열로만 받으면 값이 빈 조직에서 타입 가드가 실패해
+ * 조직 화면 전체가 오류로 바뀐다.
+ */
 export type Organization = {
   organizationId: number
   name: string
-  businessNumber: string
-  representativeName: string
-  contactEmail: string
-  contactPhone: string
+  businessNumber: string | null
+  representativeName: string | null
+  contactEmail: string | null
+  contactPhone: string | null
   logoUrl: string | null
   description: string | null
   status: string
@@ -62,8 +70,8 @@ function isNullableString(value: unknown): value is string | null {
 function isOrganization(value: unknown): value is Organization {
   if (!isRecord(value)) return false
   return typeof value.organizationId === 'number' && typeof value.name === 'string' &&
-    typeof value.businessNumber === 'string' && typeof value.representativeName === 'string' &&
-    typeof value.contactEmail === 'string' && typeof value.contactPhone === 'string' &&
+    isNullableString(value.businessNumber) && isNullableString(value.representativeName) &&
+    isNullableString(value.contactEmail) && isNullableString(value.contactPhone) &&
     isNullableString(value.logoUrl) && isNullableString(value.description) &&
     typeof value.status === 'string' && typeof value.createdAt === 'string'
 }

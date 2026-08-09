@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, PushPin } from '@phosphor-icons/react'
 import { parseServerDate } from '../../api/serverTime'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { attachmentContentUrl } from '../../api/attachments'
+import { attachmentContentUrl, resolveAttachmentUrl } from '../../api/attachments'
 import type { PageResponse } from '../../api/envelope'
 import {
   getServiceNotice,
@@ -97,18 +97,30 @@ export function ServiceNoticesPage() {
                     className="flex flex-wrap items-center justify-between gap-3 px-6 py-5 transition-colors hover:bg-[var(--color-surface-page)]"
                     to={`/service-notices/${notice.noticeId}`}
                   >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        {notice.pinned ? (
-                          <Badge variant="primary">
-                            <PushPin aria-hidden="true" size={13} weight="fill" /> {t('serviceNoticesPage.t7')}
-                          </Badge>
-                        ) : null}
-                        <strong className="min-w-0 break-keep">{notice.title}</strong>
+                    <div className="flex min-w-0 items-center gap-3">
+                      {/* 첨부한 첫 이미지를 대표로 보여 준다. 이미지 첨부가 없으면 null이다. */}
+                      {notice.thumbnailUrl ? (
+                        <img
+                          alt=""
+                          className="h-14 w-14 flex-none rounded-lg object-cover"
+                          decoding="async"
+                          loading="lazy"
+                          src={resolveAttachmentUrl(notice.thumbnailUrl)}
+                        />
+                      ) : null}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          {notice.pinned ? (
+                            <Badge variant="primary">
+                              <PushPin aria-hidden="true" size={13} weight="fill" /> {t('serviceNoticesPage.t7')}
+                            </Badge>
+                          ) : null}
+                          <strong className="min-w-0 break-keep">{notice.title}</strong>
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                          {notice.authorNickname} · {formatDateTime(notice.createdAt)}
+                        </p>
                       </div>
-                      <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-                        {notice.authorNickname} · {formatDateTime(notice.createdAt)}
-                      </p>
                     </div>
                     <ArrowRight aria-hidden="true" className="text-[var(--color-text-tertiary)]" size={18} />
                   </Link>
@@ -148,7 +160,7 @@ export function ServiceNoticeDetailPage() {
     const controller = new AbortController()
 
     setLoading(true)
-    getServiceNotice(noticeId, controller.signal)
+    getServiceNotice(noticeId, undefined, controller.signal)
       .then((result) => {
         setNotice(result)
         setError(undefined)
@@ -203,6 +215,24 @@ export function ServiceNoticeDetailPage() {
           <div className="mt-7 whitespace-pre-wrap border-t border-[var(--color-divider)] pt-7 leading-7">
             {notice.content}
           </div>
+          {/* 이미지 첨부는 내려받기 전에 본문과 함께 바로 보이는 편이 낫다. */}
+          {notice.attachments.some((attachment) => attachment.contentType.startsWith('image/')) ? (
+            <div className="mt-7 grid gap-3 border-t border-[var(--color-divider)] pt-6">
+              {notice.attachments
+                .filter((attachment) => attachment.contentType.startsWith('image/'))
+                .map((attachment) => (
+                  <img
+                    alt={attachment.originalFileName}
+                    className="w-full rounded-lg"
+                    decoding="async"
+                    key={attachment.attachmentId}
+                    loading="lazy"
+                    src={attachmentContentUrl(attachment.attachmentId)}
+                  />
+                ))}
+            </div>
+          ) : null}
+
           {/* 백엔드는 공지에 첨부를 연결할 수 있으므로 읽는 쪽에서도 내려받을 수 있게 한다. */}
           {notice.attachments.length ? (
             <section className="mt-7 grid gap-2 border-t border-[var(--color-divider)] pt-6">

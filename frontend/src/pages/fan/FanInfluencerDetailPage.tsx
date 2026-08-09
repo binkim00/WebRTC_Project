@@ -237,6 +237,8 @@ export function FanInfluencerDetailPage() {
                     <img
                       alt={t('fanInfluencerDetailPage.t17', { p0: meeting.title })}
                       className="aspect-[16/7] w-full object-cover"
+                      decoding="async"
+                      loading="lazy"
                       src={meeting.coverImageUrl}
                     />
                   ) : null}

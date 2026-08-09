@@ -39,3 +39,43 @@ export const LAYOUT_OPTIONS = (): readonly LayoutOption[] => [
 export function photoCountOf(layout: FanCardLayout | undefined): number {
   return LAYOUT_OPTIONS().find((option) => option.key === layout)?.photoCount ?? 0
 }
+
+/**
+ * 카드 칸을 채울 사진 순서를 만든다.
+ *
+ * <p>찍어 둔 사진이 칸 수보다 적으면 빈 칸을 남기지 않고 같은 사진을 다시 쓴다. 아직 쓰지
+ * 않은 사진을 먼저 넣고, 모두 쓰고도 칸이 남으면 앞서 넣은 차례를 그대로 되풀이한다.
+ * 사진 두 장으로 네 칸을 채우면 첫째·둘째 사진이 번갈아 들어간다.
+ *
+ * @param chosen 이미 고른 사진 위치이며 순서가 곧 칸 순서다
+ * @param need 이 레이아웃이 쓰는 칸 수
+ * @param photoCount 팬이 찍어 둔 사진 장수
+ * @returns 칸 순서대로 늘어놓은 사진 위치이며 칸이나 사진이 없으면 빈 배열
+ */
+export function fillPhotoSlots(
+  chosen: readonly number[],
+  need: number,
+  photoCount: number,
+): number[] {
+  if (need === 0 || photoCount === 0) return []
+
+  const slots = chosen.slice(0, need)
+  while (slots.length < need) {
+    let unused: number | undefined
+    for (let candidate = 0; candidate < photoCount; candidate += 1) {
+      if (!slots.includes(candidate)) {
+        unused = candidate
+        break
+      }
+    }
+    if (unused !== undefined) {
+      slots.push(unused)
+      continue
+    }
+    // 남는 사진이 없다는 것은 모든 사진을 한 번씩 썼다는 뜻이라 photoCount 칸 앞자리는
+    // 반드시 채워져 있다. 그 차례를 그대로 되풀이해 사진이 고르게 번갈아 들어가게 한다.
+    // 뒤의 0은 타입을 맞추기 위한 값이며 실제로는 여기까지 오지 않는다.
+    slots.push(slots[slots.length - photoCount] ?? 0)
+  }
+  return slots
+}

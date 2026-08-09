@@ -10,6 +10,8 @@ type FanCardLayoutPickerProps = {
   layout?: FanCardLayout
   /** 카드에 넣기로 한 사진의 위치이며 순서가 곧 칸 순서다 */
   selectedPhotoIndexes: readonly number[]
+  /** 미리보기에서 고른 칸의 순번이며 고른 칸이 없으면 undefined다 */
+  selectedSlot?: number
   /** 카드 모양을 바꿨을 때 호출한다 */
   onLayoutChange: (layout: FanCardLayout | undefined) => void
   /** 사진을 넣거나 뺄 때 호출한다 */
@@ -26,6 +28,7 @@ export function FanCardLayoutPicker({
   photoUrls,
   layout,
   selectedPhotoIndexes,
+  selectedSlot,
   onLayoutChange,
   onTogglePhoto,
 }: FanCardLayoutPickerProps) {
@@ -61,8 +64,12 @@ export function FanCardLayoutPicker({
           </h4>
           <ul className="mt-3 grid grid-cols-4 gap-2">
             {photoUrls.map((url, index) => {
-              const order = selectedPhotoIndexes.indexOf(index)
-              const chosen = order >= 0
+              // 사진이 칸 수보다 적으면 한 장이 여러 칸에 들어가므로 칸 번호를 모두 모은다.
+              const orders = selectedPhotoIndexes.reduce<number[]>((slots, item, slot) => {
+                if (item === index) slots.push(slot + 1)
+                return slots
+              }, [])
+              const chosen = orders.length > 0
               return (
                 <li key={url}>
                   <button
@@ -81,11 +88,12 @@ export function FanCardLayoutPicker({
                     onClick={() => onTogglePhoto(index)}
                     type="button"
                   >
-                    <img alt="" className="block aspect-video w-full object-cover" src={url} />
-                    {/* 네컷은 고른 차례가 곧 칸 순서라 번호를 보여 준다. */}
+                    <img alt="" className="block aspect-video w-full object-cover" decoding="async" loading="lazy" src={url} />
+                    {/* 네컷은 고른 차례가 곧 칸 순서라 번호를 보여 준다. 한 사진이 여러 칸에
+                        들어가면 번호를 함께 적어 어디에 놓였는지 알 수 있게 한다. */}
                     {chosen && needed > 1 ? (
-                      <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-[var(--color-primary-coral)] text-[11px] font-extrabold text-white">
-                        {order + 1}
+                      <span className="absolute right-1 top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-primary-coral)] px-1.5 text-[11px] font-extrabold text-white">
+                        {orders.join('·')}
                       </span>
                     ) : null}
                   </button>
@@ -93,7 +101,15 @@ export function FanCardLayoutPicker({
               )
             })}
           </ul>
-          {selectedPhotoIndexes.length < needed ? (
+          {/* 고른 칸이 있으면 그 칸을 바꾼다는 것을 먼저 알린다. 사진이 모자라 모든 칸이
+              차 있을 때 칸을 고르는 것이 배치를 바꾸는 유일한 방법이다. */}
+          {selectedSlot !== undefined && needed > 1 ? (
+            <p className="mt-2.5 text-[13px] font-semibold leading-6 text-[var(--color-primary-coral)]">
+               {t('fanCardLayoutPicker.t11', { p0: selectedSlot + 1 })} </p>
+          ) : photoUrls.length < needed ? (
+            <p className="mt-2.5 text-[13px] font-medium leading-6 text-[var(--color-text-muted)]">
+               {t('fanCardLayoutPicker.t10')} </p>
+          ) : selectedPhotoIndexes.length < needed ? (
             <p className="mt-2.5 text-[13px] font-medium leading-6 text-[var(--color-text-muted)]">
                {t('fanCardLayoutPicker.t9')} </p>
           ) : null}

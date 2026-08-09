@@ -183,13 +183,14 @@ export function LandingPage() {
           alt=""
           className={`float-object ${object.className}`}
           data-depth={object.depth}
+          decoding="async"
           key={object.className}
           src={object.src}
         />
       ))}
 
       <div className="hero-copy">
-        <img alt="Melly" className="wordmark" src={wordmark} />
+        <img alt="Melly" className="wordmark" decoding="async" src={wordmark} />
         <h1 id="hero-title">
           {t('landingPage.t1')}
           <br />

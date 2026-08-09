@@ -307,7 +307,7 @@ export function FanEventListPage() {
         </div>
       ) : visibleMeetings.length === 0 ? (
         <div aria-live="polite" className="grid place-items-center px-6 py-[76px] text-center">
-          <img alt="" className="size-24 object-contain opacity-60" src={moldEmptyImage} />
+          <img alt="" className="size-24 object-contain opacity-60" decoding="async" loading="lazy" src={moldEmptyImage} />
           <strong className="mt-4 text-[19px] font-extrabold tracking-[-0.03em]">
             {t('fanEvents.empty.title')}
           </strong>
@@ -359,6 +359,8 @@ export function FanEventListPage() {
                         <img
                           alt=""
                           className="block aspect-[16/10] w-full object-cover"
+                          decoding="async"
+                          loading="lazy"
                           src={meeting.coverImageUrl}
                         />
                       ) : (

@@ -558,6 +558,8 @@ export function FanMeetingListPage() {
                       <img
                         alt=""
                         className="block aspect-[16/10] w-full object-cover"
+                        decoding="async"
+                        loading="lazy"
                         src={item.application.coverImageUrl}
                       />
                     ) : (
@@ -682,6 +684,8 @@ export function FanMeetingListPage() {
                         <img
                           alt=""
                           className="block aspect-[16/10] w-full object-cover saturate-[0.8]"
+                          decoding="async"
+                          loading="lazy"
                           src={item.application.coverImageUrl}
                         />
                       ) : (

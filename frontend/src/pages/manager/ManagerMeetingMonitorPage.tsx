@@ -10,7 +10,6 @@ import {
   Stop,
   UserMinus,
   VideoCamera,
-  Warning,
 } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -739,24 +738,23 @@ export function ManagerMeetingMonitorPage() {
               <h2 className="mt-2 text-2xl font-black">{t('managerMeetingMonitorPage.t23')}</h2>
             )}
           </div>
-          {queue.currentCall ? (
+          {/*
+            유해발언 감지 화면으로 가는 버튼은 뺐다. 대상 화면이 미구현 안내만 띄우므로
+            통화 중에 눌러도 할 수 있는 일이 없다. AI 위험 감지 API가 붙으면 되살린다.
+          */}
+          {queue.currentCall && isSoloInfluencer ? (
             <div className="flex flex-wrap justify-end gap-2">
-              {isSoloInfluencer ? (
-                <Link
-                  className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
-                  to={`/influencer/fan-meetings/${encodedMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`}
-                >
-                  <VideoCamera aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t24')}
-                </Link>
-              ) : null}
-              {isSoloInfluencer && currentCallEntry ? (
+              <Link
+                className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary-coral)] px-[var(--control-padding-inline)] text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-coral-hover)]"
+                to={`/influencer/fan-meetings/${encodedMeetingId}/calls/${encodeURIComponent(queue.currentCall.callSessionId)}`}
+              >
+                <VideoCamera aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t24')}
+              </Link>
+              {currentCallEntry ? (
                 <Link className={consoleLinkClass} to={fanRecordPath(currentCallEntry)}>
                   <NotePencil aria-hidden size={18} weight="bold" />{t('managerMeetingMonitorPage.t25')}
                 </Link>
               ) : null}
-              <Link className="inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-danger)] px-[var(--control-padding-inline)] text-sm font-semibold text-white" to={`/manager/fan-meetings/${encodedMeetingId}/monitor/risk?callSessionId=${encodeURIComponent(queue.currentCall.callSessionId)}`}>
-                <Warning size={18} weight="bold" />{t('managerMeetingMonitorPage.t26')}
-              </Link>
             </div>
           ) : null}
         </div>
@@ -775,7 +773,7 @@ export function ManagerMeetingMonitorPage() {
               <div className="grid gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" key={request.requestId}>
                 <div className="flex min-w-0 items-start gap-3">
                   {request.profileImageUrl ? (
-                    <img alt="" className="size-10 shrink-0 rounded-full object-cover" src={request.profileImageUrl} />
+                    <img alt="" className="size-10 shrink-0 rounded-full object-cover" decoding="async" loading="lazy" src={request.profileImageUrl} />
                   ) : (
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-coral-soft)] font-bold text-[var(--color-primary-coral)]">{request.nickname.slice(0, 1)}</span>
                   )}

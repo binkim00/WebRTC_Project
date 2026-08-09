@@ -637,6 +637,7 @@ export function FanMeetingWaitingPage() {
             <img
               alt={t('wait.coverAlt', { influencer: influencerName })}
               className="absolute inset-0 size-full object-cover"
+              decoding="async"
               src={detail.meeting.coverImageUrl}
             />
           ) : (
@@ -842,9 +843,18 @@ export function FanMeetingWaitingPage() {
               >
                 {t('wait.notices')}
               </h2>
-              <span className="text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
-                {detail?.meeting.title ?? t('wait.fallbackMeeting')} ·{' '}
-                {t('wait.noticeCount', { count: noticeTotal })}
+              <span className="flex flex-wrap items-baseline gap-3 text-sm font-semibold tabular-nums text-[var(--color-text-muted)]">
+                <span>
+                  {detail?.meeting.title ?? t('wait.fallbackMeeting')} ·{' '}
+                  {t('wait.noticeCount', { count: noticeTotal })}
+                </span>
+                {/* 이 자리에는 최신 몇 건만 보이므로 전체 목록으로 갈 길을 열어 둔다. */}
+                <Link
+                  className="font-bold text-[var(--color-primary-coral)] hover:underline"
+                  to={`/fan-meetings/${fanMeetingId}/notices`}
+                >
+                  {t('wait.s6AllNotices')}
+                </Link>
               </span>
             </div>
             <div className="mt-3.5">
