@@ -167,4 +167,13 @@ describe('VideoCallRoom 녹화 동의 기록', () => {
     })
     expect(await screen.findByTestId('livekit-room')).toBeTruthy()
   })
+
+  it('통화 상태 조회가 실패해도 LiveKit 토큰이 정상이면 영상 화면을 연다', async () => {
+    stubCallEntry('INFLUENCER', false)
+    mocks.getCallSessionStatus.mockRejectedValue(new Error('status unavailable'))
+    renderRoom()
+
+    expect(await screen.findByTestId('livekit-room')).toBeTruthy()
+    expect(screen.getByText('status unavailable')).toBeTruthy()
+  })
 })
