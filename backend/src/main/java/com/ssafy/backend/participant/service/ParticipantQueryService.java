@@ -1,6 +1,9 @@
 package com.ssafy.backend.participant.service;
 
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.call.domain.CallSession;
+import com.ssafy.backend.call.dto.ParticipantCallSessionView;
+import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
@@ -33,6 +36,7 @@ public class ParticipantQueryService {
     private final MeetingAccessService meetingAccessService;
     private final ParticipantRepository participantRepository;
     private final QueueEntryRepository queueEntryRepository;
+    private final CallSessionRepository callSessionRepository;
 
     /**
      * 참가자 조회에 필요한 권한 검증기와 저장소를 주입받는다.
@@ -41,15 +45,18 @@ public class ParticipantQueryService {
      * @param meetingAccessService 팬미팅 운영 권한 검증 서비스
      * @param participantRepository 참가자 저장소
      * @param queueEntryRepository 대기열 항목 저장소
+     * @param callSessionRepository 영상통화 세션 저장소
      */
     public ParticipantQueryService(CurrentUserService currentUserService,
                                    MeetingAccessService meetingAccessService,
                                    ParticipantRepository participantRepository,
-                                   QueueEntryRepository queueEntryRepository) {
+                                   QueueEntryRepository queueEntryRepository,
+                                   CallSessionRepository callSessionRepository) {
         this.currentUserService = currentUserService;
         this.meetingAccessService = meetingAccessService;
         this.participantRepository = participantRepository;
         this.queueEntryRepository = queueEntryRepository;
+        this.callSessionRepository = callSessionRepository;
     }
 
     /**
@@ -84,11 +91,14 @@ public class ParticipantQueryService {
                         meetingId, status, normalizedKeyword, participantSource, pageRequest);
         if (participants.isEmpty()) {
             return PageResponse.from(participants.map(
-                    participant -> ParticipantSummaryResponse.of(participant, null)));
+                    participant -> ParticipantSummaryResponse.of(participant, null, null)));
         }
         Map<Long, String> queueStatuses = queueStatusesByParticipantId(meetingId);
+        Map<Long, Long> callSessionIds = callSessionIdsByParticipantId(meetingId);
         return PageResponse.from(participants.map(participant ->
-                ParticipantSummaryResponse.of(participant, queueStatuses.get(participant.getId()))));
+                ParticipantSummaryResponse.of(participant,
+                        queueStatuses.get(participant.getId()),
+                        callSessionIds.get(participant.getId()))));
     }
 
     /**
@@ -110,11 +120,15 @@ public class ParticipantQueryService {
         Participant participant = participantRepository
                 .findByIdAndMeeting_Id(participantId, meetingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PARTICIPANT_NOT_IN_MEETING));
-        String queueStatus = queueEntryRepository
+        QueueEntry entry = queueEntryRepository
                 .findByMeeting_IdAndParticipant_Fan_Id(meetingId, participant.getFan().getId())
-                .map(entry -> toQueueStatus(entry.getStatus()))
                 .orElse(null);
-        return ParticipantSummaryResponse.of(participant, queueStatus);
+        String queueStatus = entry == null ? null : toQueueStatus(entry.getStatus());
+        Long callSessionId = entry == null ? null : callSessionRepository
+                .findByQueueEntry_Id(entry.getId())
+                .map(CallSession::getId)
+                .orElse(null);
+        return ParticipantSummaryResponse.of(participant, queueStatus, callSessionId);
     }
 
     /**
@@ -130,6 +144,25 @@ public class ParticipantQueryService {
             statuses.put(entry.getParticipant().getId(), toQueueStatus(entry.getStatus()));
         }
         return statuses;
+    }
+
+    /**
+     * 팬미팅의 영상통화 세션을 한 번에 조회해 참가자별 세션 식별자를 만든다.
+     *
+     * <p>대기열 항목 하나에 세션 하나가 붙고 참가자당 대기열 항목도 하나이므로 참가자마다
+     * 세션은 최대 하나다. 그럼에도 중복이 생기면 가장 최근에 만들어진 세션(식별자가 큰 쪽)을
+     * 남겨 최신 통화의 요약을 가리키게 한다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @return 참가자 식별자별 영상통화 세션 식별자
+     */
+    private Map<Long, Long> callSessionIdsByParticipantId(Long meetingId) {
+        Map<Long, Long> callSessionIds = new HashMap<>();
+        for (ParticipantCallSessionView view
+                : callSessionRepository.findParticipantCallSessions(meetingId)) {
+            callSessionIds.merge(view.participantId(), view.callSessionId(), Math::max);
+        }
+        return callSessionIds;
     }
 
     /**

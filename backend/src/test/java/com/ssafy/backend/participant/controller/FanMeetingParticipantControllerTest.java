@@ -43,7 +43,8 @@ class FanMeetingParticipantControllerTest {
         ParticipantQueryService service = mock(ParticipantQueryService.class);
         FanMeetingParticipantController controller = new FanMeetingParticipantController(service);
         ParticipantSummaryResponse expected = new ParticipantSummaryResponse(
-                100L, 30L, "첫째팬", null, 1, "READY", "WAITING", ParticipantSource.APPLICATION);
+                100L, 30L, "첫째팬", null, 1, "READY", "WAITING",
+                ParticipantSource.APPLICATION, 500L);
         when(service.getParticipant(1L, 100L, MANAGER)).thenReturn(expected);
 
         ApiResponse<ParticipantSummaryResponse> response =

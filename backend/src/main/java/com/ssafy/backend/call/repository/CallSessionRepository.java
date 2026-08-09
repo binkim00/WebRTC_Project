@@ -2,6 +2,7 @@ package com.ssafy.backend.call.repository;
 
 import com.ssafy.backend.call.domain.CallSession;
 import com.ssafy.backend.call.domain.CallSessionStatus;
+import com.ssafy.backend.call.dto.ParticipantCallSessionView;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -187,4 +188,25 @@ public interface CallSessionRepository extends JpaRepository<CallSession, Long> 
      * @return 상태와 무관한 팬미팅의 전체 통화 세션 목록
      */
     List<CallSession> findByQueueEntry_Meeting_Id(Long meetingId);
+
+    /**
+     * 팬미팅 참가자별 통화 세션 식별자를 한 번에 조회한다.
+     *
+     * <p>참가자 목록 화면이 통화가 끝난 뒤에도 AI 요약을 열 수 있으려면 참가자마다 통화 세션
+     * 식별자가 필요하다. 세션 엔티티를 통째로 읽으면 참가자를 지연 로딩하느라 행 수만큼 추가
+     * 질의가 나가므로 필요한 두 식별자만 가져온다.
+     *
+     * @param meetingId 팬미팅 식별자
+     * @return 참가자 식별자와 통화 세션 식별자 쌍의 목록
+     */
+    @Query("""
+            select new com.ssafy.backend.call.dto.ParticipantCallSessionView(
+                    participant.id, callSession.id)
+            from CallSession callSession
+            join callSession.queueEntry queueEntry
+            join queueEntry.participant participant
+            where queueEntry.meeting.id = :meetingId
+            """)
+    List<ParticipantCallSessionView> findParticipantCallSessions(
+            @Param("meetingId") Long meetingId);
 }

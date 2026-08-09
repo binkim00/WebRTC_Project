@@ -40,6 +40,13 @@ export type FanMeetingParticipant = {
   queueStatus?: QueueStatus
   cameraOk?: boolean
   microphoneOk?: boolean
+  /**
+   * 이 참가자의 통화 세션 식별자다. 아직 호출된 적이 없으면 없다.
+   *
+   * AI 요약은 통화 세션 단위라 이 값이 있어야 조회할 수 있다. 서버가 대기열·참가자 관계로
+   * 찾아 주므로, 통화를 지켜보지 않은 브라우저에서도 지난 회차의 요약을 열 수 있다.
+   */
+  latestCallSessionId?: string
 }
 
 export type ParticipantPage = {
@@ -136,6 +143,12 @@ function readOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined
 }
 
+/** 서버가 숫자로 내려주는 선택적 식별자를 문자열로 맞춘다. 값이 없으면 undefined다. */
+function readOptionalId(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return readOptionalString(value)
+}
+
 function readNumber(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
@@ -170,6 +183,7 @@ function parseParticipant(value: unknown): FanMeetingParticipant {
     queueStatus: isQueueStatus(record.queueStatus) ? record.queueStatus : undefined,
     cameraOk: readOptionalBoolean(record.cameraOk),
     microphoneOk: readOptionalBoolean(record.microphoneOk),
+    latestCallSessionId: readOptionalId(record.latestCallSessionId),
   }
 }
 

@@ -1,6 +1,9 @@
 package com.ssafy.backend.participant.service;
 
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
+import com.ssafy.backend.call.domain.CallSession;
+import com.ssafy.backend.call.dto.ParticipantCallSessionView;
+import com.ssafy.backend.call.repository.CallSessionRepository;
 import com.ssafy.backend.common.api.PageResponse;
 import com.ssafy.backend.common.exception.BusinessException;
 import com.ssafy.backend.common.exception.ErrorCode;
@@ -49,6 +52,7 @@ class ParticipantQueryServiceTest {
     private MeetingAccessService meetingAccessService;
     private ParticipantRepository participantRepository;
     private QueueEntryRepository queueEntryRepository;
+    private CallSessionRepository callSessionRepository;
     private ParticipantQueryService service;
     private User manager;
     private FanMeeting meeting;
@@ -60,8 +64,9 @@ class ParticipantQueryServiceTest {
         meetingAccessService = mock(MeetingAccessService.class);
         participantRepository = mock(ParticipantRepository.class);
         queueEntryRepository = mock(QueueEntryRepository.class);
+        callSessionRepository = mock(CallSessionRepository.class);
         service = new ParticipantQueryService(currentUserService, meetingAccessService,
-                participantRepository, queueEntryRepository);
+                participantRepository, queueEntryRepository, callSessionRepository);
 
         manager = user(10L, "manager", "테스트매니저", UserRole.MANAGER);
         meeting = meeting(1L, user(20L, "influencer", "인플루언서", UserRole.INFLUENCER));
@@ -88,7 +93,8 @@ class ParticipantQueryServiceTest {
 
         assertThat(response.content()).hasSize(2);
         assertThat(response.content().get(0)).isEqualTo(new ParticipantSummaryResponse(
-                100L, 30L, "첫째팬", null, 1, "READY", "IN_CALL", ParticipantSource.APPLICATION));
+                100L, 30L, "첫째팬", null, 1, "READY", "IN_CALL",
+                ParticipantSource.APPLICATION, null));
         assertThat(response.content().get(1).queueStatus()).isEqualTo("WAITING");
         assertThat(response.totalElements()).isEqualTo(2L);
         assertThat(response.page()).isZero();
@@ -248,7 +254,52 @@ class ParticipantQueryServiceTest {
                 service.getParticipant(1L, 100L, MANAGER_PRINCIPAL);
 
         assertThat(response).isEqualTo(new ParticipantSummaryResponse(
-                100L, 30L, "첫째팬", null, 3, "READY", "CALLED", ParticipantSource.APPLICATION));
+                100L, 30L, "첫째팬", null, 3, "READY", "CALLED",
+                ParticipantSource.APPLICATION, null));
+    }
+
+    /**
+     * 참가자 목록이 통화 세션 식별자를 함께 내려주는지 검증한다.
+     *
+     * <p>팬 기록 화면은 이 값으로 통화가 끝난 뒤에도 AI 요약을 조회한다.
+     */
+    @Test
+    void returnsParticipantsWithCallSessionId() {
+        Participant participant = participant(100L, meeting,
+                user(30L, "fan1", "첫째팬", UserRole.FAN), "READY", 1);
+        when(participantRepository.searchByMeeting(eq(1L), eq(""), eq(""), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(participant), PageRequest.of(0, 20), 1));
+        when(queueEntryRepository.findByMeeting_IdOrderByQueuePositionAsc(1L))
+                .thenReturn(List.of(queueEntry(participant, QueueEntryStatus.DONE)));
+        when(callSessionRepository.findParticipantCallSessions(1L))
+                .thenReturn(List.of(new ParticipantCallSessionView(100L, 777L)));
+
+        PageResponse<ParticipantSummaryResponse> response =
+                service.getParticipants(1L, null, null, null, 0, 20, MANAGER_PRINCIPAL);
+
+        assertThat(response.content().get(0).latestCallSessionId()).isEqualTo(777L);
+    }
+
+    /** 참가자 상세도 대기열 항목에 연결된 통화 세션 식별자를 함께 반환하는지 검증한다. */
+    @Test
+    void returnsParticipantDetailWithCallSessionId() {
+        Participant participant = participant(100L, meeting,
+                user(30L, "fan1", "첫째팬", UserRole.FAN), "READY", 3);
+        QueueEntry entry = queueEntry(participant, QueueEntryStatus.DONE);
+        ReflectionTestUtils.setField(entry, "id", 55L);
+        CallSession callSession = mock(CallSession.class);
+        when(callSession.getId()).thenReturn(777L);
+        when(participantRepository.findByIdAndMeeting_Id(100L, 1L))
+                .thenReturn(Optional.of(participant));
+        when(queueEntryRepository.findByMeeting_IdAndParticipant_Fan_Id(1L, 30L))
+                .thenReturn(Optional.of(entry));
+        when(callSessionRepository.findByQueueEntry_Id(55L))
+                .thenReturn(Optional.of(callSession));
+
+        ParticipantSummaryResponse response =
+                service.getParticipant(1L, 100L, MANAGER_PRINCIPAL);
+
+        assertThat(response.latestCallSessionId()).isEqualTo(777L);
     }
 
     /** 다른 팬미팅의 참가자 식별자로 상세 조회하면 거부되는지 검증한다. */

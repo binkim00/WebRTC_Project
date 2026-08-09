@@ -17,6 +17,8 @@ import com.ssafy.backend.user.domain.User;
  * @param participantStatus 참가자 상태
  * @param queueStatus 현재 대기열 상태이며 대기열이 없으면 {@code null}
  * @param participantSource 참가자가 확정된 경로이며 응모 추첨과 외부 선별을 구분한다
+ * @param latestCallSessionId 이 참가자의 영상통화 세션 식별자이며 아직 호출된 적이 없으면
+ *                            {@code null}이다. 통화가 끝난 뒤 AI 요약을 조회할 때 쓴다
  */
 public record ParticipantSummaryResponse(
         Long participantId,
@@ -26,7 +28,8 @@ public record ParticipantSummaryResponse(
         Integer callOrder,
         String participantStatus,
         String queueStatus,
-        ParticipantSource participantSource
+        ParticipantSource participantSource,
+        Long latestCallSessionId
 ) {
 
     /**
@@ -34,9 +37,12 @@ public record ParticipantSummaryResponse(
      *
      * @param participant 변환할 참가자 엔티티
      * @param queueStatus 대기열 상태 이름이며 대기열 항목이 없으면 {@code null}
+     * @param latestCallSessionId 참가자의 영상통화 세션 식별자이며 없으면 {@code null}
      * @return 운영자 화면용 참가자 응답
      */
-    public static ParticipantSummaryResponse of(Participant participant, String queueStatus) {
+    public static ParticipantSummaryResponse of(
+            Participant participant, String queueStatus, Long latestCallSessionId
+    ) {
         User fan = participant.getFan();
         return new ParticipantSummaryResponse(
                 participant.getId(),
@@ -46,7 +52,8 @@ public record ParticipantSummaryResponse(
                 participant.getAssignedOrder(),
                 participant.getStatus(),
                 queueStatus,
-                participant.getParticipantSource()
+                participant.getParticipantSource(),
+                latestCallSessionId
         );
     }
 }

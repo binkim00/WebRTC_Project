@@ -185,6 +185,70 @@ describe('InfluencerFanRecordPage', () => {
     expect(screen.queryByRole('navigation', { name: '팬미팅' })).toBeNull()
   })
 
+  /*
+   * 요약 조회에 쓸 통화 세션은 서버 참가자 응답이 알려 준다. 예전에는 브라우저 localStorage에
+   * 남은 추정값에 기대서, 통화를 지켜보지 않은 브라우저에서는 요약이 아예 뜨지 않았다.
+   */
+  it('참가자 응답의 통화 세션으로 요약을 조회해 보여 준다', async () => {
+    mocks.fetchParticipants.mockResolvedValue({
+      content: [
+        {
+          participantId: 'p-1',
+          fanId: 'fan-1',
+          nickname: '김유진',
+          callOrder: 1,
+          participantStatus: 'ACTIVE',
+          latestCallSessionId: '4242',
+        },
+      ],
+      ...page(1),
+    })
+    mocks.getCallSummary.mockResolvedValue({
+      state: 'COMPLETED',
+      summary: { summary: '과학 동아리 이야기를 나눴다.', keywords: null },
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('과학 동아리 이야기를 나눴다.')).toBeTruthy()
+    expect(mocks.getCallSummary).toHaveBeenCalledWith('4242', 'token', expect.anything())
+  })
+
+  /** 아직 생성 중(202)이면 완료될 때까지 다시 물어본다. 한 번만 조회하면 영영 "생성 중"이다. */
+  it('요약이 생성 중이면 다시 조회해 완료된 내용을 보여 준다', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mocks.fetchParticipants.mockResolvedValue({
+      content: [
+        {
+          participantId: 'p-1',
+          fanId: 'fan-1',
+          nickname: '김유진',
+          callOrder: 1,
+          participantStatus: 'ACTIVE',
+          latestCallSessionId: '4242',
+        },
+      ],
+      ...page(1),
+    })
+    mocks.getCallSummary
+      .mockResolvedValueOnce({ state: 'GENERATING', message: '요약을 만들고 있어요.' })
+      .mockResolvedValue({
+        state: 'COMPLETED',
+        summary: { summary: '두 번째 조회에서 받은 요약.', keywords: null },
+      })
+
+    try {
+      renderPage()
+
+      await waitFor(() => expect(mocks.getCallSummary).toHaveBeenCalledTimes(1))
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      expect(await screen.findByText('두 번째 조회에서 받은 요약.')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('메모를 불러오지 못하면 빈 상태 대신 실패를 알린다', async () => {
     mocks.fetchFanMemos.mockRejectedValue(new TypeError('팬 메모를 불러오지 못했습니다.'))
     mocks.fetchMeetingDetail.mockRejectedValue(new Error('no meeting'))

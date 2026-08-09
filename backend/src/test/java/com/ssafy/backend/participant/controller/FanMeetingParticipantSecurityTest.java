@@ -72,7 +72,8 @@ class FanMeetingParticipantSecurityTest {
         when(participantQueryService.getParticipants(
                 eq(1L), isNull(), isNull(), isNull(), eq(0), eq(20), isNull()))
                 .thenReturn(new PageResponse<>(List.of(new ParticipantSummaryResponse(
-                        100L, 30L, "첫째팬", null, 1, "READY", "WAITING", ParticipantSource.APPLICATION)),
+                        100L, 30L, "첫째팬", null, 1, "READY", "WAITING",
+                        ParticipantSource.APPLICATION, 500L)),
                         0, 20, 1L, 1, false));
 
         mockMvc.perform(get("/api/v1/fan-meetings/1/participants"))
@@ -164,7 +165,8 @@ class FanMeetingParticipantSecurityTest {
     void allowsManagerParticipantDetail() throws Exception {
         when(participantQueryService.getParticipant(eq(1L), eq(100L), isNull()))
                 .thenReturn(new ParticipantSummaryResponse(
-                        100L, 30L, "첫째팬", "https://cdn.melly.test/p.png", 1, "READY", "CALLED", ParticipantSource.APPLICATION));
+                        100L, 30L, "첫째팬", "https://cdn.melly.test/p.png", 1, "READY", "CALLED",
+                        ParticipantSource.APPLICATION, 500L));
 
         mockMvc.perform(get("/api/v1/fan-meetings/1/participants/100"))
                 .andExpect(status().isOk())

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { parseServerDate } from '../../api/serverTime'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
-import { getCallSummary } from '../../api/aiSummaries'
 import { getAuthSession } from '../../api/authSession'
 import { recallFanCallSession } from '../../api/callSessionLog'
 import {
@@ -14,6 +13,7 @@ import {
 } from '../../api/fanMeetingParticipants'
 import { createFanMemo, deleteFanMemo, updateFanMemo } from '../../api/fanMemos'
 import { Button, Dialog } from '../../components'
+import { useCallSummary } from '../../hooks/useCallSummary'
 import { useTranslation } from '../../i18n'
 
 /** 백엔드 팬 메모 계약의 상한이다. */
@@ -81,6 +81,8 @@ export function InfluencerFanRecordPage() {
   const callSessionId = searchParams.get('callSessionId')?.trim() || undefined
 
   const [participant, setParticipant] = useState<FanMeetingParticipant>()
+  /** 회차별 통화 세션 식별자다. 서버 참가자 응답에서 받아 채운다. */
+  const [sessionIdByMeeting, setSessionIdByMeeting] = useState<Record<string, string>>({})
   const [memos, setMemos] = useState<FanMemo[]>([])
   const [currentMeeting, setCurrentMeeting] = useState<{ title: string; at?: string }>()
   const [loading, setLoading] = useState(true)
@@ -96,9 +98,6 @@ export function InfluencerFanRecordPage() {
   const [deletedMeetingId, setDeletedMeetingId] = useState<string>()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [summaryLines, setSummaryLines] = useState<string[]>([])
-  /** 요약을 보여 줄 수 없을 때의 이유 안내다. 요약이 표시되면 비운다. */
-  const [summaryNotice, setSummaryNotice] = useState<string>()
 
   const loadMemos = useCallback(
     async (signal?: AbortSignal) => {
@@ -158,8 +157,15 @@ export function InfluencerFanRecordPage() {
     return () => controller.abort()
   }, [authToken, fanMeetingId])
 
+  /**
+   * 선택한 회차의 참가자 정보를 읽어 팬 프로필과 통화 세션 식별자를 채운다.
+   *
+   * 회차를 바꿀 때마다 그 회차의 참가자 목록을 보는 이유는 통화 세션이 (팬미팅, 팬)마다 다르기
+   * 때문이다. 프로필은 회차와 무관하게 같으므로 어느 회차에서 읽어도 된다.
+   */
   useEffect(() => {
-    if (!fanMeetingId || !fanId || !authToken) return
+    const lookupMeetingId = selectedMeetingId ?? fanMeetingId
+    if (!lookupMeetingId || !fanId || !authToken) return
 
     const controller = new AbortController()
 
@@ -169,7 +175,7 @@ export function InfluencerFanRecordPage() {
         let page = 0
         while (!controller.signal.aborted) {
           const response = await fetchParticipants(
-            fanMeetingId,
+            lookupMeetingId,
             { page, size: PARTICIPANT_LOOKUP_SIZE },
             authToken,
             controller.signal,
@@ -177,6 +183,14 @@ export function InfluencerFanRecordPage() {
           const match = response.content.find((item) => item.fanId === fanId)
           if (match) {
             setParticipant(match)
+            if (match.latestCallSessionId) {
+              const callSessionId = match.latestCallSessionId
+              setSessionIdByMeeting((current) =>
+                current[lookupMeetingId] === callSessionId
+                  ? current
+                  : { ...current, [lookupMeetingId]: callSessionId },
+              )
+            }
             return
           }
           if (!response.hasNext || page + 1 >= response.totalPages) return
@@ -188,7 +202,7 @@ export function InfluencerFanRecordPage() {
     })()
 
     return () => controller.abort()
-  }, [authToken, fanId, fanMeetingId])
+  }, [authToken, fanId, fanMeetingId, selectedMeetingId])
 
   const sessions = useMemo<NoteSession[]>(() => {
     const byMeeting = new Map<string, NoteSession>()
@@ -249,54 +263,42 @@ export function InfluencerFanRecordPage() {
   /**
    * 요약 조회에 쓸 통화 세션이다.
    *
-   * 통화 화면에서 넘어온 값(현재 회차)이 최우선이고, 그 외 회차는 대기열 폴링이 브라우저에
-   * 남긴 (팬미팅, 팬) → 세션 기록에서 찾는다. 이 기록 덕에 팬미팅이 끝난 뒤에도 지난 회차의
-   * AI 요약을 다시 열 수 있다. (통화를 지켜본 브라우저에만 기록이 남는다)
+   * 서버 참가자 응답이 알려 준 세션이 가장 정확하므로 그 값을 먼저 쓴다. 그 값을 아직 받지
+   * 못했을 때만 통화 화면에서 넘어온 값과 브라우저에 남은 기록을 차례로 본다. 브라우저 기록은
+   * 통화를 지켜본 그 브라우저에만 남으므로 어디까지나 보조 수단이다.
    */
   const summarySessionId = useMemo(() => {
     if (!selected || !fanId) return undefined
+    const fromServer = sessionIdByMeeting[selected.meetingId]
+    if (fromServer) return fromServer
     if (selectedIsCurrent && callSessionId) return callSessionId
     return recallFanCallSession(selected.meetingId, fanId)
-  }, [callSessionId, fanId, selected, selectedIsCurrent])
+  }, [callSessionId, fanId, selected, selectedIsCurrent, sessionIdByMeeting])
 
-  useEffect(() => {
-    if (!summarySessionId || !authToken) {
-      setSummaryLines([])
-      // 세션 기록이 없으면 왜 비어 있는지 알려 준다. 통화 기록은 브라우저에만 남기 때문이다.
-      setSummaryNotice(selected ? t('influencerFanRecordPage.summary.noRecord') : undefined)
-      return
-    }
+  // 생성 중(202)이면 완료될 때까지 다시 물어보고, 실패면 그 자리에서 멈춘다.
+  const summaryState = useCallSummary(authToken ? summarySessionId : undefined)
 
-    const controller = new AbortController()
-    setSummaryNotice(undefined)
+  const summaryLines = useMemo(
+    () =>
+      summaryState.kind === 'ready'
+        ? summaryState.summary.summary
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean)
+        : [],
+    [summaryState],
+  )
 
-    void getCallSummary(summarySessionId, authToken, controller.signal)
-      .then((result) => {
-        if (controller.signal.aborted) return
-        if (result.state === 'COMPLETED') {
-          setSummaryLines(
-            result.summary.summary
-              .split('\n')
-              .map((line) => line.trim())
-              .filter(Boolean),
-          )
-          setSummaryNotice(undefined)
-          return
-        }
-        setSummaryLines([])
-        setSummaryNotice(t('influencerFanRecordPage.summary.generating'))
-      })
-      .catch(() => {
-        // 요약이 아직 없거나 조회에 실패하면 줄을 비워 두고 안내 문구만 남긴다.
-        if (controller.signal.aborted) return
-        setSummaryLines([])
-        setSummaryNotice(t('influencerFanRecordPage.summary.failed'))
-      })
-
-    return () => controller.abort()
-    // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authToken, selected, summarySessionId])
+  /** 요약을 보여 줄 수 없을 때의 이유 안내다. 요약이 표시되면 비운다. */
+  const summaryNotice = !selected
+    ? undefined
+    : summaryState.kind === 'ready'
+      ? undefined
+      : summaryState.kind === 'generating' || summaryState.kind === 'loading'
+        ? t('influencerFanRecordPage.summary.generating')
+        : summaryState.kind === 'error' || summaryState.kind === 'unauthenticated'
+          ? t('influencerFanRecordPage.summary.failed')
+          : t('influencerFanRecordPage.summary.noRecord')
 
   const editing = Boolean(selected && editingMeetingId === selected.meetingId)
   const hasMemo = Boolean(selected?.memo.trim())
