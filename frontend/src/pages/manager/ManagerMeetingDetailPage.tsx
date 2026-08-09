@@ -1102,16 +1102,15 @@ function SettingsPanel({
             value={form.scheduledStartAt}
           />
           <div className="grid gap-3">
-            <TextField
-              disabled={basicLocked}
-              label={t('managerMeetingDetailPage.t34')}
-              maxLength={2048}
-              onChange={(event) => setField('coverImageUrl', event.target.value)}
-              placeholder="https://example.com/cover.jpg"
-              type="url"
-              value={form.coverImageUrl}
-            />
-            {/* 주소를 붙여 넣는 대신 파일을 올리면 위 칸이 업로드 주소로 채워진다. */}
+            <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
+              {t('managerMeetingDetailPage.t34')}
+            </p>
+            {/*
+              주소 입력칸은 두지 않는다. 운영자가 외부 주소를 손으로 넣으면 그 주소가 막히거나
+              사라졌을 때 커버가 통째로 깨지고, 파일 업로드(POST /api/v1/attachments)가 이미
+              있으므로 올린 파일의 콘텐츠 주소를 coverImageUrl에 그대로 넣는다.
+              이미 저장돼 있던 주소는 아래 미리보기로 그대로 보인다.
+            */}
             <CoverImageUpload
               disabled={basicLocked}
               onChange={(url) => setField('coverImageUrl', url)}

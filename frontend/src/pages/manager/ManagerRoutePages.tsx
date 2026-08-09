@@ -1061,16 +1061,18 @@ export function ManagerMeetingCreatePage() {
                   placeholder={t('managerRoutePages.t26')}
                 />
                 <div className="grid gap-3 sm:col-span-2">
-                  <TextField
-                    helperText={t('managerRoutePages.t27')}
-                    label={t('managerRoutePages.t28')}
-                    maxLength={2048}
-                    type="url"
-                    value={form.coverImageUrl ?? ''}
-                    onChange={(event) => setForm({ ...form, coverImageUrl: event.target.value })}
-                    placeholder="https://example.com/cover.jpg"
-                  />
-                  {/* 주소를 붙여 넣는 대신 파일을 올리면 위 칸이 업로드 주소로 채워진다. */}
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--color-text-secondary)]">
+                      {t('managerRoutePages.t28')}
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                      {t('managerRoutePages.t27')}
+                    </p>
+                  </div>
+                  {/*
+                    주소 입력칸은 두지 않는다. 올린 파일의 콘텐츠 주소가 coverImageUrl에
+                    그대로 들어가므로 저장 요청 형태는 예전과 같다.
+                  */}
                   <CoverImageUpload
                     onChange={(url) => setForm({ ...form, coverImageUrl: url })}
                     value={form.coverImageUrl ?? ''}
