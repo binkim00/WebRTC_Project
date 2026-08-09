@@ -15,6 +15,10 @@ import {
   type UserProfile,
 } from '../../api/users'
 import {
+  getMyOrganization,
+  type MyOrganizationMembers,
+} from '../../api/organizations'
+import {
   AlertBanner,
   Button,
   Dialog,
@@ -171,6 +175,8 @@ export function MyPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string>()
   const [saveDone, setSaveDone] = useState(false)
+  const [organization, setOrganization] = useState<MyOrganizationMembers | null>()
+  const [organizationError, setOrganizationError] = useState<string>()
 
   // 비밀번호 변경. 성공하면 백엔드가 모든 기기의 세션을 끊으므로 로그인 화면으로 되돌린다.
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -208,6 +214,30 @@ export function MyPage() {
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken])
+
+  useEffect(() => {
+    if (!authToken || role !== 'INFLUENCER') {
+      setOrganization(undefined)
+      setOrganizationError(undefined)
+      return
+    }
+
+    const controller = new AbortController()
+    void getMyOrganization(authToken, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return
+        setOrganization(response)
+        setOrganizationError(undefined)
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
+        setOrganization(undefined)
+        setOrganizationError(errorMessage(reason, t('myPage.organization.loadFailed')))
+      })
+
+    return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken, role])
 
   function openEdit() {
     if (!profile) return
@@ -453,6 +483,63 @@ export function MyPage() {
               ))}
             </div>
           </section>
+
+          {role === 'INFLUENCER' ? (
+            <section
+              aria-labelledby="mp-organization"
+              className="mt-[34px] border-t border-[var(--color-divider)] pt-[26px]"
+            >
+              <h2 className="text-lg font-extrabold tracking-[-0.028em]" id="mp-organization">
+                {t('myPage.organization.title')}
+              </h2>
+              {organizationError ? (
+                <AlertBanner className="mt-4" title={t('myPage.organization.errorTitle')} variant="warning">
+                  {organizationError}
+                </AlertBanner>
+              ) : organization === undefined ? (
+                <div className="mt-4 flex min-h-24 items-center justify-center rounded-[10px] bg-[var(--color-surface-subtle)]">
+                  <Spinner label={t('myPage.organization.loading')} size="sm" />
+                </div>
+              ) : organization === null ? (
+                <AlertBanner className="mt-4" title={t('myPage.organization.noneTitle')} variant="info">
+                  {t('myPage.organization.noneDescription')}
+                </AlertBanner>
+              ) : (
+                <div className="mt-4 grid gap-4 rounded-[10px] border border-[var(--color-divider)] p-[18px] sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">{t('myPage.organization.name')}</p>
+                    <p className="mt-1 break-words text-lg font-extrabold">{organization.organization.name}</p>
+                    {organization.organization.representativeName ? (
+                      <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                        {t('myPage.organization.representative', { name: organization.organization.representativeName })}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">{t('myPage.organization.managers')}</p>
+                    <p className="mt-1 break-words text-base font-bold">
+                      {organization.members
+                        .filter((member) => member.status === 'ACTIVE' && member.userRole === 'MANAGER')
+                        .map((member) => member.nickname)
+                        .join(', ') || t('myPage.organization.managerUnknown')}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">{t('myPage.organization.contactEmail')}</p>
+                    <a className="mt-1 block break-all text-base font-bold text-[var(--color-primary-coral)] hover:underline" href={`mailto:${organization.organization.contactEmail}`}>
+                      {organization.organization.contactEmail}
+                    </a>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-text-muted)]">{t('myPage.organization.contactPhone')}</p>
+                    <a className="mt-1 block break-all text-base font-bold text-[var(--color-primary-coral)] hover:underline" href={`tel:${organization.organization.contactPhone}`}>
+                      {organization.organization.contactPhone}
+                    </a>
+                  </div>
+                </div>
+              )}
+            </section>
+          ) : null}
 
           {/*
             소셜 계정 연결 관리. 연결 흐름은 공급자 왕복이 필요하므로 돌아올 경로를 넘긴다.

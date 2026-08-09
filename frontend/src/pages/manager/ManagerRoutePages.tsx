@@ -1,4 +1,4 @@
-import { ArrowLeft } from '@phosphor-icons/react'
+import { ArrowLeft, Paperclip } from '@phosphor-icons/react'
 import { parseServerDate } from '../../api/serverTime'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -2176,17 +2176,28 @@ export function ManagerNoticesPage() {
                       ({attachments.length}/{NOTICE_ATTACHMENT_MAX_COUNT})
                     </span>
                   </legend>
-                  <input
-                    accept="image/*,.pdf"
-                    className="block w-full text-sm"
-                    disabled={!canEdit || uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT}
-                    multiple
-                    onChange={(event) => {
-                      void uploadFiles(event.target.files)
-                      event.target.value = ''
-                    }}
-                    type="file"
-                  />
+                  <label
+                    aria-disabled={!canEdit || uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT}
+                    className={`inline-flex min-h-11 w-fit max-w-full items-center gap-2 rounded-lg border px-4 text-sm font-bold ${
+                      !canEdit || uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT
+                        ? 'cursor-not-allowed border-[var(--color-divider)] bg-[var(--color-surface-subtle)] text-[var(--color-text-muted)] opacity-70'
+                        : 'cursor-pointer border-[var(--color-border-control)] bg-white text-[var(--color-text-primary)] hover:border-[var(--color-primary-coral)] hover:text-[var(--color-primary-coral)]'
+                    }`}
+                  >
+                    <Paperclip aria-hidden size={18} weight="bold" />
+                    <span className="min-w-0 break-words">{t('managerRoutePages.attachmentChoose')}</span>
+                    <input
+                      accept="image/*,.pdf"
+                      className="sr-only"
+                      disabled={!canEdit || uploading || attachments.length >= NOTICE_ATTACHMENT_MAX_COUNT}
+                      multiple
+                      onChange={(event) => {
+                        void uploadFiles(event.target.files)
+                        event.target.value = ''
+                      }}
+                      type="file"
+                    />
+                  </label>
                   {uploading ? <p className="text-sm text-[var(--color-text-secondary)]">{t('managerRoutePages.t115')}</p> : null}
                   {attachments.length ? (
                     <ul className="grid gap-2">

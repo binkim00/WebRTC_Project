@@ -7,6 +7,7 @@ import { ApiError } from '../../api/ApiError'
 import { getAuthSession } from '../../api/authSession'
 import {
   fetchPublicFanMeetings,
+  prefetchPublicFanMeetingDetail,
   type PublicFanMeetingStatus,
   type PublicFanMeetingSummary,
 } from '../../api/fanMeetings'
@@ -353,7 +354,13 @@ export function FanEventListPage() {
 
               return (
                 <article className="min-w-0" key={meeting.meetingId}>
-                  <Link className="block text-inherit no-underline" to={`/fan/events/${meeting.meetingId}`}>
+                  <Link
+                    className="block text-inherit no-underline"
+                    onFocus={() => void prefetchPublicFanMeetingDetail(meeting.meetingId, getAuthSession()?.accessToken)}
+                    onMouseEnter={() => void prefetchPublicFanMeetingDetail(meeting.meetingId, getAuthSession()?.accessToken)}
+                    onTouchStart={() => void prefetchPublicFanMeetingDetail(meeting.meetingId, getAuthSession()?.accessToken)}
+                    to={`/fan/events/${meeting.meetingId}`}
+                  >
                     <figure className="relative m-0 overflow-hidden rounded-[10px] bg-[var(--color-surface-muted)]">
                       {meeting.coverImageUrl ? (
                         <img

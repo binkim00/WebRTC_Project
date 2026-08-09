@@ -21,6 +21,8 @@ describe('팬미팅 생성 브라우저 초안', () => {
   it('빈 초기 폼은 저장 대상이 아니지만 입력이나 단계 이동이 있으면 저장 대상으로 본다', () => {
     const form = createInitialMeetingForm(9)
 
+    expect(form.operation.reconnectGraceSec).toBe(60)
+    expect(form.operation.maxRecallCount).toBe(1)
     expect(hasMeaningfulMeetingDraft(form, [], '', 0)).toBe(false)
     expect(hasMeaningfulMeetingDraft(form, [], '', 1)).toBe(true)
     expect(hasMeaningfulMeetingDraft({ ...form, title: '여름 팬미팅' }, [], '', 0)).toBe(true)

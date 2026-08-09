@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { parseServerDate } from '../../api/serverTime'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../../api/ApiError'
-import { getCallSummary } from '../../api/aiSummaries'
+import { CALL_SUMMARY_POLL_INTERVAL_MS, getCallSummary } from '../../api/aiSummaries'
 import { getAuthSession } from '../../api/authSession'
 import { recallFanCallSession } from '../../api/callSessionLog'
 import {
@@ -268,11 +268,15 @@ export function InfluencerFanRecordPage() {
       return
     }
 
+    const callSessionId = summarySessionId
+    const token = authToken
     const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
     setSummaryNotice(undefined)
 
-    void getCallSummary(summarySessionId, authToken, controller.signal)
-      .then((result) => {
+    async function loadSummary() {
+      try {
+        const result = await getCallSummary(callSessionId, token, controller.signal)
         if (controller.signal.aborted) return
         if (result.state === 'COMPLETED') {
           setSummaryLines(
@@ -286,15 +290,21 @@ export function InfluencerFanRecordPage() {
         }
         setSummaryLines([])
         setSummaryNotice(t('influencerFanRecordPage.summary.generating'))
-      })
-      .catch(() => {
+        timer = setTimeout(() => void loadSummary(), CALL_SUMMARY_POLL_INTERVAL_MS)
+      } catch {
         // 요약이 아직 없거나 조회에 실패하면 줄을 비워 두고 안내 문구만 남긴다.
         if (controller.signal.aborted) return
         setSummaryLines([])
         setSummaryNotice(t('influencerFanRecordPage.summary.failed'))
-      })
+      }
+    }
 
-    return () => controller.abort()
+    void loadSummary()
+
+    return () => {
+      controller.abort()
+      if (timer) clearTimeout(timer)
+    }
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, selected, summarySessionId])

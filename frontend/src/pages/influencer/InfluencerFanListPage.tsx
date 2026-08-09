@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { getCallSummary } from '../../api/aiSummaries'
+import { CALL_SUMMARY_POLL_INTERVAL_MS, getCallSummary } from '../../api/aiSummaries'
 import { ApiError } from '../../api/ApiError'
 import { getAuthSession, type LoginRole } from '../../api/auth'
 import { recallFanCallSession } from '../../api/callSessionLog'
@@ -627,11 +627,15 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
       return
     }
 
+    const callSessionId = sessionId
+    const token = authToken
     const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
     setFocusSummaryNotice(undefined)
 
-    void getCallSummary(sessionId, authToken, controller.signal)
-      .then((result) => {
+    async function loadSummary() {
+      try {
+        const result = await getCallSummary(callSessionId, token, controller.signal)
         if (controller.signal.aborted) return
         if (result.state === 'COMPLETED') {
           setFocusSummaryLines(
@@ -645,14 +649,20 @@ export function InfluencerFanListPage({ viewerRole }: InfluencerFanListPageProps
         }
         setFocusSummaryLines([])
         setFocusSummaryNotice(t('influencerFanRecordPage.summary.generating'))
-      })
-      .catch(() => {
+        timer = setTimeout(() => void loadSummary(), CALL_SUMMARY_POLL_INTERVAL_MS)
+      } catch {
         if (controller.signal.aborted) return
         setFocusSummaryLines([])
         setFocusSummaryNotice(t('influencerFanRecordPage.summary.failed'))
-      })
+      }
+    }
 
-    return () => controller.abort()
+    void loadSummary()
+
+    return () => {
+      controller.abort()
+      if (timer) clearTimeout(timer)
+    }
     // t는 언어가 바뀔 때만 새로 만들어진다. 의존성에 넣으면 언어 전환이 재조회를 유발한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, fanMeetingId, focusFanId, reviewMode])
