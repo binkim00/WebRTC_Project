@@ -157,11 +157,24 @@ export function resolveAttachmentUrl(url: string | null | undefined): string | n
   return url.startsWith('/') ? `${API_URL}${url}` : url
 }
 
+/**
+ * 첨부 콘텐츠 주소 앞에 붙일 오리진이다.
+ *
+ * API 주소를 따로 지정하지 않은 배포(VITE_API_BASE_URL이 빈 값)에서는 프론트와 API가 같은
+ * 도메인이므로 지금 열려 있는 오리진이 곧 API 오리진이다. 이때 오리진을 붙이지 않으면
+ * `/api/v1/...` 상대 경로가 만들어지는데, 화면에 그리는 데는 문제가 없어도 팬미팅 커버처럼
+ * **주소 문자열 자체를 저장하고 검증하는** 곳에서는 `new URL()`이 실패해 저장이 막힌다.
+ */
+function attachmentOrigin(): string {
+  if (API_URL) return API_URL
+  return typeof window === 'undefined' ? '' : window.location.origin
+}
+
 /** 첨부파일 내용 URL을 만든다. download=true면 브라우저가 저장 대화상자를 띄운다. */
 export function attachmentContentUrl(
   attachmentId: string | number,
   download = false,
 ): string {
   const suffix = download ? '?download=true' : ''
-  return `${API_URL}/api/v1/attachments/${encodeURIComponent(String(attachmentId))}/content${suffix}`
+  return `${attachmentOrigin()}/api/v1/attachments/${encodeURIComponent(String(attachmentId))}/content${suffix}`
 }

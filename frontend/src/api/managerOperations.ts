@@ -117,6 +117,11 @@ function isFanMeetingCreateResponse(value: unknown): value is FanMeetingCreateRe
 /**
  * 커버 이미지 주소를 백엔드 URL 검증에 맞는 http/https 문자열로 정규화한다.
  * 빈 값과 브라우저 미리보기용 data URL은 서버에 보내지 않는다.
+ *
+ * 업로드한 첨부 주소가 `/api/v1/...` 상대 경로로 들어오는 경우가 있어 지금 오리진을 붙여
+ * 절대 주소로 만든 뒤 검증한다. API 주소를 따로 두지 않은 배포에서 첨부 주소가 상대 경로로
+ * 만들어지던 때 저장된 팬미팅이 그렇다. 그대로 두면 그 팬미팅은 발행·수정할 때마다
+ * "올바른 URL이 아니다"로 막힌다.
  */
 function normalizeCoverImageUrl(value: string | null): string | null {
   const trimmed = value?.trim() ?? ''
@@ -129,13 +134,18 @@ function normalizeCoverImageUrl(value: string | null): string | null {
     throw new TypeError(translate('managerOperations.t1'))
   }
 
+  const absolute =
+    trimmed.startsWith('/') && !trimmed.startsWith('//') && typeof window !== 'undefined'
+      ? `${window.location.origin}${trimmed}`
+      : trimmed
+
   let normalizedUrl: URL
   // 프로토콜 오류는 catch로 흘러 들어가도 그대로 다시 던져야 한다. 이전에는 오류 메시지 문자열을
   // 비교해 구분했는데, 메시지가 번역되면서 그 비교가 항상 실패해 프로토콜 오류까지 "올바른 URL이
   // 아니다"라는 엉뚱한 안내로 바뀌었다. 그래서 플래그로 구분한다.
   let protocolRejected = false
   try {
-    normalizedUrl = new URL(trimmed)
+    normalizedUrl = new URL(absolute)
     if (normalizedUrl.protocol !== 'http:' && normalizedUrl.protocol !== 'https:') {
       protocolRejected = true
       throw new TypeError(translate('managerOperations.t2'))
