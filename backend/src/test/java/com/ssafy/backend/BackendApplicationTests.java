@@ -5,6 +5,7 @@ import com.ssafy.backend.ai.repository.AiSubtitleRepository;
 import com.ssafy.backend.ai.repository.FanCardRepository;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
+import com.ssafy.backend.application.repository.ApplicationOptionRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.application.service.ApplicationService;
@@ -96,6 +97,9 @@ class BackendApplicationTests {
 
     @MockitoBean
     private ApplicationQuestionRepository applicationQuestionRepository;
+
+    @MockitoBean
+    private ApplicationOptionRepository applicationOptionRepository;
 
     @MockitoBean
     private ApplicationAnswerRepository applicationAnswerRepository;

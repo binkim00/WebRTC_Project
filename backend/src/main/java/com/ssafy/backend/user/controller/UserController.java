@@ -5,8 +5,11 @@ import com.ssafy.backend.common.api.ApiResponse;
 import com.ssafy.backend.user.dto.MyProfileResponse;
 import com.ssafy.backend.user.dto.MyProfileUpdateRequest;
 import com.ssafy.backend.user.dto.MyProfileUpdateResponse;
+import com.ssafy.backend.user.dto.PasswordChangeRequest;
+import com.ssafy.backend.user.dto.PasswordChangeResponse;
 import com.ssafy.backend.user.dto.UserWithdrawRequest;
 import com.ssafy.backend.user.dto.UserWithdrawResponse;
+import com.ssafy.backend.user.service.UserPasswordService;
 import com.ssafy.backend.user.service.UserProfileService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,14 +29,18 @@ public class UserController {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final UserProfileService userProfileService;
+    private final UserPasswordService userPasswordService;
 
     /**
-     * 내 정보 조회·수정과 회원탈퇴 서비스를 주입받는다.
+     * 내 정보 조회·수정, 회원탈퇴와 비밀번호 변경 서비스를 주입받는다.
      *
      * @param userProfileService 사용자 회원 정보 서비스
+     * @param userPasswordService 비밀번호 변경 서비스
      */
-    public UserController(UserProfileService userProfileService) {
+    public UserController(UserProfileService userProfileService,
+                          UserPasswordService userPasswordService) {
         this.userProfileService = userProfileService;
+        this.userPasswordService = userPasswordService;
     }
 
     /**
@@ -62,6 +69,24 @@ public class UserController {
             @AuthenticationPrincipal AuthenticatedUser principal
     ) {
         return ApiResponse.success(userProfileService.updateMyProfile(principal, request));
+    }
+
+    /**
+     * 현재 비밀번호를 확인한 뒤 새 비밀번호로 바꾸고 로그인 세션을 끊는다.
+     *
+     * @param request 현재 비밀번호와 새 비밀번호
+     * @param authorization Bearer Access Token을 포함한 Authorization 헤더
+     * @param principal JWT 인증 사용자 정보
+     * @return 공통 성공 형식으로 감싼 변경 시각과 재로그인 필요 여부
+     */
+    @PatchMapping("/password")
+    public ApiResponse<PasswordChangeResponse> changePassword(
+            @Valid @RequestBody PasswordChangeRequest request,
+            @RequestHeader("Authorization") String authorization,
+            @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(userPasswordService.changePassword(
+                request, authorization.substring(BEARER_PREFIX.length()).trim(), principal));
     }
 
     /**

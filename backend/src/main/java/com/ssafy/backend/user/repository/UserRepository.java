@@ -20,6 +20,18 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     /**
+     * 같은 닉네임을 쓰는 사용자가 존재하는지 확인한다.
+     *
+     * <p>{@code nickname} 컬럼에는 UNIQUE 제약이 없다. 이미 중복 닉네임을 가진 기존 회원이 있을 수
+     * 있어 제약을 새로 걸면 운영 스키마 검증이 실패하기 때문이다. 그래서 이 검사는 가입 화면의
+     * 중복 확인과 가입 시점 재확인에만 쓰이며, 같은 순간에 들어온 두 요청까지 막지는 못한다.
+     *
+     * @param nickname 확인할 닉네임
+     * @return 같은 닉네임을 쓰는 회원이 있으면 {@code true}
+     */
+    boolean existsByNickname(String nickname);
+
+    /**
      * 지정한 사용자를 제외하고 같은 이메일을 사용하는 회원이 있는지 확인한다.
      *
      * @param email 중복 여부를 확인할 정규화된 이메일

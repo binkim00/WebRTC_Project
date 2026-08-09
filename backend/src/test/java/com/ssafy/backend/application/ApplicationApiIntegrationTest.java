@@ -317,6 +317,7 @@ class ApplicationApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"personalInformationConsent":true,
+                                 "recordingConsent":true,"participationConsent":true,
                                  "answers":[{"questionId":%d,"value":"멜리"},
                                             {"questionId":%d,"value":"응원합니다"}]}
                                 """.formatted(questionIds.get(0), questionIds.get(1))))
@@ -365,6 +366,150 @@ class ApplicationApiIntegrationTest {
                 .andExpect(jsonPath("$.data.questionStats[0].optionCounts").doesNotExist());
     }
 
+    /** 객관식 질문을 저장한 뒤 팬이 고른 선택지가 응모자 목록과 통계에 반영되는지 검증한다. */
+    @Test
+    void savesChoiceQuestionAndReadsSelectedOptionsBack() throws Exception {
+        String saved = mockMvc.perform(put(formPath())
+                        .with(as(manager))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"formDescription":"객관식 안내문",
+                                 "questions":[
+                                   {"questionText":"듣고 싶은 곡","questionType":"SINGLE_CHOICE",
+                                    "required":true,"displayOrder":1,
+                                    "options":[{"optionText":"발라드","displayOrder":1},
+                                               {"optionText":"댄스","displayOrder":2}]},
+                                   {"questionText":"좋아하는 콘텐츠","questionType":"MULTIPLE_CHOICE",
+                                    "required":false,"displayOrder":2,
+                                    "options":[{"optionText":"브이로그","displayOrder":1},
+                                               {"optionText":"라이브","displayOrder":2},
+                                               {"optionText":"챌린지","displayOrder":3}]}]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.questions[0].options.length()").value(2))
+                .andExpect(jsonPath("$.data.questions[0].options[0].optionText").value("발라드"))
+                .andExpect(jsonPath("$.data.questions[1].options.length()").value(3))
+                .andReturn().getResponse().getContentAsString();
+        long singleQuestionId = ((Number) JsonPath.read(
+                saved, "$.data.questions[0].questionId")).longValue();
+        long multiQuestionId = ((Number) JsonPath.read(
+                saved, "$.data.questions[1].questionId")).longValue();
+        long balladOptionId = ((Number) JsonPath.read(
+                saved, "$.data.questions[0].options[0].optionId")).longValue();
+        long vlogOptionId = ((Number) JsonPath.read(
+                saved, "$.data.questions[1].options[0].optionId")).longValue();
+        long liveOptionId = ((Number) JsonPath.read(
+                saved, "$.data.questions[1].options[1].optionId")).longValue();
+
+        mockMvc.perform(get(formPath()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.questions[0].questionType").value("SINGLE_CHOICE"))
+                .andExpect(jsonPath("$.data.questions[0].options[1].optionText").value("댄스"));
+
+        openApplications();
+        mockMvc.perform(post(applicationsPath())
+                        .with(as(fan))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"personalInformationConsent":true,
+                                 "recordingConsent":true,"participationConsent":true,
+                                 "answers":[{"questionId":%d,"optionIds":[%d]},
+                                            {"questionId":%d,"optionIds":[%d,%d]}]}
+                                """.formatted(
+                                singleQuestionId, balladOptionId,
+                                multiQuestionId, liveOptionId, vlogOptionId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.applicationStatus").value("SUBMITTED"));
+
+        // 복수 선택은 질문 하나에 여러 행이 저장되지만 운영자 목록에서는 한 항목으로 합쳐진다.
+        mockMvc.perform(get(applicationsPath()).with(as(manager)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].answers.length()").value(2))
+                .andExpect(jsonPath("$.data.content[0].answers[0].answerText").value("발라드"))
+                .andExpect(jsonPath("$.data.content[0].answers[1].answerText")
+                        .value("브이로그, 라이브"));
+
+        mockMvc.perform(get(applicationsPath() + "/statistics").with(as(manager)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.questionStats[0].responseCount").value(1))
+                .andExpect(jsonPath("$.data.questionStats[0].optionCounts['" + balladOptionId + "']")
+                        .value(1))
+                // 복수 선택이어도 응답 수는 답변 행 수가 아니라 응모 수다.
+                .andExpect(jsonPath("$.data.questionStats[1].responseCount").value(1))
+                .andExpect(jsonPath("$.data.questionStats[1].optionCounts['" + liveOptionId + "']")
+                        .value(1));
+    }
+
+    /** 이 질문에 없는 선택지를 고른 응모를 전용 오류 코드와 함께 400으로 거부하는지 검증한다. */
+    @Test
+    void rejectsAnswerWithUnknownOption() throws Exception {
+        String saved = mockMvc.perform(put(formPath())
+                        .with(as(manager))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"formDescription":"객관식 안내문",
+                                 "questions":[
+                                   {"questionText":"듣고 싶은 곡","questionType":"SINGLE_CHOICE",
+                                    "required":true,"displayOrder":1,
+                                    "options":[{"optionText":"발라드","displayOrder":1},
+                                               {"optionText":"댄스","displayOrder":2}]}]}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long questionId = ((Number) JsonPath.read(
+                saved, "$.data.questions[0].questionId")).longValue();
+        openApplications();
+
+        mockMvc.perform(post(applicationsPath())
+                        .with(as(fan))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"personalInformationConsent":true,
+                                 "recordingConsent":true,"participationConsent":true,
+                                 "answers":[{"questionId":%d,"optionIds":[999999]}]}
+                                """.formatted(questionId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("APPLICATION_ANSWER_INVALID"));
+    }
+
+    /** 선택지가 하나뿐인 객관식 질문 저장을 전용 오류 코드와 함께 400으로 거부하는지 검증한다. */
+    @Test
+    void rejectsChoiceQuestionWithoutEnoughOptions() throws Exception {
+        mockMvc.perform(put(formPath())
+                        .with(as(manager))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"formDescription":"안내문",
+                                 "questions":[
+                                   {"questionText":"듣고 싶은 곡","questionType":"SINGLE_CHOICE",
+                                    "required":true,"displayOrder":1,
+                                    "options":[{"optionText":"발라드","displayOrder":1}]}]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("APPLICATION_QUESTION_OPTION_INVALID"));
+    }
+
+    /** 참여 동의를 하지 않은 응모를 전용 오류 코드와 함께 400으로 거부하는지 검증한다. */
+    @Test
+    void rejectsSubmissionWithoutParticipationConsent() throws Exception {
+        openApplications();
+
+        mockMvc.perform(post(applicationsPath())
+                        .with(as(fan))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"personalInformationConsent":true,
+                                 "recordingConsent":true,"participationConsent":false,
+                                 "answers":[]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code")
+                        .value("APPLICATION_PARTICIPATION_CONSENT_REQUIRED"));
+
+        assertThat(applicationRepository.findByMeeting_IdAndFan_Id(
+                meeting.getId(), fan.getId())).isEmpty();
+    }
+
     /** 확정 참가자가 있으면 내 응모 결과에 호출 순서와 배정 방식을 채우는지 검증한다. */
     @Test
     void returnsCallOrderForSelectedParticipant() throws Exception {
@@ -395,6 +540,7 @@ class ApplicationApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"personalInformationConsent":true,
+                                 "recordingConsent":true,"participationConsent":true,
                                  "answers":[{"questionId":%d,"value":"멜리"},
                                             {"questionId":%d,"value":"응원합니다"}]}
                                 """.formatted(questionIds.get(0), questionIds.get(1))))

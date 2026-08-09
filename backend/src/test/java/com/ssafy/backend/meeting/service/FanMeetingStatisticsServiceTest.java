@@ -11,7 +11,10 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.dto.FanMeetingStatisticsResponse;
+import com.ssafy.backend.participant.domain.Participant;
+import com.ssafy.backend.participant.domain.ParticipantSource;
 import com.ssafy.backend.participant.repository.ParticipantRepository;
+import com.ssafy.backend.queue.domain.QueueEntry;
 import com.ssafy.backend.queue.domain.QueueEntryStatus;
 import com.ssafy.backend.queue.repository.QueueEntryRepository;
 import com.ssafy.backend.user.domain.User;
@@ -129,6 +132,48 @@ class FanMeetingStatisticsServiceTest {
         assertThat(response.averageCallDurationSec()).isEqualTo(120L);
     }
 
+    /** 참가자 운영 결과 CSV가 한글 헤더와 한글 상태값으로 만들어지는지 검증한다. */
+    @Test
+    void exportsParticipantResultCsvWithKoreanHeaderAndStatuses() {
+        stubOperatorMeeting(meeting());
+        Participant participant = participant(7L, 1, "말랑젤리", ParticipantSource.APPLICATION);
+        QueueEntry entry = queueEntry(11L, participant, QueueEntryStatus.DONE);
+        CallSession session = endedSession(90L);
+        when(session.getQueueEntry()).thenReturn(entry);
+        when(session.getStatus()).thenReturn(CallSessionStatus.ENDED);
+        when(participantRepository.findAllForExport(MEETING_ID))
+                .thenReturn(List.of(participant));
+        when(queueEntryRepository.findByMeeting_IdOrderByQueuePositionAsc(MEETING_ID))
+                .thenReturn(List.of(entry));
+        when(callSessionRepository.findByQueueEntry_Meeting_Id(MEETING_ID))
+                .thenReturn(List.of(session));
+
+        String csv = statisticsService.exportParticipantResultCsv(MEETING_ID, PRINCIPAL);
+
+        List<String> lines = csv.lines().toList();
+        assertThat(lines.get(0)).isEqualTo(
+                "﻿참가자 ID,참가 경로,통화 순번,닉네임,참가 상태,대기열 상태,통화 상태,통화 시간(초)");
+        assertThat(lines.get(1)).isEqualTo("7,응모 선정,1,말랑젤리,참가 확정,통화 완료,통화 종료,90");
+    }
+
+    /** 대기열과 통화 기록이 없는 참가자의 상태 칸을 빈 값으로 남기는지 검증한다. */
+    @Test
+    void exportsEmptyStatusColumnsWhenParticipantHasNoQueueEntry() {
+        stubOperatorMeeting(meeting());
+        Participant participant =
+                participant(8L, 2, "젤리곰", ParticipantSource.EXTERNAL_SELECTION);
+        when(participantRepository.findAllForExport(MEETING_ID))
+                .thenReturn(List.of(participant));
+        when(queueEntryRepository.findByMeeting_IdOrderByQueuePositionAsc(MEETING_ID))
+                .thenReturn(List.of());
+        when(callSessionRepository.findByQueueEntry_Meeting_Id(MEETING_ID))
+                .thenReturn(List.of());
+
+        String csv = statisticsService.exportParticipantResultCsv(MEETING_ID, PRINCIPAL);
+
+        assertThat(csv.lines().toList().get(1)).isEqualTo("8,외부 선별,2,젤리곰,참가 확정,,,");
+    }
+
     /** 담당 운영자가 아닌 사용자의 통계 조회를 권한 오류로 거부하는지 검증한다. */
     @Test
     void rejectsStatisticsFromNonOperator() {
@@ -188,6 +233,45 @@ class FanMeetingStatisticsServiceTest {
         when(session.getStartedAt()).thenReturn(CALL_STARTED_AT);
         when(session.getEndedAt()).thenReturn(CALL_STARTED_AT.plusSeconds(durationSec));
         return session;
+    }
+
+    /**
+     * 내보내기 검증에 쓸 참가자 대역을 만든다.
+     *
+     * @param participantId 참가자 식별자
+     * @param assignedOrder 배정된 통화 순번
+     * @param nickname 팬 닉네임
+     * @param source 참가 경로
+     * @return 참가 확정 상태의 참가자 대역
+     */
+    private Participant participant(long participantId, int assignedOrder,
+                                    String nickname, ParticipantSource source) {
+        User fan = mock(User.class);
+        when(fan.getNickname()).thenReturn(nickname);
+        Participant participant = mock(Participant.class);
+        when(participant.getId()).thenReturn(participantId);
+        when(participant.getFan()).thenReturn(fan);
+        when(participant.getAssignedOrder()).thenReturn(assignedOrder);
+        when(participant.getParticipantSource()).thenReturn(source);
+        when(participant.getStatus()).thenReturn(Participant.READY_STATUS);
+        return participant;
+    }
+
+    /**
+     * 내보내기 검증에 쓸 대기열 항목 대역을 만든다.
+     *
+     * @param entryId 대기열 항목 식별자
+     * @param participant 대기열 항목의 참가자
+     * @param status 대기열 상태
+     * @return 참가자와 상태가 설정된 대기열 항목 대역
+     */
+    private QueueEntry queueEntry(long entryId, Participant participant,
+                                  QueueEntryStatus status) {
+        QueueEntry entry = mock(QueueEntry.class);
+        when(entry.getId()).thenReturn(entryId);
+        when(entry.getParticipant()).thenReturn(participant);
+        when(entry.getStatus()).thenReturn(status);
+        return entry;
     }
 
     /** 테스트용 초안 팬미팅을 생성하고 영속 식별자를 설정한다. */

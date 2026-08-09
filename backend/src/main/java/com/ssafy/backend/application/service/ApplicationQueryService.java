@@ -3,6 +3,7 @@ package com.ssafy.backend.application.service;
 import com.ssafy.backend.application.domain.Application;
 import com.ssafy.backend.application.domain.ApplicationAnswer;
 import com.ssafy.backend.application.domain.ApplicationForm;
+import com.ssafy.backend.application.domain.ApplicationOption;
 import com.ssafy.backend.application.domain.ApplicationQuestion;
 import com.ssafy.backend.application.domain.ApplicationStatus;
 import com.ssafy.backend.application.dto.ApplicantAnswerResponse;
@@ -14,6 +15,7 @@ import com.ssafy.backend.application.dto.MyApplicationSummaryResponse;
 import com.ssafy.backend.application.dto.ParticipantAssignment;
 import com.ssafy.backend.application.repository.ApplicationAnswerRepository;
 import com.ssafy.backend.application.repository.ApplicationFormRepository;
+import com.ssafy.backend.application.repository.ApplicationOptionRepository;
 import com.ssafy.backend.application.repository.ApplicationQuestionRepository;
 import com.ssafy.backend.application.repository.ApplicationRepository;
 import com.ssafy.backend.auth.jwt.AuthenticatedUser;
@@ -36,6 +38,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -59,10 +62,11 @@ public class ApplicationQueryService {
     private final ApplicationRepository applicationRepository;
     private final ApplicationFormRepository applicationFormRepository;
     private final ApplicationQuestionRepository applicationQuestionRepository;
+    private final ApplicationOptionRepository applicationOptionRepository;
     private final ApplicationAnswerRepository applicationAnswerRepository;
 
     /**
-     * 응모 조회에 필요한 사용자, 권한, 팬미팅, 응모, 폼, 질문, 답변 저장소를 주입받는다.
+     * 응모 조회에 필요한 사용자, 권한, 팬미팅, 응모, 폼, 질문, 선택지, 답변 저장소를 주입받는다.
      *
      * @param currentUserService 현재 사용자 조회 서비스
      * @param meetingAccessService 팬미팅 운영 권한 검증 서비스
@@ -70,6 +74,7 @@ public class ApplicationQueryService {
      * @param applicationRepository 응모 저장소
      * @param applicationFormRepository 응모 폼 저장소
      * @param applicationQuestionRepository 응모 질문 저장소
+     * @param applicationOptionRepository 응모 선택지 저장소
      * @param applicationAnswerRepository 응모 답변 저장소
      */
     public ApplicationQueryService(
@@ -79,6 +84,7 @@ public class ApplicationQueryService {
             ApplicationRepository applicationRepository,
             ApplicationFormRepository applicationFormRepository,
             ApplicationQuestionRepository applicationQuestionRepository,
+            ApplicationOptionRepository applicationOptionRepository,
             ApplicationAnswerRepository applicationAnswerRepository
     ) {
         this.currentUserService = currentUserService;
@@ -87,6 +93,7 @@ public class ApplicationQueryService {
         this.applicationRepository = applicationRepository;
         this.applicationFormRepository = applicationFormRepository;
         this.applicationQuestionRepository = applicationQuestionRepository;
+        this.applicationOptionRepository = applicationOptionRepository;
         this.applicationAnswerRepository = applicationAnswerRepository;
     }
 
@@ -213,7 +220,7 @@ public class ApplicationQueryService {
         );
     }
 
-    /** 응모 폼의 활성 질문별 응답 수를 표시 순서대로 집계한다. */
+    /** 응모 폼의 활성 질문별 응답 수와 객관식 선택지별 선택 수를 표시 순서대로 집계한다. */
     private List<ApplicationStatisticsResponse.QuestionStatResponse> questionStats(Long meetingId) {
         ApplicationForm form = applicationFormRepository.findByMeeting_Id(meetingId).orElse(null);
         if (form == null) {
@@ -225,8 +232,13 @@ public class ApplicationQueryService {
                 .forEach(count -> responseCounts.put(
                         count.getQuestionId(), count.getResponseCount()
                 ));
+        Map<Long, Long> optionCounts = new HashMap<>();
+        applicationAnswerRepository
+                .countResponsesByOption(form.getId(), EXCLUDED_STATUS)
+                .forEach(count -> optionCounts.put(count.getOptionId(), count.getResponseCount()));
         List<ApplicationQuestion> questions = applicationQuestionRepository
                 .findAllByApplicationForm_IdAndDeletedAtIsNullOrderByDisplayOrderAsc(form.getId());
+        Map<Long, List<ApplicationOption>> optionsByQuestionId = activeOptions(questions);
         List<ApplicationStatisticsResponse.QuestionStatResponse> stats =
                 new ArrayList<>(questions.size());
         for (ApplicationQuestion question : questions) {
@@ -234,10 +246,46 @@ public class ApplicationQueryService {
                     question.getId(),
                     question.getQuestionText(),
                     responseCounts.getOrDefault(question.getId(), 0L),
-                    null
+                    question.getQuestionType().isChoice()
+                            ? optionCountsOf(
+                                    optionsByQuestionId.getOrDefault(question.getId(), List.of()),
+                                    optionCounts)
+                            : null
             ));
         }
         return stats;
+    }
+
+    /** 선택지 표시 순서대로 선택 수를 담고 아무도 고르지 않은 선택지는 0으로 채운다. */
+    private Map<Long, Long> optionCountsOf(
+            List<ApplicationOption> options, Map<Long, Long> counts
+    ) {
+        Map<Long, Long> result = new LinkedHashMap<>();
+        for (ApplicationOption option : options) {
+            result.put(option.getId(), counts.getOrDefault(option.getId(), 0L));
+        }
+        return result;
+    }
+
+    /** 객관식 질문의 삭제되지 않은 선택지를 질문 식별자별로 모아 조회한다. */
+    private Map<Long, List<ApplicationOption>> activeOptions(
+            List<ApplicationQuestion> questions
+    ) {
+        List<Long> choiceQuestionIds = questions.stream()
+                .filter(question -> question.getQuestionType().isChoice())
+                .map(ApplicationQuestion::getId)
+                .toList();
+        if (choiceQuestionIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<ApplicationOption>> result = new HashMap<>();
+        for (ApplicationOption option : applicationOptionRepository
+                .findAllByQuestion_IdInAndDeletedAtIsNullOrderByDisplayOrderAsc(
+                        choiceQuestionIds)) {
+            result.computeIfAbsent(option.getQuestion().getId(), key -> new ArrayList<>())
+                    .add(option);
+        }
+        return result;
     }
 
     /** 응모 식별자별 확정 참가자 배정 정보를 한 번의 조회로 모은다. */
@@ -253,20 +301,32 @@ public class ApplicationQueryService {
         return result;
     }
 
-    /** 응모 식별자별 제출 답변을 한 번의 조회로 모아 질문 표시 순서를 유지한다. */
+    /**
+     * 응모 식별자별 제출 답변을 한 번의 조회로 모아 질문 표시 순서를 유지한다.
+     *
+     * <p>복수 선택 답변은 질문 하나가 여러 행이므로 질문 단위로 묶어 한 항목으로 합친다.
+     */
     private Map<Long, List<ApplicantAnswerResponse>> answersByApplication(
             List<Long> applicationIds
     ) {
         if (applicationIds.isEmpty()) {
             return Map.of();
         }
-        Map<Long, List<ApplicantAnswerResponse>> result = new HashMap<>();
+        Map<Long, Map<Long, List<ApplicationAnswer>>> byApplication = new HashMap<>();
         List<ApplicationAnswer> answers = applicationAnswerRepository
-                .findAllByApplication_IdInOrderByQuestion_DisplayOrderAsc(applicationIds);
+                .findAllByApplication_IdInOrderByQuestion_DisplayOrderAscAnswerSequenceAsc(
+                        applicationIds);
         for (ApplicationAnswer answer : answers) {
-            result.computeIfAbsent(answer.getApplication().getId(), key -> new ArrayList<>())
-                    .add(ApplicantAnswerResponse.from(answer));
+            byApplication
+                    .computeIfAbsent(answer.getApplication().getId(), key -> new LinkedHashMap<>())
+                    .computeIfAbsent(answer.getQuestion().getId(), key -> new ArrayList<>())
+                    .add(answer);
         }
+        Map<Long, List<ApplicantAnswerResponse>> result = new HashMap<>();
+        byApplication.forEach((applicationId, byQuestion) -> result.put(
+                applicationId,
+                byQuestion.values().stream().map(ApplicantAnswerResponse::of).toList()
+        ));
         return result;
     }
 

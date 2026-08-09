@@ -4,7 +4,9 @@ import com.ssafy.backend.post.domain.Attachment;
 import com.ssafy.backend.post.support.AttachmentUrls;
 
 /**
- * 공지 상세의 첨부파일 한 건을 전달한다.
+ * 게시글 상세의 첨부파일 한 건을 전달한다.
+ *
+ * <p>공지와 커뮤니티 게시글이 같은 첨부 계약을 쓰므로 두 상세 응답이 이 타입을 함께 쓴다.
  *
  * @param attachmentId 첨부파일 식별자
  * @param originalFileName 업로드 당시 원본 파일명
@@ -21,10 +23,10 @@ public record NoticeAttachmentResponse(
 ) {
 
     /**
-     * 공지에 연결된 첨부파일 엔티티를 상세 응답 항목으로 변환한다.
+     * 게시글에 연결된 첨부파일 엔티티를 상세 응답 항목으로 변환한다.
      *
-     * @param attachment 공지에 연결된 첨부파일
-     * @return 공지 상세 첨부파일 항목
+     * @param attachment 게시글에 연결된 첨부파일
+     * @return 게시글 상세 첨부파일 항목
      */
     public static NoticeAttachmentResponse from(Attachment attachment) {
         return new NoticeAttachmentResponse(

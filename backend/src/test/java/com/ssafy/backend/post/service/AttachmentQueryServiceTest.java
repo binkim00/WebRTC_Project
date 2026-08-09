@@ -6,6 +6,7 @@ import com.ssafy.backend.common.exception.ErrorCode;
 import com.ssafy.backend.common.security.CurrentUserService;
 import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.post.domain.Attachment;
+import com.ssafy.backend.post.domain.AttachmentType;
 import com.ssafy.backend.post.domain.Post;
 import com.ssafy.backend.post.domain.PostType;
 import com.ssafy.backend.post.repository.AttachmentRepository;
@@ -165,6 +166,40 @@ class AttachmentQueryServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_NOT_FOUND);
     }
 
+    /**
+     * 팬미팅 커버 이미지는 게시글에 붙지 않아도 비로그인 조회자가 볼 수 있는지 검증한다.
+     *
+     * <p>커버는 공개 팬미팅 화면에 그려지므로 연결된 게시글이 없다는 이유로 막히면 안 된다.
+     */
+    @Test
+    void allowsAnonymousAccessForMeetingCover() {
+        stubFound(coverAttachment());
+        stubStoredFile();
+
+        assertThat(service.openContent(ATTACHMENT_ID, null).fileName()).isEqualTo("cover.png");
+    }
+
+    /** 팬미팅 커버 이미지도 삭제 처리되면 비로그인에게 없는 것으로 응답하는지 검증한다. */
+    @Test
+    void rejectsDeletedMeetingCover() {
+        Attachment cover = coverAttachment();
+        cover.softDelete(LocalDateTime.of(2026, 8, 2, 12, 0));
+        stubFound(cover);
+
+        assertThatThrownBy(() -> service.openContent(ATTACHMENT_ID, null))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ATTACHMENT_NOT_FOUND);
+    }
+
+    /** 게시글에 붙지 않는 팬미팅 커버 이미지 첨부를 만든다. */
+    private Attachment coverAttachment() {
+        Attachment attachment = Attachment.createUploaded(
+                uploader, AttachmentType.MEETING_COVER, "cover.png",
+                STORAGE_KEY, 1024L, "image/png");
+        ReflectionTestUtils.setField(attachment, "id", ATTACHMENT_ID);
+        return attachment;
+    }
+
     /** 첨부파일 조회가 주어진 엔티티를 반환하도록 대역을 설정한다. */
     private void stubFound(Attachment attachment) {
         when(attachmentRepository.findAccessContextById(ATTACHMENT_ID))
@@ -182,7 +217,7 @@ class AttachmentQueryServiceTest {
     /** 테스트용 첨부파일을 만든다. */
     private Attachment attachment() {
         Attachment attachment = Attachment.createUploaded(
-                uploader, "cover.png", STORAGE_KEY, 1024L, "image/png");
+                uploader, AttachmentType.NOTICE, "cover.png", STORAGE_KEY, 1024L, "image/png");
         ReflectionTestUtils.setField(attachment, "id", ATTACHMENT_ID);
         return attachment;
     }

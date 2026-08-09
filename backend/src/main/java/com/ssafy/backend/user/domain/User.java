@@ -131,6 +131,22 @@ public class User extends BaseTimeEntity {
     }
 
     /**
+     * 저장된 비밀번호 해시를 새 해시로 교체한다.
+     *
+     * <p>본인 확인(현재 비밀번호 또는 재설정 링크 토큰)은 호출하는 서비스가 이미 끝낸 뒤여야 한다.
+     * 소셜 전용 계정은 비밀번호로 로그인할 수 없는 상태를 유지해야 하므로 여기서 막는다.
+     *
+     * @param encodedPassword 새로 저장할 BCrypt 해시
+     * @throws IllegalStateException 소셜 로그인만 사용하는 계정인 경우
+     */
+    public void changePassword(String encodedPassword) {
+        if (isSocialOnly()) {
+            throw new IllegalStateException("소셜 로그인만 사용하는 계정은 비밀번호를 바꿀 수 없습니다.");
+        }
+        this.password = Objects.requireNonNull(encodedPassword);
+    }
+
+    /**
      * 인증에 성공한 가장 최근 시각을 갱신한다.
      *
      * @param loginAt 마지막 로그인 시각

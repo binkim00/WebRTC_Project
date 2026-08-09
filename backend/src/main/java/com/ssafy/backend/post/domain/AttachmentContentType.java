@@ -44,6 +44,17 @@ public enum AttachmentContentType {
     }
 
     /**
+     * 화면에 그림으로 그릴 수 있는 형식인지 확인한다.
+     *
+     * <p>커버 이미지처럼 이미지만 받아야 하는 첨부 유형을 검증하는 데 사용한다.
+     *
+     * @return 이미지 형식이면 true
+     */
+    public boolean isImage() {
+        return mimeType.startsWith("image/");
+    }
+
+    /**
      * 원본 파일명과 선언된 MIME 타입이 모두 허용 형식인지 확인한다.
      *
      * <p>확장자와 MIME 타입이 서로 다른 형식을 가리키면 거부해 확장자만 바꾼 파일이 통과하지

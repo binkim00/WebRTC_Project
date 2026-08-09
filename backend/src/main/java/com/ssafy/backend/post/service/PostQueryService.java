@@ -9,6 +9,7 @@ import com.ssafy.backend.meeting.domain.FanMeeting;
 import com.ssafy.backend.meeting.service.MeetingAccessService;
 import com.ssafy.backend.organization.domain.OrganizationMemberStatus;
 import com.ssafy.backend.organization.repository.OrganizationMemberRepository;
+import com.ssafy.backend.post.domain.Attachment;
 import com.ssafy.backend.post.domain.Post;
 import com.ssafy.backend.post.domain.PostStatus;
 import com.ssafy.backend.post.domain.PostType;
@@ -27,6 +28,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /** 서비스 공지와 팬미팅 공지의 목록·상세 조회를 처리한다. */
 @Service
@@ -88,13 +94,15 @@ public class PostQueryService {
     @Transactional(readOnly = true)
     public PageResponse<NoticeSummaryResponse> getServiceNotices(String keyword, int page, int size) {
         validatePage(page, size);
-        Page<NoticeSummaryResponse> result = postRepository.findVisibleServiceNotices(
+        Page<Post> notices = postRepository.findVisibleServiceNotices(
                 PostType.SERVICE_NOTICE,
                 PostStatus.PUBLISHED,
                 keywordPattern(keyword),
                 PageRequest.of(page, size, NOTICE_SORT)
-        ).map(NoticeSummaryResponse::from);
-        return PageResponse.from(result);
+        );
+        Map<Long, List<Attachment>> attachments = loadAttachments(notices);
+        return PageResponse.from(notices.map(
+                notice -> NoticeSummaryResponse.of(notice, attachmentsOf(attachments, notice))));
     }
 
     /**
@@ -112,14 +120,16 @@ public class PostQueryService {
                                                                  int page, int size) {
         validatePage(page, size);
         requireActiveMeeting(meetingId);
-        Page<NoticeSummaryResponse> result = postRepository.findVisibleMeetingNotices(
+        Page<Post> notices = postRepository.findVisibleMeetingNotices(
                 PostType.MEETING_NOTICE,
                 meetingId,
                 PostStatus.PUBLISHED,
                 keywordPattern(keyword),
                 PageRequest.of(page, size, NOTICE_SORT)
-        ).map(NoticeSummaryResponse::from);
-        return PageResponse.from(result);
+        );
+        Map<Long, List<Attachment>> attachments = loadAttachments(notices);
+        return PageResponse.from(notices.map(
+                notice -> NoticeSummaryResponse.of(notice, attachmentsOf(attachments, notice))));
     }
 
     /**
@@ -175,13 +185,15 @@ public class PostQueryService {
                                                                        int page, int size) {
         validatePage(page, size);
         requireActiveMeeting(meetingId);
-        Page<CommunityPostSummaryResponse> result = postRepository.findVisibleCommunityPosts(
+        Page<Post> posts = postRepository.findVisibleCommunityPosts(
                 meetingId,
                 PostStatus.PUBLISHED,
                 keywordPattern(keyword),
                 PageRequest.of(page, size, NOTICE_SORT)
-        ).map(CommunityPostSummaryResponse::from);
-        return PageResponse.from(result);
+        );
+        Map<Long, List<Attachment>> attachments = loadAttachments(posts);
+        return PageResponse.from(posts.map(
+                post -> CommunityPostSummaryResponse.of(post, attachmentsOf(attachments, post))));
     }
 
     /**
@@ -202,7 +214,49 @@ public class PostQueryService {
         boolean owner = viewer != null && viewer.getId().equals(post.getAuthor().getId());
         boolean operator = viewer != null && isMeetingOperator(post.getMeeting(), viewer);
         long commentCount = postCommentRepository.countVisibleByPost(postId);
-        return CommunityPostDetailResponse.of(post, commentCount, owner, owner || operator);
+        return CommunityPostDetailResponse.of(
+                post,
+                attachmentRepository
+                        .findAllByPost_IdAndDeletedAtIsNullOrderByDisplayOrderAsc(postId),
+                commentCount,
+                owner,
+                owner || operator
+        );
+    }
+
+    /**
+     * 목록 한 페이지에 속한 게시글의 첨부파일을 한 번에 읽어 게시글별로 묶는다.
+     *
+     * <p>목록 응답의 썸네일은 첨부 이미지에서 만드는데, 게시글마다 첨부를 따로 조회하면
+     * 페이지 크기만큼 질의가 늘어난다. 한 번만 읽고 메모리에서 나눈다.
+     *
+     * @param posts 조회한 게시글 페이지
+     * @param <T> 페이지 원소 타입이며 게시글이다
+     * @return 게시글 식별자별 표시 순서 오름차순 첨부파일 목록
+     */
+    private <T extends Post> Map<Long, List<Attachment>> loadAttachments(Page<T> posts) {
+        List<Long> postIds = posts.getContent().stream().map(Post::getId).toList();
+        if (postIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<Attachment>> grouped = new LinkedHashMap<>();
+        for (Attachment attachment : attachmentRepository
+                .findAllByPost_IdInAndDeletedAtIsNullOrderByDisplayOrderAsc(postIds)) {
+            grouped.computeIfAbsent(attachment.getPost().getId(), key -> new ArrayList<>())
+                    .add(attachment);
+        }
+        return grouped;
+    }
+
+    /**
+     * 일괄 조회한 첨부 묶음에서 게시글 한 건의 첨부 목록을 꺼낸다.
+     *
+     * @param grouped 게시글 식별자별 첨부파일 묶음
+     * @param post 대상 게시글
+     * @return 표시 순서 오름차순 첨부파일 목록이며 첨부가 없으면 빈 목록
+     */
+    private List<Attachment> attachmentsOf(Map<Long, List<Attachment>> grouped, Post post) {
+        return grouped.getOrDefault(post.getId(), List.of());
     }
 
     /**
