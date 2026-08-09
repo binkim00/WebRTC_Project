@@ -1,5 +1,5 @@
 import { ApiError } from './ApiError'
-import { apiRequest } from './client'
+import { apiRequest, authorizedFetch } from './client'
 import { buildQuery, unwrapEnvelope, type PageResponse } from './envelope'
 import { deletePendingRecording, getPendingRecording } from './pendingRecordings'
 import { translate } from '../i18n'
@@ -133,15 +133,12 @@ export async function uploadRecording(
   formData.append('file', file, fileName)
 
   const query = durationSec !== undefined ? `?durationSec=${encodeURIComponent(String(durationSec))}` : ''
-  const response = await fetch(
+  // 통화가 길면 업로드를 시작할 즈음엔 액세스 토큰이 이미 만료돼 있을 수 있다.
+  // 여기서 갱신하지 않으면 통화 내내 녹화해 둔 파일을 마지막 한 번의 401로 잃는다.
+  const response = await authorizedFetch(
     `${API_URL}/api/v1/call-sessions/${encodeURIComponent(String(callSessionId))}/recordings/upload${query}`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Authorization: `Bearer ${authToken}` },
-      body: formData,
-      signal,
-    },
+    { method: 'POST', body: formData, signal },
+    authToken,
   )
 
   if (!response.ok) {

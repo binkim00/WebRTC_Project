@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { apiRequest, authorizedFetch } from './client'
 import { serverLocalDateTimeMs } from './serverTime'
 import { unwrapEnvelope } from './envelope'
 import { translate } from '../i18n'
@@ -427,10 +427,11 @@ export async function downloadFanMeetingStatisticsCsv(
   signal?: AbortSignal,
 ): Promise<{ blob: Blob; fileName: string }> {
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
-  const response = await fetch(`${baseUrl}${meetingPath(meetingId, '/statistics/export.csv')}`, {
-    headers: { Authorization: `Bearer ${authToken}` },
-    signal,
-  })
+  const response = await authorizedFetch(
+    `${baseUrl}${meetingPath(meetingId, '/statistics/export.csv')}`,
+    { signal },
+    authToken,
+  )
 
   if (!response.ok) {
     throw new Error(

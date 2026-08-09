@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { apiRequest, authorizedFetch } from './client'
 import { unwrapEnvelope } from './envelope'
 import type { FanMeetingStatus } from './meetingManagement'
 import { translate } from '../i18n'
@@ -129,9 +129,10 @@ export async function downloadExternalParticipantCsvTemplate(
   signal?: AbortSignal,
 ): Promise<{ blob: Blob; fileName: string }> {
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
-  const response = await fetch(
+  const response = await authorizedFetch(
     `${baseUrl}/api/v1/fan-meetings/external-participants/csv-template`,
-    { headers: { Authorization: `Bearer ${authToken}` }, signal },
+    { signal },
+    authToken,
   )
 
   if (!response.ok) {

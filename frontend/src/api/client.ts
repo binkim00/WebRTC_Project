@@ -139,10 +139,42 @@ export async function apiRequest<T = unknown>(
 }
 
 /**
+ * JSON이 아니라 파일을 주고받는 요청을 보내고, 액세스 토큰이 만료됐으면 갱신해 다시 보낸다.
+ *
+ * apiRequest는 본문을 JSON으로 고정하고 응답도 JSON으로 읽으므로 멀티파트 업로드나 파일
+ * 내려받기는 이 경로를 쓸 수 없다. 그렇다고 fetch를 그냥 부르면 401을 만났을 때 토큰을
+ * 갱신하지 못해 그 요청만 실패한다. 다른 요청은 조용히 갱신되며 살아 있어, 파일을 다루는
+ * 기능만 "Invalid or expired access token."으로 죽는 것처럼 보인다.
+ *
+ * @param url 요청 주소
+ * @param init fetch 옵션이며 Authorization 헤더는 이 함수가 채운다
+ * @param authToken 현재 액세스 토큰
+ * @returns 서버 응답이며 갱신에 실패하면 첫 401 응답을 그대로 돌려준다
+ */
+export async function authorizedFetch(
+  url: string,
+  init: RequestInit,
+  authToken: string,
+): Promise<Response> {
+  const send = (token: string) =>
+    fetch(url, {
+      credentials: 'include',
+      ...init,
+      headers: { ...init.headers, Authorization: `Bearer ${token}` },
+    })
+
+  const response = await send(authToken)
+  if (response.status !== 401) return response
+
+  const refreshed = await refreshStoredSession()
+  return refreshed ? send(refreshed.accessToken) : response
+}
+
+/**
  * 저장된 refresh 토큰으로 액세스 토큰을 다시 발급받는다.
  *
- * apiRequest가 401을 만났을 때 쓰지만, 공통 요청 경로를 탈 수 없는 멀티파트 업로드도
- * 같은 갱신을 해야 하므로 밖으로 열어 둔다. 동시에 여러 번 불려도 요청은 한 번만 나간다.
+ * apiRequest가 401을 만났을 때 쓰지만, 공통 요청 경로를 탈 수 없는 파일 요청도 같은 갱신을
+ * 해야 하므로 밖으로 열어 둔다. 동시에 여러 번 불려도 요청은 한 번만 나간다.
  *
  * @returns 갱신된 세션이며 갱신할 수 없으면 null
  */
