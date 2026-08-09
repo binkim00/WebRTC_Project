@@ -138,7 +138,15 @@ export async function apiRequest<T = unknown>(
   return requestWithRefresh<T>(path, options, true)
 }
 
-async function refreshStoredSession(): Promise<LoginResponse | null> {
+/**
+ * 저장된 refresh 토큰으로 액세스 토큰을 다시 발급받는다.
+ *
+ * apiRequest가 401을 만났을 때 쓰지만, 공통 요청 경로를 탈 수 없는 멀티파트 업로드도
+ * 같은 갱신을 해야 하므로 밖으로 열어 둔다. 동시에 여러 번 불려도 요청은 한 번만 나간다.
+ *
+ * @returns 갱신된 세션이며 갱신할 수 없으면 null
+ */
+export async function refreshStoredSession(): Promise<LoginResponse | null> {
   if (refreshPromise) return refreshPromise
 
   const session = getAuthSession()

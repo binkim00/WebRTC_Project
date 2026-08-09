@@ -1,5 +1,5 @@
 import { ApiError } from './ApiError'
-import { apiRequest } from './client'
+import { apiRequest, refreshStoredSession } from './client'
 import { unwrapEnvelope } from './envelope'
 import { translate } from '../i18n'
 
@@ -67,6 +67,44 @@ async function readUploadError(response: Response): Promise<ApiError> {
 }
 
 /**
+ * 멀티파트 요청을 보내고, 액세스 토큰이 만료됐으면 한 번 갱신해 다시 보낸다.
+ *
+ * 공통 apiRequest는 401을 만나면 토큰을 갱신해 재시도하지만, 멀티파트는 boundary를 브라우저가
+ * 정해야 해서 그 경로를 탈 수 없다. 그 바람에 업로드만 갱신 없이 401로 끝나, 다른 화면은
+ * 토큰이 조용히 갱신되며 멀쩡한데 파일 첨부만 "Invalid or expired access token."으로 실패했다.
+ * 커버 이미지를 파일로만 올리게 된 뒤로는 이 경로가 막히면 팬미팅 등록 자체가 막힌다.
+ *
+ * @param url 요청 주소
+ * @param method 업로드는 POST, 교체는 PUT이다
+ * @param formData 보낼 멀티파트 본문
+ * @param authToken 현재 액세스 토큰
+ * @param signal 요청 취소 신호
+ * @returns 서버 응답이며 갱신에 실패하면 첫 401 응답을 그대로 돌려준다
+ */
+async function sendMultipart(
+  url: string,
+  method: 'POST' | 'PUT',
+  formData: FormData,
+  authToken: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const send = (token: string) =>
+    fetch(url, {
+      method,
+      credentials: 'include',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+      signal,
+    })
+
+  const response = await send(authToken)
+  if (response.status !== 401) return response
+
+  const refreshed = await refreshStoredSession()
+  return refreshed ? send(refreshed.accessToken) : response
+}
+
+/**
  * 첨부파일을 업로드하고 공지에 연결할 attachmentId를 받는다.
  *
  * apiRequest는 Content-Type을 application/json으로 고정하므로 멀티파트는 fetch를 직접 쓴다.
@@ -81,15 +119,12 @@ export async function uploadAttachment(
   const formData = new FormData()
   formData.append('file', file, file.name)
 
-  const response = await fetch(
+  const response = await sendMultipart(
     `${API_URL}/api/v1/attachments?attachmentType=${encodeURIComponent(attachmentType)}`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Authorization: `Bearer ${authToken}` },
-      body: formData,
-      signal,
-    },
+    'POST',
+    formData,
+    authToken,
+    signal,
   )
 
   if (!response.ok) {
@@ -114,15 +149,12 @@ export async function replaceAttachment(
   const formData = new FormData()
   formData.append('file', file, file.name)
 
-  const response = await fetch(
+  const response = await sendMultipart(
     `${API_URL}/api/v1/attachments/${encodeURIComponent(String(attachmentId))}`,
-    {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { Authorization: `Bearer ${authToken}` },
-      body: formData,
-      signal,
-    },
+    'PUT',
+    formData,
+    authToken,
+    signal,
   )
 
   if (!response.ok) {
